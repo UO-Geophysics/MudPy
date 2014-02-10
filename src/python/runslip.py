@@ -86,12 +86,12 @@ def make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT):
 
 
 #Now make synthetics for source/station pairs
-def make_synthetics(home,project_name,station_file,fault_name,model_name,delta_depth,delta_distance,integrate):
+def make_synthetics(home,project_name,station_file,fault_name,model_name,integrate):
     '''
     Blergarmon
     '''
     import green
-    from numpy import loadtxt,round
+    from numpy import loadtxt
     
     green_path=home+project_name+'/GFs/'
     station_file=home+project_name+'/data/station_info/'+station_file
@@ -101,11 +101,4 @@ def make_synthetics(home,project_name,station_file,fault_name,model_name,delta_d
     source=loadtxt(fault_file,ndmin=2)
     #Now synthetics please, one sub fault at a time
     for k in range(source.shape[0]):
-        #Round source depth to nearest computed depth
-        if delta_depth==0:
-            delta_depth=1
-        source[k,3]=round(source[k,3]/delta_depth)*delta_depth
-        green.run_syn(source[k,:],station_file,delta_distance,green_dir,integrate)
-    
-    
-    
+        green.run_syn(source[k,:],station_file,green_dir,integrate)

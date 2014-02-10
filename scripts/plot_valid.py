@@ -9,7 +9,7 @@ from obspy.signal.filter import lowpass
 from scipy.integrate import cumtrapz
 
 stafile='/Users/dmelgarm/Research/Slip_Inv/ssp0/data/station_info/ssp0.sta'
-syndir='/Users/dmelgarm/Research/Slip_Inv/ssp0/GFs/BJ97.mod_10/'
+syndir='/Users/dmelgarm/Research/Slip_Inv/ssp0/GFs/BJ97.mod_10.0/'
 val1='/Users/dmelgarm/bin/fk/validation/ssp0_sekiguchi/'
 val2='/Users/dmelgarm/bin/fk/validation/ssp0_song2/'
 val3='/Users/dmelgarm/bin/fk/validation/ssp0_ucsb/'

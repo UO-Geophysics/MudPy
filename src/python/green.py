@@ -19,7 +19,7 @@ def run_green(source,station_file,model_name,dt,NFFT):
     depth=source[3]
     print("--> Computing GFs for source depth "+str(depth)+"km")
     #Get station distances to source
-    d=src2sta(station_file,source)+0.1
+    d=src2sta(station_file,source)
     #Make distance string for system call
     diststr=''
     for k in range(len(d)):
@@ -32,7 +32,7 @@ def run_green(source,station_file,model_name,dt,NFFT):
     print err
     
     
-def run_syn(source,station_file,delta_distance,green_dir,integrate):
+def run_syn(source,station_file,green_dir,integrate):
     '''
     Use green functions and compute synthetics at stations for a given source
     distribution and station configuration.
@@ -45,7 +45,7 @@ def run_syn(source,station_file,delta_distance,green_dir,integrate):
 
     import os
     import subprocess
-    from numpy import genfromtxt,round,rad2deg
+    from numpy import genfromtxt,rad2deg
     from obspy import read
     from obspy.signal.rotate import rotate_RT_NE
     from shlex import split
@@ -59,26 +59,29 @@ def run_syn(source,station_file,delta_distance,green_dir,integrate):
     Mw=source[7]
     rise=source[8]
     duration=source[9]
-    green_dir=green_dir+"_"+str(int(zs))+"/"
+    strdepth='%.1f' % zs 
+    green_dir=green_dir+"_"+strdepth+"/"
     print("--> Computing synthetics at stations for the source at ("+str(xs)+" , "+str(ys)+")")
     staname=genfromtxt(station_file,dtype="S6",usecols=0)
     x=genfromtxt(station_file,dtype="f8",usecols=1)
     y=genfromtxt(station_file,dtype="f8",usecols=2)
     #Compute distances and azimuths
-    d=((x-xs)**2+(y-ys)**2)**0.5
+    d=src2sta(station_file,source)
     az=cartesian_azimuth(x,y,xs,ys)
-    #round dsitances to GF precision
-    d=round(d/delta_distance)*delta_distance
     #Move to output folder
     os.chdir(green_dir)
     for k in range(len(d)):
         diststr='%.3f' % d[k] #Need current distance in string form for external call
         if integrate==1: #Make displ.
-            command=split("syn -I -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rake)+" -D"+str(duration)+ \
-                "/"+str(rise)+" -A"+str(rad2deg(az[k]))+" -O"+staname[k]+".disp.x -G"+green_dir+diststr+".grn.0")
+            command="syn -I -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rake)+" -D"+str(duration)+ \
+                "/"+str(rise)+" -A"+str(rad2deg(az[k]))+" -O"+staname[k]+".disp.x -G"+green_dir+diststr+".grn.0"
+            print command
+            command=split(command)
         else: #Make vel.
-            command=split("syn -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rake)+" -D"+str(duration)+ \
-                "/"+str(rise)+" -A"+str(rad2deg(az[k]))+" -O"+staname[k]+".vel.x -G"+green_dir+diststr+".grn.0")
+            command="syn -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rake)+" -D"+str(duration)+ \
+                "/"+str(rise)+" -A"+str(rad2deg(az[k]))+" -O"+staname[k]+".vel.x -G"+green_dir+diststr+".grn.0"
+            print command
+            command=split(command)
         p=subprocess.Popen(command,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
         out,err=p.communicate() 
         #Rotate to NE
@@ -148,6 +151,4 @@ def src2sta(station_file,source):
     xs=source[1]
     ys=source[2]
     d=((x-xs)**2+(y-ys)**2)**0.5
-    #Sort distances
-    d.sort()
     return d

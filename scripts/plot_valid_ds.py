@@ -9,7 +9,7 @@ from obspy.signal.filter import lowpass
 from scipy.integrate import cumtrapz
 
 stafile='/Users/dmelgarm/Research/Slip_Inv/dsp0/data/station_info/dsp0.sta'
-syndir='/Users/dmelgarm/Research/Slip_Inv/dsp0/GFs/BJ97.mod_10/'
+syndir='/Users/dmelgarm/Research/Slip_Inv/dsp0/GFs/BJ97.mod_10.0/'
 val1='/Users/dmelgarm/bin/fk/validation/dsp0_AX/'
 val2='/Users/dmelgarm/bin/fk/validation/dsp0_CS/'
 val3='/Users/dmelgarm/bin/fk/validation/dsp0_ZR/'
@@ -47,27 +47,36 @@ for j in range(len(stations)):
     u_v3=lowpass(np.genfromtxt(val3+sta+'.syn',dtype="f8",usecols=2,skip_header=4),freq,df=1/dt3,zerophase=True)
     t_v3=np.arange(0,len(e_v3)*dt3,dt3)
     #Read my computations
-    temp=read(syndir+sta+'e')
-    tbegin=temp[0].stats.sac.b
-    e=lowpass(temp[0].data/100,freq,df=temp[0].stats.sampling_rate,zerophase=True)
-    temp=read(syndir+sta+'n')
-    n=lowpass(temp[0].data/100,freq,df=temp[0].stats.sampling_rate,zerophase=True)
-    temp=read(syndir+sta+'z')
-    u=lowpass(temp[0].data/100,freq,df=temp[0].stats.sampling_rate,zerophase=True)
-    t=temp[0].times()+tbegin
     if integrate==1: #Go to displacement-land
-        e_v1=cumtrapz(e_v1,t_v1,initial=0)
-        n_v1=cumtrapz(n_v1,t_v1,initial=0)
-        u_v1=cumtrapz(u_v1,t_v1,initial=0)
-        e_v2=cumtrapz(e_v2,t_v2,initial=0)
-        n_v2=cumtrapz(n_v2,t_v2,initial=0)
-        u_v2=cumtrapz(u_v2,t_v2,initial=0)
-        e_v3=cumtrapz(e_v3,t_v3,initial=0)
-        n_v3=cumtrapz(n_v3,t_v3,initial=0)
-        u_v3=cumtrapz(u_v3,t_v3,initial=0)
-        e=cumtrapz(t,e,initial=0)
-        n=cumtrapz(t,n,initial=0)
-        u=cumtrapz(t,u,initial=0)
+        temp=read(syndir+sta+'.disp.e')
+        tbegin=temp[0].stats.sac.b
+        e=lowpass(temp[0].data/100,freq,df=temp[0].stats.sampling_rate,zerophase=True)
+        temp=read(syndir+sta+'.disp.n')
+        n=lowpass(temp[0].data/100,freq,df=temp[0].stats.sampling_rate,zerophase=True)
+        temp=read(syndir+sta+'.disp.z')
+        u=lowpass(temp[0].data/100,freq,df=temp[0].stats.sampling_rate,zerophase=True)
+        t=temp[0].times()+tbegin
+        e_v1=cumtrapz(e_v1,t_v1)
+        n_v1=cumtrapz(n_v1,t_v1)
+        u_v1=cumtrapz(u_v1,t_v1)
+        t_v1=t_v1[1:]
+        e_v2=cumtrapz(e_v2,t_v2)
+        n_v2=cumtrapz(n_v2,t_v2)
+        u_v2=cumtrapz(u_v2,t_v2)
+        t_v2=t_v2[1:]
+        e_v3=cumtrapz(e_v3,t_v3)
+        n_v3=cumtrapz(n_v3,t_v3)
+        u_v3=cumtrapz(u_v3,t_v3)
+        t_v3=t_v3[1:]
+    else:
+        temp=read(syndir+sta+'.vel.e')
+        tbegin=temp[0].stats.sac.b
+        e=lowpass(temp[0].data/100,freq,df=temp[0].stats.sampling_rate,zerophase=True)
+        temp=read(syndir+sta+'.vel.n')
+        n=lowpass(temp[0].data/100,freq,df=temp[0].stats.sampling_rate,zerophase=True)
+        temp=read(syndir+sta+'.vel.z')
+        u=lowpass(temp[0].data/100,freq,df=temp[0].stats.sampling_rate,zerophase=True)
+        t=temp[0].times()+tbegin
     #Plot
     pl.figure()
     #EAST
