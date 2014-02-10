@@ -42,38 +42,48 @@ def init(home,project_name):
         copy(aux_dir+'init.mod',proj_dir+'structure/') #Blank structure file
 
 # Run green functions          
-def make_green(home,project_name,model_name,min_depth,max_depth,delta_depth,min_distance,max_distance,delta_distance,dt,NFFT):
+def make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT):
     '''
     di Blergerson
     '''
     import time,glob,green
-    import numpy as np
-    from shutil import rmtree,move
-    from os import chdir
+    from numpy import loadtxt
+    from shutil import rmtree,copy
+    from os import chdir,path,makedirs
     
-    if delta_depth!=0:
-        source_depths=np.arange(min_depth,max_depth,delta_depth)
-    else:
-        source_depths=np.array([min_depth])
-        delta_depth=1
-        station_distances=np.arange(min_distance,max_distance,delta_distance) 
     tic=time.time()
     model_path=home+project_name+'/structure/'
-    green_path=home+project_name+'/GFs/'   
-    chdir(model_path)  
-    for k in range(len(source_depths)):
-        green.run_green(source_depths[k],station_distances,model_name,dt,NFFT)
-    #Move to GF dir
-    dirs=glob.glob('*.mod_*')
-    for k in range(len(source_depths)):
-        #Delete previous GFs and move in the new ones
-        try:
-            rmtree(green_path+dirs[k])
-        except:
-            pass
-        move(dirs[k],green_path)
+    green_path=home+project_name+'/GFs/'
+    station_file=home+project_name+'/data/station_info/'+station_file 
+    fault_file=home+project_name+'/data/model_info/'+fault_name  
+    chdir(model_path)
+    #Load source model for station-event distance computations
+    source=loadtxt(fault_file,ndmin=2)
+    #Pass only unique source points into computation (avoid duplication for strike-slip and dip-slip components)
+    #this is PENDING, use numpy.unique and numpy.intersect1d, computation is not that slow so I might not do this
+    for k in range(source.shape[0]):
+        green.run_green(source[k,:],station_file,model_name,dt,NFFT)
+        strdepth='%.1f' % source[k,3]
+        #Move results to GF dir
+        dirs=glob.glob('*.mod_'+strdepth)
+        #Where am I writting this junk too?
+        outgreen=green_path+path.split(dirs[0])[1]
+        #Check if GF subdir already exists
+        if path.exists(outgreen)==False:
+            #It doesn't, make it, don't be lazy
+            makedirs(outgreen)
+        #Now copy GFs in, this will OVERWRITE EXISTING GFs of the same name
+        flist=glob.glob(dirs[0]+'/*')
+        for k in range(len(flist)):
+            copy(flist[k],outgreen)
+        #Cleanup
+        rmtree(dirs[0])
+    #How long was I out?
     toc=time.time()
     print 'GFs computed in '+str((toc-tic)/60)+' minutes...'
+
+
+
 
 #Now make synthetics for source/station pairs
 def make_synthetics(home,project_name,station_file,fault_name,model_name,delta_depth,delta_distance,integrate):

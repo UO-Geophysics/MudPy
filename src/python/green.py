@@ -3,22 +3,29 @@ Diego Melgar 01/2014
 Green functions routines for kinematic source models
 '''
 
-deltad=0.1
-
-def run_green(source_depths,station_distances,model_name,dt,NFFT):
+def run_green(source,station_file,model_name,dt,NFFT):
     '''
     Compute GFs using Zhu & Rivera code for a given velocity model, source depth
-    and receiver distances
+    and station file
+    
+    params:
+        
+    returns:
+        nothing
     '''
     import subprocess
     from shlex import split
     
-    print("--> Computing GFs for source depth "+str(source_depths)+"km")
+    depth=source[3]
+    print("--> Computing GFs for source depth "+str(depth)+"km")
+    #Get station distances to source
+    d=src2sta(station_file,source)+0.1
+    #Make distance string for system call
     diststr=''
-    for k in range(len(station_distances)):
-        diststr=diststr+' %.3f' % station_distances[k]
-    command=split("fk.pl -M"+model_name+"/"+str(source_depths)+" -N"+str(NFFT)+"/"+str(dt)+diststr)
-    #print "fk.pl -M"+model_name+"/"+str(source_depth)+" -N"+str(NFFT)+"/"+str(dt)+diststr
+    for k in range(len(d)):
+        diststr=diststr+' %.3f' % d[k] #Truncate distance to 3 decimal palces (meters)
+    command=split("fk.pl -M"+model_name+"/"+str(depth)+" -N"+str(NFFT)+"/"+str(dt)+diststr)
+    print "fk.pl -M"+model_name+"/"+str(depth)+" -N"+str(NFFT)+"/"+str(dt)+diststr
     p=subprocess.Popen(command,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
     out,err=p.communicate() 
     print out
@@ -27,7 +34,13 @@ def run_green(source_depths,station_distances,model_name,dt,NFFT):
     
 def run_syn(source,station_file,delta_distance,green_dir,integrate):
     '''
-    Make synthetics at stations
+    Use green functions and compute synthetics at stations for a given source
+    distribution and station configuration.
+    
+    params:
+        
+    returns:
+        a sense of well being
     '''
 
     import os
@@ -104,8 +117,37 @@ def run_syn(source,station_file,delta_distance,green_dir,integrate):
 ##########                   Utilities and stuff                      ##########          
         
 def cartesian_azimuth(x,y,xs,ys):
+    '''
+    Compute source to station azimuths when sources given in cartesianc oordinates
+    '''
+    
     from numpy import arctan,nonzero,pi
+    
     az=arctan((x-xs)/(y-ys))
     i=nonzero(y<0)
     az[i]=pi+az[i]
     return az
+    
+def src2sta(station_file,source):
+    '''
+    Compute source to station distances for all station/source pairs.
+    params:
+        station_file - Path to station file
+        source - numpy 1d array with source info read from file
+    returns:
+        d - sorted distances vector
+    '''
+    
+    from numpy import genfromtxt,array
+    
+    #Read station file
+    #staname=genfromtxt(home+station_file,dtype="S6",usecols=0)
+    x=genfromtxt(station_file,dtype="f8",usecols=1)
+    y=genfromtxt(station_file,dtype="f8",usecols=2)
+    d=array([])
+    xs=source[1]
+    ys=source[2]
+    d=((x-xs)**2+(y-ys)**2)**0.5
+    #Sort distances
+    d.sort()
+    return d
