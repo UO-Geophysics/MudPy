@@ -1,0 +1,12 @@
+PySlip v.0.1
+Diego Melgar
+Scripps Institution of Oceanography
+
+A code to run forward models of kineamtic fault rupture and invert for source models given observed seismograms.
+
+More stuff here as I develop it.
+
+NOTES:
+Uses fk code from Zhu & Rivera (2002, GJI) for Green functions calcualtions. This code is bundled here but make sure to refer to the original source for updates.
+
+http://www.eas.slu.edu/People/LZhu/home.html
