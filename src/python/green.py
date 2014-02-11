@@ -51,20 +51,26 @@ def run_syn(source,station_file,green_dir,integrate,static):
 
     import os
     import subprocess
+    from string import rjust
     from numpy import array,genfromtxt,rad2deg,loadtxt,savetxt
     from obspy import read
     from obspy.signal.rotate import rotate_RT_NE
     from shlex import split
     
+    #Constant parameters
+    rakeDS=-90 #-90 is thrust, 90 is normal
+    rakeSS=0
+    Mw=4 #This is used as unit magnitude
+    
+    num=rjust(str(int(source[0])),4,'0')
     xs=source[1]
     ys=source[2]
     zs=source[3]
     strike=source[4]
     dip=source[5]
-    rake=source[6]
-    Mw=source[7]
-    rise=source[8]
-    duration=source[9]
+    rise=source[6]
+    duration=source[7]
+
     strdepth='%.1f' % zs 
     green_path=green_dir+"_"+strdepth+"/"
     print("--> Computing synthetics at stations for the source at ("+str(xs)+" , "+str(ys)+")")
@@ -80,48 +86,95 @@ def run_syn(source,station_file,green_dir,integrate,static):
         if static==0: #Compute full waveforms
             diststr='%.3f' % d[k] #Need current distance in string form for external call
             if integrate==1: #Make displ.
-                command="syn -I -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rake)+" -D"+str(duration)+ \
-                    "/"+str(rise)+" -A"+str(rad2deg(az[k]))+" -O"+staname[k]+".disp.x -G"+green_path+diststr+".grn.0"
-                print command
-                command=split(command)
+                #First Stike-Slip GFs
+                commandSS="syn -I -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeSS)+" -D"+str(duration)+ \
+                    "/"+str(rise)+" -A"+str(rad2deg(az[k]))+" -O"+staname[k]+".subfault"+num+".SS.disp.x -G"+green_path+diststr+".grn.0"
+                print commandSS
+                commandSS=split(commandSS)
+                #Now dip slip
+                commandDS="syn -I -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeDS)+" -D"+str(duration)+ \
+                    "/"+str(rise)+" -A"+str(rad2deg(az[k]))+" -O"+staname[k]+".subfault"+num+".DS.disp.x -G"+green_path+diststr+".grn.0"
+                print commandDS
+                commandDS=split(commandDS)
             else: #Make vel.
-                command="syn -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rake)+" -D"+str(duration)+ \
-                    "/"+str(rise)+" -A"+str(rad2deg(az[k]))+" -O"+staname[k]+".vel.x -G"+green_path+diststr+".grn.0"
-                print command
-                command=split(command)
-            p=subprocess.Popen(command,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+                #First Stike-Slip GFs
+                commandSS="syn -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeSS)+" -D"+str(duration)+ \
+                    "/"+str(rise)+" -A"+str(rad2deg(az[k]))+" -O"+staname[k]+".subfault"+num+".SS.vel.x -G"+green_path+diststr+".grn.0"
+                print commandSS
+                commandSS=split(commandSS)
+                #Now dip slip
+                commandDS="syn -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeDS)+" -D"+str(duration)+ \
+                    "/"+str(rise)+" -A"+str(rad2deg(az[k]))+" -O"+staname[k]+".subfault"+num+".DS.vel.x -G"+green_path+diststr+".grn.0"
+                print commandDS
+                commandDS=split(commandDS)
+            #Run them yo
+            p=subprocess.Popen(commandSS,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+            out,err=p.communicate() 
+            p=subprocess.Popen(commandDS,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
             out,err=p.communicate() 
             #Rotate to NE
             if integrate==1: #'tis displacememnt
-                r=read(staname[k]+'.disp.r')
-                t=read(staname[k]+'.disp.t')
+                #Strike slip
+                r=read(staname[k]+".subfault"+num+'.SS.disp.r')
+                t=read(staname[k]+".subfault"+num+'.SS.disp.t')
                 ntemp,etemp=rotate_RT_NE(r[0].data,t[0].data,rad2deg(az[k]))
                 n=r.copy()
                 n[0].data=ntemp/100
                 e=t.copy()
                 e[0].data=etemp/100
-                n.write(staname[k]+'.disp.n',format='SAC')
-                e.write(staname[k]+'.disp.e',format='SAC')
+                n.write(staname[k]+".subfault"+num+'.SS.disp.n',format='SAC')
+                e.write(staname[k]+".subfault"+num+'.SS.disp.e',format='SAC')
                 #Correct polarity in vertical, ZR code has down=positive, we don't like that precious do we?
-                down=read(staname[k]+'.disp.z')
+                down=read(staname[k]+".subfault"+num+'.SS.disp.z')
                 up=down.copy()
                 up[0].data=down[0].data/-100
-                up.write(staname[k]+'.disp.z',format='SAC')
+                up.write(staname[k]+".subfault"+num+'.SS.disp.z',format='SAC')
+                #Dip Slip
+                r=read(staname[k]+".subfault"+num+'.DS.disp.r')
+                t=read(staname[k]+".subfault"+num+'.DS.disp.t')
+                ntemp,etemp=rotate_RT_NE(r[0].data,t[0].data,rad2deg(az[k]))
+                n=r.copy()
+                n[0].data=ntemp/100
+                e=t.copy()
+                e[0].data=etemp/100
+                n.write(staname[k]+".subfault"+num+'.DS.disp.n',format='SAC')
+                e.write(staname[k]+".subfault"+num+'.DS.disp.e',format='SAC')
+                #Correct polarity in vertical, ZR code has down=positive, we don't like that precious do we?
+                down=read(staname[k]+".subfault"+num+'.DS.disp.z')
+                up=down.copy()
+                up[0].data=down[0].data/-100
+                up.write(staname[k]+".subfault"+num+'.DS.disp.z',format='SAC')
             else: #'tis velocity sire
-                r=read(staname[k]+'.vel.r')
-                t=read(staname[k]+'.vel.t')
+                #Strike slip
+                r=read(staname[k]+".subfault"+num+'.SS.vel.r')
+                t=read(staname[k]+".subfault"+num+'.SS.vel.t')
                 ntemp,etemp=rotate_RT_NE(r[0].data,t[0].data,rad2deg(az[k]))
                 n=r.copy()
                 n[0].data=ntemp/100
                 e=t.copy()
                 e[0].data=etemp/100
-                n.write(staname[k]+'.vel.n',format='SAC')
-                e.write(staname[k]+'.vel.e',format='SAC')
+                n.write(staname[k]+".subfault"+num+'.SS.vel.n',format='SAC')
+                e.write(staname[k]+".subfault"+num+'.SS.vel.e',format='SAC')
                 #Correct polarity in vertical, ZR code has down=positive, we don't like that precious do we?
-                down=read(staname[k]+'.vel.z')
+                down=read(staname[k]+'.tr'+str(rise)+'.td'+str(duration)+'.SS.vel.z')
                 up=down.copy()
                 up[0].data=down[0].data/-100
-                up.write(staname[k]+'.vel.z',format='SAC')
+                up.write(staname[k]+".subfault"+num+'.SS.vel.z',format='SAC')
+                #Dip Slip
+                r=read(staname[k]+".subfault"+num+'.DS.vel.r')
+                t=read(staname[k]+".subfault"+num+'.DS.vel.t')
+                ntemp,etemp=rotate_RT_NE(r[0].data,t[0].data,rad2deg(az[k]))
+                n=r.copy()
+                n[0].data=ntemp/100
+                e=t.copy()
+                e[0].data=etemp/100
+                n.write(staname[k]+".subfault"+num+'.DS.vel.n',format='SAC')
+                e.write(staname[k]+".subfault"+num+'.DS.vel.e',format='SAC')
+                #Correct polarity in vertical, ZR code has down=positive, we don't like that precious do we?
+                down=read(staname[k]+".subfault"+num+'.DS.vel.z')
+                up=down.copy()
+                up[0].data=down[0].data/-100
+                up.write(staname[k]+".subfault"+num+'.DS.vel.z',format='SAC')
         else: #Compute statics
             diststr='%.1f' % d[k] #Need current distance in string form for external call
             green_file=green_dir+".static."+strdepth
@@ -131,23 +184,38 @@ def run_syn(source,station_file,green_dir,integrate,static):
             inpipe=''
             for j in range(len(temp_pipe)):
                 inpipe=inpipe+' %.6e' % temp_pipe[j]
-            command="syn -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rake)+\
+            commandDS="syn -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeSS)+\
+                    " -A"+str(rad2deg(az[k]))+" -P"
+            commandSS="syn -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeDS)+\
                     " -A"+str(rad2deg(az[k]))+" -P"
             print staname[k]
-            print command
-            command=split(command)
+            print commandSS
+            print commandDS
+            commandSS=split(commandSS)
+            commandDS=split(commandDS)
             ps=subprocess.Popen(['printf',inpipe],stdout=subprocess.PIPE,stderr=subprocess.PIPE)  #This is the statics pipe, pint stdout to syn's stdin
-            p=subprocess.Popen(command,stdin=ps.stdout,stdout=open(staname[k]+'.static.rtz','w'),stderr=subprocess.PIPE)     
-            out,err=p.communicate()       
+            p=subprocess.Popen(commandSS,stdin=ps.stdout,stdout=open(staname[k]+'.subfault'+num+'.SS.static.rtz','w'),stderr=subprocess.PIPE)     
+            out,err=p.communicate()  
+            ps=subprocess.Popen(['printf',inpipe],stdout=subprocess.PIPE,stderr=subprocess.PIPE)  #This is the statics pipe, pint stdout to syn's stdin
+            p=subprocess.Popen(commandDS,stdin=ps.stdout,stdout=open(staname[k]+'.subfault'+num+'.DS.static.rtz','w'),stderr=subprocess.PIPE)     
+            out,err=p.communicate()        
             #Rotate radial/transverse to East/North
-            statics=loadtxt(staname[k]+'.static.rtz')
+            statics=loadtxt(staname[k]+'.subfault'+num+'SS.static.rtz')
             u=-statics[2]/100
             r=statics[3]/100
             t=statics[4]/100
             ntemp,etemp=rotate_RT_NE(array([r,r]),array([t,t]),rad2deg(az[k]))
             n=ntemp[0]
             e=etemp[0]
-            savetxt(staname[k]+'.static.enu',(e,n,u))
+            savetxt(staname[k]+'.subfault'+num+'SS.static.enu',(e,n,u))
+            statics=loadtxt(staname[k]+'.subfault'+num+'DS.static.rtz')
+            u=-statics[2]/100
+            r=statics[3]/100
+            t=statics[4]/100
+            ntemp,etemp=rotate_RT_NE(array([r,r]),array([t,t]),rad2deg(az[k]))
+            n=ntemp[0]
+            e=etemp[0]
+            savetxt(staname[k]+'.subfault'+num+'DS.static.enu',(e,n,u))
 
 
 ##########                   Utilities and stuff                      ##########          
@@ -157,10 +225,16 @@ def cartesian_azimuth(x,y,xs,ys):
     Compute source to station azimuths when sources given in cartesianc oordinates
     '''
     
-    from numpy import arctan,nonzero,pi
+    from numpy import arctan,nonzero,pi,intersect1d
     
     az=arctan((x-xs)/(y-ys))
-    i=nonzero(y<0)
+    #Adjsut elements in 2nd quadrant
+    ix=nonzero(x-xs<0)[0]
+    iy=nonzero(y-ys>0)[0]
+    i=intersect1d(ix,iy)
+    az[i]=2*pi+az[i]
+    #Adjust elements in 3rd and 4th quadrants
+    i=nonzero(y-ys<0) 
     az[i]=pi+az[i]
     return az
     
