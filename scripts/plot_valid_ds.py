@@ -10,14 +10,15 @@ from scipy.integrate import cumtrapz
 
 stafile='/Users/dmelgarm/Research/Slip_Inv/dsp0/data/station_info/dsp0.sta'
 syndir='/Users/dmelgarm/Research/Slip_Inv/dsp0/GFs/BJ97.mod_10.0/'
-val1='/Users/dmelgarm/bin/fk/validation/dsp0_AX/'
-val2='/Users/dmelgarm/bin/fk/validation/dsp0_CS/'
-val3='/Users/dmelgarm/bin/fk/validation/dsp0_ZR/'
+edfile='/Users/dmelgarm/Research/Slip_Inv/ed/dsp0.disp'
+val1='/Users/dmelgarm/Research/Slip_Inv/fk_validation/dsp0_AX/'
+val2='/Users/dmelgarm/Research/Slip_Inv/fk_validation/dsp0_CS/'
+val3='/Users/dmelgarm/Research/Slip_Inv/fk_validation/dsp0_ZR/'
 dt1=0.0225
 dt2=0.004
 dt3=0.02
-tmin=0
-tmax=8
+tmin=2
+tmax=14
 #Filter stuff
 freq=5
 #Integrate to displacement?
@@ -77,27 +78,32 @@ for j in range(len(stations)):
         temp=read(syndir+sta+'.vel.z')
         u=lowpass(temp[0].data/100,freq,df=temp[0].stats.sampling_rate,zerophase=True)
         t=temp[0].times()+tbegin
+    #Read coseismic results from EDCMP
+    ed=np.loadtxt(edfile)
+    ecoseis=ed[:,2]
+    ncoseis=ed[:,3]
+    ucoseis=-ed[:,4]
     #Plot
     pl.figure()
     #EAST
     pl.subplot(311)
     pl.plot(t,e,'k')
-    pl.plot(t_v1,e_v1,t_v2,e_v2,t_v3,e_v3)
+    pl.plot(t_v1,e_v1,t_v2,e_v2,t_v3,e_v3,t,np.ones(t.shape)*ecoseis[k])
     pl.ylabel('East m/s')
     pl.grid()
-    pl.legend(['My Synthetics','Axitra','CompSyn','Zhu-Rivera'])
+    pl.legend(['My Synthetics','Axitra','CompSyn','Zhu-Rivera','EDCMP'])
     pl.xlim((tmin,tmax))
     #NORTH
     pl.subplot(312)
     pl.plot(t,n,'k')
-    pl.plot(t_v1,n_v1,t_v2,n_v2,t_v3,n_v3)
+    pl.plot(t_v1,n_v1,t_v2,n_v2,t_v3,n_v3,t,np.ones(t.shape)*ncoseis[k])
     pl.ylabel('North m/s')
     pl.grid()
     pl.xlim((tmin,tmax))
     #UP
     pl.subplot(313)
     pl.plot(t,u,'k')
-    pl.plot(t_v1,u_v1,t_v2,u_v2,t_v3,u_v3)
+    pl.plot(t_v1,u_v1,t_v2,u_v2,t_v3,u_v3,t,np.ones(t.shape)*ucoseis[k])
     pl.ylabel('Up m/s')
     pl.xlabel('Time (s)')
     pl.grid()

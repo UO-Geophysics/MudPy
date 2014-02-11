@@ -19,6 +19,7 @@ project_name='ssp0'
 init=0 #Initalize project
 make_green=1 #Compute GFs
 make_synthetics=1 #Compute synthetics for a given model at given stations
+static=1  #=0 computes static GFs only, =1 computes the completer waveform
 ###############################################################################
 
 ###############            Green function parameters               #############
@@ -26,7 +27,6 @@ make_synthetics=1 #Compute synthetics for a given model at given stations
 model_name='BJ97.mod'   #Velocity model
 NFFT=2048
 dt=0.01
-
 ################################################################################
 
 ############                 Synthetics parameters               ###############
@@ -43,11 +43,11 @@ if init==1:
 
 # Run green functions          
 if make_green==1:  
-    runslip.make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT)  
+    runslip.make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,static)  
 
 #Now make synthetics for source/station pairs
 if make_synthetics==1:
-    runslip.make_synthetics(home,project_name,station_file,fault_name,model_name,integrate)
+    runslip.make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static)
     
     
     
