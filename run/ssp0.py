@@ -33,7 +33,7 @@ dt=0.01
 
 fault_name='ssp0.fault'    #Source model
 station_file='ssp0.sta'    #Station distribution
-integrate=1 #=0 produces velocities, =1 makes dispalcements
+integrate=0 #=0 produces velocities, =1 makes dispalcements
 ################################################################################
 
 

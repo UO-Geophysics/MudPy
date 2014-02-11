@@ -51,11 +51,11 @@ for j in range(len(stations)):
     if integrate==1: #Go to displacement-land
         temp=read(syndir+sta+'.disp.e')
         tbegin=temp[0].stats.sac.b
-        e=lowpass(temp[0].data/100,freq,df=temp[0].stats.sampling_rate,zerophase=True)
+        e=lowpass(temp[0].data,freq,df=temp[0].stats.sampling_rate,zerophase=True)
         temp=read(syndir+sta+'.disp.n')
-        n=lowpass(temp[0].data/100,freq,df=temp[0].stats.sampling_rate,zerophase=True)
+        n=lowpass(temp[0].data,freq,df=temp[0].stats.sampling_rate,zerophase=True)
         temp=read(syndir+sta+'.disp.z')
-        u=lowpass(temp[0].data/100,freq,df=temp[0].stats.sampling_rate,zerophase=True)
+        u=lowpass(temp[0].data,freq,df=temp[0].stats.sampling_rate,zerophase=True)
         t=temp[0].times()+tbegin
         e_v1=cumtrapz(e_v1,t_v1)
         n_v1=cumtrapz(n_v1,t_v1)
@@ -72,38 +72,43 @@ for j in range(len(stations)):
     else:
         temp=read(syndir+sta+'.vel.e')
         tbegin=temp[0].stats.sac.b
-        e=lowpass(temp[0].data/100,freq,df=temp[0].stats.sampling_rate,zerophase=True)
+        e=lowpass(temp[0].data,freq,df=temp[0].stats.sampling_rate,zerophase=True)
         temp=read(syndir+sta+'.vel.n')
-        n=lowpass(temp[0].data/100,freq,df=temp[0].stats.sampling_rate,zerophase=True)
+        n=lowpass(temp[0].data,freq,df=temp[0].stats.sampling_rate,zerophase=True)
         temp=read(syndir+sta+'.vel.z')
-        u=lowpass(temp[0].data/100,freq,df=temp[0].stats.sampling_rate,zerophase=True)
+        u=lowpass(temp[0].data,freq,df=temp[0].stats.sampling_rate,zerophase=True)
         t=temp[0].times()+tbegin
     #Read coseismic results from EDCMP
     ed=np.loadtxt(edfile)
     ecoseis=ed[:,2]
     ncoseis=ed[:,3]
     ucoseis=-ed[:,4]
+    #Read coseismics from fk
+    temp=np.loadtxt(syndir+sta+'.static.enu')
+    efkcoseis=temp[0]
+    nfkcoseis=temp[1]
+    ufkcoseis=temp[2]
     #Plot
     pl.figure()
     #EAST
     pl.subplot(311)
     pl.plot(t,e,'k')
-    pl.plot(t_v1,e_v1,t_v2,e_v2,t_v3,e_v3,t,np.ones(t.shape)*ecoseis[k])
+    pl.plot(t_v1,e_v1,t_v2,e_v2,t_v3,e_v3,t,np.ones(t.shape)*ecoseis[k],t,np.ones(t.shape)*efkcoseis)
     pl.ylabel('East m/s')
     pl.grid()
-    pl.legend(['My Synthetics','Axitra','CompSyn','Zhu-Rivera','EDCMP'])
+    pl.legend(['My Synthetics','Axitra','CompSyn','Zhu-Rivera','EDCMP','FK-Coseis'])
     pl.xlim((tmin,tmax))
     #NORTH
     pl.subplot(312)
     pl.plot(t,n,'k')
-    pl.plot(t_v1,n_v1,t_v2,n_v2,t_v3,n_v3,t,np.ones(t.shape)*ncoseis[k])
+    pl.plot(t_v1,n_v1,t_v2,n_v2,t_v3,n_v3,t,np.ones(t.shape)*ncoseis[k],t,np.ones(t.shape)*nfkcoseis)
     pl.ylabel('North m/s')
     pl.grid()
     pl.xlim((tmin,tmax))
     #UP
     pl.subplot(313)
     pl.plot(t,u,'k')
-    pl.plot(t_v1,u_v1,t_v2,u_v2,t_v3,u_v3,t,np.ones(t.shape)*ucoseis[k])
+    pl.plot(t_v1,u_v1,t_v2,u_v2,t_v3,u_v3,t,np.ones(t.shape)*ucoseis[k],t,np.ones(t.shape)*ufkcoseis)
     pl.ylabel('Up m/s')
     pl.xlabel('Time (s)')
     pl.grid()

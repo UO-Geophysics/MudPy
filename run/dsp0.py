@@ -19,7 +19,7 @@ project_name='dsp0'
 init=0 #Initalize project
 make_green=0 #Compute GFs
 make_synthetics=1 #Compute synthetics for a given model at given stations
-static=1  #=0 computes static GFs only, =1 computes the complete waveform
+static=0  #=0 computes static GFs only, =1 computes the complete waveform
 ###############################################################################
 
 ###############            Green function parameters               #############
