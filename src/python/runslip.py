@@ -33,13 +33,31 @@ def init(home,project_name):
         makedirs(proj_dir+'data/model_info')
         makedirs(proj_dir+'structure')
         makedirs(proj_dir+'plots')
-        makedirs(proj_dir+'output/forward_models')
+        makedirs(proj_dir+'forward_models')
         makedirs(proj_dir+'output/inverse_models')
-        makedirs(proj_dir+'output/synthetics')
+        makedirs(proj_dir+'output/forward_models')
         #Copy aux files to proper places
         copy(aux_dir+'init.fault',proj_dir+'data/model_info/') #Blank fault file
         copy(aux_dir+'init.sta',proj_dir+'data/station_info/') #Blank station file
         copy(aux_dir+'init.mod',proj_dir+'structure/') #Blank structure file
+
+
+#Setup some book-keeping for the forward problem
+def forward_setup(home,project_name,rupture_name):
+    '''
+    Make fault file from user provided forward model rupture file
+    '''
+    from numpy import loadtxt,savetxt,c_
+    
+    print '======= FORWARD MODELING ========'
+    rupt=loadtxt(home+project_name+'/forward_models/'+rupture_name,ndmin=2)
+    fault=c_[rupt[:,0],rupt[:,1],rupt[:,2],rupt[:,3],rupt[:,4],rupt[:,5],rupt[:,7],rupt[:,8]]
+    savetxt(home+project_name+'/data/model_info/'+rupture_name.split('.')[0]+'.fault', \
+            fault,fmt='%i\t%.6f\t%.6f\t%.6f\t%.2f\t%.2f\t%.4f\t%.4f')
+
+
+
+
 
 # Run green functions          
 def make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,static):

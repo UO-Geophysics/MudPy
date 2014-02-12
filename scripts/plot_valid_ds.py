@@ -22,7 +22,7 @@ tmax=14
 #Filter stuff
 freq=5
 #Integrate to displacement?
-integrate=1
+integrate=0
 
 pl.close("all")
 #Read stations

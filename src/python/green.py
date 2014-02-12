@@ -60,7 +60,7 @@ def run_syn(source,station_file,green_dir,integrate,static):
     #Constant parameters
     rakeDS=-90 #-90 is thrust, 90 is normal
     rakeSS=0
-    Mw=4 #This is used as unit magnitude
+    Mw=3.933333333 #This is used as unit magnitude, corresponds to 1e15 N-m
     
     num=rjust(str(int(source[0])),4,'0')
     xs=source[1]
@@ -156,7 +156,7 @@ def run_syn(source,station_file,green_dir,integrate,static):
                 n.write(staname[k]+".subfault"+num+'.SS.vel.n',format='SAC')
                 e.write(staname[k]+".subfault"+num+'.SS.vel.e',format='SAC')
                 #Correct polarity in vertical, ZR code has down=positive, we don't like that precious do we?
-                down=read(staname[k]+'.tr'+str(rise)+'.td'+str(duration)+'.SS.vel.z')
+                down=read(staname[k]+".subfault"+num+'.SS.vel.z')
                 up=down.copy()
                 up[0].data=down[0].data/-100
                 up.write(staname[k]+".subfault"+num+'.SS.vel.z',format='SAC')
@@ -184,9 +184,9 @@ def run_syn(source,station_file,green_dir,integrate,static):
             inpipe=''
             for j in range(len(temp_pipe)):
                 inpipe=inpipe+' %.6e' % temp_pipe[j]
-            commandDS="syn -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeSS)+\
+            commandDS="syn -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeDS)+\
                     " -A"+str(rad2deg(az[k]))+" -P"
-            commandSS="syn -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeDS)+\
+            commandSS="syn -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeSS)+\
                     " -A"+str(rad2deg(az[k]))+" -P"
             print staname[k]
             print commandSS
@@ -200,22 +200,22 @@ def run_syn(source,station_file,green_dir,integrate,static):
             p=subprocess.Popen(commandDS,stdin=ps.stdout,stdout=open(staname[k]+'.subfault'+num+'.DS.static.rtz','w'),stderr=subprocess.PIPE)     
             out,err=p.communicate()        
             #Rotate radial/transverse to East/North
-            statics=loadtxt(staname[k]+'.subfault'+num+'SS.static.rtz')
+            statics=loadtxt(staname[k]+'.subfault'+num+'.SS.static.rtz')
             u=-statics[2]/100
             r=statics[3]/100
             t=statics[4]/100
             ntemp,etemp=rotate_RT_NE(array([r,r]),array([t,t]),rad2deg(az[k]))
             n=ntemp[0]
             e=etemp[0]
-            savetxt(staname[k]+'.subfault'+num+'SS.static.enu',(e,n,u))
-            statics=loadtxt(staname[k]+'.subfault'+num+'DS.static.rtz')
+            savetxt(staname[k]+'.subfault'+num+'.SS.static.enu',(e,n,u))
+            statics=loadtxt(staname[k]+'.subfault'+num+'.DS.static.rtz')
             u=-statics[2]/100
             r=statics[3]/100
             t=statics[4]/100
             ntemp,etemp=rotate_RT_NE(array([r,r]),array([t,t]),rad2deg(az[k]))
             n=ntemp[0]
             e=etemp[0]
-            savetxt(staname[k]+'.subfault'+num+'DS.static.enu',(e,n,u))
+            savetxt(staname[k]+'.subfault'+num+'.DS.static.enu',(e,n,u))
 
 
 ##########                   Utilities and stuff                      ##########          
