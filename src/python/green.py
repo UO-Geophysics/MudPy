@@ -59,7 +59,7 @@ def run_syn(source,station_file,green_dir,integrate,static):
     
     #Constant parameters
     rakeDS=-90 #-90 is thrust, 90 is normal
-    rakeSS=0
+    rakeSS=180
     Mw=3.933333333 #This is used as unit magnitude, corresponds to 1e15 N-m
     
     num=rjust(str(int(source[0])),4,'0')

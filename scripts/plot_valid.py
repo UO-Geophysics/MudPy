@@ -25,7 +25,7 @@ tmax=14
 #Filter stuff
 freq=5
 #Integrate?
-integrate=0
+integrate=1
 
 
 pl.close("all")

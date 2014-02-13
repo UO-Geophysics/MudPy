@@ -36,10 +36,6 @@ def init(home,project_name):
         makedirs(proj_dir+'forward_models')
         makedirs(proj_dir+'output/inverse_models')
         makedirs(proj_dir+'output/forward_models')
-        #Copy aux files to proper places
-        copy(aux_dir+'init.fault',proj_dir+'data/model_info/') #Blank fault file
-        copy(aux_dir+'init.sta',proj_dir+'data/station_info/') #Blank station file
-        copy(aux_dir+'init.mod',proj_dir+'structure/') #Blank structure file
 
 
 #Setup some book-keeping for the forward problem

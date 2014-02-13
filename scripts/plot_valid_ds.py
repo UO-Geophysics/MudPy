@@ -9,7 +9,7 @@ from obspy.signal.filter import lowpass
 from scipy.integrate import cumtrapz
 
 stafile='/Users/dmelgarm/Research/Slip_Inv/dsp0/data/station_info/dsp0.sta'
-syndir='/Users/dmelgarm/Research/Slip_Inv/dsp0/GFs/BJ97.mod_10.0/'
+fwddir='/Users/dmelgarm/Research/Slip_Inv/dsp0/output/forward_models/'
 edfile='/Users/dmelgarm/Research/Slip_Inv/ed/dsp0.disp'
 val1='/Users/dmelgarm/Research/Slip_Inv/fk_validation/dsp0_AX/'
 val2='/Users/dmelgarm/Research/Slip_Inv/fk_validation/dsp0_CS/'
@@ -22,7 +22,7 @@ tmax=14
 #Filter stuff
 freq=5
 #Integrate to displacement?
-integrate=0
+integrate=1
 
 pl.close("all")
 #Read stations
@@ -49,12 +49,12 @@ for j in range(len(stations)):
     t_v3=np.arange(0,len(e_v3)*dt3,dt3)
     #Read my computations
     if integrate==1: #Go to displacement-land
-        temp=read(syndir+sta+'.disp.e')
+        temp=read(fwddir+sta+'.disp.e')
         tbegin=temp[0].stats.sac.b
         e=lowpass(temp[0].data,freq,df=temp[0].stats.sampling_rate,zerophase=True)
-        temp=read(syndir+sta+'.disp.n')
+        temp=read(fwddir+sta+'.disp.n')
         n=lowpass(temp[0].data,freq,df=temp[0].stats.sampling_rate,zerophase=True)
-        temp=read(syndir+sta+'.disp.z')
+        temp=read(fwddir+sta+'.disp.z')
         u=lowpass(temp[0].data,freq,df=temp[0].stats.sampling_rate,zerophase=True)
         t=temp[0].times()+tbegin
         e_v1=cumtrapz(e_v1,t_v1)
@@ -70,21 +70,21 @@ for j in range(len(stations)):
         u_v3=cumtrapz(u_v3,t_v3)
         t_v3=t_v3[1:]
     else:
-        temp=read(syndir+sta+'.vel.e')
+        temp=read(fwddir+sta+'.vel.e')
         tbegin=temp[0].stats.sac.b
         e=lowpass(temp[0].data,freq,df=temp[0].stats.sampling_rate,zerophase=True)
-        temp=read(syndir+sta+'.vel.n')
+        temp=read(fwddir+sta+'.vel.n')
         n=lowpass(temp[0].data,freq,df=temp[0].stats.sampling_rate,zerophase=True)
-        temp=read(syndir+sta+'.vel.z')
+        temp=read(fwddir+sta+'.vel.z')
         u=lowpass(temp[0].data,freq,df=temp[0].stats.sampling_rate,zerophase=True)
         t=temp[0].times()+tbegin
-    #Read coseismic results from EDCMP
+    #Read coseismic results from EDCMP (x is north, y is east z is down)
     ed=np.loadtxt(edfile)
-    ecoseis=ed[:,2]
-    ncoseis=ed[:,3]
+    ecoseis=ed[:,3]
+    ncoseis=ed[:,2]
     ucoseis=-ed[:,4]
     #Read coseismics from fk
-    temp=np.loadtxt(syndir+sta+'.static.enu')
+    temp=np.loadtxt(fwddir+sta+'.static.enu')
     efkcoseis=temp[0]
     nfkcoseis=temp[1]
     ufkcoseis=temp[2]

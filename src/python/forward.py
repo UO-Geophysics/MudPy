@@ -64,10 +64,11 @@ def waveforms(home,project_name,rupture_name,station_file,model_name,integrate):
             dsmult=sin(deg2rad(rake))
             ssmult=cos(deg2rad(rake))
             M=Mo/unitM
+            print nfault+', SS='+str(ssmult)+', DS='+str(dsmult)+', Mscale='+str(M)
             #A'ight, add 'em up
-            etotal=add_traces(ess,eds,dsmult,ssmult,M)
-            ntotal=add_traces(nss,nds,dsmult,ssmult,M)
-            ztotal=add_traces(zss,zds,dsmult,ssmult,M)
+            etotal=add_traces(ess,eds,ssmult,dsmult,M)
+            ntotal=add_traces(nss,nds,ssmult,dsmult,M)
+            ztotal=add_traces(zss,zds,ssmult,dsmult,M)
             #Add to previous subfault's results
             e=add_traces(e,etotal,1,1,1)
             n=add_traces(n,ntotal,1,1,1)
@@ -167,7 +168,7 @@ def get_mu(structure,zs):
     print "Rigidity at z="+str(zs)+' is, mu = '+str(mu/1e9)+'GPa'
     return mu
     
-def add_traces(ss,ds,dsmult,ssmult,M):
+def add_traces(ss,ds,ssmult,dsmult,M):
     '''
     Add two stream objects with dip slip and striek slip contributions
     
