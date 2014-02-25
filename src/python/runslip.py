@@ -64,6 +64,7 @@ def make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,stat
     from numpy import loadtxt
     from shutil import rmtree,copy
     from os import chdir,path,makedirs,remove
+    from string import rjust
     
     tic=time.time()
     model_path=home+project_name+'/structure/'
@@ -94,7 +95,8 @@ def make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,stat
             #Cleanup
             rmtree(dirs[0])
         else:  #Static GFs
-            copy('staticgf',green_path+model_name+'.static.'+strdepth)
+            subfault=rjust(str(k),4,'0')
+            copy('staticgf',green_path+model_name+'.static.'+strdepth+'.sub'+subfault)
             #Cleanup
             remove('staticgf')
             
@@ -112,6 +114,7 @@ def make_synthetics(home,project_name,station_file,fault_name,model_name,integra
     '''
     import green
     from numpy import loadtxt
+    from string import rjust
     
     green_path=home+project_name+'/GFs/'
     station_file=home+project_name+'/data/station_info/'+station_file
@@ -121,4 +124,5 @@ def make_synthetics(home,project_name,station_file,fault_name,model_name,integra
     source=loadtxt(fault_file,ndmin=2)
     #Now synthetics please, one sub fault at a time
     for k in range(source.shape[0]):
-        green.run_syn(source[k,:],station_file,green_dir,integrate,static)
+        subfault=rjust(str(k),4,'0')
+        green.run_syn(source[k,:],station_file,green_dir,integrate,static,subfault)
