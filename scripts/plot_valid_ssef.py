@@ -8,22 +8,22 @@ from obspy import read
 from obspy.signal.filter import lowpass
 from scipy.integrate import cumtrapz
 
-stafile='/Users/dmelgarm/Research/Slip_Inv/ssp0/data/station_info/ssp0.sta'
-syndir='/Users/dmelgarm/Research/Slip_Inv/ssp0/GFs/BJ97.mod_10.0/'
-fwddir='/Users/dmelgarm/Research/Slip_Inv/ssp0/output/forward_models/'
+stafile='/Users/dmelgarm/Research/Slip_Inv/ssef/data/station_info/ssef.sta'
+syndir='/Users/dmelgarm/Research/Slip_Inv/ssef/GFs/BJ97.mod_10.0/'
+fwddir='/Users/dmelgarm/Research/Slip_Inv/ssef/output/forward_models/'
 edfile='/Users/dmelgarm/Research/Slip_Inv/ed/ssp0.disp'
-val1='/Users/dmelgarm/Research/Slip_Inv/fk_validation/ssp0_sekiguchi/'
-val2='/Users/dmelgarm/Research/Slip_Inv/fk_validation/ssp0_song2/'
-val3='/Users/dmelgarm/Research/Slip_Inv/fk_validation/ssp0_ucsb/'
-val4='/Users/dmelgarm/Research/Slip_Inv/fk_validation/ssp0_maiCS/'
-dt1=0.01
-dt2=0.025
-dt3=0.02
-dt4=0.004
-tmin=2
-tmax=14
+val1='/Users/dmelgarm/Research/Slip_Inv/fk_validation/ssef0_AX/'
+val2='/Users/dmelgarm/Research/Slip_Inv/fk_validation/ssef0_AX2/'
+val3='/Users/dmelgarm/Research/Slip_Inv/fk_validation/ssef0_CS/'
+val4='/Users/dmelgarm/Research/Slip_Inv/fk_validation/ssef0_CS2/'
+dt1=0.0225
+dt2=0.01
+dt3=0.01
+dt4=0.005
+tmin=0
+tmax=20
 #Filter stuff
-freq=5
+freq=1
 #Integrate?
 integrate=1
 
@@ -37,25 +37,25 @@ for j in range(len(stations)):
     sta=stations[k]
     print j
     #Read validation 1
-    e_v1=lowpass(np.genfromtxt(val1+sta+'.syn',dtype="f8",usecols=0,skip_header=4),freq,df=1/dt1,zerophase=True)
-    n_v1=lowpass(np.genfromtxt(val1+sta+'.syn',dtype="f8",usecols=1,skip_header=4),freq,df=1/dt1,zerophase=True)
-    u_v1=lowpass(np.genfromtxt(val1+sta+'.syn',dtype="f8",usecols=2,skip_header=4),freq,df=1/dt1,zerophase=True)
-    t_v1=np.arange(0,len(e_v1)*dt1,dt1)+0.11
+    e_v1=lowpass(np.genfromtxt(val1+sta.lower()+'.syn',dtype="f8",usecols=0,skip_header=4),freq,df=1/dt1,zerophase=True)
+    n_v1=lowpass(np.genfromtxt(val1+sta.lower()+'.syn',dtype="f8",usecols=1,skip_header=4),freq,df=1/dt1,zerophase=True)
+    u_v1=lowpass(np.genfromtxt(val1+sta.lower()+'.syn',dtype="f8",usecols=2,skip_header=4),freq,df=1/dt1,zerophase=True)
+    t_v1=np.arange(0,len(e_v1)*dt1,dt1)-0.8
     #Read validation 2
-    e_v2=lowpass(np.genfromtxt(val2+sta+'.syn',dtype="f8",usecols=0,skip_header=4),freq,df=1/dt2,zerophase=True)
-    n_v2=lowpass(np.genfromtxt(val2+sta+'.syn',dtype="f8",usecols=1,skip_header=4),freq,df=1/dt2,zerophase=True)
-    u_v2=lowpass(np.genfromtxt(val2+sta+'.syn',dtype="f8",usecols=2,skip_header=4),freq,df=1/dt2,zerophase=True)
+    e_v2=lowpass(np.genfromtxt(val2+sta.lower()+'.syn',dtype="f8",usecols=0,skip_header=4),freq,df=1/dt2,zerophase=True)
+    n_v2=lowpass(np.genfromtxt(val2+sta.lower()+'.syn',dtype="f8",usecols=1,skip_header=4),freq,df=1/dt2,zerophase=True)
+    u_v2=lowpass(np.genfromtxt(val2+sta.lower()+'.syn',dtype="f8",usecols=2,skip_header=4),freq,df=1/dt2,zerophase=True)
     t_v2=np.arange(0,len(e_v2)*dt2,dt2)
     #Read validation 3
-    e_v3=lowpass(np.genfromtxt(val3+sta+'.syn',dtype="f8",usecols=0,skip_header=4),freq,df=1/dt3,zerophase=True)
-    n_v3=lowpass(np.genfromtxt(val3+sta+'.syn',dtype="f8",usecols=1,skip_header=4),freq,df=1/dt3,zerophase=True)
-    u_v3=lowpass(np.genfromtxt(val3+sta+'.syn',dtype="f8",usecols=2,skip_header=4),freq,df=1/dt3,zerophase=True)
+    e_v3=lowpass(np.genfromtxt(val3+sta.lower()+'.syn',dtype="f8",usecols=0,skip_header=4),freq,df=1/dt3,zerophase=True)
+    n_v3=lowpass(np.genfromtxt(val3+sta.lower()+'.syn',dtype="f8",usecols=1,skip_header=4),freq,df=1/dt3,zerophase=True)
+    u_v3=lowpass(np.genfromtxt(val3+sta.lower()+'.syn',dtype="f8",usecols=2,skip_header=4),freq,df=1/dt3,zerophase=True)
     t_v3=np.arange(0,len(e_v3)*dt3,dt3)
     #Read validation 4
-    e_v4=lowpass(np.genfromtxt(val4+sta+'.syn',dtype="f8",usecols=0,skip_header=4),freq,df=1/dt4,zerophase=True)
-    n_v4=lowpass(np.genfromtxt(val4+sta+'.syn',dtype="f8",usecols=1,skip_header=4),freq,df=1/dt4,zerophase=True)
-    u_v4=lowpass(np.genfromtxt(val4+sta+'.syn',dtype="f8",usecols=2,skip_header=4),freq,df=1/dt4,zerophase=True)
-    t_v4=np.arange(0,len(e_v4)*dt4,dt4)
+    e_v4=lowpass(np.genfromtxt(val4+sta.lower()+'.syn',dtype="f8",usecols=0,skip_header=4),freq,df=1/dt4,zerophase=True)
+    n_v4=lowpass(np.genfromtxt(val4+sta.lower()+'.syn',dtype="f8",usecols=1,skip_header=4),freq,df=1/dt4,zerophase=True)
+    u_v4=lowpass(np.genfromtxt(val4+sta.lower()+'.syn',dtype="f8",usecols=2,skip_header=4),freq,df=1/dt4,zerophase=True)
+    t_v4=np.arange(0,len(e_v4)*dt4,dt4)-0.88
     #Read my computations
     if integrate==1: #Go to displacement-land
         temp=read(fwddir+sta+'.disp.e')
@@ -103,31 +103,31 @@ for j in range(len(stations)):
     ufkcoseis=temp[2]
     #Plot
     pl.figure()
-    pl.title('Station '+sta)
     #EAST
     pl.subplot(311)
     pl.plot(t,e,'k')
-    pl.plot(t_v1,e_v1,t_v2,e_v2,t_v3,e_v3,t,np.ones(t.shape)*ecoseis[k],t,np.ones(t.shape)*efkcoseis)
+    pl.plot(t_v1,e_v1,t_v2,e_v2,t_v3,e_v3,t_v4,e_v4,t,np.ones(t.shape)*efkcoseis)
     pl.ylabel('East m/s')
     pl.grid()
-    pl.legend(['MySyn','Axitra','ZR1','ZR2','EDCMP','FK-Coseis'])
+    pl.legend(['My Syntetics','Axitra','Axitra2','CompSyn','CompSyn2','FK-Coseis'])
     pl.xlim((tmin,tmax))
     #NORTH
     pl.subplot(312)
     pl.plot(t,n,'k')
-    pl.plot(t_v1,n_v1,t_v2,n_v2,t_v3,n_v3,t,np.ones(t.shape)*ncoseis[k],t,np.ones(t.shape)*nfkcoseis)
+    pl.plot(t_v1,n_v1,t_v2,n_v2,t_v3,n_v3,t_v4,n_v4,t,np.ones(t.shape)*nfkcoseis)
     pl.ylabel('North m/s')
     pl.grid()
     pl.xlim((tmin,tmax))
     #UP
     pl.subplot(313)
     pl.plot(t,u,'k')
-    pl.plot(t_v1,u_v1,t_v2,u_v2,t_v3,u_v3,t,np.ones(t.shape)*ucoseis[k],t,np.ones(t.shape)*ufkcoseis)
+    pl.plot(t_v1,u_v1,t_v2,u_v2,t_v3,u_v3,t_v4,u_v4,t,np.ones(t.shape)*ufkcoseis)
     pl.ylabel('Up m/s')
     pl.xlabel('Time (s)')
     pl.grid()
     pl.xlim((tmin,tmax))
     #Done plotting
     pl.show()
-    
-    
+    pl.subplot(311)
+    pl.title('Station '+sta)
+print 'Hello Diego!!  Te amo'

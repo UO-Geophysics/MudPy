@@ -2,17 +2,16 @@
 Diego Melgar, 02/2014
 
 Parameter file
-Project: SSEF
-Comment: Source inversion validation strike-slip finite-fault
+Project: Alaska Shield
+Comment: Synthetics for the 1964 simulation
 '''
-
 
 import runslip,forward
 
 ########                            GLOBALS                             ########
 
 home='/Users/dmelgarm/Research/Slip_Inv/'
-project_name='ssef'
+project_name='alaska'
 ################################################################################
 
 
@@ -22,18 +21,18 @@ init=0 #Initalize project
 make_green=1 #Compute GFs
 make_synthetics=1 #Compute synthetics for a given model at given stations
 direction=1  #=1 for forward modeling, =0 for inversion
-solve=1 # =1 solves forward problem or runs inverse calculation, =0 does nothing
+solve=0  # =1 solves forward problem or runs inverse calculation, =0 does nothing
 ###############################################################################
 
 ###############            Green function parameters               #############
 
 static=1  #=0 computes static GFs only, =1 computes the completer waveform
-model_name='BJ97.mod'   #Velocity model
-rupture_name='ssef.rupt'   #Rupture model, not needed for inversion
-fault_name='ssef.fault'    #Fault geometry
-station_file='ssef.sta'    #Station distribution
-NFFT=2048
-dt=0.01
+model_name='PS9.mod'   #Velocity model
+rupture_name='alaska.rupt'   #Rupture model, not needed for inversion
+fault_name='alaska.fault'    #Fault geometry
+station_file='alaska.sta'    #Station distribution
+NFFT=1024
+dt=0.5
 ################################################################################
 
 ############                 Synthetics parameters               ###############
@@ -64,3 +63,6 @@ if solve==1:
         forward.waveforms(home,project_name,rupture_name,station_file,model_name,integrate)
     if direction==1 and static==1: #Forward problem (coseismics)
         forward.coseismics(home,project_name,rupture_name,station_file,model_name)
+    
+    
+    

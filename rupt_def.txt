@@ -1,0 +1,1 @@
+#No  x            y        z(km)      str     dip      rake       rise    dura     slip    ss_len  ds_len rupt_time

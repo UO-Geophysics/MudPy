@@ -7,7 +7,7 @@ Forward modeling routines
 def waveforms(home,project_name,rupture_name,station_file,model_name,integrate):
     '''
     '''
-    from numpy import loadtxt,genfromtxt,deg2rad,sin,cos
+    from numpy import loadtxt,genfromtxt,deg2rad,sin,cos,round,allclose
     from obspy import read,Stream
     from string import rjust
     
@@ -46,6 +46,7 @@ def waveforms(home,project_name,rupture_name,station_file,model_name,integrate):
             slip=source[k,9]
             sslength=source[k,10]
             dslength=source[k,10]
+            rtime=source[k,12]
             #Where's the data
             strdepth='%.1f' % zs 
             syn_path=home+project_name+'/GFs/'+model_name+'_'+strdepth+'/'
@@ -60,20 +61,36 @@ def waveforms(home,project_name,rupture_name,station_file,model_name,integrate):
             eds=read(syn_path+sta+'.'+nfault+'.DS.'+vord+'.e')
             nds=read(syn_path+sta+'.'+nfault+'.DS.'+vord+'.n')
             zds=read(syn_path+sta+'.'+nfault+'.DS.'+vord+'.z')
+            #Time shift them according to subfault rupture time
+            dt=ess[0].stats.delta
+            rtime=round(rtime/dt)*dt  #Rupture time has to be in the sampling rate of the GFs
+            ess=tshift(ess,rtime)
+            nss=tshift(nss,rtime)
+            zss=tshift(zss,rtime)
+            eds=tshift(eds,rtime)
+            nds=tshift(nds,rtime)
+            zds=tshift(zds,rtime)
             #get rake contribution and moment multiplier
             dsmult=sin(deg2rad(rake))
             ssmult=cos(deg2rad(rake))
             M=Mo/unitM
-            print nfault+', SS='+str(ssmult)+', DS='+str(dsmult)+', Mscale='+str(M)
-            #A'ight, add 'em up
-            etotal=add_traces(ess,eds,ssmult,dsmult,M)
-            ntotal=add_traces(nss,nds,ssmult,dsmult,M)
-            ztotal=add_traces(zss,zds,ssmult,dsmult,M)
-            #Add to previous subfault's results
-            e=add_traces(e,etotal,1,1,1)
-            n=add_traces(n,ntotal,1,1,1)
-            z=add_traces(z,ztotal,1,1,1)
+            if allclose(slip,0)==False:  #Only add things that matter
+                print nfault+', SS='+str(ssmult)+', DS='+str(dsmult)+', Mscale='+str(M)
+                #A'ight, add 'em up
+                etotal=add_traces(ess,eds,ssmult,dsmult,M)
+                ntotal=add_traces(nss,nds,ssmult,dsmult,M)
+                ztotal=add_traces(zss,zds,ssmult,dsmult,M)
+                #Add to previous subfault's results
+                e=add_traces(e,etotal,1,1,1)
+                n=add_traces(n,ntotal,1,1,1)
+                z=add_traces(z,ztotal,1,1,1)
+            else:
+                print "No slip on subfault "+nfault+', ignoring it...'
+                
         #Save results
+        e[0].data=e[0].data.filled()  #This is a workaround of a bug in obspy
+        n[0].data=n[0].data.filled()
+        z[0].data=z[0].data.filled()
         e.write(outpath+sta+'.'+vord+'.e',format='SAC')
         n.write(outpath+sta+'.'+vord+'.n',format='SAC')
         z.write(outpath+sta+'.'+vord+'.z',format='SAC')
@@ -105,6 +122,7 @@ def coseismics(home,project_name,rupture_name,station_file,model_name):
         e=array([0])
         z=array([0])
         sta=staname[ksta]
+        print 'Working on station'+sta
         #Loop over sources
         for k in range(source.shape[0]):
             #Get subfault parameters
@@ -165,7 +183,7 @@ def get_mu(structure,zs):
     if imu>=structure.shape[0]:
         imu=imu-1#It's int he half-space
     mu=((1000*structure[imu,1])**2)*structure[imu,3]
-    print "Rigidity at z="+str(zs)+' is, mu = '+str(mu/1e9)+'GPa'
+    #print "Rigidity at z="+str(zs)+' is, mu = '+str(mu/1e9)+'GPa'
     return mu
     
 def add_traces(ss,ds,ssmult,dsmult,M):
@@ -209,6 +227,14 @@ def add_traces(ss,ds,ssmult,dsmult,M):
     #And done
     return st
 
+
+def tshift(st,tshift):
+    '''
+    shift a stream object by tshift seconds, positive moves forward in time
+    '''
+    tstart=st[0].stats.starttime
+    st[0].stats.starttime=tstart+tshift
+    return st
         
         
     

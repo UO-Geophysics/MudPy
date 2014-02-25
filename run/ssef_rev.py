@@ -12,7 +12,7 @@ import runslip,forward
 ########                            GLOBALS                             ########
 
 home='/Users/dmelgarm/Research/Slip_Inv/'
-project_name='ssef'
+project_name='ssef_rev'
 ################################################################################
 
 
@@ -22,18 +22,18 @@ init=0 #Initalize project
 make_green=1 #Compute GFs
 make_synthetics=1 #Compute synthetics for a given model at given stations
 direction=1  #=1 for forward modeling, =0 for inversion
-solve=1 # =1 solves forward problem or runs inverse calculation, =0 does nothing
+solve=0 # =1 solves forward problem or runs inverse calculation, =0 does nothing
 ###############################################################################
 
 ###############            Green function parameters               #############
 
-static=1  #=0 computes static GFs only, =1 computes the completer waveform
+static=0  #=0 computes static GFs only, =1 computes the completer waveform
 model_name='BJ97.mod'   #Velocity model
-rupture_name='ssef.rupt'   #Rupture model, not needed for inversion
-fault_name='ssef.fault'    #Fault geometry
+rupture_name='ssef_rev.rupt'   #Rupture model, not needed for inversion
+fault_name='ssef_rev.fault'    #Fault geometry
 station_file='ssef.sta'    #Station distribution
-NFFT=2048
-dt=0.01
+NFFT=1024
+dt=0.02
 ################################################################################
 
 ############                 Synthetics parameters               ###############

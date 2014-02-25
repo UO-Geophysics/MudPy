@@ -77,7 +77,7 @@ def make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,stat
     #this is PENDING, use numpy.unique and numpy.intersect1d, computation is not that slow so I might not do this
     for k in range(source.shape[0]):
         green.run_green(source[k,:],station_file,model_name,dt,NFFT,static)
-        strdepth='%.1f' % source[k,3]
+        strdepth='%.4f' % source[k,3]
         if static==0:
             #Move results to GF dir
             dirs=glob.glob('*.mod_'+strdepth)
