@@ -38,7 +38,7 @@ def run_green(source,station_file,model_name,dt,NFFT,static):
     print err
     
     
-def run_syn(source,station_file,green_dir,integrate,static,subfault):
+def run_syn(source,station_file,green_path,model_name,integrate,static,subfault):
     '''
     Use green functions and compute synthetics at stations for a given source
     distribution and station configuration.
@@ -71,8 +71,9 @@ def run_syn(source,station_file,green_dir,integrate,static,subfault):
     rise=source[6]
     duration=source[7]
 
-    strdepth='%.1f' % zs 
-    green_path=green_dir+"_"+strdepth+"/"
+    strdepth='%.4f' % zs
+    if static==0: 
+        green_path=green_path+'/'+model_name+"_"+strdepth+".sub"+subfault+"/"
     print("--> Computing synthetics at stations for the source at ("+str(xs)+" , "+str(ys)+")")
     staname=genfromtxt(station_file,dtype="S6",usecols=0)
     x=genfromtxt(station_file,dtype="f8",usecols=1)
@@ -177,7 +178,8 @@ def run_syn(source,station_file,green_dir,integrate,static,subfault):
                 up.write(staname[k]+".subfault"+num+'.DS.vel.z',format='SAC')
         else: #Compute statics
             diststr='%.1f' % d[k] #Need current distance in string form for external call
-            green_file=green_dir+".static."+strdepth+".sub"+subfault
+            green_file=green_path+model_name+".static."+strdepth+".sub"+subfault
+            print green_file
             statics=loadtxt(green_file)
             #Print static GFs into a pipe and pass into synthetics command
             temp_pipe=statics[k,:]

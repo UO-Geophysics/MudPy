@@ -19,7 +19,7 @@ project_name='alaska'
 
 init=0 #Initalize project
 make_green=1 #Compute GFs
-make_synthetics=1 #Compute synthetics for a given model at given stations
+make_synthetics=0 #Compute synthetics for a given model at given stations
 direction=1  #=1 for forward modeling, =0 for inversion
 solve=0  # =1 solves forward problem or runs inverse calculation, =0 does nothing
 ###############################################################################

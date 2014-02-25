@@ -157,6 +157,7 @@ c input distance ranges
       xmax = hs
       do ix=1,nx
 	write(0, '(a)') 'Input x t0 output_name (2f10.3,1x,a)'
+c 2f10.3 DMM
         read(*,'(2f10.3,1x,a)')x(ix),t0(ix),fout(ix)
 	if (xmax .LT. x(ix)) xmax=x(ix)
         t0(ix) = t0(ix)-tb*dt
@@ -245,7 +246,8 @@ c*************** do inverse fourier transform
       dfac = exp(sigma*dt)
       do ix=1,nx
 	 if ( nfft2.EQ.1 ) then
-	    write(*,'(f5.1,9e11.3)')x(ix),(real(sum(ix,l,1)),l=1,nCom)
+c	    write(*,'(f5.1,9e11.3)')x(ix),(real(sum(ix,l,1)),l=1,nCom)
+	    write(*,'(f8.1,13e15.7)')x(ix),(real(sum(ix,l,1)),l=1,nCom)
 	 else
             iblank = index(fout(ix),' ')
 	    fout(ix)(iblank+1:iblank+1) = char(0)

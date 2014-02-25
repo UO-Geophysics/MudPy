@@ -151,7 +151,7 @@ for (my $j=0;$j<$num_layer;$j++) {
 }
 printf REFL "$sigma $nft $dt $taper $tb $smth %d %d\n",int($f1*$nft*$dt)+1,int($f2*$nft*$dt)+1;
 printf REFL "$pmin $pmax $dk $kmax\n";
-printf REFL "%5d\n",$#dist+1;
+printf REFL "%8d\n",$#dist+1;
 foreach (@dist) {
     printf REFL "%10.3f%10.3f $dirnm/$_$rdep.grn.\n",$_*$deg2km,$t0{$_};
 }

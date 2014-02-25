@@ -28,6 +28,7 @@ def init(home,project_name):
         makedirs(proj_dir)
         #And make the subdirectories
         makedirs(proj_dir+'GFs')
+        makedirs(proj_dir+'GFs/static')
         makedirs(proj_dir+'data/waveforms')
         makedirs(proj_dir+'data/station_info')
         makedirs(proj_dir+'data/model_info')
@@ -79,6 +80,7 @@ def make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,stat
     for k in range(source.shape[0]):
         green.run_green(source[k,:],station_file,model_name,dt,NFFT,static)
         strdepth='%.4f' % source[k,3]
+        subfault=rjust(str(k),4,'0')
         if static==0:
             #Move results to GF dir
             dirs=glob.glob('*.mod_'+strdepth)
@@ -95,8 +97,7 @@ def make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,stat
             #Cleanup
             rmtree(dirs[0])
         else:  #Static GFs
-            subfault=rjust(str(k),4,'0')
-            copy('staticgf',green_path+model_name+'.static.'+strdepth+'.sub'+subfault)
+            copy('staticgf',green_path+'static/'+model_name+'.static.'+strdepth+'.sub'+subfault)
             #Cleanup
             remove('staticgf')
             
@@ -119,10 +120,10 @@ def make_synthetics(home,project_name,station_file,fault_name,model_name,integra
     green_path=home+project_name+'/GFs/'
     station_file=home+project_name+'/data/station_info/'+station_file
     fault_file=home+project_name+'/data/model_info/'+fault_name
-    green_dir=green_path+model_name
+    #green_dir=green_path+model_name
     #First read fault model file
     source=loadtxt(fault_file,ndmin=2)
     #Now synthetics please, one sub fault at a time
     for k in range(source.shape[0]):
         subfault=rjust(str(k),4,'0')
-        green.run_syn(source[k,:],station_file,green_dir,integrate,static,subfault)
+        green.run_syn(source[k,:],station_file,green_path,model_name,integrate,static,subfault)
