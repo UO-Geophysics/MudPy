@@ -16,7 +16,7 @@ def run_green(source,station_file,model_name,dt,NFFT,static):
     import subprocess
     from shlex import split
     
-    depth=source[3]
+    depth='%.4f' % source[3]
     print("--> Computing GFs for source depth "+str(depth)+"km")
     #Get station distances to source
     d=src2sta(station_file,source)
@@ -25,17 +25,20 @@ def run_green(source,station_file,model_name,dt,NFFT,static):
     for k in range(len(d)):
         diststr=diststr+' %.3f' % d[k] #Truncate distance to 3 decimal palces (meters)
     if static==0: #Compute full waveform
-        command=split("fk.pl -M"+model_name+"/"+str(depth)+" -N"+str(NFFT)+"/"+str(dt)+diststr)
-        print "fk.pl -M"+model_name+"/"+str(depth)+" -N"+str(NFFT)+"/"+str(dt)+diststr
+        command=split("fk.pl -M"+model_name+"/"+depth+" -N"+str(NFFT)+"/"+str(dt)+diststr)
+        print "fk.pl -M"+model_name+"/"+depth+" -N"+str(NFFT)+"/"+str(dt)+diststr
         p=subprocess.Popen(command,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
         out,err=p.communicate() 
     else: #Compute only statics
-        command=split("fk.pl -M"+model_name+"/"+str(depth)+" -N1 "+diststr)
-        print "fk.pl -M"+model_name+"/"+str(depth)+" -N1 "+diststr
+        command=split("fk.pl -M"+model_name+"/"+depth+" -N1 "+diststr)
+        print "fk.pl -M"+model_name+"/"+depth+" -N1 "+diststr
         p=subprocess.Popen(command,stdout=open('staticgf','w'),stderr=subprocess.PIPE)
         out,err=p.communicate() 
     print out
     print err
+    log=str(out)+str(err)
+    return log
+    
     
     
 def run_syn(source,station_file,green_path,model_name,integrate,static,subfault):
@@ -73,7 +76,7 @@ def run_syn(source,station_file,green_path,model_name,integrate,static,subfault)
 
     strdepth='%.4f' % zs
     if static==0: 
-        green_path=green_path+'/'+model_name+"_"+strdepth+".sub"+subfault+"/"
+        green_path=green_path+'dynamic/'+model_name+"_"+strdepth+".sub"+subfault+"/"
     print("--> Computing synthetics at stations for the source at ("+str(xs)+" , "+str(ys)+")")
     staname=genfromtxt(station_file,dtype="S6",usecols=0)
     x=genfromtxt(station_file,dtype="f8",usecols=1)
@@ -82,6 +85,7 @@ def run_syn(source,station_file,green_path,model_name,integrate,static,subfault)
     d=src2sta(station_file,source)
     az=cartesian_azimuth(x,y,xs,ys)
     #Move to output folder
+    log=''
     os.chdir(green_path)
     for k in range(len(d)):
         if static==0: #Compute full waveforms
@@ -91,28 +95,32 @@ def run_syn(source,station_file,green_path,model_name,integrate,static,subfault)
                 commandSS="syn -I -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeSS)+" -D"+str(duration)+ \
                     "/"+str(rise)+" -A"+str(rad2deg(az[k]))+" -O"+staname[k]+".subfault"+num+".SS.disp.x -G"+green_path+diststr+".grn.0"
                 print commandSS
+                log=log+commandSS+'\n'
                 commandSS=split(commandSS)
                 #Now dip slip
                 commandDS="syn -I -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeDS)+" -D"+str(duration)+ \
                     "/"+str(rise)+" -A"+str(rad2deg(az[k]))+" -O"+staname[k]+".subfault"+num+".DS.disp.x -G"+green_path+diststr+".grn.0"
                 print commandDS
+                log=log+commandDS+'\n'
                 commandDS=split(commandDS)
             else: #Make vel.
                 #First Stike-Slip GFs
                 commandSS="syn -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeSS)+" -D"+str(duration)+ \
                     "/"+str(rise)+" -A"+str(rad2deg(az[k]))+" -O"+staname[k]+".subfault"+num+".SS.vel.x -G"+green_path+diststr+".grn.0"
                 print commandSS
+                log=log+commandSS+'\n'
                 commandSS=split(commandSS)
                 #Now dip slip
                 commandDS="syn -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeDS)+" -D"+str(duration)+ \
                     "/"+str(rise)+" -A"+str(rad2deg(az[k]))+" -O"+staname[k]+".subfault"+num+".DS.vel.x -G"+green_path+diststr+".grn.0"
                 print commandDS
+                log=log+commandDS+'\n'
                 commandDS=split(commandDS)
             #Run them yo
             p=subprocess.Popen(commandSS,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
             out,err=p.communicate() 
             p=subprocess.Popen(commandDS,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
-            out,err=p.communicate() 
+            out,err=p.communicate()
             #Rotate to NE
             if integrate==1: #'tis displacememnt
                 #Strike slip
@@ -177,9 +185,11 @@ def run_syn(source,station_file,green_path,model_name,integrate,static,subfault)
                 up[0].data=down[0].data/-100
                 up.write(staname[k]+".subfault"+num+'.DS.vel.z',format='SAC')
         else: #Compute statics
+            os.chdir(green_path+'static/')
             diststr='%.1f' % d[k] #Need current distance in string form for external call
-            green_file=green_path+model_name+".static."+strdepth+".sub"+subfault
+            green_file=model_name+".static."+strdepth+".sub"+subfault
             print green_file
+            log=log+green_file+'\n'
             statics=loadtxt(green_file)
             #Print static GFs into a pipe and pass into synthetics command
             temp_pipe=statics[k,:]
@@ -193,14 +203,17 @@ def run_syn(source,station_file,green_path,model_name,integrate,static,subfault)
             print staname[k]
             print commandSS
             print commandDS
+            log=log+staname[k]+'\n'+commandSS+'\n'+commandDS+'\n'
             commandSS=split(commandSS)
             commandDS=split(commandDS)
             ps=subprocess.Popen(['printf',inpipe],stdout=subprocess.PIPE,stderr=subprocess.PIPE)  #This is the statics pipe, pint stdout to syn's stdin
             p=subprocess.Popen(commandSS,stdin=ps.stdout,stdout=open(staname[k]+'.subfault'+num+'.SS.static.rtz','w'),stderr=subprocess.PIPE)     
             out,err=p.communicate()  
+            log=log+str(out)+str(err)
             ps=subprocess.Popen(['printf',inpipe],stdout=subprocess.PIPE,stderr=subprocess.PIPE)  #This is the statics pipe, pint stdout to syn's stdin
             p=subprocess.Popen(commandDS,stdin=ps.stdout,stdout=open(staname[k]+'.subfault'+num+'.DS.static.rtz','w'),stderr=subprocess.PIPE)     
-            out,err=p.communicate()        
+            out,err=p.communicate() 
+            log=log+str(out)+str(err)       
             #Rotate radial/transverse to East/North
             statics=loadtxt(staname[k]+'.subfault'+num+'.SS.static.rtz')
             u=-statics[2]/100
@@ -218,6 +231,7 @@ def run_syn(source,station_file,green_path,model_name,integrate,static,subfault)
             n=ntemp[0]
             e=etemp[0]
             savetxt(staname[k]+'.subfault'+num+'.DS.static.enu',(e,n,u))
+    return log
 
 
 ##########                   Utilities and stuff                      ##########          

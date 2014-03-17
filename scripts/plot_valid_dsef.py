@@ -8,22 +8,20 @@ from obspy import read
 from obspy.signal.filter import lowpass
 from scipy.integrate import cumtrapz
 
-stafile='/Users/dmelgarm/Research/Slip_Inv/ssef/data/station_info/ssef.sta'
-syndir='/Users/dmelgarm/Research/Slip_Inv/ssef/GFs/BJ97.mod_10.0/'
-fwddir='/Users/dmelgarm/Research/Slip_Inv/ssef/output/forward_models/'
+stafile='/Users/dmelgarm/Research/Slip_Inv/dsef/data/station_info/dsef.sta'
+syndir='/Users/dmelgarm/Research/Slip_Inv/dsef/GFs/BJ97.mod_10.0/'
+fwddir='/Users/dmelgarm/Research/Slip_Inv/dsef/output/forward_models/'
 edfile='/Users/dmelgarm/Research/Slip_Inv/ed/ssp0.disp'
-val1='/Users/dmelgarm/Research/Slip_Inv/fk_validation/ssef0_AX/'
-val2='/Users/dmelgarm/Research/Slip_Inv/fk_validation/ssef0_AX2/'
-val3='/Users/dmelgarm/Research/Slip_Inv/fk_validation/ssef0_CS/'
-val4='/Users/dmelgarm/Research/Slip_Inv/fk_validation/ssef0_CS2/'
+val1='/Users/dmelgarm/Research/Slip_Inv/fk_validation/dsef0_AX/'
+val2='/Users/dmelgarm/Research/Slip_Inv/fk_validation/dsef0_CS1/'
+val3='/Users/dmelgarm/Research/Slip_Inv/fk_validation/dsef0_CS2/'
 dt1=0.0225
-dt2=0.01
+dt2=0.005
 dt3=0.01
-dt4=0.005
 tmin=0
 tmax=20
 #Filter stuff
-freq=2
+freq=5
 #Integrate?
 integrate=1
 
@@ -56,11 +54,6 @@ for j in range(len(stations)):
     n_v3=lowpass(np.genfromtxt(val3+sta.lower()+'.syn',dtype="f8",usecols=1,skip_header=4),freq,df=1/dt3,zerophase=True)
     u_v3=lowpass(np.genfromtxt(val3+sta.lower()+'.syn',dtype="f8",usecols=2,skip_header=4),freq,df=1/dt3,zerophase=True)
     t_v3=np.arange(0,len(e_v3)*dt3,dt3)
-    #Read validation 4
-    e_v4=lowpass(np.genfromtxt(val4+sta.lower()+'.syn',dtype="f8",usecols=0,skip_header=4),freq,df=1/dt4,zerophase=True)
-    n_v4=lowpass(np.genfromtxt(val4+sta.lower()+'.syn',dtype="f8",usecols=1,skip_header=4),freq,df=1/dt4,zerophase=True)
-    u_v4=lowpass(np.genfromtxt(val4+sta.lower()+'.syn',dtype="f8",usecols=2,skip_header=4),freq,df=1/dt4,zerophase=True)
-    t_v4=np.arange(0,len(e_v4)*dt4,dt4)#-0.88
     #Read my computations
     if integrate==1: #Go to displacement-land
         temp=read(fwddir+sta+'.disp.e')
@@ -83,10 +76,6 @@ for j in range(len(stations)):
         n_v3=cumtrapz(n_v3,t_v3)
         u_v3=cumtrapz(u_v3,t_v3)
         t_v3=t_v3[1:]
-        e_v4=cumtrapz(e_v4,t_v4)
-        n_v4=cumtrapz(n_v4,t_v4)
-        u_v4=cumtrapz(u_v4,t_v4)
-        t_v4=t_v4[1:]
     else:
         temp=read(fwddir+sta+'.vel.e')
         tbegin=temp[0].stats.sac.b
@@ -111,22 +100,22 @@ for j in range(len(stations)):
     #EAST
     pl.subplot(311)
     pl.plot(t,e,'k')
-    pl.plot(t_v1,e_v1,t_v2,e_v2,t_v3,e_v3,t_v4,e_v4,t,np.ones(t.shape)*efkcoseis[j])
+    pl.plot(t_v1,e_v1,t_v2,e_v2,t_v3,e_v3,t,np.ones(t.shape)*efkcoseis[j])
     pl.ylabel('East m/s')
     pl.grid()
-    pl.legend(['My Syntetics','Axitra','Axitra2','CompSyn','CompSyn2','FK-Coseis'])
+    pl.legend(['My Syntetics','Axitra','CompSyn','CompSyn2','FK-Coseis'])
     pl.xlim((tmin,tmax))
     #NORTH
     pl.subplot(312)
     pl.plot(t,n,'k')
-    pl.plot(t_v1,n_v1,t_v2,n_v2,t_v3,n_v3,t_v4,n_v4,t,np.ones(t.shape)*nfkcoseis[j])
+    pl.plot(t_v1,n_v1,t_v2,n_v2,t_v3,n_v3,t,np.ones(t.shape)*nfkcoseis[j])
     pl.ylabel('North m/s')
     pl.grid()
     pl.xlim((tmin,tmax))
     #UP
     pl.subplot(313)
     pl.plot(t,u,'k')
-    pl.plot(t_v1,u_v1,t_v2,u_v2,t_v3,u_v3,t_v4,u_v4,t,np.ones(t.shape)*ufkcoseis[j])
+    pl.plot(t_v1,u_v1,t_v2,u_v2,t_v3,u_v3,t,np.ones(t.shape)*ufkcoseis[j])
     pl.ylabel('Up m/s')
     pl.xlabel('Time (s)')
     pl.grid()

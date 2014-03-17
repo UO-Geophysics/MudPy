@@ -4,18 +4,25 @@ D. Melgar 02/2014
 Forward modeling routines
 '''
 
-def waveforms(home,project_name,rupture_name,station_file,model_name,integrate):
+def waveforms(home,project_name,rupture_name,station_file,model_name,integrate,F):
     '''
     '''
     from numpy import loadtxt,genfromtxt,deg2rad,sin,cos,round,allclose
     from obspy import read,Stream
+    from obspy.signal import lowpass
     from string import rjust
+    import datetime
     
     #constants
     unitM=1e15 #N-m
     
     #Output where?
     outpath=home+project_name+'/output/forward_models/'
+    logpath=home+project_name+'/logs/'
+    log=''
+    #Time for log file
+    now=datetime.datetime.now()
+    now=now.strftime('%b-%d-%H%M')
     #load source
     source=loadtxt(home+project_name+'/forward_models/'+rupture_name,ndmin=2)
     #Load stations
@@ -32,6 +39,7 @@ def waveforms(home,project_name,rupture_name,station_file,model_name,integrate):
         
     #Loop over stations
     for ksta in range(len(staname)):
+        print 'Working on station '+staname[ksta]+' ('+str(ksta)+'/'+str(len(staname))+')'
         #Initalize output
         n=Stream()
         e=Stream()
@@ -41,15 +49,16 @@ def waveforms(home,project_name,rupture_name,station_file,model_name,integrate):
         for k in range(source.shape[0]):
             #Get subfault parameters
             nfault='subfault'+rjust(str(int(source[k,0])),4,'0')
+            nsub='sub'+rjust(str(int(source[k,0])),4,'0')
             zs=source[k,3]
             rake=source[k,6]
             slip=source[k,9]
             sslength=source[k,10]
-            dslength=source[k,10]
+            dslength=source[k,11]
             rtime=source[k,12]
             #Where's the data
-            strdepth='%.1f' % zs 
-            syn_path=home+project_name+'/GFs/'+model_name+'_'+strdepth+'/'
+            strdepth='%.4f' % zs 
+            syn_path=home+project_name+'/GFs/dynamic/'+model_name+'_'+strdepth+'.'+nsub+'/'
             #Find rigidity at this source point
             mu=get_mu(structure,zs)
             #Compute equivalent Moment at this source point
@@ -61,21 +70,33 @@ def waveforms(home,project_name,rupture_name,station_file,model_name,integrate):
             eds=read(syn_path+sta+'.'+nfault+'.DS.'+vord+'.e')
             nds=read(syn_path+sta+'.'+nfault+'.DS.'+vord+'.n')
             zds=read(syn_path+sta+'.'+nfault+'.DS.'+vord+'.z')
-            #Time shift them according to subfault rupture time
+            #Filter them
             dt=ess[0].stats.delta
-            rtime=round(rtime/dt)*dt  #Rupture time has to be in the sampling rate of the GFs
+            ess[0].data=lowpass(ess[0].data,freq=F,df=1/dt,zerophase=True)
+            nss[0].data=lowpass(nss[0].data,freq=F,df=1/dt,zerophase=True)
+            zss[0].data=lowpass(zss[0].data,freq=F,df=1/dt,zerophase=True)
+            eds[0].data=lowpass(eds[0].data,freq=F,df=1/dt,zerophase=True)
+            nds[0].data=lowpass(nds[0].data,freq=F,df=1/dt,zerophase=True)
+            zds[0].data=lowpass(zds[0].data,freq=F,df=1/dt,zerophase=True)
+            #Time shift them according to subfault rupture time
             ess=tshift(ess,rtime)
+            ess[0].stats.starttime=round_time(ess[0].stats.starttime,dt)
             nss=tshift(nss,rtime)
+            nss[0].stats.starttime=round_time(nss[0].stats.starttime,dt)
             zss=tshift(zss,rtime)
+            zss[0].stats.starttime=round_time(zss[0].stats.starttime,dt)
             eds=tshift(eds,rtime)
+            eds[0].stats.starttime=round_time(eds[0].stats.starttime,dt)
             nds=tshift(nds,rtime)
+            nds[0].stats.starttime=round_time(nds[0].stats.starttime,dt)
             zds=tshift(zds,rtime)
+            zds[0].stats.starttime=round_time(zds[0].stats.starttime,dt)
             #get rake contribution and moment multiplier
             dsmult=sin(deg2rad(rake))
             ssmult=cos(deg2rad(rake))
             M=Mo/unitM
             if allclose(slip,0)==False:  #Only add things that matter
-                print nfault+', SS='+str(ssmult)+', DS='+str(dsmult)+', Mscale='+str(M)
+                log=log+nfault+', SS='+str(ssmult)+', DS='+str(dsmult)+', Mscale='+str(M)+'\n'
                 #A'ight, add 'em up
                 etotal=add_traces(ess,eds,ssmult,dsmult,M)
                 ntotal=add_traces(nss,nds,ssmult,dsmult,M)
@@ -85,7 +106,7 @@ def waveforms(home,project_name,rupture_name,station_file,model_name,integrate):
                 n=add_traces(n,ntotal,1,1,1)
                 z=add_traces(z,ztotal,1,1,1)
             else:
-                print "No slip on subfault "+nfault+', ignoring it...'
+                log=log+"No slip on subfault "+nfault+', ignoring it...\n'
                 
         #Save results
         e[0].data=e[0].data.filled()  #This is a workaround of a bug in obspy
@@ -94,6 +115,9 @@ def waveforms(home,project_name,rupture_name,station_file,model_name,integrate):
         e.write(outpath+sta+'.'+vord+'.e',format='SAC')
         n.write(outpath+sta+'.'+vord+'.n',format='SAC')
         z.write(outpath+sta+'.'+vord+'.z',format='SAC')
+    f=open(logpath+'waveforms.'+now+'.log','a')
+    f.write(log)
+    f.close()
         
 
 def coseismics(home,project_name,rupture_name,station_file,model_name):
@@ -131,10 +155,9 @@ def coseismics(home,project_name,rupture_name,station_file,model_name):
             rake=source[k,6]
             slip=source[k,9]
             sslength=source[k,10]
-            dslength=source[k,10]
+            dslength=source[k,11]
             #Where's the data
-            strdepth='%.1f' % zs 
-            syn_path=home+project_name+'/GFs/'+model_name+'_'+strdepth+'/'
+            syn_path=home+project_name+'/GFs/static/'
             #Find rigidity at this source point
             mu=get_mu(structure,zs)
             #Compute equivalent Moment at this source point
@@ -191,6 +214,9 @@ def add_traces(ss,ds,ssmult,dsmult,M):
     Add two stream objects with dip slip and striek slip contributions
     
     For simple addition use ss=ds=M=1
+    
+    NOTES: Right now I'm truncating tiems tot eh nearest second, this si incorrect, they shoudl be truncated tot he enarest dt interval.
+    Also pad value should be zero for VELOCITY and the last sampelf or DISPALCEMMENT, this needs adjsutment
     '''
     from numpy import zeros
     
@@ -204,6 +230,10 @@ def add_traces(ss,ds,ssmult,dsmult,M):
     elif ds.count()==0:
         ds=ss.copy()
         ds[0].data=zeros(ss[0].data.shape) 
+        
+    #Round times to dt sampling interval
+    ss[0].stats.starttime=round_time(ss[0].stats.starttime,ss[0].stats.delta)
+    ds[0].stats.starttime=round_time(ds[0].stats.starttime,ds[0].stats.delta)
     #Find earliest starttime
     if ss[0].stats.starttime<=ds[0].stats.starttime:
         t1=ss[0].stats.starttime
@@ -214,9 +244,13 @@ def add_traces(ss,ds,ssmult,dsmult,M):
         t2=ss[0].stats.endtime
     else:
         t2=ds[0].stats.endtime
-    #Now extend both arrays and fill edges with 0's
-    ss[0].trim(t1,t2,pad=True,fill_value=0)
-    ds[0].trim(t1,t2,pad=True,fill_value=0)
+    #Now extend both arrays and fill start with zeros then end with last sample
+    ss[0].trim(t1,ss[0].stats.endtime,pad=True,fill_value=0)
+    ds[0].trim(t1,ds[0].stats.endtime,pad=True,fill_value=0)
+    fillend=ss[0].data[-60:-1].mean()
+    ss[0].trim(t1,t2,pad=True,fill_value=fillend)
+    fillend=ds[0].data[-20:-1].mean()
+    ds[0].trim(t1,t2,pad=True,fill_value=fillend)
     #Apply rake scaling value
     ss[0].data=ss[0].data*ssmult
     ds[0].data=ds[0].data*dsmult
@@ -232,9 +266,20 @@ def tshift(st,tshift):
     '''
     shift a stream object by tshift seconds, positive moves forward in time
     '''
-    tstart=st[0].stats.starttime
-    st[0].stats.starttime=tstart+tshift
+    from datetime import timedelta
+    td=timedelta(seconds=tshift)
+    st[0].stats.starttime=st[0].stats.starttime+td
     return st
         
         
-    
+def round_time(t1,delta):
+    '''
+    '''
+    from datetime import timedelta
+    #Move start and end times to start exactly on the dt intervals
+    dtmicro=delta*1e6
+    intervals=t1.microsecond/dtmicro #How many intervals in microseconds
+    adjustment=(round(intervals)-intervals)*dtmicro
+    td=timedelta(microseconds=adjustment)
+    t1=t1+td
+    return t1

@@ -11,7 +11,7 @@ import runslip,forward
 ########                            GLOBALS                             ########
 
 home='/Users/dmelgarm/Research/Slip_Inv/'
-project_name='alaska'
+project_name='alaska_safrr'
 ################################################################################
 
 
@@ -26,13 +26,13 @@ solve=1  # =1 solves forward problem or runs inverse calculation, =0 does nothin
 
 ###############            Green function parameters               #############
 
-static=1  #=0 computes static GFs only, =1 computes the completer waveform
+static=1  #=1 computes static GFs only, =0 computes the complete waveform
 model_name='PS9.mod'   #Velocity model
-rupture_name='alaska_small.rupt'   #Rupture model, not needed for inversion
-fault_name='alaska_small.fault'    #Fault geometry
+rupture_name='alaska_SAFR.rupt'   #Rupture model, not needed for inversion
+fault_name='alaska_SAFR.fault'    #Fault geometry
 station_file='alaska.sta'    #Station distribution
 NFFT=2048
-dt=0.2
+dt=1
 ################################################################################
 
 ############                 Synthetics parameters               ###############

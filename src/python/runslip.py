@@ -29,6 +29,7 @@ def init(home,project_name):
         #And make the subdirectories
         makedirs(proj_dir+'GFs')
         makedirs(proj_dir+'GFs/static')
+        makedirs(proj_dir+'GFs/dynamic')
         makedirs(proj_dir+'data/waveforms')
         makedirs(proj_dir+'data/station_info')
         makedirs(proj_dir+'data/model_info')
@@ -37,6 +38,7 @@ def init(home,project_name):
         makedirs(proj_dir+'forward_models')
         makedirs(proj_dir+'output/inverse_models')
         makedirs(proj_dir+'output/forward_models')
+        makedirs(proj_dir+'logs')
 
 
 #Setup some book-keeping for the forward problem
@@ -57,7 +59,7 @@ def forward_setup(home,project_name,rupture_name):
 
 
 # Run green functions          
-def make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,static):
+def make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,static,hot_start):
     '''
     di Blergerson
     '''
@@ -66,26 +68,34 @@ def make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,stat
     from shutil import rmtree,copy
     from os import chdir,path,makedirs,remove
     from string import rjust
+    import datetime
     
     tic=time.time()
     model_path=home+project_name+'/structure/'
     green_path=home+project_name+'/GFs/'
     station_file=home+project_name+'/data/station_info/'+station_file 
     fault_file=home+project_name+'/data/model_info/'+fault_name  
+    logpath=home+project_name+'/logs/'
+    #log time
+    now=datetime.datetime.now()
+    now=now.strftime('%b-%d-%H%M')
     chdir(model_path)
     #Load source model for station-event distance computations
     source=loadtxt(fault_file,ndmin=2)
     #Pass only unique source points into computation (avoid duplication for strike-slip and dip-slip components)
     #this is PENDING, use numpy.unique and numpy.intersect1d, computation is not that slow so I might not do this
-    for k in range(source.shape[0]):
-        green.run_green(source[k,:],station_file,model_name,dt,NFFT,static)
+    for k in range(hot_start,source.shape[0]):
+        log=green.run_green(source[k,:],station_file,model_name,dt,NFFT,static)
+        f=open(logpath+'make_green.'+now+'.log','a')
+        f.write(log)
+        f.close()
         strdepth='%.4f' % source[k,3]
-        subfault=rjust(str(k),4,'0')
+        subfault=rjust(str(k+1),4,'0')
         if static==0:
             #Move results to GF dir
             dirs=glob.glob('*.mod_'+strdepth)
             #Where am I writting this junk too?
-            outgreen=green_path+path.split(dirs[0])[1]
+            outgreen=green_path+'/dynamic/'+path.split(dirs[0])[1]+'.sub'+subfault
             #Check if GF subdir already exists
             if path.exists(outgreen)==False:
                 #It doesn't, make it, don't be lazy
@@ -109,21 +119,28 @@ def make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,stat
 
 
 #Now make synthetics for source/station pairs
-def make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static):
+def make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,hot_start):
     '''
     Blergarmon
     '''
-    import green
+    import green,datetime
     from numpy import loadtxt
     from string import rjust
     
     green_path=home+project_name+'/GFs/'
     station_file=home+project_name+'/data/station_info/'+station_file
     fault_file=home+project_name+'/data/model_info/'+fault_name
+    logpath=home+project_name+'/logs/'
+    #Time for log file
+    now=datetime.datetime.now()
+    now=now.strftime('%b-%d-%H%M')
     #green_dir=green_path+model_name
     #First read fault model file
     source=loadtxt(fault_file,ndmin=2)
     #Now synthetics please, one sub fault at a time
-    for k in range(source.shape[0]):
-        subfault=rjust(str(k),4,'0')
-        green.run_syn(source[k,:],station_file,green_path,model_name,integrate,static,subfault)
+    for k in range(hot_start,source.shape[0]):
+        subfault=rjust(str(k+1),4,'0')
+        log=green.run_syn(source[k,:],station_file,green_path,model_name,integrate,static,subfault)
+        f=open(logpath+'make_synth.'+now+'.log','a')
+        f.write(log)
+        f.close()

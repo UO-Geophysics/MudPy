@@ -1,38 +1,39 @@
 '''
-Diego Melgar, 02/2014
+Diego Melgar, 03/2014
 
 Parameter file
-Project: Alaska Shield
-Comment: Synthetics for the 1964 simulation
+Project: DSEF
+Comment: Source inversion validation dip-slip finite-fault
 '''
+
 
 import runslip,forward
 
 ########                            GLOBALS                             ########
 
 home='/Users/dmelgarm/Research/Slip_Inv/'
-project_name='alaska'
+project_name='dsef'
 ################################################################################
 
 
 #####              What-do-you-want-to-do flags, 1=do, 0=leave be          #####
 
 init=0 #Initalize project
-make_green=0 #Compute GFs
-make_synthetics=0 #Compute synthetics for a given model at given stations
+make_green=1 #Compute GFs
+make_synthetics=1 #Compute synthetics for a given model at given stations
 direction=1  #=1 for forward modeling, =0 for inversion
-solve=1  # =1 solves forward problem or runs inverse calculation, =0 does nothing
+solve=1 # =1 solves forward problem or runs inverse calculation, =0 does nothing
 ###############################################################################
 
 ###############            Green function parameters               #############
-
+freq=5  #Lowpass corner
 static=1  #=0 computes static GFs only, =1 computes the completer waveform
-model_name='PS9.mod'   #Velocity model
-rupture_name='alaska_small.rupt'   #Rupture model, not needed for inversion
-fault_name='alaska_small.fault'    #Fault geometry
-station_file='alaska.sta'    #Station distribution
-NFFT=2048
-dt=0.2
+model_name='BJ97.mod'   #Velocity model
+rupture_name='dsef.rupt'   #Rupture model, not needed for inversion
+fault_name='dsef.fault'    #Fault geometry
+station_file='dsef.sta'    #Station distribution
+NFFT=1024
+dt=0.02
 ################################################################################
 
 ############                 Synthetics parameters               ###############
@@ -60,9 +61,6 @@ if make_synthetics==1:
 #Run forward comptuation or solve for inverse problem
 if solve==1:
     if direction==1 and static==0: #Forward problem (full waveforms)
-        forward.waveforms(home,project_name,rupture_name,station_file,model_name,integrate)
+        forward.waveforms(home,project_name,rupture_name,station_file,model_name,integrate,freq)
     if direction==1 and static==1: #Forward problem (coseismics)
         forward.coseismics(home,project_name,rupture_name,station_file,model_name)
-    
-    
-    

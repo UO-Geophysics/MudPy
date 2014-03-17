@@ -14,7 +14,7 @@ my $dt = 1;		# sampling interval.
 my $smth = 1;		# densify the output samples by a factor of smth.
 my $nft = 256;		# number of points.
 my $src = 2;		# source type, 2=dc; 1=sf; 0=ex.
-my $dk = 0.1;		# sampl. interval in wavenumber, in Pi/x, 0.1-0.4. DM=0.3
+my $dk = 0.3;		# sampl. interval in wavenumber, in Pi/x, 0.1-0.4. DM=0.3
 my $sigma = 2;		# small imaginary frequency, in 1/T, 2-3.
 my $kmax = 20.;		# max wavenumber at w=0, in 1/h, 10-30.
 my $pmin = 0.;		# max. phase velocity, in 1/vs, 0 the best.

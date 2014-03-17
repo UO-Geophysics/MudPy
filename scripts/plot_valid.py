@@ -40,7 +40,7 @@ for j in range(len(stations)):
     e_v1=lowpass(np.genfromtxt(val1+sta+'.syn',dtype="f8",usecols=0,skip_header=4),freq,df=1/dt1,zerophase=True)
     n_v1=lowpass(np.genfromtxt(val1+sta+'.syn',dtype="f8",usecols=1,skip_header=4),freq,df=1/dt1,zerophase=True)
     u_v1=lowpass(np.genfromtxt(val1+sta+'.syn',dtype="f8",usecols=2,skip_header=4),freq,df=1/dt1,zerophase=True)
-    t_v1=np.arange(0,len(e_v1)*dt1,dt1)+0.11
+    t_v1=np.arange(0,len(e_v1)*dt1,dt1)
     #Read validation 2
     e_v2=lowpass(np.genfromtxt(val2+sta+'.syn',dtype="f8",usecols=0,skip_header=4),freq,df=1/dt2,zerophase=True)
     n_v2=lowpass(np.genfromtxt(val2+sta+'.syn',dtype="f8",usecols=1,skip_header=4),freq,df=1/dt2,zerophase=True)
