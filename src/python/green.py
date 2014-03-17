@@ -53,7 +53,7 @@ def run_green(source,station_file,model_name,dt,NFFT,static,coord_type):
     
     
     
-def run_syn(source,station_file,green_path,model_name,integrate,static,subfault):
+def run_syn(source,station_file,green_path,model_name,integrate,static,subfault,coord_type):
     '''
     Use green functions and compute synthetics at stations for a given source
     distribution and station configuration.
@@ -67,7 +67,7 @@ def run_syn(source,station_file,green_path,model_name,integrate,static,subfault)
     import os
     import subprocess
     from string import rjust
-    from numpy import array,genfromtxt,rad2deg,loadtxt,savetxt
+    from numpy import array,genfromtxt,loadtxt,savetxt
     from obspy import read
     from obspy.signal.rotate import rotate_RT_NE
     from shlex import split
@@ -91,11 +91,8 @@ def run_syn(source,station_file,green_path,model_name,integrate,static,subfault)
         green_path=green_path+'dynamic/'+model_name+"_"+strdepth+".sub"+subfault+"/"
     print("--> Computing synthetics at stations for the source at ("+str(xs)+" , "+str(ys)+")")
     staname=genfromtxt(station_file,dtype="S6",usecols=0)
-    x=genfromtxt(station_file,dtype="f8",usecols=1)
-    y=genfromtxt(station_file,dtype="f8",usecols=2)
     #Compute distances and azimuths
-    d=src2sta(station_file,source)
-    az=cartesian_azimuth(x,y,xs,ys)
+    d,az=src2sta(station_file,source,coord_type)
     #Move to output folder
     log=''
     os.chdir(green_path)
@@ -105,26 +102,26 @@ def run_syn(source,station_file,green_path,model_name,integrate,static,subfault)
             if integrate==1: #Make displ.
                 #First Stike-Slip GFs
                 commandSS="syn -I -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeSS)+" -D"+str(duration)+ \
-                    "/"+str(rise)+" -A"+str(rad2deg(az[k]))+" -O"+staname[k]+".subfault"+num+".SS.disp.x -G"+green_path+diststr+".grn.0"
+                    "/"+str(rise)+" -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".SS.disp.x -G"+green_path+diststr+".grn.0"
                 print commandSS
                 log=log+commandSS+'\n'
                 commandSS=split(commandSS)
                 #Now dip slip
                 commandDS="syn -I -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeDS)+" -D"+str(duration)+ \
-                    "/"+str(rise)+" -A"+str(rad2deg(az[k]))+" -O"+staname[k]+".subfault"+num+".DS.disp.x -G"+green_path+diststr+".grn.0"
+                    "/"+str(rise)+" -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".DS.disp.x -G"+green_path+diststr+".grn.0"
                 print commandDS
                 log=log+commandDS+'\n'
                 commandDS=split(commandDS)
             else: #Make vel.
                 #First Stike-Slip GFs
                 commandSS="syn -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeSS)+" -D"+str(duration)+ \
-                    "/"+str(rise)+" -A"+str(rad2deg(az[k]))+" -O"+staname[k]+".subfault"+num+".SS.vel.x -G"+green_path+diststr+".grn.0"
+                    "/"+str(rise)+" -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".SS.vel.x -G"+green_path+diststr+".grn.0"
                 print commandSS
                 log=log+commandSS+'\n'
                 commandSS=split(commandSS)
                 #Now dip slip
                 commandDS="syn -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeDS)+" -D"+str(duration)+ \
-                    "/"+str(rise)+" -A"+str(rad2deg(az[k]))+" -O"+staname[k]+".subfault"+num+".DS.vel.x -G"+green_path+diststr+".grn.0"
+                    "/"+str(rise)+" -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".DS.vel.x -G"+green_path+diststr+".grn.0"
                 print commandDS
                 log=log+commandDS+'\n'
                 commandDS=split(commandDS)
@@ -138,7 +135,7 @@ def run_syn(source,station_file,green_path,model_name,integrate,static,subfault)
                 #Strike slip
                 r=read(staname[k]+".subfault"+num+'.SS.disp.r')
                 t=read(staname[k]+".subfault"+num+'.SS.disp.t')
-                ntemp,etemp=rotate_RT_NE(r[0].data,t[0].data,rad2deg(az[k]))
+                ntemp,etemp=rotate_RT_NE(r[0].data,t[0].data,az[k])
                 n=r.copy()
                 n[0].data=ntemp/100
                 e=t.copy()
@@ -153,7 +150,7 @@ def run_syn(source,station_file,green_path,model_name,integrate,static,subfault)
                 #Dip Slip
                 r=read(staname[k]+".subfault"+num+'.DS.disp.r')
                 t=read(staname[k]+".subfault"+num+'.DS.disp.t')
-                ntemp,etemp=rotate_RT_NE(r[0].data,t[0].data,rad2deg(az[k]))
+                ntemp,etemp=rotate_RT_NE(r[0].data,t[0].data,az[k])
                 n=r.copy()
                 n[0].data=ntemp/100
                 e=t.copy()
@@ -169,7 +166,7 @@ def run_syn(source,station_file,green_path,model_name,integrate,static,subfault)
                 #Strike slip
                 r=read(staname[k]+".subfault"+num+'.SS.vel.r')
                 t=read(staname[k]+".subfault"+num+'.SS.vel.t')
-                ntemp,etemp=rotate_RT_NE(r[0].data,t[0].data,rad2deg(az[k]))
+                ntemp,etemp=rotate_RT_NE(r[0].data,t[0].data,az[k])
                 n=r.copy()
                 n[0].data=ntemp/100
                 e=t.copy()
@@ -184,7 +181,7 @@ def run_syn(source,station_file,green_path,model_name,integrate,static,subfault)
                 #Dip Slip
                 r=read(staname[k]+".subfault"+num+'.DS.vel.r')
                 t=read(staname[k]+".subfault"+num+'.DS.vel.t')
-                ntemp,etemp=rotate_RT_NE(r[0].data,t[0].data,rad2deg(az[k]))
+                ntemp,etemp=rotate_RT_NE(r[0].data,t[0].data,az[k])
                 n=r.copy()
                 n[0].data=ntemp/100
                 e=t.copy()
@@ -194,7 +191,7 @@ def run_syn(source,station_file,green_path,model_name,integrate,static,subfault)
                 #Correct polarity in vertical, ZR code has down=positive, we don't like that precious do we?
                 down=read(staname[k]+".subfault"+num+'.DS.vel.z')
                 up=down.copy()
-                up[0].data=down[0].data/-100
+                up[0].data=down[0].data/-100 #In fk-land down is positive, but in this code up is positive
                 up.write(staname[k]+".subfault"+num+'.DS.vel.z',format='SAC')
         else: #Compute statics
             os.chdir(green_path+'static/')
@@ -209,9 +206,9 @@ def run_syn(source,station_file,green_path,model_name,integrate,static,subfault)
             for j in range(len(temp_pipe)):
                 inpipe=inpipe+' %.6e' % temp_pipe[j]
             commandDS="syn -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeDS)+\
-                    " -A"+str(rad2deg(az[k]))+" -P"
+                    " -A"+str(az[k])+" -P"
             commandSS="syn -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeSS)+\
-                    " -A"+str(rad2deg(az[k]))+" -P"
+                    " -A"+str(az[k])+" -P"
             print staname[k]
             print commandSS
             print commandDS
@@ -231,7 +228,7 @@ def run_syn(source,station_file,green_path,model_name,integrate,static,subfault)
             u=-statics[2]/100
             r=statics[3]/100
             t=statics[4]/100
-            ntemp,etemp=rotate_RT_NE(array([r,r]),array([t,t]),rad2deg(az[k]))
+            ntemp,etemp=rotate_RT_NE(array([r,r]),array([t,t]),az[k])
             n=ntemp[0]
             e=etemp[0]
             savetxt(staname[k]+'.subfault'+num+'.SS.static.enu',(e,n,u))
@@ -239,7 +236,7 @@ def run_syn(source,station_file,green_path,model_name,integrate,static,subfault)
             u=-statics[2]/100
             r=statics[3]/100
             t=statics[4]/100
-            ntemp,etemp=rotate_RT_NE(array([r,r]),array([t,t]),rad2deg(az[k]))
+            ntemp,etemp=rotate_RT_NE(array([r,r]),array([t,t]),az[k])
             n=ntemp[0]
             e=etemp[0]
             savetxt(staname[k]+'.subfault'+num+'.DS.static.enu',(e,n,u))
@@ -293,7 +290,7 @@ def src2sta(station_file,source,coord_type):
     ys=source[2]
     if coord_type==0: #Cartesian
         d=((x-xs)**2+(y-ys)**2)**0.5
-        az=zeros(d.shape)
+        az=cartesian_azimuth(x,y,xs,ys)
     else: #Lat/lon coordinates
         for k in range(len(x)):
             d[k],az[k],baz[k]=gps2DistAzimuth(ys,xs,y[k],x[k])

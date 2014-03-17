@@ -18,8 +18,8 @@ project_name='alaska_socal_spherical'
 #####              What-do-you-want-to-do flags, 1=do, 0=leave be          #####
 
 init=0 #Initalize project
-make_green=1 #Compute GFs
-make_synthetics=0 #Compute synthetics for a given model at given stations
+make_green=0 #Compute GFs
+make_synthetics=1 #Compute synthetics for a given model at given stations
 solve=0  # =1 solves forward problem or runs inverse calculation, =0 does nothing
 ###############################################################################
 
@@ -53,7 +53,7 @@ if make_green==1:
 
 #Now make synthetics for source/station pairs
 if make_synthetics==1:
-    runslip.make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,hot_start)
+    runslip.make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,hot_start,coord_type)
     
 #Run forward comptuation or solve for inverse problem
 if solve==1:

@@ -4,12 +4,11 @@ D. Melgar 02/2014
 Forward modeling routines
 '''
 
-def waveforms(home,project_name,rupture_name,station_file,model_name,integrate,F):
+def waveforms(home,project_name,rupture_name,station_file,model_name,integrate):
     '''
     '''
-    from numpy import loadtxt,genfromtxt,deg2rad,sin,cos,round,allclose
+    from numpy import loadtxt,genfromtxt,deg2rad,sin,cos,allclose
     from obspy import read,Stream
-    from obspy.signal import lowpass
     from string import rjust
     import datetime
     
@@ -70,15 +69,8 @@ def waveforms(home,project_name,rupture_name,station_file,model_name,integrate,F
             eds=read(syn_path+sta+'.'+nfault+'.DS.'+vord+'.e')
             nds=read(syn_path+sta+'.'+nfault+'.DS.'+vord+'.n')
             zds=read(syn_path+sta+'.'+nfault+'.DS.'+vord+'.z')
-            #Filter them
-            dt=ess[0].stats.delta
-            ess[0].data=lowpass(ess[0].data,freq=F,df=1/dt,zerophase=True)
-            nss[0].data=lowpass(nss[0].data,freq=F,df=1/dt,zerophase=True)
-            zss[0].data=lowpass(zss[0].data,freq=F,df=1/dt,zerophase=True)
-            eds[0].data=lowpass(eds[0].data,freq=F,df=1/dt,zerophase=True)
-            nds[0].data=lowpass(nds[0].data,freq=F,df=1/dt,zerophase=True)
-            zds[0].data=lowpass(zds[0].data,freq=F,df=1/dt,zerophase=True)
             #Time shift them according to subfault rupture time
+            dt=ess[0].stats.delta
             ess=tshift(ess,rtime)
             ess[0].stats.starttime=round_time(ess[0].stats.starttime,dt)
             nss=tshift(nss,rtime)

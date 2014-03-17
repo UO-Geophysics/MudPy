@@ -117,7 +117,7 @@ def make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,stat
 
 
 #Now make synthetics for source/station pairs
-def make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,hot_start):
+def make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,hot_start,coord_type):
     '''
     Blergarmon
     '''
@@ -138,7 +138,7 @@ def make_synthetics(home,project_name,station_file,fault_name,model_name,integra
     #Now synthetics please, one sub fault at a time
     for k in range(hot_start,source.shape[0]):
         subfault=rjust(str(k+1),4,'0')
-        log=green.run_syn(source[k,:],station_file,green_path,model_name,integrate,static,subfault)
+        log=green.run_syn(source[k,:],station_file,green_path,model_name,integrate,static,subfault,coord_type)
         f=open(logpath+'make_synth.'+now+'.log','a')
         f.write(log)
         f.close()
