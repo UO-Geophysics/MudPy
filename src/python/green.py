@@ -3,7 +3,7 @@ Diego Melgar 01/2014
 Green functions routines for kinematic source models
 '''
 
-def run_green(source,station_file,model_name,dt,NFFT,static):
+def run_green(source,station_file,model_name,dt,NFFT,static,coord_type):
     '''
     Compute GFs using Zhu & Rivera code for a given velocity model, source depth
     and station file
@@ -19,21 +19,33 @@ def run_green(source,station_file,model_name,dt,NFFT,static):
     depth='%.4f' % source[3]
     print("--> Computing GFs for source depth "+str(depth)+"km")
     #Get station distances to source
-    d=src2sta(station_file,source)
+    d,az=src2sta(station_file,source,coord_type)
     #Make distance string for system call
     diststr=''
     for k in range(len(d)):
         diststr=diststr+' %.3f' % d[k] #Truncate distance to 3 decimal palces (meters)
     if static==0: #Compute full waveform
-        command=split("fk.pl -M"+model_name+"/"+depth+" -N"+str(NFFT)+"/"+str(dt)+diststr)
-        print "fk.pl -M"+model_name+"/"+depth+" -N"+str(NFFT)+"/"+str(dt)+diststr
-        p=subprocess.Popen(command,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
-        out,err=p.communicate() 
+        if coord_type==0: #Cartesian coords NO Earth flattening
+            command=split("fk.pl -M"+model_name+"/"+depth+"/k -N"+str(NFFT)+"/"+str(dt)+diststr)
+            print "fk.pl -M"+model_name+"/"+depth+"/k -N"+str(NFFT)+"/"+str(dt)+diststr
+            p=subprocess.Popen(command,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+            out,err=p.communicate() 
+        if coord_type==1: #Lat/Lon coords, trigger Earth flattening
+            command=split("fk.pl -M"+model_name+"/"+depth+"/f -N"+str(NFFT)+"/"+str(dt)+diststr)
+            print "fk.pl -M"+model_name+"/"+depth+"/f -N"+str(NFFT)+"/"+str(dt)+diststr
+            p=subprocess.Popen(command,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+            out,err=p.communicate() 
     else: #Compute only statics
-        command=split("fk.pl -M"+model_name+"/"+depth+" -N1 "+diststr)
-        print "fk.pl -M"+model_name+"/"+depth+" -N1 "+diststr
-        p=subprocess.Popen(command,stdout=open('staticgf','w'),stderr=subprocess.PIPE)
-        out,err=p.communicate() 
+        if coord_type==0: #Cartesian coords NO Earth flattening
+            command=split("fk.pl -M"+model_name+"/"+depth+"/k -N1 "+diststr)
+            print "fk.pl -M"+model_name+"/"+depth+"/k -N1 "+diststr
+            p=subprocess.Popen(command,stdout=open('staticgf','w'),stderr=subprocess.PIPE)
+            out,err=p.communicate()
+        if coord_type==1: #Lat/Lon coords, trigger Earth flattening
+            command=split("fk.pl -M"+model_name+"/"+depth+"/f -N1 "+diststr)
+            print "fk.pl -M"+model_name+"/"+depth+"/f -N1 "+diststr
+            p=subprocess.Popen(command,stdout=open('staticgf','w'),stderr=subprocess.PIPE)
+            out,err=p.communicate()  
     print out
     print err
     log=str(out)+str(err)
@@ -254,24 +266,39 @@ def cartesian_azimuth(x,y,xs,ys):
     az[i]=pi+az[i]
     return az
     
-def src2sta(station_file,source):
+def src2sta(station_file,source,coord_type):
     '''
-    Compute source to station distances for all station/source pairs.
+    Compute cartesian source to station distances for all station/source pairs.
     params:
         station_file - Path to station file
         source - numpy 1d array with source info read from file
+        coord_type - =0 if coordinates are cartesian, =1 if they are lat/lon
     returns:
         d - sorted distances vector
+        az - azimuth
     '''
     
-    from numpy import genfromtxt,array
+    from numpy import genfromtxt,zeros
+    from obspy.core.util.geodetics import gps2DistAzimuth
+    
     
     #Read station file
     #staname=genfromtxt(home+station_file,dtype="S6",usecols=0)
     x=genfromtxt(station_file,dtype="f8",usecols=1)
     y=genfromtxt(station_file,dtype="f8",usecols=2)
-    d=array([])
+    d=zeros(x.shape)
+    az=zeros(x.shape)
+    baz=zeros(x.shape)
     xs=source[1]
     ys=source[2]
-    d=((x-xs)**2+(y-ys)**2)**0.5
-    return d
+    if coord_type==0: #Cartesian
+        d=((x-xs)**2+(y-ys)**2)**0.5
+        az=zeros(d.shape)
+    else: #Lat/lon coordinates
+        for k in range(len(x)):
+            d[k],az[k],baz[k]=gps2DistAzimuth(ys,xs,y[k],x[k])
+        d=d/1000
+    return d,az
+    
+def DistAzimuth():
+    pass

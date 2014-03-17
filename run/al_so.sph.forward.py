@@ -11,7 +11,7 @@ import runslip,forward
 ########                            GLOBALS                             ########
 
 home='/Users/dmelgarm/Research/Slip_Inv/'
-project_name='alaska_socal'
+project_name='alaska_socal_spherical'
 ################################################################################
 
 
@@ -19,16 +19,15 @@ project_name='alaska_socal'
 
 init=0 #Initalize project
 make_green=1 #Compute GFs
-make_synthetics=1 #Compute synthetics for a given model at given stations
-direction=1  #=1 for forward modeling, =0 for inversion
-solve=1  # =1 solves forward problem or runs inverse calculation, =0 does nothing
+make_synthetics=0 #Compute synthetics for a given model at given stations
+solve=0  # =1 solves forward problem or runs inverse calculation, =0 does nothing
 ###############################################################################
 
 ###############            Green function parameters               #############
 coord_type=1 #(=0 for cartesian, =1 for lat/lon (will use Earth flattening transform)
 freq=5  #Bandpass filter GFs
 hot_start=0   #Start at a certain subfault number
-static=1  #=1 computes static GFs only, =0 computes the complete waveform
+static=0  #=1 computes static GFs only, =0 computes the complete waveform
 model_name='socal.mod'   #Velocity model
 rupture_name='alaska_small_lat_lon.rupt'   #Rupture model, not needed for inversion
 fault_name='alaska_small_lat_lon.fault'    #Fault geometry
@@ -47,12 +46,9 @@ integrate=1 #=0 produces velocities, =1 makes dispalcements
 if init==1:
     runslip.init(home,project_name)
 
-#Forward modelling?
-if direction==1:
-    runslip.forward_setup(home,project_name,rupture_name)
-
 # Run green functions          
-if make_green==1:  
+if make_green==1: 
+    runslip.forward_setup(home,project_name,rupture_name) 
     runslip.make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,static,hot_start,coord_type)  
 
 #Now make synthetics for source/station pairs
@@ -61,9 +57,9 @@ if make_synthetics==1:
     
 #Run forward comptuation or solve for inverse problem
 if solve==1:
-    if direction==1 and static==0: #Forward problem (full waveforms)
+    if static==0: #Forward problem (full waveforms)
         forward.waveforms(home,project_name,rupture_name,station_file,model_name,integrate,freq)
-    if direction==1 and static==1: #Forward problem (coseismics)
+    if static==1: #Forward problem (coseismics)
         forward.coseismics(home,project_name,rupture_name,station_file,model_name)
     
     

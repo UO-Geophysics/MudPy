@@ -59,7 +59,7 @@ def forward_setup(home,project_name,rupture_name):
 
 
 # Run green functions          
-def make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,static,hot_start):
+def make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,static,hot_start,coord_type):
     '''
     di Blergerson
     '''
@@ -82,10 +82,8 @@ def make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,stat
     chdir(model_path)
     #Load source model for station-event distance computations
     source=loadtxt(fault_file,ndmin=2)
-    #Pass only unique source points into computation (avoid duplication for strike-slip and dip-slip components)
-    #this is PENDING, use numpy.unique and numpy.intersect1d, computation is not that slow so I might not do this
     for k in range(hot_start,source.shape[0]):
-        log=green.run_green(source[k,:],station_file,model_name,dt,NFFT,static)
+        log=green.run_green(source[k,:],station_file,model_name,dt,NFFT,static,coord_type)
         f=open(logpath+'make_green.'+now+'.log','a')
         f.write(log)
         f.close()

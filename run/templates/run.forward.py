@@ -30,8 +30,8 @@ freq=5  #Bandpass filter GFs
 hot_start=0   #Start at a certain subfault number
 static=1  #=1 computes static GFs only, =0 computes the complete waveform
 model_name='socal.mod'   #Velocity model
-rupture_name='alaska_small_lat_lon.rupt'   #Rupture model, not needed for inversion
-fault_name='alaska_small_lat_lon.fault'    #Fault geometry
+rupture_name='alaska_small.rupt'   #Rupture model, not needed for inversion
+fault_name='alaska_small.fault'    #Fault geometry
 station_file='alaska_lat_lon.sta'    #Station distribution
 NFFT=2048
 dt=0.2
@@ -53,7 +53,7 @@ if direction==1:
 
 # Run green functions          
 if make_green==1:  
-    runslip.make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,static,hot_start,coord_type)  
+    runslip.make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,static,hot_start)  
 
 #Now make synthetics for source/station pairs
 if make_synthetics==1:
