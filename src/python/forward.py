@@ -30,7 +30,7 @@ def waveforms(home,project_name,rupture_name,station_file,model_name,integrate):
     #Load structure
     model_path=home+project_name+'/structure/'+model_name
     structure=loadtxt(model_path)
-    #What am I processing v or d
+    #What am I processing v or d?
     if integrate==1:
         vord='disp'
     else:

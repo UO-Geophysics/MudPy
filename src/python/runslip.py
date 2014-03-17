@@ -61,7 +61,20 @@ def forward_setup(home,project_name,rupture_name):
 # Run green functions          
 def make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,static,hot_start,coord_type):
     '''
-    di Blergerson
+    This routine set's up the computation of GFs for each subfault to all stations.
+    The GFs are impulse sources, they don't yet depend on strike and dip.
+    
+    IN:
+        home: Home directory
+        project_name: Name fo the problem
+        station_file: File with coordinates of stations
+        fault_name: Name of fault file
+        model_Name: Name of Earth structure model file
+        dt: Desired sampling itnerval for waveforms
+        NFFT: No. of samples requested in waveform (must be power of 2)
+        static: =0 if computing full waveforms, =1 if computing only the static field
+        hot_start: =k if you want to start computations at k-th subfault, =0 to compute all
+        coord_type: =0 if problem is in cartesian coordinates, =1 if problem is in lat/lon
     '''
     import time,glob,green
     from numpy import loadtxt
@@ -83,14 +96,17 @@ def make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,stat
     #Load source model for station-event distance computations
     source=loadtxt(fault_file,ndmin=2)
     for k in range(hot_start,source.shape[0]):
+        #Run comptuation for 1 subfault
         log=green.run_green(source[k,:],station_file,model_name,dt,NFFT,static,coord_type)
+        #Write log
         f=open(logpath+'make_green.'+now+'.log','a')
         f.write(log)
         f.close()
+        #Move to correct directory
         strdepth='%.4f' % source[k,3]
         subfault=rjust(str(k+1),4,'0')
         if static==0:
-            #Move results to GF dir
+            #Move results to dynamic GF dir
             dirs=glob.glob('*.mod_'+strdepth)
             #Where am I writting this junk too?
             outgreen=green_path+'/dynamic/'+path.split(dirs[0])[1]+'.sub'+subfault
@@ -107,9 +123,8 @@ def make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,stat
         else:  #Static GFs
             copy('staticgf',green_path+'static/'+model_name+'.static.'+strdepth+'.sub'+subfault)
             #Cleanup
-            remove('staticgf')
-            
-    #How long was I out?
+            remove('staticgf')     
+    #How long was I working for?
     toc=time.time()
     print 'GFs computed in '+str((toc-tic)/60)+' minutes...'
 
@@ -119,7 +134,20 @@ def make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,stat
 #Now make synthetics for source/station pairs
 def make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,hot_start,coord_type):
     '''
-    Blergarmon
+    This routine will take the impulse response (GFs) and pass it into the routine that will
+    convovle them with the source time function according to each subfaults strike and dip.
+    The result fo this computation is a time series dubbed a "synthetic"
+    
+    IN:
+        home: Home directory
+        project_name: Name fo the problem
+        station_file: File with coordinates of stations
+        fault_name: Name of fault file
+        model_Name: Name of Earth structure model file
+        integrate: =0 if you want output to be velocity, =1 if you want output to be displacement
+        static: =0 if computing full waveforms, =1 if computing only the static field
+        hot_start: =k if you want to start computations at k-th subfault, =0 to compute all
+        coord_type: =0 if problem is in cartesian coordinates, =1 if problem is in lat/lon
     '''
     import green,datetime
     from numpy import loadtxt
@@ -132,10 +160,9 @@ def make_synthetics(home,project_name,station_file,fault_name,model_name,integra
     #Time for log file
     now=datetime.datetime.now()
     now=now.strftime('%b-%d-%H%M')
-    #green_dir=green_path+model_name
     #First read fault model file
     source=loadtxt(fault_file,ndmin=2)
-    #Now synthetics please, one sub fault at a time
+    #Now compute synthetics please, one sub fault at a time
     for k in range(hot_start,source.shape[0]):
         subfault=rjust(str(k+1),4,'0')
         log=green.run_syn(source[k,:],station_file,green_path,model_name,integrate,static,subfault,coord_type)

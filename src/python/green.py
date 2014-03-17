@@ -1,17 +1,23 @@
 '''
 Diego Melgar 01/2014
-Green functions routines for kinematic source models
+Green functions routines for source models
 '''
 
 def run_green(source,station_file,model_name,dt,NFFT,static,coord_type):
     '''
     Compute GFs using Zhu & Rivera code for a given velocity model, source depth
-    and station file
+    and station file. This function will make an external system call to fk.pl
     
-    params:
-        
-    returns:
-        nothing
+    IN:
+        source: 1-row numpy array containig informaiton aboutt he source, lat, lon, depth, etc...
+        station_file: File name with the station coordinates
+        dt: Desired sampling interval for waveforms
+        NFFT: No. of samples requested in waveform (must be power of 2)
+        static: =0 if computing full waveforms, =1 if computing only the static field
+        coord_type: =0 if problem is in cartesian coordinates, =1 if problem is in lat/lon
+
+    OUT:
+        log: Sysytem standard output and standard error for log
     '''
     import subprocess
     from shlex import split
@@ -46,6 +52,7 @@ def run_green(source,station_file,model_name,dt,NFFT,static,coord_type):
             print "fk.pl -M"+model_name+"/"+depth+"/f -N1 "+diststr
             p=subprocess.Popen(command,stdout=open('staticgf','w'),stderr=subprocess.PIPE)
             out,err=p.communicate()  
+    #Log output
     print out
     print err
     log=str(out)+str(err)
@@ -55,13 +62,24 @@ def run_green(source,station_file,model_name,dt,NFFT,static,coord_type):
     
 def run_syn(source,station_file,green_path,model_name,integrate,static,subfault,coord_type):
     '''
-    Use green functions and compute synthetics at stations for a given source
-    distribution and station configuration.
+    Use green functions and compute synthetics at stations for a single source
+    and multiple stations. This code makes an external system call to syn.c first it
+    will make the external call for the strike-slip component then a second externall
+    call will be made for the dip-slip component. The unit amount of moment is 1e15
+    which corresponds to Mw=3.9333...
     
-    params:
+    IN:
+        source: 1-row numpy array containig informaiton aboutt he source, lat, lon, depth, etc...
+        station_file: File name with the station coordinates
+        green_path: Directopry where GFs are stored
+        model_name: File containing the Earth velocity structure
+        integrate: =0 if youw ant velocity waveforms, =1 if you want displacements
+        static: =0 if computing full waveforms, =1 if computing only the static field
+        subfault: String indicating the subfault being worked on
+        coord_type: =0 if problem is in cartesian coordinates, =1 if problem is in lat/lon
         
-    returns:
-        a sense of well being
+    OUT:
+        log: Sysytem standard output and standard error for log
     '''
 
     import os
@@ -76,7 +94,7 @@ def run_syn(source,station_file,green_path,model_name,integrate,static,subfault,
     rakeDS=-90 #-90 is thrust, 90 is normal
     rakeSS=180
     Mw=3.933333333 #This is used as unit magnitude, corresponds to 1e15 N-m
-    
+    #Parse the soruce information
     num=rjust(str(int(source[0])),4,'0')
     xs=source[1]
     ys=source[2]
@@ -85,27 +103,27 @@ def run_syn(source,station_file,green_path,model_name,integrate,static,subfault,
     dip=source[5]
     rise=source[6]
     duration=source[7]
-
     strdepth='%.4f' % zs
-    if static==0: 
+    if static==0:  #Where to save dynamic waveforms
         green_path=green_path+'dynamic/'+model_name+"_"+strdepth+".sub"+subfault+"/"
     print("--> Computing synthetics at stations for the source at ("+str(xs)+" , "+str(ys)+")")
     staname=genfromtxt(station_file,dtype="S6",usecols=0)
     #Compute distances and azimuths
     d,az=src2sta(station_file,source,coord_type)
     #Move to output folder
-    log=''
+    log='' #Initalize log
     os.chdir(green_path)
     for k in range(len(d)):
         if static==0: #Compute full waveforms
             diststr='%.3f' % d[k] #Need current distance in string form for external call
+            #Form the strings to be used for the system calls according to suer desired options
             if integrate==1: #Make displ.
                 #First Stike-Slip GFs
                 commandSS="syn -I -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeSS)+" -D"+str(duration)+ \
                     "/"+str(rise)+" -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".SS.disp.x -G"+green_path+diststr+".grn.0"
-                print commandSS
-                log=log+commandSS+'\n'
-                commandSS=split(commandSS)
+                print commandSS #Output to screen so I know we're underway
+                log=log+commandSS+'\n' #Append to log
+                commandSS=split(commandSS) #Split string into lexical components for system call
                 #Now dip slip
                 commandDS="syn -I -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeDS)+" -D"+str(duration)+ \
                     "/"+str(rise)+" -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".DS.disp.x -G"+green_path+diststr+".grn.0"
@@ -125,24 +143,25 @@ def run_syn(source,station_file,green_path,model_name,integrate,static,subfault,
                 print commandDS
                 log=log+commandDS+'\n'
                 commandDS=split(commandDS)
-            #Run them yo
+            #Run the strike- and dip-slip commands (make system calls)
             p=subprocess.Popen(commandSS,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
             out,err=p.communicate() 
             p=subprocess.Popen(commandDS,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
             out,err=p.communicate()
-            #Rotate to NE
+            #Result is in RTZ system (+Z is down) rotate to NEZ with +Z up and scale to m or m/s
             if integrate==1: #'tis displacememnt
                 #Strike slip
                 r=read(staname[k]+".subfault"+num+'.SS.disp.r')
                 t=read(staname[k]+".subfault"+num+'.SS.disp.t')
                 ntemp,etemp=rotate_RT_NE(r[0].data,t[0].data,az[k])
+                #Scale to m and overwrite with rotated waveforms
                 n=r.copy()
                 n[0].data=ntemp/100
                 e=t.copy()
                 e[0].data=etemp/100
                 n.write(staname[k]+".subfault"+num+'.SS.disp.n',format='SAC')
                 e.write(staname[k]+".subfault"+num+'.SS.disp.e',format='SAC')
-                #Correct polarity in vertical, ZR code has down=positive, we don't like that precious do we?
+                #Correct polarity in vertical, ZR code has down=positive
                 down=read(staname[k]+".subfault"+num+'.SS.disp.z')
                 up=down.copy()
                 up[0].data=down[0].data/-100
@@ -162,7 +181,7 @@ def run_syn(source,station_file,green_path,model_name,integrate,static,subfault,
                 up=down.copy()
                 up[0].data=down[0].data/-100
                 up.write(staname[k]+".subfault"+num+'.DS.disp.z',format='SAC')
-            else: #'tis velocity sire
+            else: #Waveforms are velocity, as before, rotate from RT-Z to NE+Z and scale to m/s
                 #Strike slip
                 r=read(staname[k]+".subfault"+num+'.SS.vel.r')
                 t=read(staname[k]+".subfault"+num+'.SS.vel.t')
@@ -173,7 +192,7 @@ def run_syn(source,station_file,green_path,model_name,integrate,static,subfault,
                 e[0].data=etemp/100
                 n.write(staname[k]+".subfault"+num+'.SS.vel.n',format='SAC')
                 e.write(staname[k]+".subfault"+num+'.SS.vel.e',format='SAC')
-                #Correct polarity in vertical, ZR code has down=positive, we don't like that precious do we?
+                #Correct polarity in vertical, ZR code has down=positive
                 down=read(staname[k]+".subfault"+num+'.SS.vel.z')
                 up=down.copy()
                 up[0].data=down[0].data/-100
@@ -193,18 +212,19 @@ def run_syn(source,station_file,green_path,model_name,integrate,static,subfault,
                 up=down.copy()
                 up[0].data=down[0].data/-100 #In fk-land down is positive, but in this code up is positive
                 up.write(staname[k]+".subfault"+num+'.DS.vel.z',format='SAC')
-        else: #Compute statics
-            os.chdir(green_path+'static/')
+        else: #Compute static synthetics
+            os.chdir(green_path+'static/') #Move to appropriate dir
             diststr='%.1f' % d[k] #Need current distance in string form for external call
-            green_file=model_name+".static."+strdepth+".sub"+subfault
+            green_file=model_name+".static."+strdepth+".sub"+subfault #Output dir
             print green_file
-            log=log+green_file+'\n'
-            statics=loadtxt(green_file)
+            log=log+green_file+'\n' #Append to log
+            statics=loadtxt(green_file) #Load GFs
             #Print static GFs into a pipe and pass into synthetics command
             temp_pipe=statics[k,:]
             inpipe=''
             for j in range(len(temp_pipe)):
                 inpipe=inpipe+' %.6e' % temp_pipe[j]
+            #Form command for external call
             commandDS="syn -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeDS)+\
                     " -A"+str(az[k])+" -P"
             commandSS="syn -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeSS)+\
@@ -212,9 +232,10 @@ def run_syn(source,station_file,green_path,model_name,integrate,static,subfault,
             print staname[k]
             print commandSS
             print commandDS
-            log=log+staname[k]+'\n'+commandSS+'\n'+commandDS+'\n'
-            commandSS=split(commandSS)
+            log=log+staname[k]+'\n'+commandSS+'\n'+commandDS+'\n' #Append to log
+            commandSS=split(commandSS) #Lexical split
             commandDS=split(commandDS)
+            #Make system calls, one for DS, one for SS, and save log
             ps=subprocess.Popen(['printf',inpipe],stdout=subprocess.PIPE,stderr=subprocess.PIPE)  #This is the statics pipe, pint stdout to syn's stdin
             p=subprocess.Popen(commandSS,stdin=ps.stdout,stdout=open(staname[k]+'.subfault'+num+'.SS.static.rtz','w'),stderr=subprocess.PIPE)     
             out,err=p.communicate()  
@@ -223,7 +244,7 @@ def run_syn(source,station_file,green_path,model_name,integrate,static,subfault,
             p=subprocess.Popen(commandDS,stdin=ps.stdout,stdout=open(staname[k]+'.subfault'+num+'.DS.static.rtz','w'),stderr=subprocess.PIPE)     
             out,err=p.communicate() 
             log=log+str(out)+str(err)       
-            #Rotate radial/transverse to East/North
+            #Rotate radial/transverse to East/North, correct vertical and scale to m
             statics=loadtxt(staname[k]+'.subfault'+num+'.SS.static.rtz')
             u=-statics[2]/100
             r=statics[3]/100
@@ -247,10 +268,19 @@ def run_syn(source,station_file,green_path,model_name,integrate,static,subfault,
         
 def cartesian_azimuth(x,y,xs,ys):
     '''
-    Compute source to station azimuths when sources given in cartesianc oordinates
+    Compute source to station azimuths (from North) when sources given in cartesian coordinates
+    
+    IN:
+        x: Vector of station x coordinates
+        y: Vector of station y coordinates
+        xs: Vector of source x coordinates
+        ys: Vectpr of source y coordinates
+        
+    OUT:
+        az: Source to station azimuth in degrees
     '''
     
-    from numpy import arctan,nonzero,pi,intersect1d
+    from numpy import arctan,nonzero,pi,intersect1d,rad2deg
     
     az=arctan((x-xs)/(y-ys))
     #Adjsut elements in 2nd quadrant
@@ -261,18 +291,19 @@ def cartesian_azimuth(x,y,xs,ys):
     #Adjust elements in 3rd and 4th quadrants
     i=nonzero(y-ys<0) 
     az[i]=pi+az[i]
-    return az
+    return rad2deg(az)
     
 def src2sta(station_file,source,coord_type):
     '''
-    Compute cartesian source to station distances for all station/source pairs.
-    params:
-        station_file - Path to station file
-        source - numpy 1d array with source info read from file
-        coord_type - =0 if coordinates are cartesian, =1 if they are lat/lon
-    returns:
-        d - sorted distances vector
-        az - azimuth
+    Compute cartesian source to station distances and azimuths for all station/source pairs.
+    
+    IN:
+        station_file: Path to station file
+        source: numpy 1d array with source info read from file
+        coord_type: =0 if coordinates are cartesian, =1 if they are lat/lon
+    OUT:
+        d - sorted distances vector in km
+        az - azimuth from source to station in degrees
     '''
     
     from numpy import genfromtxt,zeros
@@ -296,6 +327,3 @@ def src2sta(station_file,source,coord_type):
             d[k],az[k],baz[k]=gps2DistAzimuth(ys,xs,y[k],x[k])
         d=d/1000
     return d,az
-    
-def DistAzimuth():
-    pass
