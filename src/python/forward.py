@@ -6,6 +6,23 @@ Forward modeling routines
 
 def waveforms(home,project_name,rupture_name,station_file,model_name,integrate):
     '''
+    This routine will take synthetics and apply a slip dsitribution. It will delay each 
+    subfault by the appropriate rupture time and linearly superimpose all of them. Output
+    will be one sac waveform file per direction of motion (NEU) for each station defined in the
+    station_file. Depending on the specified rake angle at each subfault the code will compute 
+    the contribution to dip and strike slip directions. It will also compute the moment at that
+    subfault and scale it according to the unit amount of momeent (1e15 N-m)
+    
+    IN:
+        home: Home directory
+        project_name: Name of the problem
+        rupture_name: Name of rupture description file
+        station_file: File with coordinates of stations
+        model_Name: Name of Earth structure model file
+        integrate: =0 if you want output to be velocity, =1 if you want output to de displacement
+       
+    OUT:
+        Nothing
     '''
     from numpy import loadtxt,genfromtxt,deg2rad,sin,cos,allclose
     from obspy import read,Stream
@@ -114,6 +131,23 @@ def waveforms(home,project_name,rupture_name,station_file,model_name,integrate):
 
 def coseismics(home,project_name,rupture_name,station_file,model_name):
     '''
+    This routine will take synthetics and apply a static slip dsitibution. It will 
+    linearly superimpose the synthetic coseismic from each subfault. Output will be
+    a single ascii file witht he 3 coseismic offsets (NEU) for each station defined 
+    in the station_file. Depending on the specified rake angle at each subfault the 
+    code will compute the contribution to dip and strike slip directions. It will 
+    also compute the moment at that subfault and scale it according to the unit 
+    amount of momeent (1e15 N-m)
+    
+    IN:
+        home: Home directory
+        project_name: Name of the problem
+        rupture_name: Name of rupture description file
+        station_file: File with coordinates of stations
+        model_Name: Name of Earth structure model file
+       
+    OUT:
+        Nothing
     '''
     from numpy import loadtxt,genfromtxt,deg2rad,sin,cos,array,savetxt
     from string import rjust
@@ -184,7 +218,14 @@ def coseismics(home,project_name,rupture_name,station_file,model_name):
     
 def get_mu(structure,zs):
     '''
-    Look in structure model and compute rigidity
+    Look in structure model and compute rigidity given a source depth
+    
+    IN:
+        structure: Array with velocity structure information
+        zs: depth in km at which you want to compute mu
+        
+    OUT:
+        mu: Rigidity in Pa
     '''
     from numpy import nonzero
     
@@ -203,12 +244,22 @@ def get_mu(structure,zs):
     
 def add_traces(ss,ds,ssmult,dsmult,M):
     '''
-    Add two stream objects with dip slip and striek slip contributions
-    
+    Add two stream objects with dip slip and strike slip contributions. This code will take
+    two stream objects and super impsoe them according tot he weights defined by ssmult
+    dsmult and M. If one waveform is longer than the other then the code will extend the
+    shorter waveform by padding it with the last value.
+
     For simple addition use ss=ds=M=1
     
-    NOTES: Right now I'm truncating tiems tot eh nearest second, this si incorrect, they shoudl be truncated tot he enarest dt interval.
-    Also pad value should be zero for VELOCITY and the last sampelf or DISPALCEMMENT, this needs adjsutment
+    IN:
+        ss: Strike slip waveform
+        ds: Dip-slip waveform
+        ssmult: Strike-slip contribution cos(rake)
+        dsmult: Strike-slip contribution sin(rake)
+        M: Moment scaling value, unity is 1e15 N-m, 10 is 1e16N-m and so on...
+    
+    OUT:
+        st: Stream object with result of superposition
     '''
     from numpy import zeros
     
@@ -256,7 +307,13 @@ def add_traces(ss,ds,ssmult,dsmult,M):
 
 def tshift(st,tshift):
     '''
-    shift a stream object by tshift seconds, positive moves forward in time
+    Shift a stream object by tshift seconds, positive moves forward in time
+    
+    IN:
+        st: Stream object
+        tshift: Number fo seconds to shift
+    OUT:
+        st: Shifted stream object
     '''
     from datetime import timedelta
     td=timedelta(seconds=tshift)
@@ -266,6 +323,12 @@ def tshift(st,tshift):
         
 def round_time(t1,delta):
     '''
+    Round the initial time of a waveform to the nearest multiple of the sampling rate
+    IN:
+        t1: UTC time object containing start time of waveform
+        delta: Sampling interval of waveform in seconds
+    OUT:
+        t1: Rounded UTC time object
     '''
     from datetime import timedelta
     #Move start and end times to start exactly on the dt intervals

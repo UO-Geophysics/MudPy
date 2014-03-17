@@ -7,13 +7,19 @@ Runtime file for forward modeling and inverse kinematic slip inversions
 #Initalize project folders
 def init(home,project_name):
     '''
-    Blerg
+    Initalizes file structure for a new problem
+    
+    IN:
+        home: What dir will you be working from
+        project_name: What name will you give this problem
+        
+    OUT:
+        Nothing
     '''
-    from shutil import rmtree,copy
+    from shutil import rmtree
     from os import path,makedirs
     clob='y'
     proj_dir=home+project_name+'/'
-    aux_dir=home+'aux/'
     if path.exists(proj_dir):  #Path exists, clobber?
         clob=raw_input('Project directory exists, clobber (y/n)?')
         if clob is'y' or clob is 'Y': #Clobber baby
@@ -75,6 +81,9 @@ def make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,stat
         static: =0 if computing full waveforms, =1 if computing only the static field
         hot_start: =k if you want to start computations at k-th subfault, =0 to compute all
         coord_type: =0 if problem is in cartesian coordinates, =1 if problem is in lat/lon
+        
+    OUT:
+        Nothing
     '''
     import time,glob,green
     from numpy import loadtxt
@@ -148,6 +157,9 @@ def make_synthetics(home,project_name,station_file,fault_name,model_name,integra
         static: =0 if computing full waveforms, =1 if computing only the static field
         hot_start: =k if you want to start computations at k-th subfault, =0 to compute all
         coord_type: =0 if problem is in cartesian coordinates, =1 if problem is in lat/lon
+        
+    OUT:
+        Nothing
     '''
     import green,datetime
     from numpy import loadtxt
