@@ -25,7 +25,7 @@ solve=1  # =1 solves forward problem or runs inverse calculation, =0 does nothin
 
 ###############            Green function parameters               #############
 coord_type=1 #(=0 for cartesian, =1 for lat/lon (will use Earth flattening transform)
-hot_start=0   #Start at a certain subfault number
+hot_start=271   #Start at a certain subfault number
 static=0  #=1 computes static GFs only, =0 computes the complete waveform
 model_name='socal.mod'   #Velocity model
 rupture_name='alaska_small_lat_lon.rupt'   #Rupture model, not needed for inversion
@@ -52,6 +52,7 @@ if make_green==1:
 
 #Now make synthetics for source/station pairs
 if make_synthetics==1:
+    hot_start=0
     runslip.make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,hot_start,coord_type)
     
 #Run forward comptuation or solve for inverse problem

@@ -1,12 +1,35 @@
-PySlip v.0.1
+MULTI-DATA SOURCE MODELING AND INVERSION TOOLKIT
+
+MudPy v.0.5
 Diego Melgar
 Scripps Institution of Oceanography
 
-A code to run forward models of kineamtic fault rupture and invert for source models given observed seismograms.
+A code to run forward models of dislocation sources as well as invert for them with multiple
+geophysical data types:
 
-More stuff here as I develop it.
+** Data types that MudPy can simulate and invert:
+	+ Displacement seismograms
+	+ Velocity seismograms
+	+ Static field vectors
+	+ Tsunami waveforms (under development)
+	+ Strain offsets (under development)
+
+** MudPy can do:
+
+FORWARD MODELING of static point source
+FORWARD MODELING of static slip distributions
+FORWARD MODELING of kinematic point sources
+FORWARD MODELING of kinematic slip distributions
+
+** MudPy will soon do:
+
+INVERSION of a static point source
+INVERSION of static slip distributions
+INVERSION of kinematic point sources
+INVERSION of kinematic slip distributions
+
+Not a whole lot of documentation since I'm still working on this although the code is thoroughly commented.
 
 NOTES:
-Uses fk code from Zhu & Rivera (2002, GJI) for Green functions calcualtions. This code is bundled here but make sure to refer to the original source for updates.
-
+Uses fk code from Zhu & Rivera (2002, GJI) for Green functions calculations. This code is bundled here but make sure to refer to the original source for updates.
 http://www.eas.slu.edu/People/LZhu/home.html

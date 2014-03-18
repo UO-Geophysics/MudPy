@@ -181,3 +181,61 @@ def make_synthetics(home,project_name,station_file,fault_name,model_name,integra
         f=open(logpath+'make_synth.'+now+'.log','a')
         f.write(log)
         f.close()
+       
+        
+         
+#Compute GFs for the ivenrse problem            
+def inversionGFs(home,project_name,GF_list,fault_name,model_name,dt,NFFT,coord_type,green_flag,synth_flag):
+    '''
+    This routine will read a .gflist file and compute the required GF type for each station
+    '''
+    from numpy import genfromtxt
+    from os import remove
+    
+    #Read in GFlist and decide what to compute
+    gf_file=home+project_name+'/data/station_info/'+GF_list
+    stations=genfromtxt(gf_file,usecols=0,skip_header=1,dtype='S6')
+    GF=genfromtxt(gf_file,usecols=[1,2,3,4,5,6,7],skip_header=1,dtype='f8')
+    #Now do one station at a time
+    hot_start=0 #Used for the forward problem, doesn't do anything here
+    station_file='temp.sta'
+    remove(home+project_name+'/data/station_info/'+station_file) #Cleanup
+    for k in range(len(stations)):
+        #Make dummy station file
+        out=stations[k]+'\t'+repr(GF[k,0])+'\t'+repr(GF[k,1])
+        f=open(home+project_name+'/data/station_info/'+station_file,'w')
+        f.write(out)
+        f.close()
+        if green_flag==1:
+            #decide what GF computation is required for this station
+            if GF[k,2]==1: #Static offset
+                static=1
+                make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,static,hot_start,coord_type)
+            if GF[k,3]==1 or GF[k,4]==1: #full waveform
+                static=0
+                make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,static,hot_start,coord_type)
+            if GF[k,5]==1: #Tsunami (pending)
+                pass
+            if GF[k,6]==1: #strain (pending)
+                pass
+        if synth_flag==1:
+            #Decide which synthetics are required
+            if GF[k,2]==1: #Static offset
+                integrate=0
+                static=1
+                make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,hot_start,coord_type)
+            if GF[k,3]==1: #dispalcement waveform
+                integrate=1
+                static=0
+                make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,hot_start,coord_type)
+            if GF[k,4]==1: #velocity waveform
+                integrate=0
+                static=0
+                make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,hot_start,coord_type)
+            if GF[k,5]==1: #tsunami waveform
+                pass
+            if GF[k,6]==1: #strain offsets
+                pass
+    remove(home+project_name+'/data/station_info/'+station_file) #Cleanup
+                                
+    

@@ -108,6 +108,8 @@ def run_syn(source,station_file,green_path,model_name,integrate,static,subfault,
         green_path=green_path+'dynamic/'+model_name+"_"+strdepth+".sub"+subfault+"/"
     print("--> Computing synthetics at stations for the source at ("+str(xs)+" , "+str(ys)+")")
     staname=genfromtxt(station_file,dtype="S6",usecols=0)
+    if staname.shape==(): #Single staiton file
+        staname=array([staname])
     #Compute distances and azimuths
     d,az=src2sta(station_file,source,coord_type)
     #Move to output folder
@@ -220,7 +222,10 @@ def run_syn(source,station_file,green_path,model_name,integrate,static,subfault,
             log=log+green_file+'\n' #Append to log
             statics=loadtxt(green_file) #Load GFs
             #Print static GFs into a pipe and pass into synthetics command
-            temp_pipe=statics[k,:]
+            try:
+                temp_pipe=statics[k,:]
+            except:
+                temp_pipe=statics
             inpipe=''
             for j in range(len(temp_pipe)):
                 inpipe=inpipe+' %.6e' % temp_pipe[j]
@@ -306,7 +311,7 @@ def src2sta(station_file,source,coord_type):
         az - azimuth from source to station in degrees
     '''
     
-    from numpy import genfromtxt,zeros
+    from numpy import genfromtxt,zeros,array
     from obspy.core.util.geodetics import gps2DistAzimuth
     
     
@@ -314,6 +319,9 @@ def src2sta(station_file,source,coord_type):
     #staname=genfromtxt(home+station_file,dtype="S6",usecols=0)
     x=genfromtxt(station_file,dtype="f8",usecols=1)
     y=genfromtxt(station_file,dtype="f8",usecols=2)
+    if x.shape==() or y.shape==(): #Single station file
+        x=array([x])
+        y=array([y])
     d=zeros(x.shape)
     az=zeros(x.shape)
     baz=zeros(x.shape)
