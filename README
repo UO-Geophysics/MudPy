@@ -4,8 +4,8 @@ MudPy v.0.5
 Diego Melgar
 Scripps Institution of Oceanography
 
-A code to run forward models of dislocation sources as well as invert for them with multiple
-geophysical data types:
+A code to run forward models of dislocation sources as well as invert for them 
+with multiple geophysical data types:
 
 ** Data types that MudPy can simulate and invert:
 	+ Displacement seismograms
@@ -28,8 +28,10 @@ INVERSION of static slip distributions
 INVERSION of kinematic point sources
 INVERSION of kinematic slip distributions
 
-Not a whole lot of documentation since I'm still working on this although the code is thoroughly commented.
+Not a whole lot of documentation since I'm still working on this although the 
+code is thoroughly commented.
 
 NOTES:
-Uses fk code from Zhu & Rivera (2002, GJI) for Green functions calculations. This code is bundled here but make sure to refer to the original source for updates.
+Uses fk code from Zhu & Rivera (2002, GJI) for Green functions calculations. This 
+code is bundled here but make sure to refer to the original source for updates.
 http://www.eas.slu.edu/People/LZhu/home.html
