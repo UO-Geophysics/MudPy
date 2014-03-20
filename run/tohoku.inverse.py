@@ -7,6 +7,7 @@ Comment: Inversion fo Tohoku data
 '''
 
 import runslip,inverse
+import numpy as np
 
 ########                            GLOBALS                             ########
 
@@ -20,6 +21,7 @@ project_name='tohoku'
 init=0 #Initalize project
 make_green=0 #Compute GFs
 make_synthetics=1 #Compute synthetics for a given model at given stations
+G_from_file=0 # =0 read GFs a=and create G, =1 load G from file
 invert=0  # =1 runs inversion, =0 does nothing
 ###############################################################################
 
@@ -36,6 +38,12 @@ NFFT=2048
 dt=0.2
 ################################################################################
 
+#############               Inversion Parameters               ################# 
+epicenter=np.array([142.435,38.305,26.3305])    #lon,lat,depth (positive in km) must correspond to a fault patch
+rupture_speeds=np.array([2.8])   #In km/s
+smoothing_values=np.linspace(1,1,1)
+regularization_type='laplace'
+################################################################################
 
 
 #Initalize project folders
@@ -46,6 +54,8 @@ if init==1:
 if make_green==1 or make_synthetics==1:
     runslip.inversionGFs(home,project_name,GF_list,fault_name,model_name,dt,NFFT,coord_type,make_green,make_synthetics)
     
+# Prepare G matrix
+runslip.loadG()
 #Run inverse computation
 #if solve==1:
 #    if static==0: #Forward problem (full waveforms)

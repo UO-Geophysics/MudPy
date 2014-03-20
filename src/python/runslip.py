@@ -239,3 +239,76 @@ def inversionGFs(home,project_name,GF_list,fault_name,model_name,dt,NFFT,coord_t
     remove(home+project_name+'/data/station_info/'+station_file) #Cleanup
                                 
     
+def loadG(home,project_name,fault_name,model_name,GF_list,G_from_file,epicenter,rupture_speeds):
+    '''
+    Either load G from file or aprse gflist file and assemble it from previous computations
+    '''
+    from inverse import makeG
+    from numpy import genfromtxt,where
+    from os import remove
+    from os.path import split
+    
+    if G_from_file==1: #load from file
+        pass
+    else: #assemble G one data type at a time
+        #Read in GFlist and decide what to compute
+        gf_file=home+project_name+'/data/station_info/'+GF_list
+        mini_station=home+project_name+'/data/station_info/temp.sta'
+        stations=genfromtxt(gf_file,usecols=0,skip_header=1,dtype='S6')
+        GF=genfromtxt(gf_file,usecols=[1,2,3,4,5,6,7],skip_header=1,dtype='f8')
+        #static field GFs
+        kgf=2
+        if GF[:,kgf].sum()>0:
+            try:
+                remove(mini_station) #Cleanup  
+            except:
+                pass
+            #Make mini station file 
+            i=where(GF[:,kgf]==1)[0]
+            if len(i)>0: #There's actually something to do
+                mini_station_file(mini_station,stations[i],GF[i,0],GF[i,1])
+                gftype='static'
+                tdelay=0
+                max_time=0
+                Gstatic=makeG(home,project_name,fault_name,model_name,split(mini_station)[1],gftype,tdelay,max_time)
+                remove(mini_station) #Cleanup  
+        #Dispalcement waveform GFs
+        kgf=3
+        if GF[:,kgf].sum()>0:
+            #Load fault file
+            source=loadtxt(home+project_name+'/data/model_info/'+fault_name,ndmin=2)
+            try:
+                remove(mini_station) #Cleanup  
+            except:
+                pass
+            #Make mini station file 
+            i=where(GF[:,kgf]==1)[0]
+            if len(i)>0: #There's actually something to do
+                mini_station_file(mini_station,stations[i],GF[i,0],GF[i,1])
+                gftype='disp'
+                for krup in range(len(rupture_speeds)):
+                    tdelay=epi2subfault(epicenter,source)
+                    max_time=0
+                    Gdyn=makeG(home,project_name,fault_name,model_name,split(mini_station)[1],gftype,tdelay,max_time)
+                
+                remove(mini_station) #Cleanup  
+
+
+######                 Le tools undt le trinkets                         #######
+                                
+def mini_station_file(outfile,sta,lon,lat):
+    '''
+    Make a temporary station file from a alrger file
+    '''
+    f=open(outfile,'a')
+    for k in range(len(sta)):
+        out=sta[k]+'\t'+repr(lon[k])+'\t'+repr(lat[k])+'\n'
+        f.write(out)
+    f.close()
+    
+def epi2subfault(epicenter,source):
+    '''
+    Compute time delays from epicetner to subfault based on a give rupture speed
+    '''
+        
+        
