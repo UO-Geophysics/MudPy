@@ -44,8 +44,10 @@ dk=0.1 ; pmin=0 ; pmax=1 ; kmax=20
 epicenter=np.array([142.435,38.305,26.3305])    #lon,lat,depth(positive in km)
 time_epi=UTCDateTime('2011-03-11T05:46:23')
 rupture_speeds=np.array([2.4])   #In km/s
-smoothing_values=np.linspace(1,1,1)
+regularization_parameter=np.linspace(1,1,1)
 regularization_type='laplace'
+top='free' ; bottom='locked' ; left='locked' ; right='locked' ; bounds=(top,bottom,left,right) #'locked' or 'free'
+nstrike=21 ; ndip=9 ; nfaults=(nstrike,ndip)
 ################################################################################
 
 
@@ -58,9 +60,8 @@ if make_green==1 or make_synthetics==1:
     runslip.inversionGFs(home,project_name,GF_list,fault_name,model_name,dt,NFFT,
                         coord_type,make_green,make_synthetics,dk,pmin,pmax,kmax,time_epi)
     
-# Prepare G matrix
-G=runslip.makeG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epicenter,
-                rupture_speeds,coord_type)
+#Run inversion
+
 
     
     

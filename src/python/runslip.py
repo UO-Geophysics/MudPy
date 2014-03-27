@@ -242,125 +242,28 @@ def inversionGFs(home,project_name,GF_list,fault_name,model_name,dt,NFFT,coord_t
                 pass
     remove(home+project_name+'/data/station_info/'+station_file) #Cleanup
                                 
-    
-def makeG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epicenter,rupture_speeds,coord_type):
+def run_inversion(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epicenter,
+                rupture_speeds,coord_type,bounds,regularization_type,regularization_parameter,nfaults):
     '''
-    Either load G from file or parse gflist file and assemble it from previous computations
+    Assemble G and d, determine smoothing and run the inversion
     '''
-    from inverse import makeG
-    from numpy import genfromtxt,where,loadtxt,array,r_,concatenate,save,load
-    from os import remove
-    from os.path import split
+    from inverse import getG,getdata,getL
     
-    G_name=home+project_name+'/GFs/matrices/'+G_name
-    if G_from_file==1: #load from file
-        if G_name[-3:]!='npy':
-            G_name=G_name+'.npy'
-        G=load(G_name)
-    else: #assemble G one data type at a time
-        #Read in GFlist and decide what to compute
-        gf_file=home+project_name+'/data/station_info/'+GF_list
-        mini_station=home+project_name+'/data/station_info/temp.sta'
-        stations=genfromtxt(gf_file,usecols=0,skip_header=1,dtype='S6')
-        GF=genfromtxt(gf_file,usecols=[1,2,3,4,5,6,7],skip_header=1,dtype='f8')
-        GFfiles=genfromtxt(gf_file,usecols=[8,9,10],dtype='S')
-        #static field GFs
-        kgf=2
-        Gstatic=array([])
-        if GF[:,kgf].sum()>0:
-            try:
-                remove(mini_station) #Cleanup  
-            except:
-                pass
-            #Make mini station file 
-            i=where(GF[:,kgf]==1)[0]
-            if len(i)>0: #There's actually something to do
-                mini_station_file(mini_station,stations[i],GF[i,0],GF[i,1],GFfiles[i,0])
-                gftype='static'
-                tdelay=0
-                Gstatic=makeG(home,project_name,fault_name,model_name,split(mini_station)[1],gftype,tdelay)
-                remove(mini_station) #Cleanup  
-        #Dispalcement waveform GFs
-        kgf=3
-        Gdisp=array([])
-        if GF[:,kgf].sum()>0:
-            #Load fault file
-            source=loadtxt(home+project_name+'/data/model_info/'+fault_name,ndmin=2)
-            try:
-                remove(mini_station) #Cleanup  
-            except:
-                pass
-            #Make mini station file 
-            i=where(GF[:,kgf]==1)[0]
-            if len(i)>0: #There's actually something to do
-                mini_station_file(mini_station,stations[i],GF[i,0],GF[i,1],GFfiles[i,1])
-                gftype='disp'
-                for krup in range(len(rupture_speeds)):
-                    tdelay=epi2subfault(epicenter,source,rupture_speeds[krup])
-                    Gdisp_temp=makeG(home,project_name,fault_name,model_name,split(mini_station)[1],gftype,tdelay)
-                    if krup==0: #First rupture speed
-                        Gdisp=Gdisp_temp
-                    else:
-                        Gdisp=r_[Gdisp,Gdisp_temp]
-                remove(mini_station) #Cleanup 
-        #Velocity waveforms
-        kgf=4
-        Gvel=array([])
-        if GF[:,kgf].sum()>0:
-            pass
-        #Tsunami waveforms
-        kgf=5
-        Gtsun=array([])
-        if GF[:,kgf].sum()>0:
-            pass
-        #Strain offsets
-        kgf=6
-        Gstrain=array([])
-        if GF[:,kgf].sum()>0:
-            pass
-        #Done, now concatenate them all and save to pickle file
-        G=concatenate([g for g in [Gstatic,Gdisp,Gvel,Gtsun,Gstrain] if g.size > 0])
-        print 'Saving to '+G_name+' this might take just a second...'
-        save(G_name,G)
-    return G
+    #Get data vector
+    d=getdata(home,project_name,GF_list,rupture_speeds)
+    #Get GFs
+    G=getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epicenter,
+                rupture_speeds,coord_type)
+    L=getL(home,project_name,fault_name,bounds,regularization_type,nfaults)
+    s,W=get_data_weights(home,project_name,GF_list)
+
         
                 
 
 
 ######                 Le tools undt le trinkets                         #######
                                 
-def mini_station_file(outfile,sta,lon,lat,gffiles):
-    '''
-    Make a temporary station file from a larger file
-    '''
-    f=open(outfile,'a')
-    for k in range(len(sta)):
-        out=sta[k]+'\t'+repr(round(lon[k],6))+'\t'+repr(round(lat[k],6))+'\t'+gffiles[k]+'\n'
-        f.write(out)
-    f.close()
 
-    
-            
-def epi2subfault(epicenter,source,vr):
-    '''
-    Compute time delays from epicetner to subfault based on a give rupture speed
-    
-    Coordinates in lat/lon,depth(km). vr in km/s, returns tdelay in s
-    '''
-    from numpy import tile,sin,cos,deg2rad,sqrt
-    #Compute distances from epi to subfault by converting to cartesian
-    R=6371
-    epicenter=tile(epicenter,(len(source),1))
-    xepi=(R-epicenter[:,2])*sin(deg2rad(90-epicenter[:,1]))*cos(deg2rad(epicenter[:,0]))
-    yepi=(R-epicenter[:,2])*sin(deg2rad(90-epicenter[:,1]))*sin(deg2rad(epicenter[:,0]))
-    zepi=(R-epicenter[:,2])*cos(deg2rad(90-epicenter[:,1]))
-    x=(R-source[:,3])*sin(deg2rad(90-source[:,2]))*cos(deg2rad(source[:,1]))
-    y=(R-source[:,3])*sin(deg2rad(90-source[:,2]))*sin(deg2rad(source[:,1]))
-    z=(R-source[:,3])*cos(deg2rad(90-source[:,2]))
-    d=sqrt((xepi-x)**2+(yepi-y)**2+(zepi-z)**2)
-    #Compute time associated with a given rupture speed
-    tdelay=d/vr
-    return tdelay
         
         
         
