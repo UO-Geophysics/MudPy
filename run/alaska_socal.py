@@ -18,17 +18,16 @@ project_name='alaska_socal'
 #####              What-do-you-want-to-do flags, 1=do, 0=leave be          #####
 
 init=0 #Initalize project
-make_green=1 #Compute GFs
-make_synthetics=1 #Compute synthetics for a given model at given stations
+make_green=0 #Compute GFs
+make_synthetics=0 #Compute synthetics for a given model at given stations
 direction=1  #=1 for forward modeling, =0 for inversion
 solve=1  # =1 solves forward problem or runs inverse calculation, =0 does nothing
 ###############################################################################
 
 ###############            Green function parameters               #############
 coord_type=1 #(=0 for cartesian, =1 for lat/lon (will use Earth flattening transform)
-freq=5  #Bandpass filter GFs
-hot_start=0   #Start at a certain subfault number
-static=1  #=1 computes static GFs only, =0 computes the complete waveform
+hot_start=42   #Start at a certain subfault number
+static=0  #=1 computes static GFs only, =0 computes the complete waveform
 model_name='socal.mod'   #Velocity model
 rupture_name='alaska_small_lat_lon.rupt'   #Rupture model, not needed for inversion
 fault_name='alaska_small_lat_lon.fault'    #Fault geometry
@@ -38,7 +37,7 @@ dt=0.2
 ################################################################################
 
 ############                 Synthetics parameters               ###############
-
+resample=0.2
 integrate=1 #=0 produces velocities, =1 makes dispalcements
 ################################################################################
 
@@ -62,7 +61,7 @@ if make_synthetics==1:
 #Run forward comptuation or solve for inverse problem
 if solve==1:
     if direction==1 and static==0: #Forward problem (full waveforms)
-        forward.waveforms(home,project_name,rupture_name,station_file,model_name,integrate,freq)
+        forward.waveforms(home,project_name,rupture_name,station_file,model_name,integrate,hot_start,resample)
     if direction==1 and static==1: #Forward problem (coseismics)
         forward.coseismics(home,project_name,rupture_name,station_file,model_name)
     

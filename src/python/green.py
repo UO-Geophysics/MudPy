@@ -3,7 +3,7 @@ Diego Melgar 01/2014
 Green functions routines for source models
 '''
 
-def run_green(source,station_file,model_name,dt,NFFT,static,coord_type):
+def run_green(source,station_file,model_name,dt,NFFT,static,coord_type,dk,pmin,pmax,kmax):
     '''
     Compute GFs using Zhu & Rivera code for a given velocity model, source depth
     and station file. This function will make an external system call to fk.pl
@@ -30,15 +30,15 @@ def run_green(source,station_file,model_name,dt,NFFT,static,coord_type):
     diststr=''
     for k in range(len(d)):
         diststr=diststr+' %.3f' % d[k] #Truncate distance to 3 decimal palces (meters)
-    if static==0: #Compute full waveform
+    if static==0: #Compute full waveform, dk=0.1 is hardcoded right now, works up to 1500-2000km
         if coord_type==0: #Cartesian coords NO Earth flattening
-            command=split("fk.pl -M"+model_name+"/"+depth+"/k -N"+str(NFFT)+"/"+str(dt)+diststr)
-            print "fk.pl -M"+model_name+"/"+depth+"/k -N"+str(NFFT)+"/"+str(dt)+diststr
+            command=split("fk.pl -M"+model_name+"/"+depth+"/k -N"+str(NFFT)+"/"+str(dt)+'/1/'+repr(dk)+' -P'+repr(pmin)+'/'+repr(pmax)+'/'+repr(kmax)+diststr)
+            print "fk.pl -M"+model_name+"/"+depth+"/k -N"+str(NFFT)+"/"+str(dt)+'/1/'+repr(dk)+'-P '+repr(pmin)+'/'+repr(pmax)+'/'+repr(kmax)+diststr
             p=subprocess.Popen(command,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
             out,err=p.communicate() 
         if coord_type==1: #Lat/Lon coords, trigger Earth flattening
-            command=split("fk.pl -M"+model_name+"/"+depth+"/f -N"+str(NFFT)+"/"+str(dt)+diststr)
-            print "fk.pl -M"+model_name+"/"+depth+"/f -N"+str(NFFT)+"/"+str(dt)+diststr
+            command=split("fk.pl -M"+model_name+"/"+depth+"/f -N"+str(NFFT)+"/"+str(dt)+'/1/'+repr(dk)+' -P'+repr(pmin)+'/'+repr(pmax)+'/'+repr(kmax)+diststr)
+            print "fk.pl -M"+model_name+"/"+depth+"/f -N"+str(NFFT)+"/"+str(dt)+'/1/'+repr(dk)+' -P'+repr(pmin)+'/'+repr(pmax)+'/'+repr(kmax)+diststr
             p=subprocess.Popen(command,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
             out,err=p.communicate() 
     else: #Compute only statics
@@ -60,7 +60,7 @@ def run_green(source,station_file,model_name,dt,NFFT,static,coord_type):
     
     
     
-def run_syn(source,station_file,green_path,model_name,integrate,static,subfault,coord_type):
+def run_syn(source,station_file,green_path,model_name,integrate,static,subfault,coord_type,time_epi):
     '''
     Use green functions and compute synthetics at stations for a single source
     and multiple stations. This code makes an external system call to syn.c first it
@@ -94,6 +94,7 @@ def run_syn(source,station_file,green_path,model_name,integrate,static,subfault,
     rakeDS=-90 #-90 is thrust, 90 is normal
     rakeSS=180
     Mw=3.933333333 #This is used as unit magnitude, corresponds to 1e15 N-m
+    tb=50 #Number of samples before first arrival
     #Parse the soruce information
     num=rjust(str(int(source[0])),4,'0')
     xs=source[1]
@@ -161,12 +162,15 @@ def run_syn(source,station_file,green_path,model_name,integrate,static,subfault,
                 n[0].data=ntemp/100
                 e=t.copy()
                 e[0].data=etemp/100
+                n=origin_time(n,time_epi,tb)
+                e=origin_time(e,time_epi,tb)
                 n.write(staname[k]+".subfault"+num+'.SS.disp.n',format='SAC')
                 e.write(staname[k]+".subfault"+num+'.SS.disp.e',format='SAC')
                 #Correct polarity in vertical, ZR code has down=positive
                 down=read(staname[k]+".subfault"+num+'.SS.disp.z')
                 up=down.copy()
                 up[0].data=down[0].data/-100
+                up=origin_time(up,time_epi,tb)
                 up.write(staname[k]+".subfault"+num+'.SS.disp.z',format='SAC')
                 #Dip Slip
                 r=read(staname[k]+".subfault"+num+'.DS.disp.r')
@@ -176,12 +180,15 @@ def run_syn(source,station_file,green_path,model_name,integrate,static,subfault,
                 n[0].data=ntemp/100
                 e=t.copy()
                 e[0].data=etemp/100
+                n=origin_time(n,time_epi,tb)
+                e=origin_time(e,time_epi,tb)
                 n.write(staname[k]+".subfault"+num+'.DS.disp.n',format='SAC')
                 e.write(staname[k]+".subfault"+num+'.DS.disp.e',format='SAC')
                 #Correct polarity in vertical, ZR code has down=positive, we don't like that precious do we?
                 down=read(staname[k]+".subfault"+num+'.DS.disp.z')
                 up=down.copy()
                 up[0].data=down[0].data/-100
+                up=origin_time(up,time_epi,tb)  #Assign epicentral time
                 up.write(staname[k]+".subfault"+num+'.DS.disp.z',format='SAC')
             else: #Waveforms are velocity, as before, rotate from RT-Z to NE+Z and scale to m/s
                 #Strike slip
@@ -192,12 +199,15 @@ def run_syn(source,station_file,green_path,model_name,integrate,static,subfault,
                 n[0].data=ntemp/100
                 e=t.copy()
                 e[0].data=etemp/100
+                n=origin_time(n,time_epi,tb)
+                e=origin_time(e,time_epi,tb)
                 n.write(staname[k]+".subfault"+num+'.SS.vel.n',format='SAC')
                 e.write(staname[k]+".subfault"+num+'.SS.vel.e',format='SAC')
                 #Correct polarity in vertical, ZR code has down=positive
                 down=read(staname[k]+".subfault"+num+'.SS.vel.z')
                 up=down.copy()
                 up[0].data=down[0].data/-100
+                up=origin_time(up,time_epi,tb)
                 up.write(staname[k]+".subfault"+num+'.SS.vel.z',format='SAC')
                 #Dip Slip
                 r=read(staname[k]+".subfault"+num+'.DS.vel.r')
@@ -207,12 +217,15 @@ def run_syn(source,station_file,green_path,model_name,integrate,static,subfault,
                 n[0].data=ntemp/100
                 e=t.copy()
                 e[0].data=etemp/100
+                n=origin_time(n,time_epi,tb)
+                e=origin_time(e,time_epi,tb)
                 n.write(staname[k]+".subfault"+num+'.DS.vel.n',format='SAC')
                 e.write(staname[k]+".subfault"+num+'.DS.vel.e',format='SAC')
                 #Correct polarity in vertical, ZR code has down=positive, we don't like that precious do we?
                 down=read(staname[k]+".subfault"+num+'.DS.vel.z')
                 up=down.copy()
                 up[0].data=down[0].data/-100 #In fk-land down is positive, but in this code up is positive
+                up=origin_time(up,time_epi,tb)
                 up.write(staname[k]+".subfault"+num+'.DS.vel.z',format='SAC')
         else: #Compute static synthetics
             os.chdir(green_path+'static/') #Move to appropriate dir
@@ -335,3 +348,30 @@ def src2sta(station_file,source,coord_type):
             d[k],az[k],baz[k]=gps2DistAzimuth(ys,xs,y[k],x[k])
         d=d/1000
     return d,az
+    
+def origin_time(st,time_epi,tb):
+    '''
+    Make start time of synthetics correspond with epicentral time
+    
+    Usage:
+        st=origin_time(st,time_epi,tb)
+    
+    In:
+        st: stream object to be altered
+        time_epi: UTCDateTime object containing epicentral tiem
+        tb: Number fo samples before first arrival in waveform
+        
+    Out:
+        st: Time adjsuted waveform
+    '''
+    
+    from datetime import timedelta
+    
+    t1=st[0].stats.starttime  #Waveform starttime
+    td=timedelta(seconds=st[0].stats.delta*tb)  #Shift due to pre-first arrival samples
+    #Shift forward
+    t1=t1+td
+    #Shift to oring time
+    t1=time_epi+timedelta(minutes=t1.minute,seconds=t1.second,microseconds=t1.microsecond)-td
+    st[0].stats.starttime=t1
+    return st

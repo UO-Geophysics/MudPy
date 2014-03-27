@@ -7,6 +7,7 @@
 
 use strict;
 my $r0 = 6371.;
+my $tb=50;		# num. of samples before the first arrival.(Never,ever change this, like, ever. Should always be 50)
 
 #========= default values
 my $fk = "fk";		# FK.
@@ -14,14 +15,13 @@ my $dt = 1;		# sampling interval.
 my $smth = 1;		# densify the output samples by a factor of smth.
 my $nft = 256;		# number of points.
 my $src = 2;		# source type, 2=dc; 1=sf; 0=ex.
-my $dk = 0.3;		# sampl. interval in wavenumber, in Pi/x, 0.1-0.4. DM=0.3
-my $sigma = 2;		# small imaginary frequency, in 1/T, 2-3.
-my $kmax = 20.;		# max wavenumber at w=0, in 1/h, 10-30.
-my $pmin = 0.;		# max. phase velocity, in 1/vs, 0 the best.
-my $pmax = 1.;		# min. phase velocity, in 1/vs.
+my $dk = 0.2;		# sampl. interval in wavenumber, in Pi/x, 0.1-0.4. DM=0.3
+my $sigma = 3;		# small imaginary frequency, in 1/T, 2-3.
+my $kmax = 10.0;		# max wavenumber at w=0, in 1/h, 10-30. Default 20 (h is source depth)
+my $pmin = 0;		# max. phase velocity, in 1/vs, 0 the best.
+my $pmax = 1;		# min. phase velocity, in 1/vs.
 my $taper = 0.3;	# for low-pass filter, 0-1.
 my ($f1,$f2) = (0,0);	# for high-pass filter transition band, in Hz.
-my $tb=50;		# num. of samples before the first arrival.(DM, used to be 50)
 my $deg2km=1;
 my $flat=0;		# Earth flattening transformation.
 my $r_depth = 0.;	# receiver depth.

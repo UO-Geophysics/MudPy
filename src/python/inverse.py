@@ -4,7 +4,7 @@ Diego Melgar, 03.2014
 Routines for solving dislocation ivnerse problems, static and dynamic.
 '''
 
-def makeG(home,project_name,fault_name,model_name,station_file,gftype,tdelay,max_time):
+def makeG(home,project_name,fault_name,model_name,station_file,gftype,tdelay):
     '''
     
     IN:
@@ -17,7 +17,7 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tdelay,max
     OUT:
         Nothing
     '''
-    from numpy import genfromtxt,loadtxt,zeros
+    from numpy import genfromtxt,loadtxt,zeros,r_
     from string import rjust
     from obspy import read
     from forward import tshift,round_time
@@ -28,12 +28,14 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tdelay,max
     #Load station info
     station_file=home+project_name+'/data/station_info/'+station_file
     staname=genfromtxt(station_file,dtype="S6",usecols=0)
+    datafiles=genfromtxt(station_file,dtype="S",usecols=3)
     Nsta=len(staname)
-    #Initalize output variable
-    G=zeros([len(staname)*3,Nfaults*2])
+    insert_position=0
     #Loop over stations
     for ksta in range(Nsta):
             if gftype.lower()=='static': #Make matrix of static GFs
+                #Initalize output variable
+                Gtemp=zeros([3,Nfaults*2])
                 #Where's the data
                 syn_path=home+project_name+'/GFs/static/'
                 #Loop over subfaults
@@ -49,23 +51,27 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tdelay,max
                     nds=coseis_ds[1]
                     zds=coseis_ds[2]
                     #Place into G matrix
-                    G[3*ksta,2*kfault]=nss   ; G[3*ksta,2*kfault+1]=nds    #North
-                    G[3*ksta+1,2*kfault]=ess ; G[3*ksta+1,2*kfault+1]=eds  #East
-                    G[3*ksta+2,2*kfault]=zss ; G[3*ksta+2,2*kfault+1]=zds  #Up
+                    Gtemp[0,2*kfault]=nss   ; Gtemp[0,2*kfault+1]=nds    #North
+                    Gtemp[1,2*kfault]=ess ; Gtemp[1,2*kfault+1]=eds  #East
+                    Gtemp[2,2*kfault]=zss ; Gtemp[2,2*kfault+1]=zds  #Up
+                    #Append to G
+                if ksta==0: #First station, create array 
+                    G=Gtemp
+                else: #Just append
+                    G=r_[G,Gtemp]
             if gftype.lower()=='disp' or gftype.lower=='vel':  #Full waveforms
                 if gftype.lower()=='disp':
                     vord='disp'
                 else:
                     vord='vel'
-                #determine length of waveforms
                 #Loop over subfaults
                 for kfault in range(Nfaults):
-                    print 'Assembling '+vord+' waveform GFs for station '+staname[ksta]+' '+nfault
                     #Get subfault GF directory
                     nsub='sub'+rjust(str(int(source[kfault,0])),4,'0')
                     nfault='subfault'+rjust(str(int(source[kfault,0])),4,'0')
                     strdepth='%.4f' % source[kfault,3]
                     syn_path=home+project_name+'/GFs/dynamic/'+model_name+'_'+strdepth+'.'+nsub+'/'
+                    print 'Assembling '+vord+' waveform GFs for station '+staname[ksta]+' '+nfault
                     #Get synthetics
                     ess=read(syn_path+staname[ksta]+'.'+nfault+'.SS.'+vord+'.e')
                     nss=read(syn_path+staname[ksta]+'.'+nfault+'.SS.'+vord+'.n')
@@ -73,44 +79,47 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tdelay,max
                     eds=read(syn_path+staname[ksta]+'.'+nfault+'.DS.'+vord+'.e')
                     nds=read(syn_path+staname[ksta]+'.'+nfault+'.DS.'+vord+'.n')
                     zds=read(syn_path+staname[ksta]+'.'+nfault+'.DS.'+vord+'.z')
+                    #Load raw data, this will be used to trim the GFs
+                    edata=read(datafiles[ksta]+'.e')
+                    ndata=read(datafiles[ksta]+'.n')
+                    udata=read(datafiles[ksta]+'.u')
                     #Time shift them according to subfault rupture time, zero pad, round to dt interval
                     #and extend to maximum time
                     dt=ess[0].stats.delta
                     ess=tshift(ess,tdelay[kfault])
                     ess[0].stats.starttime=round_time(ess[0].stats.starttime,dt)
-                    ess=pad2zero(ess)
-                    ess=padend(ess,max_time,vord)
+                    ess=prep_synth(ess,edata)
                     nss=tshift(nss,tdelay[kfault])
                     nss[0].stats.starttime=round_time(nss[0].stats.starttime,dt)
-                    nss=pad2zero(nss)
-                    nss=padend(nss,max_time,vord)
+                    nss=prep_synth(nss,ndata)
                     zss=tshift(zss,tdelay[kfault])
                     zss[0].stats.starttime=round_time(zss[0].stats.starttime,dt)
-                    zss=pad2zero(zss)
-                    zss=padend(zss,max_time,vord)
+                    zss=prep_synth(zss,udata)
                     eds=tshift(eds,tdelay[kfault])
                     eds[0].stats.starttime=round_time(eds[0].stats.starttime,dt)
-                    eds=pad2zero(eds)
-                    eds=padend(eds,max_time,vord)
+                    eds=prep_synth(eds,edata)
                     nds=tshift(nds,tdelay[kfault])
                     nds[0].stats.starttime=round_time(nds[0].stats.starttime,dt)
-                    nds=pad2zero(nds)
-                    nds=padend(nds,max_time,vord)
+                    nds=prep_synth(nds,ndata)
                     zds=tshift(zds,tdelay[kfault])
                     zds[0].stats.starttime=round_time(zds[0].stats.starttime,dt)
-                    zds=pad2zero(zds)
-                    zds=padend(zds,max_time,vord)
-                    #Initalize G
-                    if kfault==0 and ksta==0: 
-                        npts=ess[0].stats.npts
-                        G=zeros([3*Nsta*npts,2*Nfaults])
-                    #Insert them into G
-                    G[3*ksta*npts:3*ksta*npts+npts,2*kfault]=nss[0].data
-                    G[3*ksta*npts:3*ksta*npts+npts,2*kfault+1]=nds[0].data
-                    G[3*ksta*npts+npts:3*ksta*npts+2*npts,2*kfault]=ess[0].data
-                    G[3*ksta*npts+npts:3*ksta*npts+2*npts,2*kfault+1]=eds[0].data
-                    G[3*ksta*npts+2*npts:3*ksta*npts+3*npts,2*kfault]=zss[0].data
-                    G[3*ksta*npts+2*npts:3*ksta*npts+3*npts,2*kfault+1]=zds[0].data 
+                    zds=prep_synth(zds,udata)
+                    #Insert into Gtemp then append to G
+                    if kfault==0 and ksta==0: #It's the first subfault and station, initalize G
+                        G=gdims(datafiles,Nfaults) #Survey all stations to decide size of G
+                    if kfault==0: #Initalize Gtemp
+                        npts=edata[0].stats.npts
+                        Gtemp=zeros([3*npts,Nfaults*2])      
+                    #Insert synthetics into Gtemp
+                    Gtemp[0:npts,2*kfault]=nss[0].data
+                    Gtemp[0:npts,2*kfault+1]=nds[0].data
+                    Gtemp[npts:2*npts,2*kfault]=ess[0].data
+                    Gtemp[npts:2*npts,2*kfault+1]=eds[0].data
+                    Gtemp[2*npts:3*npts,2*kfault]=zss[0].data
+                    Gtemp[2*npts:3*npts,2*kfault+1]=zds[0].data
+                #After looping through all subfaults Insert Gtemp into G
+                G[insert_position:insert_position+3*npts,:]=Gtemp
+                insert_position+=3*npts #Update for next station
             if gftype.lower()=='tsun':
                 pass                
             if gftype.lower()=='strain':
@@ -119,46 +128,61 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tdelay,max
     
     
 #==================              Random Tools            ======================
-  
-def pad2zero(st):
+      
+def prep_synth(syn,st):
     '''
-    Extend a stream object to zero time and pad with 0's
-    
-    Usage:
-        st=pad2zero(st)
-    ''' 
+    Extend syntetic to start time of data and cut it to end time of data, make sure
+    synthetic ALWAYS ends after data
+    '''
     from numpy import zeros,r_
-    from obspy import Stream,Trace
-    
-    #Figure out how many zeros I will need
-    npad=st[0].stats.starttime.minute*60+st[0].stats.starttime.second+st[0].stats.starttime.microsecond/1e6
-    npad=npad/st[0].stats.delta
-    #Build zeros trace
-    z=Stream(Trace())
-    z[0].stats.starttime=st[0].stats.starttime
-    z[0].stats.starttime.minute=0
-    z[0].stats.starttime.second=0
-    z[0].stats.starttime.microsecond=0
-    z[0].stats.delta=st[0].stats.delta
-    z[0].stats.npts=npad
-    z[0].data=zeros(npad)
-    #Add and make output stream
-    st_out=Stream(Trace())
-    st_out[0].stats.starttime=z[0].stats.starttime
-    st_out[0].stats.delta=st[0].stats.delta
-    st_out[0].stats.npts=z[0].stats.npts+st[0].stats.npts
-    st_out[0].data=r_[z[0].data,st[0].data]
-    
-    return st_out
-    
-def padend(st,tend,vord):
+    #What's the difference ins tart times?
+    t1syn=syn[0].stats.starttime
+    t1st=st[0].stats.starttime
+    dt=t1syn-t1st
+    if dt>=0: #Synthetic starts before data, pad with zeros
+        #How many zeros do I need
+        npad=dt/st[0].stats.delta
+        z=zeros(npad)
+        syn[0].data=r_[z,syn[0].data]
+        syn[0].stats.starttime=t1st
+    else: #Synthetic starts after the waveform, crop to start fo waveform
+        syn[0].trim(t1st)
+    #Now deal with end times
+    t2syn=syn[0].stats.endtime
+    t2st=st[0].stats.endtime
+    dt=t2syn-t2st
+    if dt>=0: #Synthetic ends after data, crop it
+        syn[0].trim(endtime=t2st)
+    else: #Syntetic ends before data, throw an error
+        print "ERROR: Synthetic end time is before data end time, recompute longer syntehtics please."
+        return 'Error in GF length'
+    return syn
+        
+def gdims(datafiles,nfaults):
     '''
-    Extend a waveform to alonger time and fill with a given value
+    Survey the data files to determine what dimension G will be and return a matrix of zeros 
+    with the required dimensions
     '''
-    st_out=st.copy()
-    if vord.lower()=='disp': #Fillw ith mean of last 100 samples
-        fillend=st[0].data[-100:-1].mean()
-    else: #Fill with zeros
-        fillend=0
-    st_out[0].trim(st[0].stats.starttime,tend,pad=True,fill_value=fillend)
-    return st_out
+    
+    from obspy import read
+    from numpy import zeros
+    
+    npts=0
+    for k in range(len(datafiles)):
+        e=read(datafiles[k]+'.e')
+        n=read(datafiles[k]+'.n')
+        u=read(datafiles[k]+'.u')
+        if e[0].stats.npts==n[0].stats.npts==u[0].stats.npts:
+            npts+=e[0].stats.npts
+        else:
+            print str(e[0].stats.npts)+' pts in east component'
+            print str(n[0].stats.npts)+' pts in north component'
+            print str(u[0].stats.npts)+' pts in up component'
+            print 'ERROR: The 3 components of data are not the same length'
+            return 'Error in forming G'
+    G=zeros([3*npts,nfaults*2])
+    return G            
+        
+    
+    
+    

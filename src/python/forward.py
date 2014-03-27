@@ -4,7 +4,7 @@ D. Melgar 02/2014
 Forward modeling routines
 '''
 
-def waveforms(home,project_name,rupture_name,station_file,model_name,integrate):
+def waveforms(home,project_name,rupture_name,station_file,model_name,integrate,hot_start,resample):
     '''
     This routine will take synthetics and apply a slip dsitribution. It will delay each 
     subfault by the appropriate rupture time and linearly superimpose all of them. Output
@@ -54,7 +54,7 @@ def waveforms(home,project_name,rupture_name,station_file,model_name,integrate):
         vord='vel'
         
     #Loop over stations
-    for ksta in range(len(staname)):
+    for ksta in range(hot_start,len(staname)):
         print 'Working on station '+staname[ksta]+' ('+str(ksta)+'/'+str(len(staname))+')'
         #Initalize output
         n=Stream()
@@ -88,16 +88,22 @@ def waveforms(home,project_name,rupture_name,station_file,model_name,integrate):
             zds=read(syn_path+sta+'.'+nfault+'.DS.'+vord+'.z')
             #Time shift them according to subfault rupture time
             dt=ess[0].stats.delta
+            ess[0].resample(resample)
             ess=tshift(ess,rtime)
             ess[0].stats.starttime=round_time(ess[0].stats.starttime,dt)
+            nss[0].resample(resample)
             nss=tshift(nss,rtime)
             nss[0].stats.starttime=round_time(nss[0].stats.starttime,dt)
+            zss[0].resample(resample)
             zss=tshift(zss,rtime)
             zss[0].stats.starttime=round_time(zss[0].stats.starttime,dt)
+            eds[0].resample(resample)
             eds=tshift(eds,rtime)
             eds[0].stats.starttime=round_time(eds[0].stats.starttime,dt)
+            nds[0].resample(resample)
             nds=tshift(nds,rtime)
             nds[0].stats.starttime=round_time(nds[0].stats.starttime,dt)
+            zds[0].resample(resample)
             zds=tshift(zds,rtime)
             zds[0].stats.starttime=round_time(zds[0].stats.starttime,dt)
             #get rake contribution and moment multiplier
@@ -238,7 +244,7 @@ def get_mu(structure,zs):
         imu=max(i)+1
     if imu>=structure.shape[0]:
         imu=imu-1#It's int he half-space
-    mu=((1000*structure[imu,1])**2)*structure[imu,3]
+    mu=((1000*structure[imu,1])**2)*structure[imu,3]*1000
     #print "Rigidity at z="+str(zs)+' is, mu = '+str(mu/1e9)+'GPa'
     return mu
     
@@ -263,7 +269,7 @@ def add_traces(ss,ds,ssmult,dsmult,M):
     '''
     from numpy import zeros
     
-    #If one stream object is empty set it to zeros, if bot are empty then freak out
+    #If one stream object is empty set it to zeros, if both are empty then freak out
     if ss.count()==0 and ds.count()==0:
         print 'FATAL ERROR: can\'t add 2 empty stream objects doofus'
         return None
