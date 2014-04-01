@@ -38,12 +38,16 @@ def init(home,project_name):
         makedirs(proj_dir+'GFs/dynamic')
         makedirs(proj_dir+'GFs/matrices')
         makedirs(proj_dir+'data/waveforms')
+        makedirs(proj_dir+'data/statics')
         makedirs(proj_dir+'data/station_info')
         makedirs(proj_dir+'data/model_info')
         makedirs(proj_dir+'structure')
         makedirs(proj_dir+'plots')
         makedirs(proj_dir+'forward_models')
         makedirs(proj_dir+'output/inverse_models')
+        makedirs(proj_dir+'output/inverse_models/statics')
+        makedirs(proj_dir+'output/inverse_models/waveforms')
+        makedirs(proj_dir+'output/inverse_models/models')
         makedirs(proj_dir+'output/forward_models')
         makedirs(proj_dir+'logs')
 
@@ -227,7 +231,7 @@ def inversionGFs(home,project_name,GF_list,fault_name,model_name,dt,NFFT,coord_t
             if GF[k,2]==1: #Static offset
                 integrate=0
                 static=1
-                make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,hot_start,coord_type)
+                make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,hot_start,coord_type,time_epi)
             if GF[k,3]==1: #dispalcement waveform
                 integrate=1
                 static=0
@@ -241,22 +245,70 @@ def inversionGFs(home,project_name,GF_list,fault_name,model_name,dt,NFFT,coord_t
             if GF[k,6]==1: #strain offsets
                 pass
     remove(home+project_name+'/data/station_info/'+station_file) #Cleanup
+                    
                                 
-def run_inversion(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epicenter,
+                                                        
+def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_from_file,G_name,epicenter,
                 rupture_speeds,coord_type,bounds,regularization_type,regularization_parameter,nfaults):
     '''
     Assemble G and d, determine smoothing and run the inversion
     '''
-    from inverse import getG,getdata,getL
+    from inverse import getG,getdata,getL,get_data_weights,get_stats,get_moment
+    from inverse import write_model,write_synthetics,write_log
+    from numpy import r_,tile,empty,zeros,dot
+    from numpy.linalg import lstsq,norm
+    from matplotlib import pyplot as plt
     
     #Get data vector
     d=getdata(home,project_name,GF_list,rupture_speeds)
     #Get GFs
     G=getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epicenter,
                 rupture_speeds,coord_type)
-    L=getL(home,project_name,fault_name,bounds,regularization_type,nfaults)
-    s,W=get_data_weights(home,project_name,GF_list)
+    #Get regularization matrix
+    L,h=getL(home,project_name,fault_name,bounds,regularization_type,nfaults)
+    #Get data weights
+    w=get_data_weights(home,project_name,GF_list,d,rupture_speeds)
+    #Put everything together
+    print "Preparing solver..."
+    #Make matrix of weights (Speedy impementation)
+    W=empty(G.shape)
+    W=tile(w,(G.shape[1],1)).T
+    K=r_[W*G,L]
+    x=r_[(w*d),h]
+    nregu=len(h) #This will be used to change the amount of regularization later on
+    previous_l=1.0
+    res=zeros(len(regularization_parameter))
+    Lm=zeros(len(regularization_parameter))
+    for k in range(len(regularization_parameter)):
+        next_l=regularization_parameter[k] #egularization for this iteration
+        print 'Running inversion at regularization level '+repr(next_l)+'...'
+        #Rescale K
+        K[-nregu:,:]=K[-nregu:]*(1/previous_l)
+        #Apply new regularization
+        K[-nregu:,:]=K[-nregu:]*next_l
+        #Update
+        previous_l=next_l
+        #Run inversion
+        sol,res[k],rank,s=lstsq(K,x)
+        #Write output to file
+        write_model(home,project_name,run_name,fault_name,model_name,rupture_speeds,epicenter,sol,k)
+        #Compute and save synthetics
+        ds=dot(G,sol)
+        write_synthetics(home,project_name,run_name,GF_list,G,sol,ds,k)
+        #Get stats
+        L2,Lmodel,VR,AIC=get_stats(G,sol,d,ds)
+        #Get moment
+        Mo,Mw=get_moment(home,project_name,fault_name,model_name,sol)
+        #Write log
+        write_log(home,project_name,run_name,k,rupture_speeds,next_l,L2,Lmodel,VR,AIC,Mo,Mw)
+        Lm[k]=norm(sol)
+    plt.figure()
+    plt.loglog(res,Lm) ; plt.xlabel('Residual') ; plt.ylabel('Model Norm')
+    plt.show()
+    
+        
 
+        
         
                 
 

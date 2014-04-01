@@ -106,9 +106,9 @@ def getdata(home,project_name,GF_list,rupture_speeds):
     i=where(GF[:,kgf]==1)[0]
     for ksta in range(len(i)):
             dtemp=genfromtxt(GFfiles[i[ksta],kgf])
-            e=dtemp[0]
             n=dtemp[0]
-            u=dtemp[0]
+            e=dtemp[1]
+            u=dtemp[2]
             dstatic=append(dstatic,r_[n,e,u])
     #Displacements
     kgf=1
@@ -163,7 +163,7 @@ def getL(home,project_name,fault_name,bounds,regularization_type,nfaults):
     Make regularization matrix
     '''
     
-    from numpy import loadtxt,zeros,ones
+    from numpy import loadtxt,zeros
     
     #Load source
     source=loadtxt(home+project_name+'/data/model_info/'+fault_name,ndmin=2)
@@ -177,21 +177,90 @@ def getL(home,project_name,fault_name,bounds,regularization_type,nfaults):
         print 'Making discrete Laplace operator regularization matrix...'
         for kfault in range(N): #Loop over faults and fill regularization matrix
             stencil,correction=laplace_stencil(kfault,nstrike,ndip,bounds)
-            #Add strike slip branches of stencil
-            L[2*kfault,2*stencil]=1
-            #Add dip slip branches of stencil
-            L[2*kfault+1,2*stencil+1]=1
-            #Add strike slip central node with correction
-            L[2*kfault,2*kfault]=-4+correction
-            #Add dip slip central node with correction
-            L[2*kfault+1,2*kfault+1]=-4+correction
-        return L
+            if type(stencil)!=bool: #No errors were reported
+                #Add strike slip branches of stencil
+                L[2*kfault,2*stencil]=1
+                #Add dip slip branches of stencil
+                L[2*kfault+1,2*stencil+1]=1
+                #Add strike slip central node with correction
+                L[2*kfault,2*kfault]=-4+correction
+                #Add dip slip central node with correction
+                L[2*kfault+1,2*kfault+1]=-4+correction
+            else:
+                return False
+        h=zeros(len(L))
+        return L,h
     else:
         print 'ERROR: Unknown regularization type ('+regularization_type+') requested.'
         return False
         
-        
-        
+def get_data_weights(home,project_name,GF_list,d,rupture_speeds):
+    '''
+    Assemble matrix of data weights from sigmas of observations
+    '''    
+    from numpy import genfromtxt,where,zeros,ones,diag_indices_from
+    from obspy import read
+
+    print 'Computing data weights...'
+    #Read gf file and decide what needs tog et loaded
+    gf_file=home+project_name+'/data/station_info/'+GF_list
+    GF=genfromtxt(gf_file,usecols=[3,4,5,6,7],skip_header=1,dtype='f8')
+    GFfiles=genfromtxt(gf_file,usecols=[8,9,10],dtype='S')
+    weights=genfromtxt(gf_file,usecols=range(13,28),dtype='f')
+    #Initalize
+    w=zeros(len(d))
+    kinsert=0
+    #Static weights
+    kgf=0
+    i=where(GF[:,kgf]==1)[0]
+    for ksta in range(len(i)):
+        w[kinsert]=1/weights[i[ksta],0] #North
+        w[kinsert+1]=1/weights[i[ksta],1] #East
+        w[kinsert+2]=1/weights[i[ksta],2] #Up
+        kinsert=kinsert+3
+    #Displacement waveform weights
+    kgf=1
+    i=where(GF[:,kgf]==1)[0]
+    for krup in range(len(rupture_speeds)):
+        for ksta in range(len(i)):
+            #Read waveform to determine length of insert
+            st=read(GFfiles[i[ksta],kgf]+'.n')
+            nsamples=st[0].stats.npts
+            wn=(1/weights[i[ksta],3])*ones(nsamples)
+            w[kinsert:kinsert+nsamples]=wn
+            kinsert=kinsert+nsamples
+            we=(1/weights[i[ksta],4])*ones(nsamples)
+            w[kinsert:kinsert+nsamples]=we
+            kinsert=kinsert+nsamples
+            wu=(1/weights[i[ksta],5])*ones(nsamples)
+            w[kinsert:kinsert+nsamples]=wu
+            kinsert=kinsert+nsamples
+    #velocity waveform weights
+    kgf=2
+    i=where(GF[:,kgf]==1)[0]
+    for krup in range(len(rupture_speeds)):
+        for ksta in range(len(i)):
+            #Read waveform to determine length of insert
+            st=read(GFfiles[i[ksta],kgf]+'.n')
+            nsamples=st[0].stats.npts
+            wn=(1/weights[i[ksta],6])*ones(nsamples)
+            w[kinsert:kinsert+nsamples]=wn
+            kinsert=kinsert+nsamples
+            we=(1/weights[i[ksta],7])*ones(nsamples)
+            w[kinsert:kinsert+nsamples]=we
+            kinsert=kinsert+nsamples
+            wu=(1/weights[i[ksta],8])*ones(nsamples)
+            w[kinsert:kinsert+nsamples]=wu
+            kinsert=kinsert+nsamples
+    #Tsunami
+    kgf=3
+    #Strain
+    kgf=4
+    #Make W and exit
+    return w
+
+    
+    
     
 def makeG(home,project_name,fault_name,model_name,station_file,gftype,tdelay):
     '''
@@ -231,6 +300,7 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tdelay):
                 for kfault in range(Nfaults):
                     nfault='subfault'+rjust(str(int(source[kfault,0])),4,'0')
                     print 'Assembling static GFs for station '+staname[ksta]+' '+nfault
+                    ###### These need to be changed to neu, enu is stupid Diego ########
                     coseis_ss=loadtxt(syn_path+staname[ksta]+'.'+nfault+'.SS.static.enu')
                     ess=coseis_ss[0]
                     nss=coseis_ss[1]
@@ -315,6 +385,129 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tdelay):
                 pass                                
     return G
     
+#=================        Write inversion results      =========================
+    
+def write_model(home,project_name,run_name,fault_name,model_name,rupture_speeds,epicenter,sol,num):
+    '''
+    Write model results
+    '''
+    
+    from numpy import genfromtxt,arange,zeros,c_,savetxt
+    from forward import get_mu
+    from string import rjust
+   
+    #Open model file
+    f=genfromtxt(home+project_name+'/data/model_info/'+fault_name)
+    #Open structure file
+    mod=genfromtxt(home+project_name+'/structure/'+model_name)
+    #Get slip quantities
+    iss=2*arange(len(f))
+    ids=2*arange(len(f))+1
+    ss=sol[iss]
+    ds=sol[ids]
+    #Get rigidities
+    mu=zeros(len(ds))
+    trup=zeros(len(ds)*len(rupture_speeds))
+    for k in range(len(f)):
+        mu[k]=get_mu(mod,f[k,3])
+    #Get rupture start times
+    for krup in range(len(rupture_speeds)):
+        trup[krup*len(ds):(krup+1)*len(ds)]=epi2subfault(epicenter,f,rupture_speeds[krup])
+    #Prepare for output
+    out=c_[f[:,0:6],f[:,8:10],mu,trup,f[:,6],f[:,7],ss,ds]
+    outdir=home+project_name+'/output/inverse_models/models/'+run_name+'.'+rjust(str(num),4,'0')+'.inv'
+    #CHANGE this to rupture definition as #No  x            y        z(km)      str     dip      rake       rise    dura     slip    ss_len  ds_len rupt_time
+    fmtout='%6i\t%.4f\t%.4f\t%6.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.4e\t%10.4f\t%.4f\t%.4f\t%8.4f\t%8.4f'
+    print 'Writing model results to file '+outdir
+    savetxt(outdir,out,fmtout,header='No.,lat,lon,depth(km),strike,dip,strike-length(km),dip-length(km),rigidity(Pa),rupture start time(s),rise time fraction(non-dimensional),rupture duration,along strike slip (m),along dip slip (m)')
+        
+    
+    
+def write_synthetics(home,project_name,run_name,GF_list,G,sol,ds,num):
+    '''
+    Output synthetics as sac
+    '''
+    
+    from obspy import read
+    from numpy import dot,array,savetxt,where,genfromtxt
+    from string import rjust
+    
+    print 'Computing and saving synthetics...'
+    num=rjust(str(num),4,'0')
+    #Read gf file and decide what needs to get loaded
+    gf_file=home+project_name+'/data/station_info/'+GF_list
+    stations=genfromtxt(gf_file,usecols=[0],skip_header=1,dtype='S')
+    GF=genfromtxt(gf_file,usecols=[3,4,5,6,7],skip_header=1,dtype='f8')
+    GFfiles=genfromtxt(gf_file,usecols=[8,9,10],skip_header=1,dtype='S')
+    #Separate into its constituent parts (statics,displacaments, velocities, etc...)
+    kinsert=0
+    #Statics
+    kgf=0
+    i=where(GF[:,kgf]==1)[0]
+    if len(i)>0:
+        for ksta in range(len(i)):
+            sta=stations[i[ksta]]
+            neu=array([ds[kinsert],ds[kinsert+1],ds[kinsert+2]])
+            kinsert+=3
+            savetxt(home+project_name+'/output/inverse_models/statics/'+run_name+sta+'.neu',neu)
+    #Displacement
+    kgf=1
+    i=where(GF[:,kgf]==1)[0]
+    if len(i)>0:
+        for ksta in range(len(i)):
+            sta=stations[i[ksta]]
+            n=read(GFfiles[i[ksta],kgf]+'.n')
+            e=read(GFfiles[i[ksta],kgf]+'.e')
+            u=read(GFfiles[i[ksta],kgf]+'.u')
+            npts=n[0].stats.npts
+            n[0].data=ds[kinsert:kinsert+npts]
+            e[0].data=ds[kinsert+npts:kinsert+2*npts]
+            u[0].data=ds[kinsert+2*npts:kinsert+3*npts]
+            kinsert+=3*npts
+            n.write(home+project_name+'/output/inverse_models/waveforms/'+run_name+'.'+num+'.'+sta+'.disp.n.sac',format='SAC')
+            e.write(home+project_name+'/output/inverse_models/waveforms/'+run_name+'.'+num+'.'+sta+'.disp.e.sac',format='SAC')
+            u.write(home+project_name+'/output/inverse_models/waveforms/'+run_name+'.'+num+'.'+sta+'.disp.u.sac',format='SAC')
+    #Velocity
+    kgf=2
+    i=where(GF[:,kgf]==1)[0]
+    if len(i)>0:
+        for ksta in range(len(i)):
+            sta=stations[i[ksta]]
+            n=read(GFfiles[i[ksta],kgf]+'.n')
+            e=read(GFfiles[i[ksta],kgf]+'.e')
+            u=read(GFfiles[i[ksta],kgf]+'.u')
+            npts=n[0].stats.npts
+            n[0].data=ds[kinsert:kinsert+npts]
+            e[0].data=ds[kinsert+npts:kinsert+2*npts]
+            u[0].data=ds[kinsert+2*npts:kinsert+3*npts]
+            kinsert+=3*npts
+            n.write(home+project_name+'/output/inverse_models/waveforms/'+run_name+'.'+num+'.'+sta+'.vel.n.sac',format='SAC')
+            e.write(home+project_name+'/output/inverse_models/waveforms/'+run_name+'.'+num+'.'+sta+'.vel.e.sac',format='SAC')
+            u.write(home+project_name+'/output/inverse_models/waveforms/'+run_name+'.'+num+'.'+sta+'.vel.u.sac',format='SAC')
+            
+        
+def write_log(home,project_name,run_name,k,rupture_speeds,next_l,L2,Lm,VR,AIC,Mo,Mw):
+    '''
+    Write ivnersion sumamry to file
+    '''
+    from string import rjust
+    
+    num=rjust(str(k),4,'0')
+    f=open(home+project_name+'/output/inverse_models/models/'+run_name+'.'+num+'.log','w')
+    f.write('Project: '+project_name+'\n')
+    f.write('Run name: '+run_name+'\n')
+    f.write('Run number: '+num+'\n')
+    f.write('lambda = '+repr(next_l)+'\n')
+    f.write('rupture velocities allowed (km/s) = '+str(rupture_speeds)+'\n')
+    f.write('L2 = '+repr(L2)+'\n')
+    f.write('VR = '+repr(VR)+'\n')
+    f.write('Lm = '+repr(Lm)+'\n')
+    f.write('AIC = '+repr(AIC)+'\n')
+    f.write('M0 = '+repr(Mo)+' N-m\n')
+    f.write('Mw = '+repr(Mw)+'\n')
+    f.close()
+    
+    
     
 #==================              Random Tools            ======================
 
@@ -342,6 +535,20 @@ def laplace_stencil(ifault,nstrike,ndip,bounds):
     bottom=bounds[1]
     left=bounds[2]
     right=bounds[3]
+    #Check the boundary conditions
+    if (top.lower()!='locked' and top.lower()!='free'):
+        print 'ERROR: Unknown boundary condition \''+top+'\' at top edge of model'
+        return False,False
+    if (bottom.lower()!='locked' and bottom.lower()!='free'):
+        print 'ERROR: Unknown boundary condition \''+bottom+'\' at bottom edge of model'
+        return False,False
+    if (right.lower()!='locked' and right.lower()!='free'):
+        print 'ERROR: Unknown boundary condition \''+right+'\' at right edge of model'
+        return False,False
+    if (left.lower()!='locked' and left.lower()!='free'):
+        print 'ERROR: Unknown boundary condition \''+left+'\' at left edge of model'
+        return False,False
+    #No errors, move forward with stencil computation
     row=ifault/nstrike #Row number corresponding to this subfault
     column=ifault-(nstrike*row)
     if row==0 and column==0: #Top right corner
@@ -503,3 +710,52 @@ def epi2subfault(epicenter,source,vr):
     return tdelay   
     
     
+
+def get_stats(G,sol,d,ds):
+    '''
+    Compute basic performance metrics of an inversion
+    '''
+    
+    from numpy.linalg import norm
+    
+    L2=norm(ds-d)
+    Lm=norm(sol)
+    #Variance reduction
+    res=((d-ds)**2)**0.5
+    dnorm=(d**2)**0.5 #Yes i know this is dumb, shush
+    VR=(1-(res.sum()/dnorm.sum()))*100
+    AIC=0
+    return L2,Lm,VR,AIC
+    
+    
+def get_moment(home,project_name,fault_name,model_name,sol):
+    '''
+    Compute total moment from an inversion
+    '''
+    from numpy import log10,genfromtxt,arange,zeros
+    from forward import get_mu
+   
+    #Open model file
+    f=genfromtxt(home+project_name+'/data/model_info/'+fault_name)
+    #Open structure file
+    mod=genfromtxt(home+project_name+'/structure/'+model_name)
+    #Get slip quantities
+    iss=2*arange(len(f))
+    ids=2*arange(len(f))+1
+    ss=sol[iss]
+    ds=sol[ids]
+    #Get total slip
+    slip=(ss**2+ds**2)**0.5
+    #Get subfault areas in emters
+    A=f[:,8]*f[:,9]*1000**2
+    #Get rigidities
+    mu=zeros(len(ds))
+    for k in range(len(f)):
+        mu[k]=get_mu(mod,f[k,3])
+    #Compute moments
+    M0=mu*A*slip
+    #Total up and copute magnitude
+    M0=M0.sum()
+    Mw=(2./3)*(log10(M0)-9.1)
+    
+    return M0,Mw

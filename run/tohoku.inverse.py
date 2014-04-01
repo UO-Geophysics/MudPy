@@ -14,6 +14,7 @@ from obspy.core import UTCDateTime
 
 home='/Users/dmelgarm/Research/Slip_Inv/'
 project_name='tohoku'
+run_name='static'
 ################################################################################
 
 
@@ -23,7 +24,7 @@ init=0 #Initalize project
 make_green=0 #Compute GFs
 make_synthetics=0 #Compute synthetics for a given model at given stations
 G_from_file=1 # =0 read GFs and create G, =1 load G from file
-invert=0  # =1 runs inversion, =0 does nothing
+invert=1  # =1 runs inversion, =0 does nothing
 ###############################################################################
 
 ###############            Green function parameters               #############
@@ -32,8 +33,8 @@ hot_start=0   #Start at a certain subfault number
 model_name='gil7.mod'   #Velocity model
 fault_name='tohoku.fault'    #Fault geometry
 station_file='tohoku.sta'    #Station distribution
-GF_list='tohoku.gflist' #What GFs are to be computed for each station
-G_name='kaldisp.g' #Either name of GF matrix to load or name to save GF matrix with
+GF_list='tohoku.static.gflist' #What GFs are to be computed for each station
+G_name='kalstatics.g' #Either name of GF matrix to load or name to save GF matrix with
 # Displacement and velocity waveform parameters
 NFFT=2048 ; dt=0.25
 #fk-parameters
@@ -43,8 +44,8 @@ dk=0.1 ; pmin=0 ; pmax=1 ; kmax=20
 #############               Inversion Parameters               ################# 
 epicenter=np.array([142.435,38.305,26.3305])    #lon,lat,depth(positive in km)
 time_epi=UTCDateTime('2011-03-11T05:46:23')
-rupture_speeds=np.array([2.4])   #In km/s
-regularization_parameter=np.linspace(1,1,1)
+rupture_speeds=np.array([1.9])   #In km/s
+regularization_parameter=np.logspace(-5,0,num=20)
 regularization_type='laplace'
 top='free' ; bottom='locked' ; left='locked' ; right='locked' ; bounds=(top,bottom,left,right) #'locked' or 'free'
 nstrike=21 ; ndip=9 ; nfaults=(nstrike,ndip)
@@ -61,6 +62,11 @@ if make_green==1 or make_synthetics==1:
                         coord_type,make_green,make_synthetics,dk,pmin,pmax,kmax,time_epi)
     
 #Run inversion
+if invert==1:
+    runslip.run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_from_file,
+                           G_name,epicenter,rupture_speeds,coord_type,bounds,regularization_type,
+                           regularization_parameter,nfaults)
+    
 
 
     
