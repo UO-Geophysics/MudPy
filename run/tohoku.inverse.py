@@ -21,10 +21,10 @@ run_name='static'
 #####              What-do-you-want-to-do flags, 1=do, 0=leave be          #####
 
 init=0 #Initalize project
-make_green=0 #Compute GFs
-make_synthetics=0 #Compute synthetics for a given model at given stations
+make_green=1 #Compute GFs
+make_synthetics=1 #Compute synthetics for a given model at given stations
 G_from_file=1 # =0 read GFs and create G, =1 load G from file
-invert=1  # =1 runs inversion, =0 does nothing
+invert=0  # =1 runs inversion, =0 does nothing
 ###############################################################################
 
 ###############            Green function parameters               #############
@@ -33,7 +33,7 @@ hot_start=0   #Start at a certain subfault number
 model_name='gil7.mod'   #Velocity model
 fault_name='tohoku.fault'    #Fault geometry
 station_file='tohoku.sta'    #Station distribution
-GF_list='tohoku.static.gflist' #What GFs are to be computed for each station
+GF_list='tohoku.disp.gflist' #What GFs are to be computed for each station
 G_name='kalstatics.g' #Either name of GF matrix to load or name to save GF matrix with
 # Displacement and velocity waveform parameters
 NFFT=2048 ; dt=0.25

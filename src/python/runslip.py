@@ -52,18 +52,18 @@ def init(home,project_name):
         makedirs(proj_dir+'logs')
 
 
-#Setup some book-keeping for the forward problem
-def forward_setup(home,project_name,rupture_name):
+#Extract fault geometry from rupture file
+def rupt2fault(home,project_name,rupture_name):
     '''
     Make fault file from user provided forward model rupture file
     '''
     from numpy import loadtxt,savetxt,c_
     
-    print '======= FORWARD MODELING ========'
+    print 'Assembling fault file from rupture file'
     rupt=loadtxt(home+project_name+'/forward_models/'+rupture_name,ndmin=2)
-    fault=c_[rupt[:,0],rupt[:,1],rupt[:,2],rupt[:,3],rupt[:,4],rupt[:,5],rupt[:,7],rupt[:,8]]
+    fault=c_[rupt[:,0],rupt[:,1],rupt[:,2],rupt[:,3],rupt[:,4],rupt[:,5],rupt[:,6],rupt[:,7],rupt[:,10],rupt[:,11]]
     savetxt(home+project_name+'/data/model_info/'+rupture_name.split('.')[0]+'.fault', \
-            fault,fmt='%i\t%.6f\t%.6f\t%.6f\t%.2f\t%.2f\t%.4f\t%.4f')
+            fault,fmt='%i\t%.6f\t%.6f\t%.6f\t%.2f\t%.2f\t%.4f\t%.4f\t%.4f\t%.4f')
 
 
 
@@ -182,7 +182,7 @@ def make_synthetics(home,project_name,station_file,fault_name,model_name,integra
     #Now compute synthetics please, one sub fault at a time
     for k in range(hot_start,source.shape[0]):
         subfault=rjust(str(k+1),4,'0')
-        log=green.run_syn(source[k,:],station_file,green_path,model_name,integrate,static,subfault,coord_type,time_epi)
+        log=green.run_syn(home,project_name,source[k,:],station_file,green_path,model_name,integrate,static,subfault,coord_type,time_epi)
         f=open(logpath+'make_synth.'+now+'.log','a')
         f.write(log)
         f.close()

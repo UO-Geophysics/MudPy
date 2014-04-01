@@ -60,7 +60,7 @@ def run_green(source,station_file,model_name,dt,NFFT,static,coord_type,dk,pmin,p
     
     
     
-def run_syn(source,station_file,green_path,model_name,integrate,static,subfault,coord_type,time_epi):
+def run_syn(home,project_name,source,station_file,green_path,model_name,integrate,static,subfault,coord_type,time_epi):
     '''
     Use green functions and compute synthetics at stations for a single source
     and multiple stations. This code makes an external system call to syn.c first it
@@ -72,7 +72,7 @@ def run_syn(source,station_file,green_path,model_name,integrate,static,subfault,
         source: 1-row numpy array containig informaiton aboutt he source, lat, lon, depth, etc...
         station_file: File name with the station coordinates
         green_path: Directopry where GFs are stored
-        model_name: File containing the Earth velocity structure
+        model_file: File containing the Earth velocity structure
         integrate: =0 if youw ant velocity waveforms, =1 if you want displacements
         static: =0 if computing full waveforms, =1 if computing only the static field
         subfault: String indicating the subfault being worked on
@@ -84,8 +84,9 @@ def run_syn(source,station_file,green_path,model_name,integrate,static,subfault,
 
     import os
     import subprocess
+    from forward import get_mu
     from string import rjust
-    from numpy import array,genfromtxt,loadtxt,savetxt
+    from numpy import array,genfromtxt,loadtxt,savetxt,log10
     from obspy import read
     from obspy.signal.rotate import rotate_RT_NE
     from shlex import split
@@ -93,8 +94,10 @@ def run_syn(source,station_file,green_path,model_name,integrate,static,subfault,
     #Constant parameters
     rakeDS=-90 #-90 is thrust, 90 is normal
     rakeSS=180
-    Mw=3.933333333 #This is used as unit magnitude, corresponds to 1e15 N-m
     tb=50 #Number of samples before first arrival
+    #Load structure
+    model_file=home+project_name+'/structure/'+model_name
+    structure=loadtxt(model_file)
     #Parse the soruce information
     num=rjust(str(int(source[0])),4,'0')
     xs=source[1]
@@ -104,6 +107,8 @@ def run_syn(source,station_file,green_path,model_name,integrate,static,subfault,
     dip=source[5]
     rise=source[6]
     duration=source[7]
+    ss_length=source[8]
+    ds_length=source[9]
     strdepth='%.4f' % zs
     if static==0:  #Where to save dynamic waveforms
         green_path=green_path+'dynamic/'+model_name+"_"+strdepth+".sub"+subfault+"/"
@@ -113,6 +118,10 @@ def run_syn(source,station_file,green_path,model_name,integrate,static,subfault,
         staname=array([staname])
     #Compute distances and azimuths
     d,az=src2sta(station_file,source,coord_type)
+    #Get moment corresponding to 1 meter of slip on subfault
+    mu=get_mu(structure,zs)
+    Mo=mu*ss_length*ds_length*1
+    Mw=(2./3)*(log10(Mo)-9.1)
     #Move to output folder
     log='' #Initalize log
     os.chdir(green_path)

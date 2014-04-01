@@ -24,13 +24,10 @@ def waveforms(home,project_name,rupture_name,station_file,model_name,integrate,h
     OUT:
         Nothing
     '''
-    from numpy import loadtxt,genfromtxt,deg2rad,sin,cos,allclose
+    from numpy import loadtxt,genfromtxt,allclose
     from obspy import read,Stream
     from string import rjust
     import datetime
-    
-    #constants
-    unitM=1e15 #N-m
     
     #Output where?
     outpath=home+project_name+'/output/forward_models/'
@@ -44,9 +41,6 @@ def waveforms(home,project_name,rupture_name,station_file,model_name,integrate,h
     #Load stations
     station_file=home+project_name+'/data/station_info/'+station_file
     staname=genfromtxt(station_file,dtype="S6",usecols=0)
-    #Load structure
-    model_path=home+project_name+'/structure/'+model_name
-    structure=loadtxt(model_path)
     #What am I processing v or d?
     if integrate==1:
         vord='disp'
@@ -67,18 +61,12 @@ def waveforms(home,project_name,rupture_name,station_file,model_name,integrate,h
             nfault='subfault'+rjust(str(int(source[k,0])),4,'0')
             nsub='sub'+rjust(str(int(source[k,0])),4,'0')
             zs=source[k,3]
-            rake=source[k,6]
-            slip=source[k,9]
-            sslength=source[k,10]
-            dslength=source[k,11]
+            ss_slip=source[k,8]
+            ds_slip=source[k,9]
             rtime=source[k,12]
             #Where's the data
             strdepth='%.4f' % zs 
             syn_path=home+project_name+'/GFs/dynamic/'+model_name+'_'+strdepth+'.'+nsub+'/'
-            #Find rigidity at this source point
-            mu=get_mu(structure,zs)
-            #Compute equivalent Moment at this source point
-            Mo=mu*slip*sslength*dslength
             #Get synthetics
             ess=read(syn_path+sta+'.'+nfault+'.SS.'+vord+'.e')
             nss=read(syn_path+sta+'.'+nfault+'.SS.'+vord+'.n')
@@ -106,20 +94,16 @@ def waveforms(home,project_name,rupture_name,station_file,model_name,integrate,h
             zds[0].resample(resample)
             zds=tshift(zds,rtime)
             zds[0].stats.starttime=round_time(zds[0].stats.starttime,dt)
-            #get rake contribution and moment multiplier
-            dsmult=sin(deg2rad(rake))
-            ssmult=cos(deg2rad(rake))
-            M=Mo/unitM
-            if allclose(slip,0)==False:  #Only add things that matter
-                log=log+nfault+', SS='+str(ssmult)+', DS='+str(dsmult)+', Mscale='+str(M)+'\n'
+            if allclose(ss_slip+ds_slip,0)==False:  #Only add things that matter
+                log=log+nfault+', SS='+str(ss_slip)+', DS='+str(ds_slip)+'\n'
                 #A'ight, add 'em up
-                etotal=add_traces(ess,eds,ssmult,dsmult,M)
-                ntotal=add_traces(nss,nds,ssmult,dsmult,M)
-                ztotal=add_traces(zss,zds,ssmult,dsmult,M)
+                etotal=add_traces(ess,eds,ss_slip,ds_slip)
+                ntotal=add_traces(nss,nds,ss_slip,ds_slip)
+                ztotal=add_traces(zss,zds,ss_slip,ds_slip)
                 #Add to previous subfault's results
-                e=add_traces(e,etotal,1,1,1)
-                n=add_traces(n,ntotal,1,1,1)
-                z=add_traces(z,ztotal,1,1,1)
+                e=add_traces(e,etotal,1,1)
+                n=add_traces(n,ntotal,1,1)
+                z=add_traces(z,ztotal,1,1)
             else:
                 log=log+"No slip on subfault "+nfault+', ignoring it...\n'
                 
@@ -135,7 +119,7 @@ def waveforms(home,project_name,rupture_name,station_file,model_name,integrate,h
     f.close()
         
 
-def coseismics(home,project_name,rupture_name,station_file,model_name):
+def coseismics(home,project_name,rupture_name,station_file):
     '''
     This routine will take synthetics and apply a static slip dsitibution. It will 
     linearly superimpose the synthetic coseismic from each subfault. Output will be
@@ -155,11 +139,11 @@ def coseismics(home,project_name,rupture_name,station_file,model_name):
     OUT:
         Nothing
     '''
-    from numpy import loadtxt,genfromtxt,deg2rad,sin,cos,array,savetxt
+    from numpy import loadtxt,genfromtxt,array,savetxt
     from string import rjust
     
     #constants
-    unitM=1e15 #N-m
+    #unitM=1e15 #N-m
     
     #Output where?
     outpath=home+project_name+'/output/forward_models/'
@@ -168,9 +152,6 @@ def coseismics(home,project_name,rupture_name,station_file,model_name):
     #Load stations
     station_file=home+project_name+'/data/station_info/'+station_file
     staname=genfromtxt(station_file,dtype="S6",usecols=0)
-    #Load structure
-    model_path=home+project_name+'/structure/'+model_name
-    structure=loadtxt(model_path)
     #Loop over stations
     for ksta in range(len(staname)):
         #Initalize output
@@ -178,23 +159,15 @@ def coseismics(home,project_name,rupture_name,station_file,model_name):
         e=array([0])
         z=array([0])
         sta=staname[ksta]
-        print 'Working on station'+sta
+        print 'Working on station '+sta
         #Loop over sources
         for k in range(source.shape[0]):
             #Get subfault parameters
             nfault='subfault'+rjust(str(int(source[k,0])),4,'0')
-            zs=source[k,3]
             ss_slip=source[k,8]
             ds_slip=source[k,9]
-            slip=(ds_slip**2+ss_slip**2)**0.5
-            sslength=source[k,10]
-            dslength=source[k,11]
             #Where's the data
             syn_path=home+project_name+'/GFs/static/'
-            #Find rigidity at this source point
-            mu=get_mu(structure,zs)
-            #Compute equivalent Moment at this source point
-            Mo=mu*slip*sslength*dslength
             #Get synthetics
             coseis_ss=loadtxt(syn_path+sta+'.'+nfault+'.SS.static.neu')
             nss=coseis_ss[0]
@@ -205,13 +178,9 @@ def coseismics(home,project_name,rupture_name,station_file,model_name):
             eds=coseis_ds[1]
             zds=coseis_ds[2]
             #get rake contribution and moment multiplier
-            dsmult=ds_slip/slip
-            ssmult=ss_slip/slip
-            M=Mo/unitM
-            #A'ight, add 'em up
-            etotal=M*(dsmult*eds+ssmult*ess)
-            ntotal=M*(dsmult*nds+ssmult*nss)
-            ztotal=M*(dsmult*zds+ssmult*zss)
+            etotal=ds_slip*eds+ss_slip*ess
+            ntotal=ds_slip*nds+ss_slip*nss
+            ztotal=ds_slip*zds+ss_slip*zss
             #Add to previous subfault's results
             e=e+etotal
             n=n+ntotal
@@ -249,11 +218,11 @@ def get_mu(structure,zs):
     #print "Rigidity at z="+str(zs)+' is, mu = '+str(mu/1e9)+'GPa'
     return mu
     
-def add_traces(ss,ds,ssmult,dsmult,M):
+def add_traces(ss,ds,ssmult,dsmult):
     '''
     Add two stream objects with dip slip and strike slip contributions. This code will take
     two stream objects and super impsoe them according tot he weights defined by ssmult
-    dsmult and M. If one waveform is longer than the other then the code will extend the
+    dsmult. If one waveform is longer than the other then the code will extend the
     shorter waveform by padding it with the last value.
 
     For simple addition use ss=ds=M=1
@@ -261,9 +230,8 @@ def add_traces(ss,ds,ssmult,dsmult,M):
     IN:
         ss: Strike slip waveform
         ds: Dip-slip waveform
-        ssmult: Strike-slip contribution cos(rake)
-        dsmult: Strike-slip contribution sin(rake)
-        M: Moment scaling value, unity is 1e15 N-m, 10 is 1e16N-m and so on...
+        ssmult: Strike-slip contribution (meters)
+        dsmult: Strike-slip contribution (meters)
     
     OUT:
         st: Stream object with result of superposition
@@ -307,7 +275,7 @@ def add_traces(ss,ds,ssmult,dsmult,M):
     #Creat output stream
     st=ss.copy()
     #Add and apply scale
-    st[0].data=M*(ss[0].data+ds[0].data)
+    st[0].data=ss[0].data+ds[0].data
     #And done
     return st
 
