@@ -184,8 +184,9 @@ def coseismics(home,project_name,rupture_name,station_file,model_name):
             #Get subfault parameters
             nfault='subfault'+rjust(str(int(source[k,0])),4,'0')
             zs=source[k,3]
-            rake=source[k,6]
-            slip=source[k,9]
+            ss_slip=source[k,8]
+            ds_slip=source[k,9]
+            slip=(ds_slip**2+ss_slip**2)**0.5
             sslength=source[k,10]
             dslength=source[k,11]
             #Where's the data
@@ -195,17 +196,17 @@ def coseismics(home,project_name,rupture_name,station_file,model_name):
             #Compute equivalent Moment at this source point
             Mo=mu*slip*sslength*dslength
             #Get synthetics
-            coseis_ss=loadtxt(syn_path+sta+'.'+nfault+'.SS.static.enu')
-            ess=coseis_ss[0]
-            nss=coseis_ss[1]
+            coseis_ss=loadtxt(syn_path+sta+'.'+nfault+'.SS.static.neu')
+            nss=coseis_ss[0]
+            ess=coseis_ss[1]
             zss=coseis_ss[2]
-            coseis_ds=loadtxt(syn_path+sta+'.'+nfault+'.DS.static.enu')
-            eds=coseis_ds[0]
-            nds=coseis_ds[1]
+            coseis_ds=loadtxt(syn_path+sta+'.'+nfault+'.DS.static.neu')
+            nds=coseis_ds[0]
+            eds=coseis_ds[1]
             zds=coseis_ds[2]
             #get rake contribution and moment multiplier
-            dsmult=sin(deg2rad(rake))
-            ssmult=cos(deg2rad(rake))
+            dsmult=ds_slip/slip
+            ssmult=ss_slip/slip
             M=Mo/unitM
             #A'ight, add 'em up
             etotal=M*(dsmult*eds+ssmult*ess)
@@ -216,7 +217,7 @@ def coseismics(home,project_name,rupture_name,station_file,model_name):
             n=n+ntotal
             z=z+ztotal
         #Save results
-        savetxt(outpath+sta+'.static.enu',(e,n,z))
+        savetxt(outpath+sta+'.static.neu',(n,e,z))
             
             
             

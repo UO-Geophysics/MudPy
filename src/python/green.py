@@ -270,7 +270,7 @@ def run_syn(source,station_file,green_path,model_name,integrate,static,subfault,
             ntemp,etemp=rotate_RT_NE(array([r,r]),array([t,t]),az[k])
             n=ntemp[0]
             e=etemp[0]
-            savetxt(staname[k]+'.subfault'+num+'.SS.static.enu',(e,n,u))
+            savetxt(staname[k]+'.subfault'+num+'.SS.static.neu',(n,e,u))
             statics=loadtxt(staname[k]+'.subfault'+num+'.DS.static.rtz')
             u=-statics[2]/100
             r=statics[3]/100
@@ -278,7 +278,7 @@ def run_syn(source,station_file,green_path,model_name,integrate,static,subfault,
             ntemp,etemp=rotate_RT_NE(array([r,r]),array([t,t]),az[k])
             n=ntemp[0]
             e=etemp[0]
-            savetxt(staname[k]+'.subfault'+num+'.DS.static.enu',(e,n,u))
+            savetxt(staname[k]+'.subfault'+num+'.DS.static.neu',(n,e,u))
     return log
 
 

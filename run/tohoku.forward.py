@@ -11,7 +11,7 @@ import runslip,forward
 ########                            GLOBALS                             ########
 
 home='/Users/dmelgarm/Research/Slip_Inv/'
-project_name='alaska_socal_spherical'
+project_name='tohoku'
 ################################################################################
 
 
@@ -25,12 +25,12 @@ solve=1  # =1 solves forward problem or runs inverse calculation, =0 does nothin
 
 ###############            Green function parameters               #############
 coord_type=1 #(=0 for cartesian, =1 for lat/lon (will use Earth flattening transform)
-hot_start=35   #Start at a certain subfault number
-static=0  #=1 computes static GFs only, =0 computes the complete waveform
-model_name='socal.mod'   #Velocity model
-rupture_name='alaska_small_lat_lon.rupt'   #Rupture model, not needed for inversion
-fault_name='alaska_small_lat_lon.fault'    #Fault geometry
-station_file='alaska_lat_lon.sta'    #Station distribution
+hot_start=0  #Start at a certain subfault number
+static=1  #=1 computes static GFs only, =0 computes the complete waveform
+model_name='gil7.mod'   #Velocity model
+rupture_name='tohoku.allgps.rupt'   #Rupture model, not needed for inversion
+fault_name='tohoku.allgps.fault'    #Fault geometry
+station_file='tohoku.sta'    #Station distribution
 NFFT=1024 ; dt=0.8  #Time parameters
 dk=0.2 ; pmin=0 ; pmax=1 ; kmax=10   #fk integration parameters
 ################################################################################
