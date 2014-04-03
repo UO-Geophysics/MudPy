@@ -29,7 +29,7 @@ coord_type=1 #(=0 for cartesian, =1 for lat/lon (will use Earth flattening trans
 hot_start=0  #Start at a certain subfault number
 static=1  #=1 computes static GFs only, =0 computes the complete waveform
 model_name='gil7.mod'   #Velocity model
-rupture_name='tohoku_allgps.rupt'   #Rupture model, not needed for inversion
+rupture_name='static.0051.inv'   #Rupture model, not needed for inversion
 fault_name='tohoku_allgps.fault'    #Fault geometry
 station_file='tohoku.sta'    #Station distribution
 NFFT=1024 ; dt=0.8  #Time parameters

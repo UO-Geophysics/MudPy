@@ -97,7 +97,7 @@ def run_syn(home,project_name,source,station_file,green_path,model_name,integrat
     tb=50 #Number of samples before first arrival
     #Load structure
     model_file=home+project_name+'/structure/'+model_name
-    structure=loadtxt(model_file)
+    structure=loadtxt(model_file,ndmin=2)
     #Parse the soruce information
     num=rjust(str(int(source[0])),4,'0')
     xs=source[1]

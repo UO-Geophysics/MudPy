@@ -273,11 +273,13 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
     #Make matrix of weights (Speedy impementation)
     W=empty(G.shape)
     W=tile(w,(G.shape[1],1)).T
-    K=r_[W*G,L]
-    x=r_[(w*d),h]
+    WG=W*G
+    K=r_[WG,L]
+    wd=w*d
+    x=r_[wd,h]
     nregu=len(h) #This will be used to change the amount of regularization later on
     previous_l=1.0
-    res=zeros(len(regularization_parameter))
+    R=zeros(len(regularization_parameter))
     Lm=zeros(len(regularization_parameter))
     for k in range(len(regularization_parameter)):
         next_l=regularization_parameter[k] #egularization for this iteration
@@ -289,21 +291,22 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
         #Update
         previous_l=next_l
         #Run inversion
-        sol,res[k],rank,s=lstsq(K,x)
+        sol,res,rank,s=lstsq(K,x)
         #Write output to file
         write_model(home,project_name,run_name,fault_name,model_name,rupture_speeds,epicenter,sol,k)
         #Compute and save synthetics
         ds=dot(G,sol)
         write_synthetics(home,project_name,run_name,GF_list,G,sol,ds,k)
         #Get stats
-        L2,Lmodel,VR,AIC=get_stats(G,sol,d,ds)
+        L2,Lmodel,VR,AIC=get_stats(WG,sol,wd)
         #Get moment
         Mo,Mw=get_moment(home,project_name,fault_name,model_name,sol)
         #Write log
         write_log(home,project_name,run_name,k,rupture_speeds,next_l,L2,Lmodel,VR,AIC,Mo,Mw)
-        Lm[k]=norm(sol)
+        Lm[k]=Lmodel
+        R[k]=L2
     plt.figure()
-    plt.loglog(res,Lm) ; plt.xlabel('Residual') ; plt.ylabel('Model Norm')
+    plt.loglog(R,Lm) ; plt.xlabel('Residual') ; plt.ylabel('Model Norm')
     plt.show()
     
         

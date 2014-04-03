@@ -205,17 +205,20 @@ def get_mu(structure,zs):
     '''
     from numpy import nonzero
     
-    Z=structure[:,0].cumsum()
-    #Which layer do I want?
-    i=nonzero(zs>Z)[0]
-    if i.size==0: #It's in top layer
-        imu=0
-    else:
-        imu=max(i)+1
-    if imu>=structure.shape[0]:
-        imu=imu-1#It's int he half-space
-    mu=((1000*structure[imu,1])**2)*structure[imu,3]*1000
-    #print "Rigidity at z="+str(zs)+' is, mu = '+str(mu/1e9)+'GPa'
+    if len(structure)>1: #Model is more than jsut the halfspace
+        Z=structure[:,0].cumsum()
+        #Which layer do I want?
+        i=nonzero(zs>Z)[0]
+        if i.size==0: #It's in top layer
+            imu=0
+        else:
+            imu=max(i)+1
+        if imu>=structure.shape[0]:
+            imu=imu-1#It's int he half-space
+        mu=((1000*structure[imu,1])**2)*structure[imu,3]*1000
+        #print "Rigidity at z="+str(zs)+' is, mu = '+str(mu/1e9)+'GPa'
+    else: #Model is a halfspace
+        mu=((1000*structure[0,1])**2)*structure[0,3]*1000
     return mu
     
 def add_traces(ss,ds,ssmult,dsmult):

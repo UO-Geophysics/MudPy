@@ -301,11 +301,11 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tdelay):
                     nfault='subfault'+rjust(str(int(source[kfault,0])),4,'0')
                     print 'Assembling static GFs for station '+staname[ksta]+' '+nfault
                     ###### These need to be changed to neu, enu is stupid Diego ########
-                    coseis_ss=loadtxt(syn_path+staname[ksta]+'.'+nfault+'.SS.static.enu')
+                    coseis_ss=loadtxt(syn_path+staname[ksta]+'.'+nfault+'.SS.static.neu')
                     ess=coseis_ss[0]
                     nss=coseis_ss[1]
                     zss=coseis_ss[2]
-                    coseis_ds=loadtxt(syn_path+staname[ksta]+'.'+nfault+'.DS.static.enu')
+                    coseis_ds=loadtxt(syn_path+staname[ksta]+'.'+nfault+'.DS.static.neu')
                     eds=coseis_ds[0]
                     nds=coseis_ds[1]
                     zds=coseis_ds[2]
@@ -414,12 +414,12 @@ def write_model(home,project_name,run_name,fault_name,model_name,rupture_speeds,
     for krup in range(len(rupture_speeds)):
         trup[krup*len(ds):(krup+1)*len(ds)]=epi2subfault(epicenter,f,rupture_speeds[krup])
     #Prepare for output
-    out=c_[f[:,0:6],f[:,8:10],mu,trup,f[:,6],f[:,7],ss,ds]
+    out=c_[f[:,0:8],ss,ds,f[:,8:10],trup,mu]  #!!!!!!  Have not adjsuted fmt
     outdir=home+project_name+'/output/inverse_models/models/'+run_name+'.'+rjust(str(num),4,'0')+'.inv'
     #CHANGE this to rupture definition as #No  x            y        z(km)      str     dip      rake       rise    dura     slip    ss_len  ds_len rupt_time
-    fmtout='%6i\t%.4f\t%.4f\t%6.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.4e\t%10.4f\t%.4f\t%.4f\t%8.4f\t%8.4f'
+    fmtout='%6i\t%.4f\t%.4f\t%6.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.4e\t%.4e%8.1f\t%8.1f\t%8.4f\t%.4e'
     print 'Writing model results to file '+outdir
-    savetxt(outdir,out,fmtout,header='No.,lat,lon,depth(km),strike,dip,strike-length(km),dip-length(km),rigidity(Pa),rupture start time(s),rise time fraction(non-dimensional),rupture duration,along strike slip (m),along dip slip (m)')
+    savetxt(outdir,out,fmtout,header='No,lon,lat,z(km),strike,dip,rise,dura,ss-slip(m),ds-slip(m),ss_len(m),ds_len(m),rupt_time(s),rigidity(Pa)')
         
     
     
@@ -711,18 +711,19 @@ def epi2subfault(epicenter,source,vr):
     
     
 
-def get_stats(G,sol,d,ds):
+def get_stats(WG,sol,wd):
     '''
     Compute basic performance metrics of an inversion
     '''
     
     from numpy.linalg import norm
     
-    L2=norm(ds-d)
+    wds=WG.dot(sol)
+    L2=norm(wds-wd)
     Lm=norm(sol)
     #Variance reduction
-    res=((d-ds)**2)**0.5
-    dnorm=(d**2)**0.5 #Yes i know this is dumb, shush
+    res=((wd-wds)**2)**0.5
+    dnorm=(wd**2)**0.5 #Yes i know this is dumb, shush
     VR=(1-(res.sum()/dnorm.sum()))*100
     AIC=0
     return L2,Lm,VR,AIC
@@ -747,7 +748,7 @@ def get_moment(home,project_name,fault_name,model_name,sol):
     #Get total slip
     slip=(ss**2+ds**2)**0.5
     #Get subfault areas in emters
-    A=f[:,8]*f[:,9]*1000**2
+    A=f[:,8]*f[:,9]
     #Get rigidities
     mu=zeros(len(ds))
     for k in range(len(f)):
