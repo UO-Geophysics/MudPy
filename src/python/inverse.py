@@ -125,9 +125,6 @@ def getdata(home,project_name,GF_list,rupture_speeds):
         n[0].stats.starttime=round_time(n[0].stats.starttime,dt)
         u[0].stats.starttime=round_time(u[0].stats.starttime,dt)
         ddisp=append(ddisp,r_[n[0].data,e[0].data,u[0].data])
-    #If there is more than one rupture speed
-    for k in range(1,len(rupture_speeds)):
-        ddisp=r_[ddisp,ddisp]
     #Velocities
     kgf=2
     dvel=array([])
@@ -183,8 +180,10 @@ def getL(home,project_name,fault_name,bounds,regularization_type,nfaults):
                 #Add dip slip branches of stencil
                 L[2*kfault+1,2*stencil+1]=1
                 #Add strike slip central node with correction
+                #correction=0
                 L[2*kfault,2*kfault]=-4+correction
                 #Add dip slip central node with correction
+                #correction=0
                 L[2*kfault+1,2*kfault+1]=-4+correction
             else:
                 return False
