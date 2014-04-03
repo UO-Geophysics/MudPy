@@ -14,7 +14,7 @@ from obspy.core import UTCDateTime
 
 home='/Users/dmelgarm/Research/Slip_Inv/'
 project_name='tohoku'
-run_name='static'
+run_name='halfspace'
 ################################################################################
 
 
@@ -23,7 +23,7 @@ run_name='static'
 init=0 #Initalize project
 make_green=0 #Compute GFs
 make_synthetics=0 #Compute synthetics for a given model at given stations
-G_from_file=0 # =0 read GFs and create a new G, =1 load G from file
+G_from_file=1 # =0 read GFs and create a new G, =1 load G from file
 invert=1  # =1 runs inversion, =0 does nothing
 ###############################################################################
 
@@ -45,7 +45,7 @@ dk=0.1 ; pmin=0 ; pmax=1 ; kmax=20
 epicenter=np.array([142.435,38.305,26.3305])    #lon,lat,depth(positive in km)
 time_epi=UTCDateTime('2011-03-11T05:46:23')
 rupture_speeds=np.array([1.9])   #In km/s
-regularization_parameter=np.logspace(-5,2,num=100)
+regularization_parameter=np.logspace(-2,-2,num=1)
 regularization_type='laplace'
 top='free' ; bottom='locked' ; left='locked' ; right='locked' ; bounds=(top,bottom,left,right) #'locked' or 'free'
 nstrike=21 ; ndip=9 ; nfaults=(nstrike,ndip)

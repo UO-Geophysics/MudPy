@@ -79,7 +79,7 @@ def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epic
         Gstrain=array([])
         if GF[:,kgf].sum()>0:
             pass
-        #Done, now concatenate them all and save to pickle file
+        #Done, now concatenate them all and save to binary file
         G=concatenate([g for g in [Gstatic,Gdisp,Gvel,Gtsun,Gstrain] if g.size > 0])
         print 'Saving to '+G_name+' this might take just a second...'
         save(G_name,G)
@@ -302,12 +302,12 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tdelay):
                     print 'Assembling static GFs for station '+staname[ksta]+' '+nfault
                     ###### These need to be changed to neu, enu is stupid Diego ########
                     coseis_ss=loadtxt(syn_path+staname[ksta]+'.'+nfault+'.SS.static.neu')
-                    ess=coseis_ss[0]
-                    nss=coseis_ss[1]
+                    nss=coseis_ss[0]
+                    ess=coseis_ss[1]
                     zss=coseis_ss[2]
                     coseis_ds=loadtxt(syn_path+staname[ksta]+'.'+nfault+'.DS.static.neu')
-                    eds=coseis_ds[0]
-                    nds=coseis_ds[1]
+                    nds=coseis_ds[0]
+                    eds=coseis_ds[1]
                     zds=coseis_ds[2]
                     #Place into G matrix
                     Gtemp[0,2*kfault]=nss   ; Gtemp[0,2*kfault+1]=nds    #North
@@ -392,14 +392,14 @@ def write_model(home,project_name,run_name,fault_name,model_name,rupture_speeds,
     Write model results
     '''
     
-    from numpy import genfromtxt,arange,zeros,c_,savetxt
+    from numpy import genfromtxt,loadtxt,arange,zeros,c_,savetxt
     from forward import get_mu
     from string import rjust
    
     #Open model file
     f=genfromtxt(home+project_name+'/data/model_info/'+fault_name)
     #Open structure file
-    mod=genfromtxt(home+project_name+'/structure/'+model_name)
+    mod=loadtxt(home+project_name+'/structure/'+model_name,ndmin=2)
     #Get slip quantities
     iss=2*arange(len(f))
     ids=2*arange(len(f))+1
@@ -449,7 +449,7 @@ def write_synthetics(home,project_name,run_name,GF_list,G,sol,ds,num):
             sta=stations[i[ksta]]
             neu=array([ds[kinsert],ds[kinsert+1],ds[kinsert+2]])
             kinsert+=3
-            savetxt(home+project_name+'/output/inverse_models/statics/'+run_name+sta+'.neu',neu)
+            savetxt(home+project_name+'/output/inverse_models/statics/'+run_name+'.'+num+'.'+sta+'.static.neu',neu)
     #Displacement
     kgf=1
     i=where(GF[:,kgf]==1)[0]
@@ -733,13 +733,13 @@ def get_moment(home,project_name,fault_name,model_name,sol):
     '''
     Compute total moment from an inversion
     '''
-    from numpy import log10,genfromtxt,arange,zeros
+    from numpy import log10,genfromtxt,loadtxt,arange,zeros
     from forward import get_mu
    
     #Open model file
     f=genfromtxt(home+project_name+'/data/model_info/'+fault_name)
     #Open structure file
-    mod=genfromtxt(home+project_name+'/structure/'+model_name)
+    mod=loadtxt(home+project_name+'/structure/'+model_name,ndmin=2)
     #Get slip quantities
     iss=2*arange(len(f))
     ids=2*arange(len(f))+1

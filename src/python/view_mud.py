@@ -34,7 +34,7 @@ def quick_model_plot(rupt):
     plt.title(rupt)
     plt.show()
     
-def quick_static_plot(gflist,datapath,h_or_u,c):
+def quick_static_plot(gflist,datapath,run_name,run_num,h_or_u,c):
     '''
     Make quick quiver plot of static fields
     
@@ -57,8 +57,11 @@ def quick_static_plot(gflist,datapath,h_or_u,c):
     e=zeros(len(i))
     u=zeros(len(i))
     #Get data
+    if run_name!='' or run_num!='':
+        run_name=run_name+'.'
+        run_num=run_num+'.'
     for k in range(len(i)):
-        neu=genfromtxt(datapath+sta[i[k]]+'.static.neu')
+        neu=genfromtxt(datapath+run_name+run_num+sta[i[k]]+'.static.neu')
         n[k]=neu[0]
         e[k]=neu[1]
         u[k]=neu[2]
