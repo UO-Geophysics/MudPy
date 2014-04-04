@@ -11,16 +11,27 @@ def quick_model_plot(rupt):
     Quick and dirty plot of a .rupt file
     '''
     
-    from numpy import genfromtxt
+    from numpy import genfromtxt,unique,where,zeros
     import matplotlib.pyplot as plt
     
     f=genfromtxt(rupt)
-    lon=f[:,1]
-    lat=f[:,2]
-    strike=f[:,4]
-    ss=f[:,8]
-    ds=f[:,9]
+    num=f[:,0]
+    all_ss=f[:,8]
+    all_ds=f[:,9]
+    #Now parse for multiple rupture speeds
+    unum=unique(num)
+    ss=zeros(len(unum))
+    ds=zeros(len(unum))
+    for k in range(len(unum)):
+        i=where(unum[k]==num)
+        ss[k]=all_ss[i].sum()
+        ds[k]=all_ds[i].sum()
+    #Sum them
     slip=(ss**2+ds**2)**0.5
+    #Get other parameters
+    lon=f[0:len(unum),1]
+    lat=f[0:len(unum),2]
+    strike=f[0:len(unum),4]
     #Get projection of rake vector
     x,y=slip2geo(ss,ds,strike)
     #Plot

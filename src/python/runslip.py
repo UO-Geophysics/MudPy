@@ -256,19 +256,20 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
     from inverse import getG,getdata,getL,get_data_weights,get_stats,get_moment
     from inverse import write_model,write_synthetics,write_log
     from numpy import r_,tile,empty,zeros,dot
-    from numpy.linalg import lstsq,norm
+    from numpy.linalg import lstsq
+    from scipy.optimize import nnls
     from matplotlib import pyplot as plt
     
     #Get data vector
-    d=getdata(home,project_name,GF_list,rupture_speeds)
+    d=getdata(home,project_name,GF_list)
     #Get GFs
     G=getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epicenter,
                 rupture_speeds,coord_type)
     #Get regularization matrix
-    L,h=getL(home,project_name,fault_name,bounds,regularization_type,nfaults)
+    L,h=getL(home,project_name,fault_name,bounds,regularization_type,nfaults,rupture_speeds)
     #Get data weights
     w=get_data_weights(home,project_name,GF_list,d,rupture_speeds)
-    #Put everything together
+    #Put eveG.shaperything together
     print "Preparing solver..."
     #Make matrix of weights (Speedy impementation)
     W=empty(G.shape)
@@ -291,7 +292,8 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
         #Update
         previous_l=next_l
         #Run inversion
-        sol,res,rank,s=lstsq(K,x)
+        #sol,res,rank,s=lstsq(K,x)
+        sol,res=nnls(K,x)
         #Write output to file
         write_model(home,project_name,run_name,fault_name,model_name,rupture_speeds,epicenter,sol,k)
         #Compute and save synthetics

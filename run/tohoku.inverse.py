@@ -14,7 +14,7 @@ from obspy.core import UTCDateTime
 
 home='/Users/dmelgarm/Research/Slip_Inv/'
 project_name='tohoku'
-run_name='kal'
+run_name='kal_multivr'
 ################################################################################
 
 
@@ -33,8 +33,8 @@ hot_start=0   #Start at a certain subfault number
 model_name='gil7.mod'   #Velocity model
 fault_name='tohoku.fault'    #Fault geometry
 station_file='tohoku.sta'    #Station distribution
-GF_list='tohoku.kaldisp.gflist' #What GFs are to be computed for each station
-G_name='kaldisp.g' #Either name of GF matrix to load or name to save GF matrix with
+GF_list='tohoku.kaldisp_small.gflist' #What GFs are to be computed for each station
+G_name='kaldisp_multivr_small.g' #Either name of GF matrix to load or name to save GF matrix with
 # Displacement and velocity waveform parameters
 NFFT=2048 ; dt=0.25
 #fk-parameters
@@ -44,8 +44,8 @@ dk=0.1 ; pmin=0 ; pmax=1 ; kmax=20
 #############               Inversion Parameters               ################# 
 epicenter=np.array([142.435,38.305,26.3305])    #lon,lat,depth(positive in km)
 time_epi=UTCDateTime('2011-03-11T05:46:23')
-rupture_speeds=np.array([2.4])   #In km/s
-regularization_parameter=np.logspace(0.778,0.778,num=1)
+rupture_speeds=np.array([1.6,1.8,2.0,2.2,2.4,2.6,2.8])   #In km/s
+regularization_parameter=np.logspace(-1,-1,num=1)
 regularization_type='laplace'
 top='free' ; bottom='locked' ; left='locked' ; right='locked' ; bounds=(top,bottom,left,right) #'locked' or 'free'
 nstrike=21 ; ndip=9 ; nfaults=(nstrike,ndip)

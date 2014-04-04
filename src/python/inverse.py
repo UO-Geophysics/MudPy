@@ -7,7 +7,7 @@ def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epic
     '''
     Either load G from file or parse gflist file and assemble it from previous computations
     '''
-    from numpy import genfromtxt,where,loadtxt,array,r_,concatenate,save,load
+    from numpy import genfromtxt,where,loadtxt,array,c_,concatenate,save,load
     from os import remove
     from os.path import split
     
@@ -57,12 +57,13 @@ def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epic
                 mini_station_file(mini_station,stations[i],GF[i,0],GF[i,1],GFfiles[i,1])
                 gftype='disp'
                 for krup in range(len(rupture_speeds)):
+                    print 'Working on rupture speed '+str(rupture_speeds[krup])+' km/s'
                     tdelay=epi2subfault(epicenter,source,rupture_speeds[krup])
                     Gdisp_temp=makeG(home,project_name,fault_name,model_name,split(mini_station)[1],gftype,tdelay)
                     if krup==0: #First rupture speed
                         Gdisp=Gdisp_temp
                     else:
-                        Gdisp=r_[Gdisp,Gdisp_temp]
+                        Gdisp=c_[Gdisp,Gdisp_temp]
                 remove(mini_station) #Cleanup 
         #Velocity waveforms
         kgf=4
@@ -86,7 +87,7 @@ def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epic
     return G
     
     
-def getdata(home,project_name,GF_list,rupture_speeds):
+def getdata(home,project_name,GF_list):
     '''
     Assemble the data vector
     '''
@@ -140,9 +141,6 @@ def getdata(home,project_name,GF_list,rupture_speeds):
         n[0].stats.starttime=round_time(n[0].stats.starttime,dt)
         u[0].stats.starttime=round_time(u[0].stats.starttime,dt)
         dvel=append(dvel,r_[n[0].data,e[0].data,u[0].data])
-    #If there is more than one rupture speed
-    for k in range(1,len(rupture_speeds)):
-        dvel=r_[dvel,dvel]
     #Tsunami
     kgf=3
     dtsun=array([])
@@ -155,12 +153,13 @@ def getdata(home,project_name,GF_list,rupture_speeds):
     
     
     
-def getL(home,project_name,fault_name,bounds,regularization_type,nfaults):
+def getL(home,project_name,fault_name,bounds,regularization_type,nfaults,rupture_speeds):
     '''
     Make regularization matrix
     '''
     
     from numpy import loadtxt,zeros
+    from scipy.linalg import block_diag
     
     #Load source
     source=loadtxt(home+project_name+'/data/model_info/'+fault_name,ndmin=2)
@@ -180,15 +179,21 @@ def getL(home,project_name,fault_name,bounds,regularization_type,nfaults):
                 #Add dip slip branches of stencil
                 L[2*kfault+1,2*stencil+1]=1
                 #Add strike slip central node with correction
-                #correction=0
+                correction=0
                 L[2*kfault,2*kfault]=-4+correction
                 #Add dip slip central node with correction
-                #correction=0
+                correction=0
                 L[2*kfault+1,2*kfault+1]=-4+correction
             else:
                 return False
-        h=zeros(len(L))
-        return L,h
+        if len(rupture_speeds)==1: #Only one rupture speed
+            Lout=L 
+        else: #Multiple rupture speeds
+            Lout=L
+            for k in range(len(rupture_speeds)-1):
+                Lout=block_diag(Lout,L)
+        hout=zeros(len(Lout))
+        return Lout,hout
     else:
         print 'ERROR: Unknown regularization type ('+regularization_type+') requested.'
         return False
@@ -197,7 +202,7 @@ def get_data_weights(home,project_name,GF_list,d,rupture_speeds):
     '''
     Assemble matrix of data weights from sigmas of observations
     '''    
-    from numpy import genfromtxt,where,zeros,ones,diag_indices_from
+    from numpy import genfromtxt,where,zeros,ones
     from obspy import read
 
     print 'Computing data weights...'
@@ -220,37 +225,35 @@ def get_data_weights(home,project_name,GF_list,d,rupture_speeds):
     #Displacement waveform weights
     kgf=1
     i=where(GF[:,kgf]==1)[0]
-    for krup in range(len(rupture_speeds)):
-        for ksta in range(len(i)):
-            #Read waveform to determine length of insert
-            st=read(GFfiles[i[ksta],kgf]+'.n')
-            nsamples=st[0].stats.npts
-            wn=(1/weights[i[ksta],3])*ones(nsamples)
-            w[kinsert:kinsert+nsamples]=wn
-            kinsert=kinsert+nsamples
-            we=(1/weights[i[ksta],4])*ones(nsamples)
-            w[kinsert:kinsert+nsamples]=we
-            kinsert=kinsert+nsamples
-            wu=(1/weights[i[ksta],5])*ones(nsamples)
-            w[kinsert:kinsert+nsamples]=wu
-            kinsert=kinsert+nsamples
+    for ksta in range(len(i)):
+        #Read waveform to determine length of insert
+        st=read(GFfiles[i[ksta],kgf]+'.n')
+        nsamples=st[0].stats.npts
+        wn=(1/weights[i[ksta],3])*ones(nsamples)
+        w[kinsert:kinsert+nsamples]=wn
+        kinsert=kinsert+nsamples
+        we=(1/weights[i[ksta],4])*ones(nsamples)
+        w[kinsert:kinsert+nsamples]=we
+        kinsert=kinsert+nsamples
+        wu=(1/weights[i[ksta],5])*ones(nsamples)
+        w[kinsert:kinsert+nsamples]=wu
+        kinsert=kinsert+nsamples
     #velocity waveform weights
     kgf=2
     i=where(GF[:,kgf]==1)[0]
-    for krup in range(len(rupture_speeds)):
-        for ksta in range(len(i)):
-            #Read waveform to determine length of insert
-            st=read(GFfiles[i[ksta],kgf]+'.n')
-            nsamples=st[0].stats.npts
-            wn=(1/weights[i[ksta],6])*ones(nsamples)
-            w[kinsert:kinsert+nsamples]=wn
-            kinsert=kinsert+nsamples
-            we=(1/weights[i[ksta],7])*ones(nsamples)
-            w[kinsert:kinsert+nsamples]=we
-            kinsert=kinsert+nsamples
-            wu=(1/weights[i[ksta],8])*ones(nsamples)
-            w[kinsert:kinsert+nsamples]=wu
-            kinsert=kinsert+nsamples
+    for ksta in range(len(i)):
+        #Read waveform to determine length of insert
+        st=read(GFfiles[i[ksta],kgf]+'.n')
+        nsamples=st[0].stats.npts
+        wn=(1/weights[i[ksta],6])*ones(nsamples)
+        w[kinsert:kinsert+nsamples]=wn
+        kinsert=kinsert+nsamples
+        we=(1/weights[i[ksta],7])*ones(nsamples)
+        w[kinsert:kinsert+nsamples]=we
+        kinsert=kinsert+nsamples
+        wu=(1/weights[i[ksta],8])*ones(nsamples)
+        w[kinsert:kinsert+nsamples]=wu
+        kinsert=kinsert+nsamples
     #Tsunami
     kgf=3
     #Strain
@@ -391,7 +394,7 @@ def write_model(home,project_name,run_name,fault_name,model_name,rupture_speeds,
     Write model results
     '''
     
-    from numpy import genfromtxt,loadtxt,arange,zeros,c_,savetxt
+    from numpy import genfromtxt,loadtxt,arange,zeros,c_,savetxt,r_
     from forward import get_mu
     from string import rjust
    
@@ -400,20 +403,28 @@ def write_model(home,project_name,run_name,fault_name,model_name,rupture_speeds,
     #Open structure file
     mod=loadtxt(home+project_name+'/structure/'+model_name,ndmin=2)
     #Get slip quantities
-    iss=2*arange(len(f))
-    ids=2*arange(len(f))+1
+    iss=2*arange(len(f)*len(rupture_speeds))
+    ids=2*arange(len(f)*len(rupture_speeds))+1
     ss=sol[iss]
     ds=sol[ids]
     #Get rigidities
     mu=zeros(len(ds))
-    trup=zeros(len(ds)*len(rupture_speeds))
-    for k in range(len(f)):
-        mu[k]=get_mu(mod,f[k,3])
+    trup=zeros(len(ds))
+    j=0
+    for krup in range(len(rupture_speeds)):
+        for k in range(len(f)):
+            mu[j]=get_mu(mod,f[k,3])
+            j+=1
     #Get rupture start times
     for krup in range(len(rupture_speeds)):
-        trup[krup*len(ds):(krup+1)*len(ds)]=epi2subfault(epicenter,f,rupture_speeds[krup])
+        trup[krup*(len(ds)/len(rupture_speeds)):(krup+1)*(len(ds)/len(rupture_speeds))]=epi2subfault(epicenter,f,rupture_speeds[krup])
     #Prepare for output
-    out=c_[f[:,0:8],ss,ds,f[:,8:10],trup,mu]  #!!!!!!  Have not adjsuted fmt
+    out1=f[:,0:8]
+    out2=f[:,8:10]
+    for k in range(len(rupture_speeds)-1):
+        out1=r_[out1,f[:,0:8]]
+        out2=r_[out2,f[:,8:10]]
+    out=c_[out1,ss,ds,out2,trup,mu]
     outdir=home+project_name+'/output/inverse_models/models/'+run_name+'.'+rjust(str(num),4,'0')+'.inv'
     #CHANGE this to rupture definition as #No  x            y        z(km)      str     dip      rake       rise    dura     slip    ss_len  ds_len rupt_time
     fmtout='%6i\t%.4f\t%.4f\t%6.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.4e\t%.4e%8.1f\t%8.1f\t%8.4f\t%.4e'
@@ -428,7 +439,7 @@ def write_synthetics(home,project_name,run_name,GF_list,G,sol,ds,num):
     '''
     
     from obspy import read
-    from numpy import dot,array,savetxt,where,genfromtxt
+    from numpy import array,savetxt,where,genfromtxt
     from string import rjust
     
     print 'Computing and saving synthetics...'
