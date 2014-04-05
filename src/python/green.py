@@ -21,6 +21,7 @@ def run_green(source,station_file,model_name,dt,NFFT,static,coord_type,dk,pmin,p
     '''
     import subprocess
     from shlex import split
+    from numpy import unique
     
     depth='%.4f' % source[3]
     print("--> Computing GFs for source depth "+str(depth)+"km")
@@ -92,8 +93,8 @@ def run_syn(home,project_name,source,station_file,green_path,model_name,integrat
     from shlex import split
     
     #Constant parameters
-    rakeDS=-90 #-90 is thrust, 90 is normal
-    rakeSS=180
+    rakeDS=90 #90 is thrust, -90 is normal
+    rakeSS=0 #0 is left lateral, 180 is right lateral
     tb=50 #Number of samples before first arrival
     #Load structure
     model_file=home+project_name+'/structure/'+model_name
@@ -165,7 +166,7 @@ def run_syn(home,project_name,source,station_file,green_path,model_name,integrat
                 #Strike slip
                 r=read(staname[k]+".subfault"+num+'.SS.disp.r')
                 t=read(staname[k]+".subfault"+num+'.SS.disp.t')
-                ntemp,etemp=rotate_RT_NE(r[0].data,t[0].data,az[k])
+                ntemp,etemp=rt2ne(r[0].data,t[0].data,az[k])
                 #Scale to m and overwrite with rotated waveforms
                 n=r.copy()
                 n[0].data=ntemp/100
@@ -175,16 +176,10 @@ def run_syn(home,project_name,source,station_file,green_path,model_name,integrat
                 e=origin_time(e,time_epi,tb)
                 n.write(staname[k]+".subfault"+num+'.SS.disp.n',format='SAC')
                 e.write(staname[k]+".subfault"+num+'.SS.disp.e',format='SAC')
-                #Correct polarity in vertical, ZR code has down=positive
-                down=read(staname[k]+".subfault"+num+'.SS.disp.z')
-                up=down.copy()
-                up[0].data=down[0].data/-100
-                up=origin_time(up,time_epi,tb)
-                up.write(staname[k]+".subfault"+num+'.SS.disp.z',format='SAC')
                 #Dip Slip
                 r=read(staname[k]+".subfault"+num+'.DS.disp.r')
                 t=read(staname[k]+".subfault"+num+'.DS.disp.t')
-                ntemp,etemp=rotate_RT_NE(r[0].data,t[0].data,az[k])
+                ntemp,etemp=rt2ne(r[0].data,t[0].data,az[k])
                 n=r.copy()
                 n[0].data=ntemp/100
                 e=t.copy()
@@ -193,17 +188,11 @@ def run_syn(home,project_name,source,station_file,green_path,model_name,integrat
                 e=origin_time(e,time_epi,tb)
                 n.write(staname[k]+".subfault"+num+'.DS.disp.n',format='SAC')
                 e.write(staname[k]+".subfault"+num+'.DS.disp.e',format='SAC')
-                #Correct polarity in vertical, ZR code has down=positive, we don't like that precious do we?
-                down=read(staname[k]+".subfault"+num+'.DS.disp.z')
-                up=down.copy()
-                up[0].data=down[0].data/-100
-                up=origin_time(up,time_epi,tb)  #Assign epicentral time
-                up.write(staname[k]+".subfault"+num+'.DS.disp.z',format='SAC')
             else: #Waveforms are velocity, as before, rotate from RT-Z to NE+Z and scale to m/s
                 #Strike slip
                 r=read(staname[k]+".subfault"+num+'.SS.vel.r')
                 t=read(staname[k]+".subfault"+num+'.SS.vel.t')
-                ntemp,etemp=rotate_RT_NE(r[0].data,t[0].data,az[k])
+                ntemp,etemp=rt2ne(r[0].data,t[0].data,az[k])
                 n=r.copy()
                 n[0].data=ntemp/100
                 e=t.copy()
@@ -212,16 +201,10 @@ def run_syn(home,project_name,source,station_file,green_path,model_name,integrat
                 e=origin_time(e,time_epi,tb)
                 n.write(staname[k]+".subfault"+num+'.SS.vel.n',format='SAC')
                 e.write(staname[k]+".subfault"+num+'.SS.vel.e',format='SAC')
-                #Correct polarity in vertical, ZR code has down=positive
-                down=read(staname[k]+".subfault"+num+'.SS.vel.z')
-                up=down.copy()
-                up[0].data=down[0].data/-100
-                up=origin_time(up,time_epi,tb)
-                up.write(staname[k]+".subfault"+num+'.SS.vel.z',format='SAC')
                 #Dip Slip
                 r=read(staname[k]+".subfault"+num+'.DS.vel.r')
                 t=read(staname[k]+".subfault"+num+'.DS.vel.t')
-                ntemp,etemp=rotate_RT_NE(r[0].data,t[0].data,az[k])
+                ntemp,etemp=rt2ne(r[0].data,t[0].data,az[k])
                 n=r.copy()
                 n[0].data=ntemp/100
                 e=t.copy()
@@ -230,12 +213,6 @@ def run_syn(home,project_name,source,station_file,green_path,model_name,integrat
                 e=origin_time(e,time_epi,tb)
                 n.write(staname[k]+".subfault"+num+'.DS.vel.n',format='SAC')
                 e.write(staname[k]+".subfault"+num+'.DS.vel.e',format='SAC')
-                #Correct polarity in vertical, ZR code has down=positive, we don't like that precious do we?
-                down=read(staname[k]+".subfault"+num+'.DS.vel.z')
-                up=down.copy()
-                up[0].data=down[0].data/-100 #In fk-land down is positive, but in this code up is positive
-                up=origin_time(up,time_epi,tb)
-                up.write(staname[k]+".subfault"+num+'.DS.vel.z',format='SAC')
         else: #Compute static synthetics
             os.chdir(green_path+'static/') #Move to appropriate dir
             diststr='%.1f' % d[k] #Need current distance in string form for external call
@@ -273,18 +250,18 @@ def run_syn(home,project_name,source,station_file,green_path,model_name,integrat
             log=log+str(out)+str(err)       
             #Rotate radial/transverse to East/North, correct vertical and scale to m
             statics=loadtxt(staname[k]+'.subfault'+num+'.SS.static.rtz')
-            u=-statics[2]/100
+            u=statics[2]/100
             r=statics[3]/100
             t=statics[4]/100
-            ntemp,etemp=rotate_RT_NE(array([r,r]),array([t,t]),az[k])
+            ntemp,etemp=rt2ne(array([r,r]),array([t,t]),az[k])
             n=ntemp[0]
             e=etemp[0]
             savetxt(staname[k]+'.subfault'+num+'.SS.static.neu',(n,e,u))
             statics=loadtxt(staname[k]+'.subfault'+num+'.DS.static.rtz')
-            u=-statics[2]/100
+            u=statics[2]/100
             r=statics[3]/100
             t=statics[4]/100
-            ntemp,etemp=rotate_RT_NE(array([r,r]),array([t,t]),az[k])
+            ntemp,etemp=rt2ne(array([r,r]),array([t,t]),az[k])
             n=ntemp[0]
             e=etemp[0]
             savetxt(staname[k]+'.subfault'+num+'.DS.static.neu',(n,e,u))
@@ -384,3 +361,15 @@ def origin_time(st,time_epi,tb):
     t1=time_epi+timedelta(minutes=t1.minute,seconds=t1.second,microseconds=t1.microsecond)-td
     st[0].stats.starttime=t1
     return st
+
+def rt2ne(r,t,azimuth):
+    '''
+    rotate time series of radial transverse to north and east. The azimuth is source 
+    to station in degrees from north.
+    '''
+    from numpy import cos,sin,deg2rad
+    az=deg2rad(azimuth)
+    n=r*cos(az)-t*sin(az)
+    e=r*sin(az)+t*cos(az)
+    return n,e
+    

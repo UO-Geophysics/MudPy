@@ -142,9 +142,6 @@ def coseismics(home,project_name,rupture_name,station_file):
     from numpy import loadtxt,genfromtxt,array,savetxt
     from string import rjust
     
-    #constants
-    #unitM=1e15 #N-m
-    
     #Output where?
     outpath=home+project_name+'/output/forward_models/'
     #load source

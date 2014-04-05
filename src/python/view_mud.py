@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 '''
 D.Melgar
 04/2014
@@ -45,7 +46,7 @@ def quick_model_plot(rupt):
     plt.title(rupt)
     plt.show()
     
-def quick_static_plot(gflist,datapath,run_name,run_num,h_or_u,c):
+def quick_static_plot(gflist,datapath,run_name,run_num,c):
     '''
     Make quick quiver plot of static fields
     
@@ -54,7 +55,10 @@ def quick_static_plot(gflist,datapath,run_name,run_num,h_or_u,c):
         datapath: Where are the data files
     '''
     import matplotlib.pyplot as plt
-    from numpy import genfromtxt,where,zeros
+    from numpy import genfromtxt,where,zeros,meshgrid,linspace
+    from matplotlib.mlab import griddata
+    from matplotlib.colors import Colormap
+
     
     GF=genfromtxt(gflist,usecols=3)
     sta=genfromtxt(gflist,usecols=0,dtype='S')
@@ -73,16 +77,23 @@ def quick_static_plot(gflist,datapath,run_name,run_num,h_or_u,c):
         run_num=run_num+'.'
     for k in range(len(i)):
         neu=genfromtxt(datapath+run_name+run_num+sta[i[k]]+'.static.neu')
-        n[k]=neu[0]
-        e[k]=neu[1]
-        u[k]=neu[2]
+        n[k]=neu[0]/((neu[0]**2+neu[1]**2)**0.5)
+        e[k]=neu[1]/((neu[0]**2+neu[1]**2)**0.5)
+        u[k]=neu[2]#/(2*abs(neu[2]))
+
+            
     #Plot
-    if h_or_u.lower()=='u': #plot verticals
-        e=zeros(e.shape)
-        n=u
-    Q=plt.quiver(lon,lat,e,n,width=0.0035,color=c)
+    xi = linspace(min(lon), max(lon), 2000)
+    yi = linspace(min(lat), max(lat), 2000)
+    Z = griddata(lon, lat, u, xi, yi)
+    X, Y = meshgrid(xi, yi)
+    #c=Colormap('bwr')
+    plt.contourf(X,Y,Z,100)
+    plt.colorbar()
+    Q=plt.quiver(lon,lat,e,n,width=0.001,color=c)
     qscale_en=0.1*max((n**2+e**2)**0.5)
-    plt.quiverkey(Q,X=0.1,Y=0.9,U=qscale_en,label=str(qscale_en)+'m')
+    plt.grid()
+    #plt.quiverkey(Q,X=0.1,Y=0.9,U=qscale_en,label=str(qscale_en)+'m')
     
 #########                  Supporting tools                       ##############
 
