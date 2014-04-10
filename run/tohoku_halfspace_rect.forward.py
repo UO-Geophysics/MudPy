@@ -12,7 +12,7 @@ from obspy.core import UTCDateTime
 ########                            GLOBALS                             ########
 
 home='/Users/dmelgarm/Research/Slip_Inv/'
-project_name='tohoku'
+project_name='tohoku_halfspace_rect'
 ################################################################################
 
 
@@ -20,7 +20,7 @@ project_name='tohoku'
 
 init=0 #Initalize project
 make_green=0 #Compute GFs
-make_synthetics=1 #Compute synthetics for a given model at given stations
+make_synthetics=0 #Compute synthetics for a given model at given stations
 solve=1  # =1 solves forward problem or runs inverse calculation, =0 does nothing
 ###############################################################################
 
@@ -28,7 +28,7 @@ solve=1  # =1 solves forward problem or runs inverse calculation, =0 does nothin
 coord_type=1 #(=0 for cartesian, =1 for lat/lon (will use Earth flattening transform)
 hot_start=0  #Start at a certain subfault number
 static=0  #=1 computes static GFs only, =0 computes the complete waveform
-model_name='gil7.mod'   #Velocity model
+model_name='halfspace.mod'   #Velocity model
 rupture_name='gil7_static.0000.rupt'   #Rupture model, not needed for inversion
 fault_name='tohoku.fault'    #Fault geometry
 station_file='tohoku.kaldisp_small.sta'    #Station distribution

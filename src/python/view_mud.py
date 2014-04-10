@@ -41,7 +41,7 @@ def quick_model_plot(rupt):
     plt.xlabel('Longitude')
     cb=plt.colorbar()
     cb.set_label('Slip (m)')
-    plt.quiver(lon,lat,x,y,color='green',width=0.002)
+    plt.quiver(lon,lat,x,y,color='green',width=0.0013)
     plt.grid()
     plt.title(rupt)
     plt.show()
@@ -77,24 +77,183 @@ def quick_static_plot(gflist,datapath,run_name,run_num,c):
         run_num=run_num+'.'
     for k in range(len(i)):
         neu=genfromtxt(datapath+run_name+run_num+sta[i[k]]+'.static.neu')
-        n[k]=neu[0]/((neu[0]**2+neu[1]**2)**0.5)
-        e[k]=neu[1]/((neu[0]**2+neu[1]**2)**0.5)
+        n[k]=neu[0]#/((neu[0]**2+neu[1]**2)**0.5)
+        e[k]=neu[1]#/((neu[0]**2+neu[1]**2)**0.5)
         u[k]=neu[2]#/(2*abs(neu[2]))
 
             
     #Plot
-    xi = linspace(min(lon), max(lon), 2000)
-    yi = linspace(min(lat), max(lat), 2000)
+    xi = linspace(min(lon), max(lon), 500)
+    yi = linspace(min(lat), max(lat), 500)
     Z = griddata(lon, lat, u, xi, yi)
     X, Y = meshgrid(xi, yi)
     #c=Colormap('bwr')
-    plt.contourf(X,Y,Z,100)
-    plt.colorbar()
+    #plt.contourf(X,Y,Z,100)
+    #plt.colorbar()
     Q=plt.quiver(lon,lat,e,n,width=0.001,color=c)
-    qscale_en=0.1*max((n**2+e**2)**0.5)
+    plt.scatter(lon,lat,color='b')
     plt.grid()
     #plt.quiverkey(Q,X=0.1,Y=0.9,U=qscale_en,label=str(qscale_en)+'m')
     
+
+def model_tslice(rupt,out,dt,cumul):
+    '''
+    Quick and dirty plot of a .rupt file
+    '''
+    
+    from numpy import genfromtxt,unique,where,zeros,arange,intersect1d,trapz
+    import matplotlib.pyplot as plt
+    from string import rjust
+    
+    delta_t=0.01
+    f=genfromtxt(rupt)
+    trupt=f[:,12]
+    trise=f[:,7]
+    all_ss=f[:,8]
+    all_ds=f[:,9]
+    num=f[:,0]
+    #Get other parameters
+    #lon=f[0:len(unum),1]
+    #lat=f[0:len(unum),2]
+    #strike=f[0:len(unum),4]
+    #Decide on time vector
+    tslice=arange(0,trupt.max()+dt,dt)
+    #Determine triangle height at all subfaults
+    hss=2*all_ss/trise
+    hds=2*all_ds/trise
+    #Cumulative
+    ss_cumul=zeros(len(f))
+    ds_cumul=zeros(len(f))
+    #Determine time series fo each triangle
+    t=arange(0,trupt.max()+trise[0],delta_t)
+    for kslice in range(len(tslice-2)):
+        print str(kslice)+'/'+str(len(tslice)-1)
+        #And initalize slice vectors
+        ss_slice=zeros(len(f))
+        ds_slice=zeros(len(f))
+        for kfault in range(len(f)):
+            yss=zeros(t.shape)
+            yds=zeros(t.shape)
+            #Up going
+            i1=where(t>=trupt[kfault])[0]
+            i2=where(t<=(trupt[kfault]+trise[0]/2))[0] #Ascending triangle
+            i=intersect1d(i1,i2)
+            yss[i]=(2*hss[kfault]/trise[0])*t[i]-(2*hss[kfault]*trupt[kfault]/trise[0])
+            yds[i]=(2*hds[kfault]/trise[0])*t[i]-(2*hds[kfault]*trupt[kfault]/trise[0])
+            #Down going
+            i1=where(t>(trupt[kfault]+trise[0]/2))[0]
+            i2=where(t<=(trupt[kfault]+trise[0]))[0] #Ascending triangle
+            i=intersect1d(i1,i2)
+            yss[i]=(-2*hss[kfault]/trise[0])*t[i]+(2*hss[kfault]/trise[0])*(trupt[kfault]+trise[0])
+            yds[i]=(-2*hds[kfault]/trise[0])*t[i]+(2*hds[kfault]/trise[0])*(trupt[kfault]+trise[0])
+            #Now integrate slip at pertinent time interval
+            i1=where(t>=tslice[kslice])[0]
+            i2=where(t<=tslice[kslice+1])[0]
+            i=intersect1d(i1,i2)
+            ss_slice[kfault]=trapz(yss[i],t[i])
+            ds_slice[kfault]=trapz(yds[i],t[i])
+        #Combine into single model for that time slice
+        ss_cumul=ss_cumul+ss_slice
+        ds_cumul=ds_cumul+ds_slice
+        unum=unique(num)
+        lon=f[0:len(unum),1]
+        lat=f[0:len(unum),2]
+        strike=f[0:len(unum),4]
+        ss=zeros(len(unum))
+        ds=zeros(len(unum))
+        for k in range(len(unum)):
+            if cumul==0:
+                i=where(unum[k]==num)
+                ss[k]=ss_slice[i].sum()
+                ds[k]=ds_slice[i].sum()    
+            else:
+                i=where(unum[k]==num)
+                ss[k]=ss_cumul[i].sum()
+                ds[k]=ds_cumul[i].sum()        
+        slip=(ss**2+ds**2)**0.5
+        #Plot
+        #Get projection of rake vector
+        x,y=slip2geo(ss,ds,strike)
+        #Plot
+        plt.figure()
+        plt.scatter(lon,lat,marker='o',c=slip,s=250,cmap=plt.cm.gnuplot2_r,vmin=0,vmax=35)
+        plt.ylabel('Latitude')
+        plt.xlabel('Longitude')
+        cb=plt.colorbar()
+        plt.quiver(lon,lat,x,y,color='green',width=0.0013)
+        plt.grid()
+        if cumul==0:
+            cb.set_label('Slip (m)')
+            plt.title('t = '+str(tslice[kslice])+'s to '+str(tslice[kslice+1])+'s') 
+            plt.savefig(out+rjust(str(kslice),4,'0')+'.kin_slice.png')
+        else:
+            cb.set_label('Cumulative Slip (m)')
+            plt.title('t = '+str(tslice[kslice+1])+'s')
+            plt.savefig(out+rjust(str(kslice),4,'0')+'.kin_cumulative.png')
+        plt.close("all")
+    
+    
+def plot_synthetics(gflist,datapath,datasuffix,synthpath,synthsuffix,vord):
+    '''
+    Plot synthetics vs real data
+    '''
+    from obspy import read
+    from numpy import genfromtxt,where
+    import matplotlib.pyplot as plt
+    
+    #Decide what to plot
+    sta=genfromtxt(gflist,usecols=0,dtype='S')
+    gf=genfromtxt(gflist,usecols=[4,5],dtype='f')
+    kgf=0 #disp
+    i=where(gf[:,kgf]==1)[0]
+    if gf[i,kgf].sum()>0:
+        #Initalize the plot canvas
+        plt.figure()
+        nsta=len(i)
+        left=0.05
+        width=0.28
+        bottom=0.05
+        height=0.75/nsta
+        Dy=height+0.03
+        for k in range(len(i)):
+            n=read(datapath+sta[i[k]]+'.'+datasuffix+'.n')
+            e=read(datapath+sta[i[k]]+'.'+datasuffix+'.e')
+            u=read(datapath+sta[i[k]]+'.'+datasuffix+'.u')
+            ns=read(synthpath+synthsuffix+'.'+sta[i[k]]+'.disp.n.sac')
+            es=read(synthpath+synthsuffix+'.'+sta[i[k]]+'.disp.e.sac')
+            us=read(synthpath+synthsuffix+'.'+sta[i[k]]+'.disp.u.sac')
+            #Make plot
+            dy=Dy*k
+            rect=[left,bottom+dy,width,height]
+            axn=plt.axes(rect)
+            axn.plot(n[0].times(),n[0].data,'k',ns[0].times(),ns[0].data,'r')
+            axn.grid(which='both')
+            axn.set_ylabel(sta[i[k]])
+            rect=[left+width+0.03,bottom+dy,width,height]
+            axe=plt.axes(rect)
+            axe.plot(e[0].times(),e[0].data,'k',es[0].times(),es[0].data,'r')
+            axe.grid(which='both')
+            rect=[left+2*width+0.06,bottom+dy,width,height]
+            axz=plt.axes(rect)
+            axz.plot(u[0].times(),u[0].data,'k',us[0].times(),us[0].data,'r')
+            axz.grid(which='both')
+            if k==0:
+                axn.set_xlabel('Time (s)')
+                axe.set_xlabel('Time (s)')
+                axz.set_xlabel('Time (s)')
+            if k!=0:
+                axn.get_xaxis().set_ticklabels([])
+                axe.get_xaxis().set_ticklabels([])
+                axz.get_xaxis().set_ticklabels([])
+            if k==nsta-1:
+                axn.set_title('North (m)')
+                axe.set_title('East (m)')
+                axz.set_title('Up (m)')
+                axn.legend(['Observed','Inversion'])
+                
+    
+    
+
 #########                  Supporting tools                       ##############
 
 def slip2geo(ss,ds,strike):
@@ -103,6 +262,9 @@ def slip2geo(ss,ds,strike):
     '''
     from numpy import deg2rad,sin,cos
     
+    #Normalize slips
+    ds=ds/((ds**2+ss*2)**0.5)
+    ss=ss/((ds**2+ss*2)**0.5)
     #determine contribution of ds and ss slips
     xds=ds*sin(deg2rad(strike-90))
     yds=ds*cos(deg2rad(strike-90))

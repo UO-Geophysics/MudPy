@@ -190,7 +190,7 @@ def make_synthetics(home,project_name,station_file,fault_name,model_name,integra
         
          
 #Compute GFs for the ivenrse problem            
-def inversionGFs(home,project_name,GF_list,fault_name,model_name,dt,NFFT,coord_type,green_flag,synth_flag,dk,pmin,pmax,kmax,time_epi):
+def inversionGFs(home,project_name,GF_list,fault_name,model_name,dt,NFFT,coord_type,green_flag,synth_flag,dk,pmin,pmax,kmax,time_epi,hot_start):
     '''
     This routine will read a .gflist file and compute the required GF type for each station
     '''
@@ -202,7 +202,6 @@ def inversionGFs(home,project_name,GF_list,fault_name,model_name,dt,NFFT,coord_t
     stations=genfromtxt(gf_file,usecols=0,skip_header=1,dtype='S6')
     GF=genfromtxt(gf_file,usecols=[1,2,3,4,5,6,7],skip_header=1,dtype='f8')
     #Now do one station at a time
-    hot_start=0 #Used for the forward problem, doesn't do anything here
     station_file='temp.sta'
     try:
         remove(home+project_name+'/data/station_info/'+station_file) #Cleanup
@@ -249,7 +248,7 @@ def inversionGFs(home,project_name,GF_list,fault_name,model_name,dt,NFFT,coord_t
                                 
                                                         
 def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_from_file,G_name,epicenter,
-                rupture_speeds,coord_type,bounds,regularization_type,regularization_parameter,nfaults):
+                rupture_speed,num_windows,coord_type,bounds,regularization_type,regularization_parameter,nfaults):
     '''
     Assemble G and d, determine smoothing and run the inversion
     '''
@@ -264,11 +263,12 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
     d=getdata(home,project_name,GF_list)
     #Get GFs
     G=getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epicenter,
-                rupture_speeds,coord_type)
+                rupture_speed,num_windows,coord_type)
     #Get regularization matrix
-    L,h=getL(home,project_name,fault_name,bounds,regularization_type,nfaults,rupture_speeds)
+    L,h=getL(home,project_name,fault_name,bounds,regularization_type,nfaults,num_windows)
+    #L,h=getL2(home,project_name,fault_name,regularization_type,nfaults,rupture_speeds)
     #Get data weights
-    w=get_data_weights(home,project_name,GF_list,d,rupture_speeds)
+    w=get_data_weights(home,project_name,GF_list,d)
     #Put eveG.shaperything together
     print "Preparing solver..."
     #Make matrix of weights (Speedy impementation)
@@ -280,8 +280,6 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
     x=r_[wd,h]
     nregu=len(h) #This will be used to change the amount of regularization later on
     previous_l=1.0
-    R=zeros(len(regularization_parameter))
-    Lm=zeros(len(regularization_parameter))
     for k in range(len(regularization_parameter)):
         next_l=regularization_parameter[k] #egularization for this iteration
         print 'Running inversion at regularization level '+repr(next_l)+'...'
@@ -295,7 +293,7 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
         #sol,res,rank,s=lstsq(K,x)
         sol,res=nnls(K,x)
         #Write output to file
-        write_model(home,project_name,run_name,fault_name,model_name,rupture_speeds,epicenter,sol,k)
+        write_model(home,project_name,run_name,fault_name,model_name,rupture_speed,num_windows,epicenter,sol,k)
         #Compute and save synthetics
         ds=dot(G,sol)
         write_synthetics(home,project_name,run_name,GF_list,G,sol,ds,k)
@@ -304,12 +302,7 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
         #Get moment
         Mo,Mw=get_moment(home,project_name,fault_name,model_name,sol)
         #Write log
-        write_log(home,project_name,run_name,k,rupture_speeds,next_l,L2,Lmodel,VR,AIC,Mo,Mw)
-        Lm[k]=Lmodel
-        R[k]=L2
-    plt.figure()
-    plt.loglog(R,Lm) ; plt.xlabel('Residual') ; plt.ylabel('Model Norm')
-    plt.show()
+        write_log(home,project_name,run_name,k,rupture_speed,num_windows,next_l,L2,Lmodel,VR,AIC,Mo,Mw)
     
         
 

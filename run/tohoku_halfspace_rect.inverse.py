@@ -3,7 +3,7 @@ Diego Melgar, 02/2014
 
 Parameter file for inverse problem
 Project: Tohoku
-Comment: Inversion fo Tohoku data
+Comment: Inversion of Tohoku data with 10s rise times in a halfspace. Using a rectangle instead of a triangle
 '''
 
 import runslip
@@ -13,8 +13,8 @@ from obspy.core import UTCDateTime
 ########                            GLOBALS                             ########
 
 home='/Users/dmelgarm/Research/Slip_Inv/'
-project_name='tohoku'
-run_name='gil7_multivr'
+project_name='tohoku_halfspace_rect'
+run_name='halfspace'
 ################################################################################
 
 
@@ -22,19 +22,19 @@ run_name='gil7_multivr'
 
 init=0 #Initalize project
 make_green=0 #Compute GFs
-make_synthetics=0 #Compute synthetics for a given model at given stations
-G_from_file=1 # =0 read GFs and create a new G, =1 load G from file
-invert=1  # =1 runs inversion, =0 does nothing
+make_synthetics=1 #Compute synthetics for a given model at given stations
+G_from_file=0 # =0 read GFs and create a new G, =1 load G from file
+invert=0  # =1 runs inversion, =0 does nothing
 ###############################################################################
 
 ###############            Green function parameters               #############
 coord_type=1 # =0 for cartesian, =1 for lat/lon (will use Earth flattening transform)
 hot_start=0   #Start at a certain subfault number
-model_name='gil7.mod'   #Velocity model
+model_name='halfspace.mod'   #Velocity model
 fault_name='tohoku.fault'    #Fault geometry
 station_file='tohoku.sta'    #Station distribution
-GF_list='tohoku.static.gflist' #What GFs are to be computed for each station
-G_name='gil7_static.g' #Either name of GF matrix to load or name to save GF matrix with
+GF_list='tohoku.kaldisp_small.gflist' #What GFs are to be computed for each station
+G_name='halfspace_1vr.g' #Either name of GF matrix to load or name to save GF matrix with
 # Displacement and velocity waveform parameters
 NFFT=2048 ; dt=0.25
 #fk-parameters
@@ -59,7 +59,7 @@ if init==1:
 # Run green functions          
 if make_green==1 or make_synthetics==1:
     runslip.inversionGFs(home,project_name,GF_list,fault_name,model_name,dt,NFFT,
-                        coord_type,make_green,make_synthetics,dk,pmin,pmax,kmax,time_epi)
+                        coord_type,make_green,make_synthetics,dk,pmin,pmax,kmax,time_epi,hot_start)
     
 #Run inversion
 if invert==1:

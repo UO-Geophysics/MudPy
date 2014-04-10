@@ -3,11 +3,11 @@ Diego Melgar, 03.2014
 
 Routines for solving dislocation ivnerse problems, static and dynamic.
 '''
-def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epicenter,rupture_speeds,coord_type):
+def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epicenter,rupture_speed,num_windows,coord_type):
     '''
     Either load G from file or parse gflist file and assemble it from previous computations
     '''
-    from numpy import genfromtxt,where,loadtxt,array,c_,concatenate,save,load
+    from numpy import arange,genfromtxt,where,loadtxt,array,c_,concatenate,save,load
     from os import remove
     from os.path import split
     
@@ -47,6 +47,7 @@ def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epic
         if GF[:,kgf].sum()>0:
             #Load fault file
             source=loadtxt(home+project_name+'/data/model_info/'+fault_name,ndmin=2)
+            trise=source[0,7]
             try:
                 remove(mini_station) #Cleanup  
             except:
@@ -56,9 +57,11 @@ def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epic
             if len(i)>0: #There's actually something to do
                 mini_station_file(mini_station,stations[i],GF[i,0],GF[i,1],GFfiles[i,1])
                 gftype='disp'
-                for krup in range(len(rupture_speeds)):
-                    print 'Working on rupture speed '+str(rupture_speeds[krup])+' km/s'
-                    tdelay=epi2subfault(epicenter,source,rupture_speeds[krup])
+                #Decide on delays for each time window (50% overlap)
+                trupt=arange(0,num_windows)*trise/2
+                for krup in range(num_windows):
+                    print 'Working on window '+str(krup)
+                    tdelay=epi2subfault(epicenter,source,rupture_speed,trupt[krup])
                     Gdisp_temp=makeG(home,project_name,fault_name,model_name,split(mini_station)[1],gftype,tdelay)
                     if krup==0: #First rupture speed
                         Gdisp=Gdisp_temp
@@ -85,184 +88,6 @@ def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epic
         print 'Saving to '+G_name+' this might take just a second...'
         save(G_name,G)
     return G
-    
-    
-def getdata(home,project_name,GF_list):
-    '''
-    Assemble the data vector
-    '''
-    from numpy import genfromtxt,where,array,append,r_,concatenate
-    from obspy import read
-    from forward import round_time
-    
-
-    #Read gf file and decide what needs tog et loaded
-    gf_file=home+project_name+'/data/station_info/'+GF_list
-    GF=genfromtxt(gf_file,usecols=[3,4,5,6,7],skip_header=1,dtype='f8')
-    GFfiles=genfromtxt(gf_file,usecols=[8,9,10],dtype='S')  
-    stations=genfromtxt(gf_file,usecols=0,dtype='S')  
-    #Read one column at a time
-    kgf=0 #Static field
-    dstatic=array([])
-    i=where(GF[:,kgf]==1)[0]
-    for ksta in range(len(i)):
-            dtemp=genfromtxt(GFfiles[i[ksta],kgf])
-            n=dtemp[0]
-            e=dtemp[1]
-            u=dtemp[2]
-            dstatic=append(dstatic,r_[n,e,u])
-    #Displacements
-    kgf=1
-    ddisp=array([])
-    i=where(GF[:,kgf]==1)[0]
-    for ksta in range(len(i)):
-        print 'Assembling displacement waveforms from '+stations[i[ksta]]+' into inversion.'
-        n=read(GFfiles[i[ksta],kgf]+'.n')
-        e=read(GFfiles[i[ksta],kgf]+'.e')
-        u=read(GFfiles[i[ksta],kgf]+'.u')
-        #Make sure they are rounded to a dt interval
-        dt=e[0].stats.delta
-        e[0].stats.starttime=round_time(e[0].stats.starttime,dt)
-        n[0].stats.starttime=round_time(n[0].stats.starttime,dt)
-        u[0].stats.starttime=round_time(u[0].stats.starttime,dt)
-        ddisp=append(ddisp,r_[n[0].data,e[0].data,u[0].data])
-    #Velocities
-    kgf=2
-    dvel=array([])
-    i=where(GF[:,kgf]==1)[0]
-    for ksta in range(len(i)):
-        print 'Assembling displacement waveforms from '+stations[i[ksta]]+' into inversion.'
-        n=read(GFfiles[i[ksta],kgf]+'.n')
-        e=read(GFfiles[i[ksta],kgf]+'.e')
-        u=read(GFfiles[i[ksta],kgf]+'.u')
-        #Make sure they are rounded to a dt interval
-        dt=e[0].stats.delta
-        e[0].stats.starttime=round_time(e[0].stats.starttime,dt)
-        n[0].stats.starttime=round_time(n[0].stats.starttime,dt)
-        u[0].stats.starttime=round_time(u[0].stats.starttime,dt)
-        dvel=append(dvel,r_[n[0].data,e[0].data,u[0].data])
-    #Tsunami
-    kgf=3
-    dtsun=array([])
-    #Strain
-    kgf=4
-    dstrain=array([])            
-    #Done, concatenate all and exit
-    d=concatenate([dx for dx in [dstatic,ddisp,dvel,dtsun,dstrain] if dx.size > 0])
-    return d
-    
-    
-    
-def getL(home,project_name,fault_name,bounds,regularization_type,nfaults,rupture_speeds):
-    '''
-    Make regularization matrix
-    '''
-    
-    from numpy import loadtxt,zeros
-    from scipy.linalg import block_diag
-    
-    #Load source
-    source=loadtxt(home+project_name+'/data/model_info/'+fault_name,ndmin=2)
-    N=len(source) #No. of subfaults
-    nstrike=nfaults[0]
-    ndip=nfaults[1]
-    #Initalize
-    L=zeros((2*N,2*N))
-    #Which L am I building?
-    if regularization_type.lower()=='laplace':
-        print 'Making discrete Laplace operator regularization matrix...'
-        for kfault in range(N): #Loop over faults and fill regularization matrix
-            stencil,correction=laplace_stencil(kfault,nstrike,ndip,bounds)
-            if type(stencil)!=bool: #No errors were reported
-                #Add strike slip branches of stencil
-                L[2*kfault,2*stencil]=1
-                #Add dip slip branches of stencil
-                L[2*kfault+1,2*stencil+1]=1
-                #Add strike slip central node with correction
-                correction=0
-                L[2*kfault,2*kfault]=-4+correction
-                #Add dip slip central node with correction
-                correction=0
-                L[2*kfault+1,2*kfault+1]=-4+correction
-            else:
-                return False
-        if len(rupture_speeds)==1: #Only one rupture speed
-            Lout=L 
-        else: #Multiple rupture speeds
-            Lout=L
-            for k in range(len(rupture_speeds)-1):
-                Lout=block_diag(Lout,L)
-        hout=zeros(len(Lout))
-        return Lout,hout
-    else:
-        print 'ERROR: Unknown regularization type ('+regularization_type+') requested.'
-        return False
-        
-def get_data_weights(home,project_name,GF_list,d,rupture_speeds):
-    '''
-    Assemble matrix of data weights from sigmas of observations
-    '''    
-    from numpy import genfromtxt,where,zeros,ones
-    from obspy import read
-
-    print 'Computing data weights...'
-    #Read gf file and decide what needs tog et loaded
-    gf_file=home+project_name+'/data/station_info/'+GF_list
-    GF=genfromtxt(gf_file,usecols=[3,4,5,6,7],skip_header=1,dtype='f8')
-    GFfiles=genfromtxt(gf_file,usecols=[8,9,10],dtype='S')
-    weights=genfromtxt(gf_file,usecols=range(13,28),dtype='f')
-    #Initalize
-    w=zeros(len(d))
-    kinsert=0
-    #Static weights
-    kgf=0
-    i=where(GF[:,kgf]==1)[0]
-    for ksta in range(len(i)):
-        w[kinsert]=1/weights[i[ksta],0] #North
-        w[kinsert+1]=1/weights[i[ksta],1] #East
-        w[kinsert+2]=1/weights[i[ksta],2] #Up
-        kinsert=kinsert+3
-    #Displacement waveform weights
-    kgf=1
-    i=where(GF[:,kgf]==1)[0]
-    for ksta in range(len(i)):
-        #Read waveform to determine length of insert
-        st=read(GFfiles[i[ksta],kgf]+'.n')
-        nsamples=st[0].stats.npts
-        wn=(1/weights[i[ksta],3])*ones(nsamples)
-        w[kinsert:kinsert+nsamples]=wn
-        kinsert=kinsert+nsamples
-        we=(1/weights[i[ksta],4])*ones(nsamples)
-        w[kinsert:kinsert+nsamples]=we
-        kinsert=kinsert+nsamples
-        wu=(1/weights[i[ksta],5])*ones(nsamples)
-        w[kinsert:kinsert+nsamples]=wu
-        kinsert=kinsert+nsamples
-    #velocity waveform weights
-    kgf=2
-    i=where(GF[:,kgf]==1)[0]
-    for ksta in range(len(i)):
-        #Read waveform to determine length of insert
-        st=read(GFfiles[i[ksta],kgf]+'.n')
-        nsamples=st[0].stats.npts
-        wn=(1/weights[i[ksta],6])*ones(nsamples)
-        w[kinsert:kinsert+nsamples]=wn
-        kinsert=kinsert+nsamples
-        we=(1/weights[i[ksta],7])*ones(nsamples)
-        w[kinsert:kinsert+nsamples]=we
-        kinsert=kinsert+nsamples
-        wu=(1/weights[i[ksta],8])*ones(nsamples)
-        w[kinsert:kinsert+nsamples]=wu
-        kinsert=kinsert+nsamples
-    #Tsunami
-    kgf=3
-    #Strain
-    kgf=4
-    #Make W and exit
-    return w
-
-    
-    
     
 def makeG(home,project_name,fault_name,model_name,station_file,gftype,tdelay):
     '''
@@ -386,10 +211,224 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tdelay):
             if gftype.lower()=='strain':
                 pass                                
     return G
+      
+def getdata(home,project_name,GF_list):
+    '''
+    Assemble the data vector
+    '''
+    from numpy import genfromtxt,where,array,append,r_,concatenate
+    from obspy import read
+    from forward import round_time
+    
+
+    #Read gf file and decide what needs tog et loaded
+    gf_file=home+project_name+'/data/station_info/'+GF_list
+    GF=genfromtxt(gf_file,usecols=[3,4,5,6,7],skip_header=1,dtype='f8')
+    GFfiles=genfromtxt(gf_file,usecols=[8,9,10],dtype='S')  
+    stations=genfromtxt(gf_file,usecols=0,dtype='S')  
+    #Read one column at a time
+    kgf=0 #Static field
+    dstatic=array([])
+    i=where(GF[:,kgf]==1)[0]
+    for ksta in range(len(i)):
+            dtemp=genfromtxt(GFfiles[i[ksta],kgf])
+            n=dtemp[0]
+            e=dtemp[1]
+            u=dtemp[2]
+            dstatic=append(dstatic,r_[n,e,u])
+    #Displacements
+    kgf=1
+    ddisp=array([])
+    i=where(GF[:,kgf]==1)[0]
+    for ksta in range(len(i)):
+        print 'Assembling displacement waveforms from '+stations[i[ksta]]+' into inversion.'
+        n=read(GFfiles[i[ksta],kgf]+'.n')
+        e=read(GFfiles[i[ksta],kgf]+'.e')
+        u=read(GFfiles[i[ksta],kgf]+'.u')
+        #Make sure they are rounded to a dt interval
+        dt=e[0].stats.delta
+        e[0].stats.starttime=round_time(e[0].stats.starttime,dt)
+        n[0].stats.starttime=round_time(n[0].stats.starttime,dt)
+        u[0].stats.starttime=round_time(u[0].stats.starttime,dt)
+        ddisp=append(ddisp,r_[n[0].data,e[0].data,u[0].data])
+    #Velocities
+    kgf=2
+    dvel=array([])
+    i=where(GF[:,kgf]==1)[0]
+    for ksta in range(len(i)):
+        print 'Assembling displacement waveforms from '+stations[i[ksta]]+' into inversion.'
+        n=read(GFfiles[i[ksta],kgf]+'.n')
+        e=read(GFfiles[i[ksta],kgf]+'.e')
+        u=read(GFfiles[i[ksta],kgf]+'.u')
+        #Make sure they are rounded to a dt interval
+        dt=e[0].stats.delta
+        e[0].stats.starttime=round_time(e[0].stats.starttime,dt)
+        n[0].stats.starttime=round_time(n[0].stats.starttime,dt)
+        u[0].stats.starttime=round_time(u[0].stats.starttime,dt)
+        dvel=append(dvel,r_[n[0].data,e[0].data,u[0].data])
+    #Tsunami
+    kgf=3
+    dtsun=array([])
+    #Strain
+    kgf=4
+    dstrain=array([])            
+    #Done, concatenate all and exit
+    d=concatenate([dx for dx in [dstatic,ddisp,dvel,dtsun,dstrain] if dx.size > 0])
+    return d
+    
+    
+def getL(home,project_name,fault_name,bounds,regularization_type,nfaults,num_windows):
+    '''
+    Make regularization matrix
+    '''
+    
+    from numpy import loadtxt,zeros
+    from scipy.linalg import block_diag
+    
+    #Load source
+    source=loadtxt(home+project_name+'/data/model_info/'+fault_name,ndmin=2)
+    N=len(source) #No. of subfaults
+    nstrike=nfaults[0]
+    ndip=nfaults[1]
+    #Initalize
+    L=zeros((2*N,2*N))
+    #Which L am I building?
+    if regularization_type.lower()=='laplace':
+        print 'Making discrete Laplace operator regularization matrix...'
+        for kfault in range(N): #Loop over faults and fill regularization matrix
+            stencil,correction=laplace_stencil(kfault,nstrike,ndip,bounds)
+            if type(stencil)!=bool: #No errors were reported
+                #Add strike slip branches of stencil
+                L[2*kfault,2*stencil]=1
+                #Add dip slip branches of stencil
+                L[2*kfault+1,2*stencil+1]=1
+                #Add strike slip central node with correction
+                correction=0
+                L[2*kfault,2*kfault]=-4+correction
+                #Add dip slip central node with correction
+                correction=0
+                L[2*kfault+1,2*kfault+1]=-4+correction
+            else:
+                return False
+        if num_windows==1: #Only one rupture speed
+            Lout=L 
+        else: #Multiple rupture speeds
+            Lout=L
+            for k in range(num_windows-1):
+                Lout=block_diag(Lout,L)
+        hout=zeros(len(Lout))
+        return Lout,hout
+    else:
+        print 'ERROR: Unknown regularization type ('+regularization_type+') requested.'
+        return False
+        
+    
+def getL2(home,project_name,fault_name,regularization_type,nfaults,num_windows):
+    '''
+    Make regularization matrix
+    '''
+    
+    from numpy import loadtxt,zeros
+    from scipy.linalg import block_diag
+    
+    #Load source
+    source=loadtxt(home+project_name+'/data/model_info/'+fault_name,ndmin=2)
+    N=len(source) #No. of subfaults
+    nstrike=nfaults[0]
+    ndip=nfaults[1]
+    #Initalize
+    L=zeros((2*N,2*N))
+    #Which L am I building?
+    if regularization_type.lower()=='laplace':
+        print 'Making discrete Laplace operator regularization matrix...'
+        for kfault in range(N): #Loop over faults and fill regularization matrix
+            stencil,values=laplace_stencil(kfault,nstrike,ndip)
+            #Add strike slip branches of stencil
+            L[2*kfault,2*stencil]=values
+            #Add dip slip branches of stencil
+            L[2*kfault+1,2*stencil+1]=values
+        if num_windows==1: #Only one rupture speed
+            Lout=L 
+        else: #Multiple rupture speeds
+            Lout=L
+            for k in range(num_windows-1):
+                Lout=block_diag(Lout,L)
+        hout=zeros(len(Lout))
+        return Lout,hout
+    else:
+        print 'ERROR: Unknown regularization type ('+regularization_type+') requested.'
+        return False
+        
+
+
+def get_data_weights(home,project_name,GF_list,d):
+    '''
+    Assemble matrix of data weights from sigmas of observations
+    '''    
+    from numpy import genfromtxt,where,zeros,ones
+    from obspy import read
+
+    print 'Computing data weights...'
+    #Read gf file and decide what needs tog et loaded
+    gf_file=home+project_name+'/data/station_info/'+GF_list
+    GF=genfromtxt(gf_file,usecols=[3,4,5,6,7],skip_header=1,dtype='f8')
+    GFfiles=genfromtxt(gf_file,usecols=[8,9,10],dtype='S')
+    weights=genfromtxt(gf_file,usecols=range(13,28),dtype='f')
+    #Initalize
+    w=zeros(len(d))
+    kinsert=0
+    #Static weights
+    kgf=0
+    i=where(GF[:,kgf]==1)[0]
+    for ksta in range(len(i)):
+        w[kinsert]=1/weights[i[ksta],0] #North
+        w[kinsert+1]=1/weights[i[ksta],1] #East
+        w[kinsert+2]=1/weights[i[ksta],2] #Up
+        kinsert=kinsert+3
+    #Displacement waveform weights
+    kgf=1
+    i=where(GF[:,kgf]==1)[0]
+    for ksta in range(len(i)):
+        #Read waveform to determine length of insert
+        st=read(GFfiles[i[ksta],kgf]+'.n')
+        nsamples=st[0].stats.npts
+        wn=(1/weights[i[ksta],3])*ones(nsamples)
+        w[kinsert:kinsert+nsamples]=wn
+        kinsert=kinsert+nsamples
+        we=(1/weights[i[ksta],4])*ones(nsamples)
+        w[kinsert:kinsert+nsamples]=we
+        kinsert=kinsert+nsamples
+        wu=(1/weights[i[ksta],5])*ones(nsamples)
+        w[kinsert:kinsert+nsamples]=wu
+        kinsert=kinsert+nsamples
+    #velocity waveform weights
+    kgf=2
+    i=where(GF[:,kgf]==1)[0]
+    for ksta in range(len(i)):
+        #Read waveform to determine length of insert
+        st=read(GFfiles[i[ksta],kgf]+'.n')
+        nsamples=st[0].stats.npts
+        wn=(1/weights[i[ksta],6])*ones(nsamples)
+        w[kinsert:kinsert+nsamples]=wn
+        kinsert=kinsert+nsamples
+        we=(1/weights[i[ksta],7])*ones(nsamples)
+        w[kinsert:kinsert+nsamples]=we
+        kinsert=kinsert+nsamples
+        wu=(1/weights[i[ksta],8])*ones(nsamples)
+        w[kinsert:kinsert+nsamples]=wu
+        kinsert=kinsert+nsamples
+    #Tsunami
+    kgf=3
+    #Strain
+    kgf=4
+    #Make W and exit
+    return w
+
+    
     
 #=================        Write inversion results      =========================
     
-def write_model(home,project_name,run_name,fault_name,model_name,rupture_speeds,epicenter,sol,num):
+def write_model(home,project_name,run_name,fault_name,model_name,rupture_speed,num_windows,epicenter,sol,num):
     '''
     Write model results
     '''
@@ -400,34 +439,36 @@ def write_model(home,project_name,run_name,fault_name,model_name,rupture_speeds,
    
     #Open model file
     f=genfromtxt(home+project_name+'/data/model_info/'+fault_name)
+    trise=f[0,7]
     #Open structure file
     mod=loadtxt(home+project_name+'/structure/'+model_name,ndmin=2)
     #Get slip quantities
-    iss=2*arange(len(f)*len(rupture_speeds))
-    ids=2*arange(len(f)*len(rupture_speeds))+1
+    iss=2*arange(len(f)*num_windows)
+    ids=2*arange(len(f)*num_windows)+1
     ss=sol[iss]
     ds=sol[ids]
     #Get rigidities
     mu=zeros(len(ds))
     trup=zeros(len(ds))
     j=0
-    for krup in range(len(rupture_speeds)):
+    for krup in range(num_windows):
         for k in range(len(f)):
             mu[j]=get_mu(mod,f[k,3])
             j+=1
     #Get rupture start times
-    for krup in range(len(rupture_speeds)):
-        trup[krup*(len(ds)/len(rupture_speeds)):(krup+1)*(len(ds)/len(rupture_speeds))]=epi2subfault(epicenter,f,rupture_speeds[krup])
+    trupt=arange(0,num_windows)*trise/2 #Time delays fore ach sub-window
+    for krup in range(num_windows):
+        trup[krup*(len(ds)/num_windows):(krup+1)*(len(ds)/num_windows)]=epi2subfault(epicenter,f,rupture_speed,trupt[krup])
     #Prepare for output
     out1=f[:,0:8]
     out2=f[:,8:10]
-    for k in range(len(rupture_speeds)-1):
+    for k in range(num_windows-1):
         out1=r_[out1,f[:,0:8]]
         out2=r_[out2,f[:,8:10]]
     out=c_[out1,ss,ds,out2,trup,mu]
     outdir=home+project_name+'/output/inverse_models/models/'+run_name+'.'+rjust(str(num),4,'0')+'.inv'
     #CHANGE this to rupture definition as #No  x            y        z(km)      str     dip      rake       rise    dura     slip    ss_len  ds_len rupt_time
-    fmtout='%6i\t%.4f\t%.4f\t%6.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.4e\t%.4e%8.1f\t%8.1f\t%8.4f\t%.4e'
+    fmtout='%6i\t%.4f\t%.4f\t%8.4f\t%.2f\t%.2f\t%.2f\t%.2f\t%12.4e\t%12.4e%10.1f\t%10.1f\t%8.4f\t%.4e'
     print 'Writing model results to file '+outdir
     savetxt(outdir,out,fmtout,header='No,lon,lat,z(km),strike,dip,rise,dura,ss-slip(m),ds-slip(m),ss_len(m),ds_len(m),rupt_time(s),rigidity(Pa)')
         
@@ -496,7 +537,7 @@ def write_synthetics(home,project_name,run_name,GF_list,G,sol,ds,num):
             u.write(home+project_name+'/output/inverse_models/waveforms/'+run_name+'.'+num+'.'+sta+'.vel.u.sac',format='SAC')
             
         
-def write_log(home,project_name,run_name,k,rupture_speeds,next_l,L2,Lm,VR,AIC,Mo,Mw):
+def write_log(home,project_name,run_name,k,rupture_speed,num_windows,next_l,L2,Lm,VR,AIC,Mo,Mw):
     '''
     Write ivnersion sumamry to file
     '''
@@ -508,18 +549,78 @@ def write_log(home,project_name,run_name,k,rupture_speeds,next_l,L2,Lm,VR,AIC,Mo
     f.write('Run name: '+run_name+'\n')
     f.write('Run number: '+num+'\n')
     f.write('lambda = '+repr(next_l)+'\n')
-    f.write('rupture velocities allowed (km/s) = '+str(rupture_speeds)+'\n')
+    f.write('Mean rupture velocity (km/s) = '+str(rupture_speed)+'\n')
+    f.write('Number of rupture windows = '+str(num_windows)+'\n')
     f.write('L2 = '+repr(L2)+'\n')
     f.write('VR = '+repr(VR)+'\n')
     f.write('Lm = '+repr(Lm)+'\n')
     f.write('AIC = '+repr(AIC)+'\n')
-    f.write('M0 = '+repr(Mo)+' N-m\n')
+    f.write('M0 (N-m) = '+repr(Mo)+'\n')
     f.write('Mw = '+repr(Mw)+'\n')
     f.close()
     
     
     
 #==================              Random Tools            ======================
+
+def laplace_stencil2(ifault,nstrike,ndip):
+    '''
+    Find the index of the subfaults that make the laplacian stencil of fault number ifault
+    
+    Usage:
+        stencil=laplace_stencil(ifault,nstrike,ndip)
+        
+    IN:
+        ifault: subfault index number
+        nstrike: number of along-strike fault segments
+        ndip: number of along dip subfaults
+    OUT:
+        stencil: indices of the subfaults that contribute to the laplacian
+    '''
+    
+    from numpy import array
+    
+    row=ifault/nstrike #Row number corresponding to this subfault
+    column=ifault-(nstrike*row)
+    if nstrike<4 or ndip<4:
+        print "ERROR: The fault model is too small for Laplacian regualrization. You need a minimum of 4 rows and 4 columns in the model."
+        return False,False
+    if row==0 and column==0: #Top right corner
+        stencil=array([ifault,ifault+1,ifault+2,ifault+3,ifault+nstrike,ifault+2*nstrike,ifault+3*nstrike])
+        values=array([4,-5,4,-1,-5,4,-1])
+        return stencil,values
+    if row==0 and column==(nstrike-1): #Top left corner
+        stencil=array([ifault,ifault-1,ifault-2,ifault-3,ifault+nstrike,ifault+2*nstrike,ifault+3*nstrike])
+        values=array([4,-5,4,-1,-5,4,-1])
+        return stencil,values
+    if row==(ndip-1) and column==0: #Bottom right corner
+        stencil=array([ifault,ifault+1,ifault+2,ifault+3,ifault-nstrike,ifault-2*nstrike,ifault-3*nstrike])
+        values=array([4,-5,4,-1,-5,4,-1])
+        return stencil,values
+    if row==(ndip-1) and column==(nstrike-1): #Bottom left corner
+        stencil=array([ifault,ifault-1,ifault-2,ifault-3,ifault-nstrike,ifault-2*nstrike,ifault-3*nstrike])
+        values=array([4,-5,4,-1,-5,4,-1])
+        return stencil,values
+    if row==0: #Top edge, NOT the corner
+        stencil=array([ifault,ifault+1,ifault-1,ifault+nstrike,ifault+2*nstrike,ifault+3*nstrike])
+        values=array([0,1,1,-5,4,-1])
+        return stencil,values
+    if row==(ndip-1): #Bottom edge, NOT the corner
+        stencil=array([ifault,ifault-1,ifault+1,ifault-nstrike,ifault-2*nstrike,ifault-3*nstrike])
+        values=array([0,1,1,-5,4,-1])
+        return stencil,values
+    if column==0: #Right edge, NOT the corner
+        stencil=array([ifault,ifault-nstrike,ifault+nstrike,ifault+1,ifault+2,ifault+3])
+        values=array([0,1,1,-5,4,-1])
+        return stencil,values
+    if column==(nstrike-1): #left edge, NOT the corner
+        stencil=array([ifault,ifault-nstrike,ifault+nstrike,ifault-1,ifault-2,ifault-3])
+        values=array([0,1,1,-5,4,-1])
+        return stencil,values
+    else: #Somewhere in the middle
+        stencil=array([ifault,ifault-1,ifault+1,ifault-nstrike,ifault+nstrike])
+        values=array([-4,1,1,1,1])
+        return stencil,values
 
 def laplace_stencil(ifault,nstrike,ndip,bounds):
     '''
@@ -630,8 +731,6 @@ def laplace_stencil(ifault,nstrike,ndip,bounds):
         correction=0
         return stencil,correction
 
-
-
 def prep_synth(syn,st):
     '''
     Extend syntetic to start time of data and cut it to end time of data, make sure
@@ -698,11 +797,11 @@ def mini_station_file(outfile,sta,lon,lat,gffiles):
 
     
             
-def epi2subfault(epicenter,source,vr):
+def epi2subfault(epicenter,source,vr,tr):
     '''
     Compute time delays from epicetner to subfault based on a give rupture speed
     
-    Coordinates in lat/lon,depth(km). vr in km/s, returns tdelay in s
+    Coordinates in lat/lon,depth(km). vr in km/s, tr is delay to apply to rupture speed, returns tdelay in s
     '''
     from numpy import tile,sin,cos,deg2rad,sqrt
     #Compute distances from epi to subfault by converting to cartesian
@@ -717,6 +816,8 @@ def epi2subfault(epicenter,source,vr):
     d=sqrt((xepi-x)**2+(yepi-y)**2+(zepi-z)**2)
     #Compute time associated with a given rupture speed
     tdelay=d/vr
+    #Apply delay due to window
+    tdelay=tdelay+tr
     return tdelay   
     
     
@@ -751,18 +852,21 @@ def get_moment(home,project_name,fault_name,model_name,sol):
     #Open structure file
     mod=loadtxt(home+project_name+'/structure/'+model_name,ndmin=2)
     #Get slip quantities
-    iss=2*arange(len(f))
-    ids=2*arange(len(f))+1
+    iss=2*arange(len(sol)/2)
+    ids=2*arange(len(sol)/2)+1
     ss=sol[iss]
     ds=sol[ids]
     #Get total slip
     slip=(ss**2+ds**2)**0.5
-    #Get subfault areas in emters
-    A=f[:,8]*f[:,9]
-    #Get rigidities
+    #Get rigidities and areas
     mu=zeros(len(ds))
-    for k in range(len(f)):
-        mu[k]=get_mu(mod,f[k,3])
+    A=zeros(len(ds))
+    i=0
+    for krupt in range((len(sol)/len(f))/2):
+        for k in range(len(f)):
+            mu[i]=get_mu(mod,f[k,3])
+            A[i]=f[k,8]*f[k,9]
+            i+=1
     #Compute moments
     M0=mu*A*slip
     #Total up and copute magnitude

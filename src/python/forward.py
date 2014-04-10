@@ -49,7 +49,7 @@ def waveforms(home,project_name,rupture_name,station_file,model_name,integrate,h
         
     #Loop over stations
     for ksta in range(hot_start,len(staname)):
-        print 'Working on station '+staname[ksta]+' ('+str(ksta)+'/'+str(len(staname))+')'
+        print 'Working on station '+staname[ksta]+' ('+str(ksta+1)+'/'+str(len(staname))+')'
         #Initalize output
         n=Stream()
         e=Stream()

@@ -12,7 +12,7 @@ from obspy.core import UTCDateTime
 ########                            GLOBALS                             ########
 
 home='/Users/dmelgarm/Research/Slip_Inv/'
-project_name='tohoku'
+project_name='tohoku_slow'
 ################################################################################
 
 
@@ -20,7 +20,7 @@ project_name='tohoku'
 
 init=0 #Initalize project
 make_green=0 #Compute GFs
-make_synthetics=1 #Compute synthetics for a given model at given stations
+make_synthetics=0 #Compute synthetics for a given model at given stations
 solve=1  # =1 solves forward problem or runs inverse calculation, =0 does nothing
 ###############################################################################
 

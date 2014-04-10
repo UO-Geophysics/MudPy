@@ -166,53 +166,69 @@ def run_syn(home,project_name,source,station_file,green_path,model_name,integrat
                 #Strike slip
                 r=read(staname[k]+".subfault"+num+'.SS.disp.r')
                 t=read(staname[k]+".subfault"+num+'.SS.disp.t')
+                z=read(staname[k]+".subfault"+num+'.SS.disp.z')
                 ntemp,etemp=rt2ne(r[0].data,t[0].data,az[k])
                 #Scale to m and overwrite with rotated waveforms
                 n=r.copy()
                 n[0].data=ntemp/100
                 e=t.copy()
                 e[0].data=etemp/100
+                z[0].data=z[0].data/100
                 n=origin_time(n,time_epi,tb)
                 e=origin_time(e,time_epi,tb)
+                z=origin_time(z,time_epi,tb)
                 n.write(staname[k]+".subfault"+num+'.SS.disp.n',format='SAC')
                 e.write(staname[k]+".subfault"+num+'.SS.disp.e',format='SAC')
+                z.write(staname[k]+".subfault"+num+'.SS.disp.z',format='SAC')
                 #Dip Slip
                 r=read(staname[k]+".subfault"+num+'.DS.disp.r')
                 t=read(staname[k]+".subfault"+num+'.DS.disp.t')
+                z=read(staname[k]+".subfault"+num+'.DS.disp.z')
                 ntemp,etemp=rt2ne(r[0].data,t[0].data,az[k])
                 n=r.copy()
                 n[0].data=ntemp/100
                 e=t.copy()
                 e[0].data=etemp/100
+                z[0].data=z[0].data/100
                 n=origin_time(n,time_epi,tb)
                 e=origin_time(e,time_epi,tb)
+                z=origin_time(z,time_epi,tb)
                 n.write(staname[k]+".subfault"+num+'.DS.disp.n',format='SAC')
                 e.write(staname[k]+".subfault"+num+'.DS.disp.e',format='SAC')
+                z.write(staname[k]+".subfault"+num+'.DS.disp.z',format='SAC')
             else: #Waveforms are velocity, as before, rotate from RT-Z to NE+Z and scale to m/s
                 #Strike slip
                 r=read(staname[k]+".subfault"+num+'.SS.vel.r')
                 t=read(staname[k]+".subfault"+num+'.SS.vel.t')
+                z=read(staname[k]+".subfault"+num+'.SS.vel.z')
                 ntemp,etemp=rt2ne(r[0].data,t[0].data,az[k])
                 n=r.copy()
                 n[0].data=ntemp/100
                 e=t.copy()
                 e[0].data=etemp/100
+                z[0].data=z[0].data/100
                 n=origin_time(n,time_epi,tb)
                 e=origin_time(e,time_epi,tb)
+                z=origin_time(z,time_epi,tb)
                 n.write(staname[k]+".subfault"+num+'.SS.vel.n',format='SAC')
                 e.write(staname[k]+".subfault"+num+'.SS.vel.e',format='SAC')
+                z.write(staname[k]+".subfault"+num+'.SS.vel.z',format='SAC')
                 #Dip Slip
                 r=read(staname[k]+".subfault"+num+'.DS.vel.r')
                 t=read(staname[k]+".subfault"+num+'.DS.vel.t')
+                z=read(staname[k]+".subfault"+num+'.DS.vel.z')
                 ntemp,etemp=rt2ne(r[0].data,t[0].data,az[k])
                 n=r.copy()
                 n[0].data=ntemp/100
                 e=t.copy()
                 e[0].data=etemp/100
+                z[0].data=z[0].data/100
                 n=origin_time(n,time_epi,tb)
                 e=origin_time(e,time_epi,tb)
+                z=origin_time(z,time_epi,tb)
                 n.write(staname[k]+".subfault"+num+'.DS.vel.n',format='SAC')
                 e.write(staname[k]+".subfault"+num+'.DS.vel.e',format='SAC')
+                z.write(staname[k]+".subfault"+num+'.DS.vel.z',format='SAC')
         else: #Compute static synthetics
             os.chdir(green_path+'static/') #Move to appropriate dir
             diststr='%.1f' % d[k] #Need current distance in string form for external call
