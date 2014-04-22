@@ -29,6 +29,7 @@ def waveforms(home,project_name,rupture_name,station_file,model_name,integrate,h
     from string import rjust
     import datetime
     
+    print 'Solving for dynamic problem'
     #Output where?
     outpath=home+project_name+'/output/forward_models/'
     logpath=home+project_name+'/logs/'
@@ -74,24 +75,33 @@ def waveforms(home,project_name,rupture_name,station_file,model_name,integrate,h
             eds=read(syn_path+sta+'.'+nfault+'.DS.'+vord+'.e')
             nds=read(syn_path+sta+'.'+nfault+'.DS.'+vord+'.n')
             zds=read(syn_path+sta+'.'+nfault+'.DS.'+vord+'.z')
-            #Time shift them according to subfault rupture time
+            #Decide if resampling is required
+            if resample < (1/ess[0].stats.delta): #Downsample
+                ess[0].resample(resample)
+                nss[0].resample(resample)
+                zss[0].resample(resample)
+                eds[0].resample(resample)
+                nds[0].resample(resample)
+                zds[0].resample(resample)
+            elif resample > (1/ess[0].stats.delta): #Upsample
+                upsample(ess,1./resample)
+                upsample(nss,1./resample)
+                upsample(zss,1./resample)
+                upsample(eds,1./resample)
+                upsample(nds,1./resample)
+                upsample(zds,1./resample)
             dt=ess[0].stats.delta
-            ess[0].resample(resample)
+            #Time shift them according to subfault rupture time
             ess=tshift(ess,rtime)
             ess[0].stats.starttime=round_time(ess[0].stats.starttime,dt)
-            nss[0].resample(resample)
             nss=tshift(nss,rtime)
             nss[0].stats.starttime=round_time(nss[0].stats.starttime,dt)
-            zss[0].resample(resample)
             zss=tshift(zss,rtime)
             zss[0].stats.starttime=round_time(zss[0].stats.starttime,dt)
-            eds[0].resample(resample)
             eds=tshift(eds,rtime)
             eds[0].stats.starttime=round_time(eds[0].stats.starttime,dt)
-            nds[0].resample(resample)
             nds=tshift(nds,rtime)
             nds[0].stats.starttime=round_time(nds[0].stats.starttime,dt)
-            zds[0].resample(resample)
             zds=tshift(zds,rtime)
             zds[0].stats.starttime=round_time(zds[0].stats.starttime,dt)
             if allclose(ss_slip+ds_slip,0)==False:  #Only add things that matter
@@ -139,9 +149,10 @@ def coseismics(home,project_name,rupture_name,station_file):
     OUT:
         Nothing
     '''
-    from numpy import loadtxt,genfromtxt,array,savetxt
+    from numpy import loadtxt,genfromtxt,array,savetxt,unique,where
     from string import rjust
     
+    print 'Solving for static problem'
     #Output where?
     outpath=home+project_name+'/output/forward_models/'
     #load source
@@ -149,6 +160,8 @@ def coseismics(home,project_name,rupture_name,station_file):
     #Load stations
     station_file=home+project_name+'/data/station_info/'+station_file
     staname=genfromtxt(station_file,dtype="S6",usecols=0)
+    #Get unique sources
+    source_id=unique(source[:,0])
     #Loop over stations
     for ksta in range(len(staname)):
         #Initalize output
@@ -156,13 +169,16 @@ def coseismics(home,project_name,rupture_name,station_file):
         e=array([0])
         z=array([0])
         sta=staname[ksta]
-        print 'Working on station '+sta
+        print 'Working on station '+staname[ksta]+' ('+str(ksta+1)+'/'+str(len(staname))+')'
         #Loop over sources
-        for k in range(source.shape[0]):
+        for k in range(len(source_id)):
+            print k
             #Get subfault parameters
-            nfault='subfault'+rjust(str(int(source[k,0])),4,'0')
-            ss_slip=source[k,8]
-            ds_slip=source[k,9]
+            nfault='subfault'+rjust(str(int(source_id[k])),4,'0')
+            ifault=where(source[:,0]==source_id[k])[0]
+            ss_slip=source[ifault,8].sum()
+            ds_slip=source[ifault,9].sum()
+            print 'ds_slip='+str(ds_slip)
             #Where's the data
             syn_path=home+project_name+'/GFs/static/'
             #Get synthetics
@@ -174,14 +190,19 @@ def coseismics(home,project_name,rupture_name,station_file):
             nds=coseis_ds[0]
             eds=coseis_ds[1]
             zds=coseis_ds[2]
+            print 'zds='+str(zds)
             #get rake contribution and moment multiplier
             etotal=ds_slip*eds+ss_slip*ess
             ntotal=ds_slip*nds+ss_slip*nss
             ztotal=ds_slip*zds+ss_slip*zss
+            print 'ztotal='+str(ztotal)
             #Add to previous subfault's results
             e=e+etotal
             n=n+ntotal
             z=z+ztotal
+            print 'n='+str(n)
+            print 'e='+str(e)
+            print 'z='+str(z)
         #Save results
         savetxt(outpath+sta+'.static.neu',(n,e,z))
             
@@ -313,3 +334,30 @@ def round_time(t1,delta):
     td=timedelta(microseconds=adjustment)
     t1=t1+td
     return t1
+
+def upsample(st,delta):
+    '''
+    Go from a low sampling rate to a high sampling rate
+    
+    IN:
+        st - stream object
+        delta - sampling rate requested in seconds
+    
+    OUT:
+        st - modified stream object
+    '''
+    
+    from scipy.interpolate import interp1d
+    from numpy import arange
+    
+    t=st[0].times()
+    y=st[0].data
+    #Make interpolant
+    f=interp1d(t,y)
+    ti=arange(t[0],t[-1],delta)
+    #Interpoalte and reassign tos tream object
+    yi=f(ti)
+    st[0].data=yi
+    st[0].stats.delta=delta
+
+    

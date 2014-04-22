@@ -14,7 +14,7 @@ from obspy.core import UTCDateTime
 
 home='/Users/dmelgarm/Research/Slip_Inv/'
 project_name='tohoku_slow'
-run_name='gil7_vr3.0_10win'
+run_name='gil7_vr2.4_1win'
 ################################################################################
 
 
@@ -34,7 +34,7 @@ model_name='gil7.mod'   #Velocity model
 fault_name='tohoku.fault'    #Fault geometry
 station_file='tohoku.sta'    #Station distribution
 GF_list='tohoku.kaldisp_small.gflist' #What GFs are to be computed for each station
-G_name='gil7_vr3.0_10win.g' #Either name of GF matrix to load or name to save GF matrix with
+G_name='gil7_vr2.4_1win.g' #Either name of GF matrix to load or name to save GF matrix with
 # Displacement and velocity waveform parameters
 NFFT=2048 ; dt=0.25
 #fk-parameters
@@ -44,8 +44,8 @@ dk=0.1 ; pmin=0 ; pmax=1 ; kmax=20
 #############               Inversion Parameters               ################# 
 epicenter=np.array([142.435,38.305,26.3305])    #lon,lat,depth(positive in km)
 time_epi=UTCDateTime('2011-03-11T05:46:23')
-rupture_speed=3.0 #In km/s
-num_windows=10
+rupture_speed=4.4 #In km/s
+num_windows=1
 regularization_parameter=np.logspace(-1,-1,num=1)
 regularization_type='laplace'
 top='free' ; bottom='locked' ; left='locked' ; right='locked' ; bounds=(top,bottom,left,right) #'locked' or 'free'

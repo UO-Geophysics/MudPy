@@ -109,7 +109,7 @@ def make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,stat
     chdir(model_path)
     #Load source model for station-event distance computations
     source=loadtxt(fault_file,ndmin=2)
-    for k in range(hot_start,source.shape[0]):
+    for k in range(source.shape[0]):
         #Run comptuation for 1 subfault
         log=green.run_green(source[k,:],station_file,model_name,dt,NFFT,static,coord_type,dk,pmin,pmax,kmax)
         #Write log

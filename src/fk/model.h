@@ -19,7 +19,7 @@ c		xi--- mu/bulk_modulus.
 c		si(3,6) ---- source coefs. of n=0,1,2.
       integer mb,stype,src,rcv,nlay,ndis,nt,updn
 c max. # of layers and receivers and time length
-      parameter(nlay=2000, ndis=2000, nt=8192)
+      parameter(nlay=200, ndis=2500, nt=8192)
       real d(nlay),rho(nlay),mu(nlay),xi(nlay),si(3,6),epsilon
       complex ka(nlay),kb(nlay)
       PARAMETER (epsilon=0.0001)
