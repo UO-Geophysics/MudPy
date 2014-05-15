@@ -3,7 +3,8 @@ Diego Melgar, 03.2014
 
 Routines for solving dislocation ivnerse problems, static and dynamic.
 '''
-def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epicenter,rupture_speed,num_windows,coord_type):
+def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epicenter,rupture_speed,
+        num_windows,coord_type,decimate):
     '''
     Either load G from file or parse gflist file and assemble it from previous computations
     '''
@@ -21,7 +22,7 @@ def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epic
         print 'Assembling G from synthetic computations...'
         #Read in GFlist and decide what to compute
         gf_file=home+project_name+'/data/station_info/'+GF_list
-        mini_station=home+project_name+'/data/station_info/temp.sta'
+        mini_station=home+project_name+'/data/station_info/tempG.sta'
         stations=genfromtxt(gf_file,usecols=0,skip_header=1,dtype='S6')
         GF=genfromtxt(gf_file,usecols=[1,2,3,4,5,6,7],skip_header=1,dtype='f8')
         GFfiles=genfromtxt(gf_file,usecols=[8,9,10],dtype='S')
@@ -39,7 +40,7 @@ def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epic
                 mini_station_file(mini_station,stations[i],GF[i,0],GF[i,1],GFfiles[i,0])
                 gftype='static'
                 tdelay=0
-                Gstatic=makeG(home,project_name,fault_name,model_name,split(mini_station)[1],gftype,tdelay)
+                Gstatic=makeG(home,project_name,fault_name,model_name,split(mini_station)[1],gftype,tdelay,decimate)
                 remove(mini_station) #Cleanup  
         #Dispalcement waveform GFs
         kgf=3
@@ -62,7 +63,7 @@ def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epic
                 for krup in range(num_windows):
                     print 'Working on window '+str(krup)
                     tdelay=epi2subfault(epicenter,source,rupture_speed,trupt[krup])
-                    Gdisp_temp=makeG(home,project_name,fault_name,model_name,split(mini_station)[1],gftype,tdelay)
+                    Gdisp_temp=makeG(home,project_name,fault_name,model_name,split(mini_station)[1],gftype,tdelay,decimate)
                     if krup==0: #First rupture speed
                         Gdisp=Gdisp_temp
                     else:
@@ -89,7 +90,7 @@ def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epic
         save(G_name,G)
     return G
     
-def makeG(home,project_name,fault_name,model_name,station_file,gftype,tdelay):
+def makeG(home,project_name,fault_name,model_name,station_file,gftype,tdelay,decimate):
     '''
     
     IN:
@@ -106,6 +107,7 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tdelay):
     from string import rjust
     from obspy import read
     from forward import tshift,round_time
+    from green import stdecimate
     
     #Load fault model
     source=loadtxt(home+project_name+'/data/model_info/'+fault_name,ndmin=2)
@@ -119,6 +121,7 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tdelay):
     #Loop over stations
     for ksta in range(Nsta):
             if gftype.lower()=='static': #Make matrix of static GFs
+                print 'Assembling static GFs for station '+staname[ksta]
                 #Initalize output variable
                 Gtemp=zeros([3,Nfaults*2])
                 #Where's the data
@@ -126,8 +129,6 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tdelay):
                 #Loop over subfaults
                 for kfault in range(Nfaults):
                     nfault='subfault'+rjust(str(int(source[kfault,0])),4,'0')
-                    print 'Assembling static GFs for station '+staname[ksta]+' '+nfault
-                    ###### These need to be changed to neu, enu is stupid Diego ########
                     coseis_ss=loadtxt(syn_path+staname[ksta]+'.'+nfault+'.SS.static.neu')
                     nss=coseis_ss[0]
                     ess=coseis_ss[1]
@@ -150,6 +151,7 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tdelay):
                     vord='disp'
                 else:
                     vord='vel'
+                print 'Assembling '+vord+' waveform GFs for station '+staname[ksta]
                 #Loop over subfaults
                 for kfault in range(Nfaults):
                     #Get subfault GF directory
@@ -157,7 +159,6 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tdelay):
                     nfault='subfault'+rjust(str(int(source[kfault,0])),4,'0')
                     strdepth='%.4f' % source[kfault,3]
                     syn_path=home+project_name+'/GFs/dynamic/'+model_name+'_'+strdepth+'.'+nsub+'/'
-                    print 'Assembling '+vord+' waveform GFs for station '+staname[ksta]+' '+nfault
                     #Get synthetics
                     ess=read(syn_path+staname[ksta]+'.'+nfault+'.SS.'+vord+'.e')
                     nss=read(syn_path+staname[ksta]+'.'+nfault+'.SS.'+vord+'.n')
@@ -169,30 +170,42 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tdelay):
                     edata=read(datafiles[ksta]+'.e')
                     ndata=read(datafiles[ksta]+'.n')
                     udata=read(datafiles[ksta]+'.u')
-                    #Time shift them according to subfault rupture time, zero pad, round to dt interval
+                    #Time shift them according to subfault rupture time, zero pad, round to dt interval,decimate
                     #and extend to maximum time
-                    dt=ess[0].stats.delta
                     ess=tshift(ess,tdelay[kfault])
+                    nss=tshift(nss,tdelay[kfault])
+                    zss=tshift(zss,tdelay[kfault])
+                    eds=tshift(eds,tdelay[kfault])
+                    nds=tshift(nds,tdelay[kfault])
+                    zds=tshift(zds,tdelay[kfault])
+                    if decimate>0:
+                        ess=stdecimate(ess,decimate)
+                        nss=stdecimate(nss,decimate)
+                        zss=stdecimate(zss,decimate)    
+                        eds=stdecimate(eds,decimate)
+                        nds=stdecimate(nds,decimate)
+                        zds=stdecimate(zds,decimate)
+                        edata=stdecimate(edata,decimate)
+                        ndata=stdecimate(ndata,decimate)
+                        udata=stdecimate(udata,decimate) 
+                    #Now time align stuff (This is where we might have some timing issues, check later, consider re-sampling to data time vector)                                       
+                    dt=ess[0].stats.delta
                     ess[0].stats.starttime=round_time(ess[0].stats.starttime,dt)
                     ess=prep_synth(ess,edata)
-                    nss=tshift(nss,tdelay[kfault])
                     nss[0].stats.starttime=round_time(nss[0].stats.starttime,dt)
                     nss=prep_synth(nss,ndata)
-                    zss=tshift(zss,tdelay[kfault])
                     zss[0].stats.starttime=round_time(zss[0].stats.starttime,dt)
                     zss=prep_synth(zss,udata)
-                    eds=tshift(eds,tdelay[kfault])
                     eds[0].stats.starttime=round_time(eds[0].stats.starttime,dt)
                     eds=prep_synth(eds,edata)
                     nds=tshift(nds,tdelay[kfault])
                     nds[0].stats.starttime=round_time(nds[0].stats.starttime,dt)
                     nds=prep_synth(nds,ndata)
-                    zds=tshift(zds,tdelay[kfault])
                     zds[0].stats.starttime=round_time(zds[0].stats.starttime,dt)
                     zds=prep_synth(zds,udata)
                     #Insert into Gtemp then append to G
                     if kfault==0 and ksta==0: #It's the first subfault and station, initalize G
-                        G=gdims(datafiles,Nfaults) #Survey all stations to decide size of G
+                        G=gdims(datafiles,Nfaults,decimate) #Survey all stations to decide size of G
                     if kfault==0: #Initalize Gtemp
                         npts=edata[0].stats.npts
                         Gtemp=zeros([3*npts,Nfaults*2])      
@@ -212,16 +225,17 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tdelay):
                 pass                                
     return G
       
-def getdata(home,project_name,GF_list):
+def getdata(home,project_name,GF_list,decimate):
     '''
     Assemble the data vector
     '''
     from numpy import genfromtxt,where,array,append,r_,concatenate
     from obspy import read
     from forward import round_time
+    from green import stdecimate
     
 
-    #Read gf file and decide what needs tog et loaded
+    #Read gf file and decide what needs to get loaded
     gf_file=home+project_name+'/data/station_info/'+GF_list
     GF=genfromtxt(gf_file,usecols=[3,4,5,6,7],skip_header=1,dtype='f8')
     GFfiles=genfromtxt(gf_file,usecols=[8,9,10],dtype='S')  
@@ -245,6 +259,11 @@ def getdata(home,project_name,GF_list):
         n=read(GFfiles[i[ksta],kgf]+'.n')
         e=read(GFfiles[i[ksta],kgf]+'.e')
         u=read(GFfiles[i[ksta],kgf]+'.u')
+        #Decimate
+        if decimate>0:
+            n=stdecimate(n,decimate)
+            e=stdecimate(e,decimate)
+            u=stdecimate(u,decimate)
         #Make sure they are rounded to a dt interval
         dt=e[0].stats.delta
         e[0].stats.starttime=round_time(e[0].stats.starttime,dt)
@@ -260,6 +279,11 @@ def getdata(home,project_name,GF_list):
         n=read(GFfiles[i[ksta],kgf]+'.n')
         e=read(GFfiles[i[ksta],kgf]+'.e')
         u=read(GFfiles[i[ksta],kgf]+'.u')
+        #Decimate
+        if decimate>0:
+            n=stdecimate(n,decimate)
+            e=stdecimate(e,decimate)
+            u=stdecimate(u,decimate)
         #Make sure they are rounded to a dt interval
         dt=e[0].stats.delta
         e[0].stats.starttime=round_time(e[0].stats.starttime,dt)
@@ -342,7 +366,7 @@ def getL2(home,project_name,fault_name,regularization_type,nfaults,num_windows):
     if regularization_type.lower()=='laplace':
         print 'Making discrete Laplace operator regularization matrix...'
         for kfault in range(N): #Loop over faults and fill regularization matrix
-            stencil,values=laplace_stencil(kfault,nstrike,ndip)
+            stencil,values=laplace_stencil2(kfault,nstrike,ndip)
             #Add strike slip branches of stencil
             L[2*kfault,2*stencil]=values
             #Add dip slip branches of stencil
@@ -361,7 +385,7 @@ def getL2(home,project_name,fault_name,regularization_type,nfaults,num_windows):
         
 
 
-def get_data_weights(home,project_name,GF_list,d):
+def get_data_weights(home,project_name,GF_list,d,decimate):
     '''
     Assemble matrix of data weights from sigmas of observations
     '''    
@@ -391,7 +415,7 @@ def get_data_weights(home,project_name,GF_list,d):
     for ksta in range(len(i)):
         #Read waveform to determine length of insert
         st=read(GFfiles[i[ksta],kgf]+'.n')
-        nsamples=st[0].stats.npts
+        nsamples=st[0].stats.npts/decimate
         wn=(1/weights[i[ksta],3])*ones(nsamples)
         w[kinsert:kinsert+nsamples]=wn
         kinsert=kinsert+nsamples
@@ -407,7 +431,7 @@ def get_data_weights(home,project_name,GF_list,d):
     for ksta in range(len(i)):
         #Read waveform to determine length of insert
         st=read(GFfiles[i[ksta],kgf]+'.n')
-        nsamples=st[0].stats.npts
+        nsamples=st[0].stats.npts/decimate
         wn=(1/weights[i[ksta],6])*ones(nsamples)
         w[kinsert:kinsert+nsamples]=wn
         kinsert=kinsert+nsamples
@@ -760,7 +784,7 @@ def prep_synth(syn,st):
         return 'Error in GF length'
     return syn
         
-def gdims(datafiles,nfaults):
+def gdims(datafiles,nfaults,decimate):
     '''
     Survey the data files to determine what dimension G will be and return a matrix of zeros 
     with the required dimensions
@@ -775,7 +799,7 @@ def gdims(datafiles,nfaults):
         n=read(datafiles[k]+'.n')
         u=read(datafiles[k]+'.u')
         if e[0].stats.npts==n[0].stats.npts==u[0].stats.npts:
-            npts+=e[0].stats.npts
+            npts+=e[0].stats.npts/decimate
         else:
             print str(e[0].stats.npts)+' pts in east component'
             print str(n[0].stats.npts)+' pts in north component'

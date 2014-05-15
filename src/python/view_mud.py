@@ -200,7 +200,9 @@ def plot_synthetics(gflist,datapath,datasuffix,synthpath,synthsuffix,vord):
     from obspy import read
     from numpy import genfromtxt,where
     import matplotlib.pyplot as plt
+    import matplotlib
     
+    matplotlib.rcParams.update({'font.size': 16})
     #Decide what to plot
     sta=genfromtxt(gflist,usecols=0,dtype='S')
     gf=genfromtxt(gflist,usecols=[4,5],dtype='f')

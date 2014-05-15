@@ -117,7 +117,7 @@ def run_syn(home,project_name,source,station_file,green_path,model_name,integrat
     staname=genfromtxt(station_file,dtype="S6",usecols=0)
     if staname.shape==(): #Single staiton file
         staname=array([staname])
-    #Compute distances and azimuths
+    #Compute distances and azmuths
     d,az=src2sta(station_file,source,coord_type)
     #Get moment corresponding to 1 meter of slip on subfault
     mu=get_mu(structure,zs)
@@ -389,3 +389,34 @@ def rt2ne(r,t,azimuth):
     e=r*sin(az)+t*cos(az)
     return n,e
     
+def stdecimate(st,factor):
+    '''
+    Decimate stream by a constant factor, i.e. factor=4 will go from 4hz to 1Hz data
+    '''
+    from scipy.signal import resample
+    from numpy import zeros,ones,r_
+    
+    pad=10000
+    y=st[0].data
+    head=zeros(pad)
+    tail=ones(pad)*y[-1]
+    y=r_[head,y,tail]
+    y=resample(y,len(y)/factor)
+    y=y[pad/factor:-pad/factor]
+    stout=st.copy()
+    stout[0].data=y
+    stout[0].stats.delta=stout[0].stats.delta*factor
+    return stout
+    
+def rtrim(st,T):
+    '''
+    Keep only the first T seconds of a waveform
+    '''
+    
+    from datetime import timedelta
+    
+    stout=st.copy()
+    start=st[0].stats.starttime
+    T=timedelta(seconds=T)
+    stout[0].trim(starttime=start,endtime=start+T)
+    return stout

@@ -248,11 +248,12 @@ def inversionGFs(home,project_name,GF_list,fault_name,model_name,dt,NFFT,coord_t
                                 
                                                         
 def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_from_file,G_name,epicenter,
-                rupture_speed,num_windows,coord_type,bounds,regularization_type,regularization_parameter,nfaults):
+                rupture_speed,num_windows,coord_type,bounds,regularization_type,regularization_parameter,
+                nfaults,decimate):
     '''
     Assemble G and d, determine smoothing and run the inversion
     '''
-    from inverse import getG,getdata,getL,get_data_weights,get_stats,get_moment
+    from inverse import getG,getdata,getL,getL2,get_data_weights,get_stats,get_moment
     from inverse import write_model,write_synthetics,write_log
     from numpy import r_,tile,empty,zeros,dot
     from numpy.linalg import lstsq
@@ -260,15 +261,15 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
     from matplotlib import pyplot as plt
     
     #Get data vector
-    d=getdata(home,project_name,GF_list)
+    d=getdata(home,project_name,GF_list,decimate)
     #Get GFs
     G=getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epicenter,
-                rupture_speed,num_windows,coord_type)
+                rupture_speed,num_windows,coord_type,decimate)
     #Get regularization matrix
-    L,h=getL(home,project_name,fault_name,bounds,regularization_type,nfaults,num_windows)
-    #L,h=getL2(home,project_name,fault_name,regularization_type,nfaults,rupture_speeds)
+    #L,h=getL(home,project_name,fault_name,bounds,regularization_type,nfaults,num_windows)
+    L,h=getL2(home,project_name,fault_name,regularization_type,nfaults,rupture_speeds)
     #Get data weights
-    w=get_data_weights(home,project_name,GF_list,d)
+    w=get_data_weights(home,project_name,GF_list,d,decimate)
     #Put eveG.shaperything together
     print "Preparing solver..."
     #Make matrix of weights (Speedy impementation)
