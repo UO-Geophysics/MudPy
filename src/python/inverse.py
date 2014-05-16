@@ -301,7 +301,7 @@ def getdata(home,project_name,GF_list,decimate):
     return d
     
     
-def getL(home,project_name,fault_name,bounds,regularization_type,nfaults,num_windows):
+def getLs(home,project_name,fault_name,bounds,nfaults,num_windows):
     '''
     Make regularization matrix
     '''
@@ -317,73 +317,63 @@ def getL(home,project_name,fault_name,bounds,regularization_type,nfaults,num_win
     #Initalize
     L=zeros((2*N,2*N))
     #Which L am I building?
-    if regularization_type.lower()=='laplace':
-        print 'Making discrete Laplace operator regularization matrix...'
-        for kfault in range(N): #Loop over faults and fill regularization matrix
-            stencil,correction=laplace_stencil(kfault,nstrike,ndip,bounds)
-            if type(stencil)!=bool: #No errors were reported
-                #Add strike slip branches of stencil
-                L[2*kfault,2*stencil]=1
-                #Add dip slip branches of stencil
-                L[2*kfault+1,2*stencil+1]=1
-                #Add strike slip central node with correction
-                correction=0
-                L[2*kfault,2*kfault]=-4+correction
-                #Add dip slip central node with correction
-                correction=0
-                L[2*kfault+1,2*kfault+1]=-4+correction
-            else:
-                return False
-        if num_windows==1: #Only one rupture speed
-            Lout=L 
-        else: #Multiple rupture speeds
-            Lout=L
-            for k in range(num_windows-1):
-                Lout=block_diag(Lout,L)
-        hout=zeros(len(Lout))
-        return Lout,hout
-    else:
-        print 'ERROR: Unknown regularization type ('+regularization_type+') requested.'
-        return False
-        
-    
-def getL2(home,project_name,fault_name,regularization_type,nfaults,num_windows):
-    '''
-    Make regularization matrix
-    '''
-    
-    from numpy import loadtxt,zeros
-    from scipy.linalg import block_diag
-    
-    #Load source
-    source=loadtxt(home+project_name+'/data/model_info/'+fault_name,ndmin=2)
-    N=len(source) #No. of subfaults
-    nstrike=nfaults[0]
-    ndip=nfaults[1]
-    #Initalize
-    L=zeros((2*N,2*N))
-    #Which L am I building?
-    if regularization_type.lower()=='laplace':
-        print 'Making discrete Laplace operator regularization matrix...'
-        for kfault in range(N): #Loop over faults and fill regularization matrix
-            stencil,values=laplace_stencil2(kfault,nstrike,ndip)
+    print 'Making discrete Laplace operator regularization matrix...'
+    for kfault in range(N): #Loop over faults and fill regularization matrix
+        stencil,correction=laplace_stencil(kfault,nstrike,ndip,bounds)
+        if type(stencil)!=bool: #No errors were reported
             #Add strike slip branches of stencil
-            L[2*kfault,2*stencil]=values
+            L[2*kfault,2*stencil]=1
             #Add dip slip branches of stencil
-            L[2*kfault+1,2*stencil+1]=values
-        if num_windows==1: #Only one rupture speed
-            Lout=L 
-        else: #Multiple rupture speeds
-            Lout=L
-            for k in range(num_windows-1):
-                Lout=block_diag(Lout,L)
-        hout=zeros(len(Lout))
-        return Lout,hout
-    else:
-        print 'ERROR: Unknown regularization type ('+regularization_type+') requested.'
-        return False
-        
+            L[2*kfault+1,2*stencil+1]=1
+            #Add strike slip central node with correction
+            correction=0
+            L[2*kfault,2*kfault]=-4+correction
+            #Add dip slip central node with correction
+            correction=0
+            L[2*kfault+1,2*kfault+1]=-4+correction
+    if num_windows==1: #Only one rupture speed
+        Lout=L 
+    else: #Multiple rupture speeds
+        Lout=L
+        for k in range(num_windows-1):
+            Lout=block_diag(Lout,L)
+    return Lout
 
+        
+    
+def getLs2(home,project_name,fault_name,nfaults,num_windows):
+    '''
+    Make regularization matrix
+    '''
+    
+    from numpy import loadtxt,zeros
+    from scipy.linalg import block_diag
+    
+    #Load source
+    source=loadtxt(home+project_name+'/data/model_info/'+fault_name,ndmin=2)
+    N=len(source) #No. of subfaults
+    nstrike=nfaults[0]
+    ndip=nfaults[1]
+    #Initalize
+    L=zeros((2*N,2*N))
+    #Which L am I building?
+    print 'Making discrete Laplace operator regularization matrix...'
+    for kfault in range(N): #Loop over faults and fill regularization matrix
+        stencil,values=laplace_stencil2(kfault,nstrike,ndip)
+        #Add strike slip branches of stencil
+        L[2*kfault,2*stencil]=values
+        #Add dip slip branches of stencil
+        L[2*kfault+1,2*stencil+1]=values
+    if num_windows==1: #Only one rupture speed
+        Lout=L 
+    else: #Multiple rupture speeds
+        Lout=L
+        for k in range(num_windows-1):
+            Lout=block_diag(Lout,L)
+    return Lout
+        
+def getLt():
+    return 0
 
 def get_data_weights(home,project_name,GF_list,d,decimate):
     '''
@@ -561,7 +551,7 @@ def write_synthetics(home,project_name,run_name,GF_list,G,sol,ds,num):
             u.write(home+project_name+'/output/inverse_models/waveforms/'+run_name+'.'+num+'.'+sta+'.vel.u.sac',format='SAC')
             
         
-def write_log(home,project_name,run_name,k,rupture_speed,num_windows,next_l,L2,Lm,VR,AIC,Mo,Mw):
+def write_log(home,project_name,run_name,k,rupture_speed,num_windows,lambda_spatial,lambda_temporal,L2,Lm,VR,AIC,Mo,Mw):
     '''
     Write ivnersion sumamry to file
     '''
@@ -572,14 +562,15 @@ def write_log(home,project_name,run_name,k,rupture_speed,num_windows,next_l,L2,L
     f.write('Project: '+project_name+'\n')
     f.write('Run name: '+run_name+'\n')
     f.write('Run number: '+num+'\n')
-    f.write('lambda = '+repr(next_l)+'\n')
+    f.write('lambda_spatial = '+repr(lambda_spatial)+'\n')
+    f.write('lambda_temporal = '+repr(lambda_temporal)+'\n')
     f.write('Mean rupture velocity (km/s) = '+str(rupture_speed)+'\n')
     f.write('Number of rupture windows = '+str(num_windows)+'\n')
     f.write('L2 = '+repr(L2)+'\n')
-    f.write('VR = '+repr(VR)+'\n')
+    f.write('VR(%) = '+repr(VR)+'\n')
     f.write('Lm = '+repr(Lm)+'\n')
-    f.write('AIC = '+repr(AIC)+'\n')
-    f.write('M0 (N-m) = '+repr(Mo)+'\n')
+    f.write('ABIC = '+repr(AIC)+'\n')
+    f.write('M0(N-m) = '+repr(Mo)+'\n')
     f.write('Mw = '+repr(Mw)+'\n')
     f.close()
     
@@ -856,12 +847,57 @@ def get_stats(WG,sol,wd):
     wds=WG.dot(sol)
     L2=norm(wds-wd)
     Lm=norm(sol)
+    return L2,Lm
+    
+def get_VR(G,sol,d):
+    '''
+    Compute Variance reduction to the data
+    '''
+    
+    from numpy.linalg import norm
+    
+    ds=G.dot(sol)
     #Variance reduction
-    res=((wd-wds)**2)**0.5
-    dnorm=(wd**2)**0.5 #Yes i know this is dumb, shush
+    res=((d-ds)**2)**0.5
+    dnorm=(d**2)**0.5 #Yes i know this is dumb, shush
     VR=(1-(res.sum()/dnorm.sum()))*100
-    AIC=0
-    return L2,Lm,VR,AIC
+    return VR
+    
+def get_ABIC(G,sol,d,lambda_s,lambda_t,Ls,Lt,Ls_rank,Lt_rank):
+    '''
+    Compute Akaike's Bayesian information criterion, for details see Ide et al. (1996)
+    in BSSA, specifically equation 33.
+    '''
+    
+    from numpy import log
+    from numpy.linalg  import norm,slogdet
+    
+    #Data points
+    N=d.size
+    #Model parameters
+    M=sol.size
+    #Likelihood exponent
+    s=norm(d-G.dot(sol))**2+(lambda_s**2)*norm(Ls.dot(sol))**2+(lambda_t**2)*norm(Lt.dot(sol))**2
+    #Total determinant
+    sq,q=slogdet(G.transpose().dot(G)+(lambda_s**2)*Ls.transpose().dot(Ls)+(lambda_t**2)*Lt.transpose().dot(Lt))
+    #Off you go, compute it
+    a1=(N+Ls_rank+Lt_rank-M)*log(s)
+    #Check for log(0) errors
+    if lambda_s>0:
+        a2=Ls_rank*log(lambda_s**2)
+    else:
+        a2=0
+    if lambda_t>0:
+        a3=Lt_rank*log(lambda_t**2)
+    else:
+        a3=0
+    #Add 'em up
+    ABIC=a1-a2-a3+q
+    return ABIC
+    
+    
+    
+    return 0
     
     
 def get_moment(home,project_name,fault_name,model_name,sol):

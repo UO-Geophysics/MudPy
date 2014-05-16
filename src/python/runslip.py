@@ -248,62 +248,78 @@ def inversionGFs(home,project_name,GF_list,fault_name,model_name,dt,NFFT,coord_t
                                 
                                                         
 def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_from_file,G_name,epicenter,
-                rupture_speed,num_windows,coord_type,bounds,regularization_type,regularization_parameter,
-                nfaults,decimate):
+                rupture_speed,num_windows,coord_type,bounds,reg_spatial,reg_temporal,nfaults,
+                decimate,solver):
     '''
     Assemble G and d, determine smoothing and run the inversion
     '''
-    from inverse import getG,getdata,getL,getL2,get_data_weights,get_stats,get_moment
-    from inverse import write_model,write_synthetics,write_log
+    import inverse as inv
     from numpy import r_,tile,empty,zeros,dot
-    from numpy.linalg import lstsq
+    from numpy.linalg import lstsq,matrix_rank
     from scipy.optimize import nnls
     from matplotlib import pyplot as plt
     
     #Get data vector
-    d=getdata(home,project_name,GF_list,decimate)
+    d=inv.getdata(home,project_name,GF_list,decimate)
     #Get GFs
-    G=getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epicenter,
+    G=inv.getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epicenter,
                 rupture_speed,num_windows,coord_type,decimate)
-    #Get regularization matrix
-    #L,h=getL(home,project_name,fault_name,bounds,regularization_type,nfaults,num_windows)
-    L,h=getL2(home,project_name,fault_name,regularization_type,nfaults,rupture_speeds)
+    #Define inversion quantities
+    K=G.transpose().dot(G)
+    x=G.transpose().dot(d)
+    #Get regularization matrices (set to 0 matrix if not needed)
+    if type(reg_spatial)!=bool:
+        Ls=inv.getLs(home,project_name,fault_name,bounds,nfaults,num_windows)
+    else:
+        Ls=zeros(K.shape)
+        lambda_spatial=0
+    if type(reg_temporal)!=bool:
+        Lt=inv.getLt()
+    else:
+        Lt=zeros(K.shape)
+        lambda_temporal=0
+    #Get ranks for ABIC computation
+    Ls_rank=matrix_rank(Ls.transpose().dot(Ls))
+    Lt_rank=matrix_rank(Lt.transpose().dot(Lt))
     #Get data weights
-    w=get_data_weights(home,project_name,GF_list,d,decimate)
-    #Put eveG.shaperything together
-    print "Preparing solver..."
-    #Make matrix of weights (Speedy impementation)
-    W=empty(G.shape)
-    W=tile(w,(G.shape[1],1)).T
-    WG=W*G
-    K=r_[WG,L]
-    wd=w*d
-    x=r_[wd,h]
-    nregu=len(h) #This will be used to change the amount of regularization later on
-    previous_l=1.0
-    for k in range(len(regularization_parameter)):
-        next_l=regularization_parameter[k] #egularization for this iteration
-        print 'Running inversion at regularization level '+repr(next_l)+'...'
-        #Rescale K
-        K[-nregu:,:]=K[-nregu:]*(1/previous_l)
-        #Apply new regularization
-        K[-nregu:,:]=K[-nregu:]*next_l
-        #Update
-        previous_l=next_l
-        #Run inversion
-        #sol,res,rank,s=lstsq(K,x)
-        sol,res=nnls(K,x)
+    #w=get_data_weights(home,project_name,GF_list,d,decimate)
+    ##Put eveG.shaperything together
+    #print "Preparing solver..."
+    ##Make matrix of weights (Speedy impementation)
+    #W=empty(G.shape)
+    #W=tile(w,(G.shape[1],1)).T
+    #WG=W*G
+    #K=r_[WG,L]
+    #wd=w*d
+    #x=r_[wd,h]
+    LsLs=Ls.transpose().dot(Ls)
+    LtLt=Lt.transpose().dot(Lt)
+    for k in range(len(reg_spatial)):
+        
+        #INSERTS START
+        lambda_spatial=reg_spatial[k]
+        print 'Running inversion at regularization levels: ls ='+repr(lambda_spatial)+' , lt = '+repr(lambda_temporal)
+        Kinv=K+(lambda_spatial**2)*LsLs+(lambda_temporal**2)*LtLt
+        if solver.lower()=='lstsq':
+            sol,res,rank,s=lstsq(Kinv,x)
+        elif solver.lower()=='nnls':
+            sol,res=nnls(K,x)
+        else:
+            print 'ERROR: Unrecognized solver \''+solver+'\''
         #Write output to file
-        write_model(home,project_name,run_name,fault_name,model_name,rupture_speed,num_windows,epicenter,sol,k)
+        inv.write_model(home,project_name,run_name,fault_name,model_name,rupture_speed,num_windows,epicenter,sol,k)
         #Compute and save synthetics
         ds=dot(G,sol)
-        write_synthetics(home,project_name,run_name,GF_list,G,sol,ds,k)
+        inv.write_synthetics(home,project_name,run_name,GF_list,G,sol,ds,k)
         #Get stats
-        L2,Lmodel,VR,AIC=get_stats(WG,sol,wd)
+        L2,Lmodel=inv.get_stats(Kinv,sol,x)
+        VR=inv.get_VR(G,sol,d)
+        ABIC=inv.get_ABIC(G,sol,d,lambda_spatial,lambda_temporal,Ls,Lt,Ls_rank,Lt_rank)
+        print ABIC
         #Get moment
-        Mo,Mw=get_moment(home,project_name,fault_name,model_name,sol)
+        Mo,Mw=inv.get_moment(home,project_name,fault_name,model_name,sol)
         #Write log
-        write_log(home,project_name,run_name,k,rupture_speed,num_windows,next_l,L2,Lmodel,VR,AIC,Mo,Mw)
+        inv.write_log(home,project_name,run_name,k,rupture_speed,num_windows,lambda_spatial,lambda_temporal,L2,Lmodel,VR,ABIC,Mo,Mw)
     
         
 

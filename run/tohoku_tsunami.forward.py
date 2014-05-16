@@ -26,7 +26,7 @@ solve=0  # =1 solves forward problem or runs inverse calculation, =0 does nothin
 
 ###############            Green function parameters               #############
 coord_type=1 #(=0 for cartesian, =1 for lat/lon (will use Earth flattening transform)
-hot_start=0  #Start at a certain subfault number
+hot_start=129  #Start at a certain subfault number
 static=0  #=1 computes static GFs only, =0 computes the complete waveform
 model_name='fnet_cmt.mod'   #Velocity model
 rupture_name='tohoku_dense_2split.rupt'   #Rupture model, not needed for inversion

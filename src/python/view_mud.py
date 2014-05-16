@@ -253,7 +253,45 @@ def plot_synthetics(gflist,datapath,datasuffix,synthpath,synthsuffix,vord):
                 axz.set_title('Up (m)')
                 axn.legend(['Observed','Inversion'])
                 
+
+def plotABIC(home,run_name):
+    '''
+    plot values of ABIC vs smoothing parameter for model selection
+    '''
+    from glob import glob
+    from numpy import zeros,argmin
+    import matplotlib.pyplot as pl
     
+    #Text rendering
+    pl.rc('font',family='serif')
+    #Get list of log files
+    outdir=home+'output/inverse_models/models/'
+    plotdir=home+'/plots/'
+    logs=glob(outdir+'*'+run_name+'*.log')
+    ABIC=zeros(len(logs))
+    ls=zeros(len(logs))
+    for k in range(len(logs)):
+        with open(logs[k]) as f:
+            for line in f:
+                if 'ABIC' in line:
+                    ABIC[k]=float(line.split('=')[1])
+                if 'lambda_spatial' homein line:
+                    ls[k]=float(line.split('=')[1])
+    #Get the minimum
+    imin=argmin(ABIC)
+    #Plot the thing
+    pl.figure()
+    pl.semilogx(ls,ABIC,'k',linewidth=2)
+    pl.grid(which='both')
+    pl.semilogx(ls[imin],ABIC[imin],marker='*',color='r',markersize=14)
+    pl.xlabel(r'$\lambda$',fontsize=14)
+    pl.ylabel('ABIC',fontsize=14)
+    pl.annotate(r'$\lambda$'+'='+str(ls[imin]),xy=(ls[imin],ABIC[imin]),xytext=(ls[imin],0.98*ABIC[imin]))
+    pl.title('Run Name: '+run_name)
+    pl.savefig(plotdir+run_name+'.ABIC.png')
+    print 'ABIC is minimized al lambda = '+repr(ls[imin])
+    pl.show()
+        
     
 
 #########                  Supporting tools                       ##############
@@ -265,8 +303,8 @@ def slip2geo(ss,ds,strike):
     from numpy import deg2rad,sin,cos
     
     #Normalize slips
-    ds=ds/((ds**2+ss*2)**0.5)
-    ss=ss/((ds**2+ss*2)**0.5)
+    ds=ds/((ds**2+ss**2)**0.5)
+    ss=ss/((ds**2+ss**2)**0.5)
     #determine contribution of ds and ss slips
     xds=ds*sin(deg2rad(strike-90))
     yds=ds*cos(deg2rad(strike-90))
