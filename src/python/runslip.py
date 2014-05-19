@@ -146,7 +146,8 @@ def make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,stat
 
 
 #Now make synthetics for source/station pairs
-def make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,hot_start,coord_type,time_epi):
+def make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,beta,
+                    hot_start,coord_type,time_epi):
     '''
     This routine will take the impulse response (GFs) and pass it into the routine that will
     convovle them with the source time function according to each subfaults strike and dip.
@@ -182,7 +183,8 @@ def make_synthetics(home,project_name,station_file,fault_name,model_name,integra
     #Now compute synthetics please, one sub fault at a time
     for k in range(hot_start,source.shape[0]):
         subfault=rjust(str(k+1),4,'0')
-        log=green.run_syn(home,project_name,source[k,:],station_file,green_path,model_name,integrate,static,subfault,coord_type,time_epi)
+        log=green.run_syn(home,project_name,source[k,:],station_file,green_path,model_name,integrate,static,
+                subfault,coord_type,time_epi,beta)
         f=open(logpath+'make_synth.'+now+'.log','a')
         f.write(log)
         f.close()
@@ -190,12 +192,14 @@ def make_synthetics(home,project_name,station_file,fault_name,model_name,integra
         
          
 #Compute GFs for the ivenrse problem            
-def inversionGFs(home,project_name,GF_list,fault_name,model_name,dt,NFFT,coord_type,green_flag,synth_flag,dk,pmin,pmax,kmax,time_epi,hot_start):
+def inversionGFs(home,project_name,GF_list,fault_name,model_name,dt,NFFT,coord_type,
+                green_flag,synth_flag,dk,pmin,pmax,kmax,beta,time_epi,hot_start):
     '''
     This routine will read a .gflist file and compute the required GF type for each station
     '''
     from numpy import genfromtxt
     from os import remove
+    from gc import collect
     
     #Read in GFlist and decide what to compute
     gf_file=home+project_name+'/data/station_info/'+GF_list
@@ -207,7 +211,7 @@ def inversionGFs(home,project_name,GF_list,fault_name,model_name,dt,NFFT,coord_t
         remove(home+project_name+'/data/station_info/'+station_file) #Cleanup
     except:
         pass
-    for k in range(len(stations)):
+    for k in range(hot_start,len(stations)):
         #Make dummy station file
         out=stations[k]+'\t'+repr(GF[k,0])+'\t'+repr(GF[k,1])
         f=open(home+project_name+'/data/station_info/'+station_file,'w')
@@ -225,39 +229,39 @@ def inversionGFs(home,project_name,GF_list,fault_name,model_name,dt,NFFT,coord_t
                 pass
             if GF[k,6]==1: #strain (pending)
                 pass
+            collect()
         if synth_flag==1:
             #Decide which synthetics are required
             if GF[k,2]==1: #Static offset
                 integrate=0
                 static=1
-                make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,hot_start,coord_type,time_epi)
+                make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,beta,hot_start,coord_type,time_epi)
             if GF[k,3]==1: #dispalcement waveform
                 integrate=1
                 static=0
-                make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,hot_start,coord_type,time_epi)
+                make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,beta,hot_start,coord_type,time_epi)
             if GF[k,4]==1: #velocity waveform
                 integrate=0
                 static=0
-                make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,hot_start,coord_type,time_epi)
+                make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,beta,hot_start,coord_type,time_epi)
             if GF[k,5]==1: #tsunami waveform
                 pass
             if GF[k,6]==1: #strain offsets
                 pass
+            
     remove(home+project_name+'/data/station_info/'+station_file) #Cleanup
                     
                                 
                                                         
 def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_from_file,G_name,epicenter,
-                rupture_speed,num_windows,coord_type,bounds,reg_spatial,reg_temporal,nfaults,
-                decimate,solver):
+                rupture_speed,num_windows,coord_type,reg_spatial,reg_temporal,nfaults,beta,decimate,solver):
     '''
     Assemble G and d, determine smoothing and run the inversion
     '''
     import inverse as inv
-    from numpy import r_,tile,empty,zeros,dot
+    from numpy import zeros,dot
     from numpy.linalg import lstsq,matrix_rank
     from scipy.optimize import nnls
-    from matplotlib import pyplot as plt
     
     #Get data vector
     d=inv.getdata(home,project_name,GF_list,decimate)
@@ -269,7 +273,7 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
     x=G.transpose().dot(d)
     #Get regularization matrices (set to 0 matrix if not needed)
     if type(reg_spatial)!=bool:
-        Ls=inv.getLs(home,project_name,fault_name,bounds,nfaults,num_windows)
+        Ls=inv.getLs(home,project_name,fault_name,nfaults,num_windows)
     else:
         Ls=zeros(K.shape)
         lambda_spatial=0
@@ -303,24 +307,26 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
         if solver.lower()=='lstsq':
             sol,res,rank,s=lstsq(Kinv,x)
         elif solver.lower()=='nnls':
-            sol,res=nnls(K,x)
+            sol,res=nnls(Kinv,x)
         else:
             print 'ERROR: Unrecognized solver \''+solver+'\''
-        #Write output to file
-        inv.write_model(home,project_name,run_name,fault_name,model_name,rupture_speed,num_windows,epicenter,sol,k)
-        #Compute and save synthetics
+        #Compute synthetics
         ds=dot(G,sol)
-        inv.write_synthetics(home,project_name,run_name,GF_list,G,sol,ds,k)
         #Get stats
         L2,Lmodel=inv.get_stats(Kinv,sol,x)
         VR=inv.get_VR(G,sol,d)
         ABIC=inv.get_ABIC(G,sol,d,lambda_spatial,lambda_temporal,Ls,Lt,Ls_rank,Lt_rank)
-        print ABIC
         #Get moment
         Mo,Mw=inv.get_moment(home,project_name,fault_name,model_name,sol)
+        #If a rotational offset was applied then reverse it for output to file
+        #if beta !=0:
+        #    sol=inv.rot2ds(sol,beta)
         #Write log
-        inv.write_log(home,project_name,run_name,k,rupture_speed,num_windows,lambda_spatial,lambda_temporal,L2,Lmodel,VR,ABIC,Mo,Mw)
-    
+        inv.write_log(home,project_name,run_name,k,rupture_speed,num_windows,lambda_spatial,lambda_temporal,beta,
+                L2,Lmodel,VR,ABIC,Mo,Mw,model_name,fault_name,G_name,GF_list)
+        #Write output to file
+        inv.write_synthetics(home,project_name,run_name,GF_list,G,sol,ds,k)
+        inv.write_model(home,project_name,run_name,fault_name,model_name,rupture_speed,num_windows,epicenter,sol,k)
         
 
         

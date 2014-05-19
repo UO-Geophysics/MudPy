@@ -103,7 +103,7 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tdelay,dec
     OUT:
         Nothing
     '''
-    from numpy import genfromtxt,loadtxt,zeros,r_
+    from numpy import genfromtxt,loadtxt,zeros,r_,array
     from string import rjust
     from obspy import read
     from forward import tshift,round_time
@@ -137,6 +137,16 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tdelay,dec
                     nds=coseis_ds[0]
                     eds=coseis_ds[1]
                     zds=coseis_ds[2]
+                    ##Apply rotational offset
+                    #rot=ds2rot(array([nss,nds]),beta)
+                    #nss=rot[0]
+                    #nds=rot[1]
+                    #rot=ds2rot(array([ess,eds]),beta)
+                    #ess=rot[0]
+                    #eds=rot[1]
+                    #rot=ds2rot(array([zss,zds]),beta)
+                    #zss=rot[0]
+                    #zds=rot[1]
                     #Place into G matrix
                     Gtemp[0,2*kfault]=nss   ; Gtemp[0,2*kfault+1]=nds    #North
                     Gtemp[1,2*kfault]=ess ; Gtemp[1,2*kfault+1]=eds  #East
@@ -301,7 +311,7 @@ def getdata(home,project_name,GF_list,decimate):
     return d
     
     
-def getLs(home,project_name,fault_name,bounds,nfaults,num_windows):
+def getLs(home,project_name,fault_name,nfaults,num_windows):
     '''
     Make regularization matrix
     '''
@@ -319,18 +329,16 @@ def getLs(home,project_name,fault_name,bounds,nfaults,num_windows):
     #Which L am I building?
     print 'Making discrete Laplace operator regularization matrix...'
     for kfault in range(N): #Loop over faults and fill regularization matrix
-        stencil,correction=laplace_stencil(kfault,nstrike,ndip,bounds)
+        stencil=laplace_stencil(kfault,nstrike,ndip)
         if type(stencil)!=bool: #No errors were reported
             #Add strike slip branches of stencil
             L[2*kfault,2*stencil]=1
             #Add dip slip branches of stencil
             L[2*kfault+1,2*stencil+1]=1
             #Add strike slip central node with correction
-            correction=0
-            L[2*kfault,2*kfault]=-4+correction
+            L[2*kfault,2*kfault]=-4
             #Add dip slip central node with correction
-            correction=0
-            L[2*kfault+1,2*kfault+1]=-4+correction
+            L[2*kfault+1,2*kfault+1]=-4
     if num_windows==1: #Only one rupture speed
         Lout=L 
     else: #Multiple rupture speeds
@@ -551,7 +559,8 @@ def write_synthetics(home,project_name,run_name,GF_list,G,sol,ds,num):
             u.write(home+project_name+'/output/inverse_models/waveforms/'+run_name+'.'+num+'.'+sta+'.vel.u.sac',format='SAC')
             
         
-def write_log(home,project_name,run_name,k,rupture_speed,num_windows,lambda_spatial,lambda_temporal,L2,Lm,VR,AIC,Mo,Mw):
+def write_log(home,project_name,run_name,k,rupture_speed,num_windows,lambda_spatial,lambda_temporal,
+        beta,L2,Lm,VR,AIC,Mo,Mw,velmod,fault,g_name,gflist):
     '''
     Write ivnersion sumamry to file
     '''
@@ -562,8 +571,13 @@ def write_log(home,project_name,run_name,k,rupture_speed,num_windows,lambda_spat
     f.write('Project: '+project_name+'\n')
     f.write('Run name: '+run_name+'\n')
     f.write('Run number: '+num+'\n')
+    f.write('Velocity model: '+velmod+'\n')
+    f.write('Fault model: '+fault+'\n')
+    f.write('G name: '+g_name+'\n')
+    f.write('GF list: '+gflist+'\n')
     f.write('lambda_spatial = '+repr(lambda_spatial)+'\n')
     f.write('lambda_temporal = '+repr(lambda_temporal)+'\n')
+    f.write('Beta(degs) = '+repr(beta)+'\n')
     f.write('Mean rupture velocity (km/s) = '+str(rupture_speed)+'\n')
     f.write('Number of rupture windows = '+str(num_windows)+'\n')
     f.write('L2 = '+repr(L2)+'\n')
@@ -637,7 +651,7 @@ def laplace_stencil2(ifault,nstrike,ndip):
         values=array([-4,1,1,1,1])
         return stencil,values
 
-def laplace_stencil(ifault,nstrike,ndip,bounds):
+def laplace_stencil(ifault,nstrike,ndip):
     '''
     Find the index of the subfaults that make the laplacian stencil of fault number ifault
     
@@ -656,95 +670,35 @@ def laplace_stencil(ifault,nstrike,ndip,bounds):
     
     from numpy import array
     
-    #What are the boundary condiitons
-    top=bounds[0]
-    bottom=bounds[1]
-    left=bounds[2]
-    right=bounds[3]
-    #Check the boundary conditions
-    if (top.lower()!='locked' and top.lower()!='free'):
-        print 'ERROR: Unknown boundary condition \''+top+'\' at top edge of model'
-        return False,False
-    if (bottom.lower()!='locked' and bottom.lower()!='free'):
-        print 'ERROR: Unknown boundary condition \''+bottom+'\' at bottom edge of model'
-        return False,False
-    if (right.lower()!='locked' and right.lower()!='free'):
-        print 'ERROR: Unknown boundary condition \''+right+'\' at right edge of model'
-        return False,False
-    if (left.lower()!='locked' and left.lower()!='free'):
-        print 'ERROR: Unknown boundary condition \''+left+'\' at left edge of model'
-        return False,False
-    #No errors, move forward with stencil computation
     row=ifault/nstrike #Row number corresponding to this subfault
     column=ifault-(nstrike*row)
     if row==0 and column==0: #Top right corner
         stencil=array([ifault+1,ifault+nstrike])
-        if top.lower()=='free' and right.lower()=='free': #Both are free
-            correction=2
-        elif top.lower()=='free' or right.lower()=='free': #Only one is free
-            correction=1
-        else: #Both are locked
-            correction=0
-        return stencil,correction
+        return stencil
     if row==0 and column==(nstrike-1): #Top left corner
         stencil=array([ifault-1,ifault+nstrike])
-        if top.lower()=='free' and left.lower()=='free': #Both are free
-            correction=2
-        elif top.lower()=='free' or left.lower()=='free': #Only one is free
-            correction=1
-        else: #Both are locked
-            correction=0
-        return stencil,correction
+        return stencil
     if row==(ndip-1) and column==0: #Bottom right corner
         stencil=array([ifault-nstrike,ifault+1])
-        if bottom.lower()=='free' and right.lower()=='free': #Both are free
-            correction=2
-        elif bottom.lower()=='free' or right.lower()=='free': #Only one is free
-            correction=1
-        else: #Both are locked
-            correction=0
-        return stencil,correction
+        return stencil
     if row==(ndip-1) and column==(nstrike-1): #Bottom left corner
         stencil=array([ifault-nstrike,ifault-1])
-        if bottom.lower()=='free' and left.lower()=='free': #Both are free
-            correction=2
-        elif bottom.lower()=='free' or left.lower()=='free': #Only one is free
-            correction=1
-        else: #Both are locked
-            correction=0
-        return stencil,correction
+        return stencil
     if row==0: #Top edge, NOT the corner
         stencil=array([ifault+1,ifault-1,ifault+nstrike])
-        if top.lower()=='free': #Free boundary condition
-            correction=1
-        else: #Boundary is locked
-            correction=0
-        return stencil,correction
+        return stencil
     if row==(ndip-1): #Bottom edge, NOT the corner
         stencil=array([ifault-1,ifault+1,ifault-nstrike])
-        if bottom.lower()=='free': #Free boundary condition
-            correction=1
-        else: #Boundary is locked
-            correction=0
-        return stencil,correction
+        return stencil
     if column==0: #Right edge, NOT the corner
         stencil=array([ifault-nstrike,ifault+nstrike,ifault+1])
-        if right.lower()=='free': #Free boundary condition
-            correction=1
-        else: #Boundary is locked
-            correction=0
-        return stencil,correction
+        return stencil
     if column==(nstrike-1): #left edge, NOT the corner
         stencil=array([ifault-nstrike,ifault+nstrike,ifault-1])
-        if left.lower()=='free': #Free boundary condition
-            correction=1
-        else: #Boundary is locked
-            correction=0
-        return stencil,correction
+        return stencil
     else: #Somewhere in the middle
         stencil=array([ifault-1,ifault+1,ifault-nstrike,ifault+nstrike])
-        correction=0
-        return stencil,correction
+        return stencil
 
 def prep_synth(syn,st):
     '''
@@ -934,3 +888,53 @@ def get_moment(home,project_name,fault_name,model_name,sol):
     Mw=(2./3)*(log10(M0)-9.1)
     
     return M0,Mw
+    
+    
+def ds2rot(sol,beta):
+    '''
+    Rotate from a coordiante system where the basis is SS=0,DS=90 to one where the
+    basis is SS=0+beta and DS=90+beta
+    '''
+    from numpy import array,deg2rad,cos,sin,arange,vstack,zeros
+    
+    #Split into strike-slip and dip-slip
+    iss=arange(0,len(sol),2)
+    ids=arange(1,len(sol),2)
+    if len(iss)==1:
+        ss=sol[0]
+        ds=sol[1]
+    else:
+        ss=sol[iss]
+        ds=sol[ids]
+    #Rotate
+    beta=deg2rad(beta)
+    rot=array([[cos(beta),sin(beta)],[-sin(beta),cos(beta)]]).dot(vstack((ss,ds)))
+    #Re-insert in output vector
+    out=zeros(sol.shape)
+    out[iss]=rot[0,:]
+    out[ids]=rot[1,:]
+    return out
+    
+def rot2ds(sol,beta):
+    '''
+    Reverses the operationd escribed in function ds2rot()
+    '''
+    from numpy import array,deg2rad,cos,sin,arange,vstack,zeros
+    
+    #Split into strike-slip and dip-slip
+    iss=arange(0,len(sol),2)
+    ids=arange(1,len(sol),2)
+    if len(iss)==1:
+        ssrot=sol[0]
+        dsrot=sol[1]
+    else:
+        ssrot=sol[iss]
+        dsrot=sol[ids]
+    #Rotate
+    beta=deg2rad(beta)
+    ssds=array([[cos(beta),-sin(beta)],[sin(beta),cos(beta)]]).dot(vstack((ssrot,dsrot)))
+    #Re-insert in output vector
+    out=zeros(sol.shape)
+    out[iss]=ssds[0,:]
+    out[ids]=ssds[1,:]
+    return out

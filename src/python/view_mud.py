@@ -36,6 +36,7 @@ def quick_model_plot(rupt):
     #Get projection of rake vector
     x,y=slip2geo(ss,ds,strike)
     #Plot
+    plt.figure()
     plt.scatter(lon,lat,marker='o',c=slip,s=250,cmap=plt.cm.gnuplot_r)
     plt.ylabel('Latitude')
     plt.xlabel('Longitude')
@@ -83,6 +84,7 @@ def quick_static_plot(gflist,datapath,run_name,run_num,c):
 
             
     #Plot
+    plt.figure()
     xi = linspace(min(lon), max(lon), 500)
     yi = linspace(min(lat), max(lat), 500)
     Z = griddata(lon, lat, u, xi, yi)
@@ -93,8 +95,59 @@ def quick_static_plot(gflist,datapath,run_name,run_num,c):
     Q=plt.quiver(lon,lat,e,n,width=0.001,color=c)
     plt.scatter(lon,lat,color='b')
     plt.grid()
-    #plt.quiverkey(Q,X=0.1,Y=0.9,U=qscale_en,label=str(qscale_en)+'m')
+    plt.title(datapath+run_name+run_num)
+    plt.show()
+    qscale_en=1
+    plt.quiverkey(Q,X=0.1,Y=0.9,U=qscale_en,label=str(qscale_en)+'m')
     
+def tile_plot(rupt,nstrike,ndip):
+    '''
+    Quick and dirty plot of a .rupt file
+    '''
+    
+    from numpy import genfromtxt,unique,where,zeros
+    import matplotlib.pyplot as plt
+    
+    f=genfromtxt(rupt)
+    num=f[:,0]
+    all_ss=f[:,8]
+    all_ds=f[:,9]
+    #Now parse for multiple rupture speeds
+    unum=unique(num)
+    ss=zeros(len(unum))
+    ds=zeros(len(unum))
+    for k in range(len(unum)):
+        i=where(unum[k]==num)
+        ss[k]=all_ss[i].sum()
+        ds[k]=all_ds[i].sum()
+    #Sum them
+    slip=(ss**2+ds**2)**0.5
+    #Get unit rake vector
+    rakess=ss/slip
+    rakeds=ds/slip
+    #Get indices for plot
+    istrike=zeros(nstrike*ndip)
+    idip=zeros(nstrike*ndip)
+    k=0
+    for i in range(ndip):
+         for j in range(nstrike):
+             istrike[k]=nstrike-j
+             idip[k]=ndip-i
+             k+=1           
+    #Plot
+    plt.figure()
+    plt.scatter(istrike,idip,marker='o',c=slip,s=250,cmap=plt.cm.gnuplot_r)
+    plt.ylabel('Along-dip index')
+    plt.xlabel('Along-strike index')
+    cb=plt.colorbar()
+    cb.set_label('Slip (m)')
+    plt.axis('equal')
+    plt.xlim(istrike.min()-1,istrike.max()+1)
+    plt.ylim(idip.min()-1,idip.max()+1)
+    plt.quiver(istrike,idip,rakess,rakeds,color='green',width=0.002)
+    plt.grid()
+    plt.title(rupt)
+    plt.show()
 
 def model_tslice(rupt,out,dt,cumul):
     '''
@@ -270,12 +323,13 @@ def plotABIC(home,run_name):
     logs=glob(outdir+'*'+run_name+'*.log')
     ABIC=zeros(len(logs))
     ls=zeros(len(logs))
+    print 'Gathering statistics for '+str(len(logs))+' inversions...'
     for k in range(len(logs)):
         with open(logs[k]) as f:
             for line in f:
                 if 'ABIC' in line:
                     ABIC[k]=float(line.split('=')[1])
-                if 'lambda_spatial' homein line:
+                if 'lambda_spatial' in line:
                     ls[k]=float(line.split('=')[1])
     #Get the minimum
     imin=argmin(ABIC)
@@ -286,10 +340,11 @@ def plotABIC(home,run_name):
     pl.semilogx(ls[imin],ABIC[imin],marker='*',color='r',markersize=14)
     pl.xlabel(r'$\lambda$',fontsize=14)
     pl.ylabel('ABIC',fontsize=14)
-    pl.annotate(r'$\lambda$'+'='+str(ls[imin]),xy=(ls[imin],ABIC[imin]),xytext=(ls[imin],0.98*ABIC[imin]))
+    pl.annotate(r'$\lambda$'+'='+str(ls[imin]),xy=(ls[imin],ABIC[imin]),xytext=(ls[imin],ABIC[imin]-0.05*(max(ABIC)-ABIC[imin])))
     pl.title('Run Name: '+run_name)
     pl.savefig(plotdir+run_name+'.ABIC.png')
-    print 'ABIC is minimized al lambda = '+repr(ls[imin])
+    print 'ABIC is minimized at inversion '+logs[imin]
+    print '... lambda = '+repr(ls[imin])
     pl.show()
         
     

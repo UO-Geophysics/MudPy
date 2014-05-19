@@ -21,7 +21,6 @@ def run_green(source,station_file,model_name,dt,NFFT,static,coord_type,dk,pmin,p
     '''
     import subprocess
     from shlex import split
-    from numpy import unique
     
     depth='%.4f' % source[3]
     print("--> Computing GFs for source depth "+str(depth)+"km")
@@ -61,7 +60,8 @@ def run_green(source,station_file,model_name,dt,NFFT,static,coord_type,dk,pmin,p
     
     
     
-def run_syn(home,project_name,source,station_file,green_path,model_name,integrate,static,subfault,coord_type,time_epi):
+def run_syn(home,project_name,source,station_file,green_path,model_name,integrate,static,
+        subfault,coord_type,time_epi,beta):
     '''
     Use green functions and compute synthetics at stations for a single source
     and multiple stations. This code makes an external system call to syn.c first it
@@ -89,12 +89,11 @@ def run_syn(home,project_name,source,station_file,green_path,model_name,integrat
     from string import rjust
     from numpy import array,genfromtxt,loadtxt,savetxt,log10
     from obspy import read
-    from obspy.signal.rotate import rotate_RT_NE
     from shlex import split
     
     #Constant parameters
-    rakeDS=90 #90 is thrust, -90 is normal
-    rakeSS=0 #0 is left lateral, 180 is right lateral
+    rakeDS=90+beta #90 is thrust, -90 is normal
+    rakeSS=0+beta #0 is left lateral, 180 is right lateral
     tb=50 #Number of samples before first arrival
     #Load structure
     model_file=home+project_name+'/structure/'+model_name
@@ -280,7 +279,7 @@ def run_syn(home,project_name,source,station_file,green_path,model_name,integrat
             ntemp,etemp=rt2ne(array([r,r]),array([t,t]),az[k])
             n=ntemp[0]
             e=etemp[0]
-            savetxt(staname[k]+'.subfault'+num+'.DS.static.neu',(n,e,u))
+            savetxt(staname[k]+'.subfault'+num+'.DS.static.neu',(n,e,u,beta))
     return log
 
 
@@ -420,3 +419,5 @@ def rtrim(st,T):
     T=timedelta(seconds=T)
     stout[0].trim(starttime=start,endtime=start+T)
     return stout
+    
+
