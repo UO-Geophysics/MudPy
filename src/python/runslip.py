@@ -254,7 +254,8 @@ def inversionGFs(home,project_name,GF_list,fault_name,model_name,dt,NFFT,coord_t
                                 
                                                         
 def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_from_file,G_name,epicenter,
-                rupture_speed,num_windows,coord_type,reg_spatial,reg_temporal,nfaults,beta,decimate,solver):
+                rupture_speed,num_windows,coord_type,reg_spatial,reg_temporal,nfaults,beta,decimate,solver,
+                bounds):
     '''
     Assemble G and d, determine smoothing and run the inversion
     '''
@@ -273,7 +274,7 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
     x=G.transpose().dot(d)
     #Get regularization matrices (set to 0 matrix if not needed)
     if type(reg_spatial)!=bool:
-        Ls=inv.getLs(home,project_name,fault_name,nfaults,num_windows)
+        Ls=inv.getLs(home,project_name,fault_name,nfaults,num_windows,bounds)
     else:
         Ls=zeros(K.shape)
         lambda_spatial=0
@@ -319,11 +320,11 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
         #Get moment
         Mo,Mw=inv.get_moment(home,project_name,fault_name,model_name,sol)
         #If a rotational offset was applied then reverse it for output to file
-        #if beta !=0:
-        #    sol=inv.rot2ds(sol,beta)
+        if beta !=0:
+            sol=inv.rot2ds(sol,beta)
         #Write log
         inv.write_log(home,project_name,run_name,k,rupture_speed,num_windows,lambda_spatial,lambda_temporal,beta,
-                L2,Lmodel,VR,ABIC,Mo,Mw,model_name,fault_name,G_name,GF_list)
+                L2,Lmodel,VR,ABIC,Mo,Mw,model_name,fault_name,G_name,GF_list,solver)
         #Write output to file
         inv.write_synthetics(home,project_name,run_name,GF_list,G,sol,ds,k)
         inv.write_model(home,project_name,run_name,fault_name,model_name,rupture_speed,num_windows,epicenter,sol,k)

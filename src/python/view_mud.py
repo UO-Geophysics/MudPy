@@ -148,6 +148,47 @@ def tile_plot(rupt,nstrike,ndip):
     plt.grid()
     plt.title(rupt)
     plt.show()
+    
+
+def plot_Rm(G,lambda_spatial,lambda_temporal,Ls,Lt,bounds,nstrike,ndip,maxR=0.2):
+    '''
+    Plot model resolution matrix
+    '''
+    
+    from numpy import diag,zeros,arange
+    import matplotlib.pyplot as plt
+    from numpy.linalg import inv
+    
+    #Compute model resolution matrix
+    Gs=G.transpose().dot(G)+(lambda_spatial**2)*Ls.transpose().dot(Ls)+(lambda_temporal**2)*Lt.transpose().dot(Lt)
+    R=inv(Gs).dot(G.transpose()).dot(G)
+    #Keep diagonals only
+    r=diag(R)
+    ids=arange(1,len(r),2)
+    r=r[ids]
+    #Get indices for plot
+    istrike=zeros(nstrike*ndip)
+    idip=zeros(nstrike*ndip)
+    k=0
+    for i in range(ndip):
+         for j in range(nstrike):
+             istrike[k]=nstrike-j
+             idip[k]=ndip-i
+             k+=1           
+    #Plot
+    plt.figure()
+    plt.scatter(istrike,idip,marker='o',c=r,s=250,cmap=plt.cm.PuBuGn,vmax=maxR)
+    plt.ylabel('Along-dip index')
+    plt.xlabel('Along-strike index')
+    cb=plt.colorbar()
+    cb.set_label('Diagonal Value of R')
+    plt.axis('equal')
+    plt.xlim(istrike.min()-1,istrike.max()+1)
+    plt.ylim(idip.min()-1,idip.max()+1)
+    plt.grid()
+    plt.title('Model Resolution')
+    plt.show()
+    return R
 
 def model_tslice(rupt,out,dt,cumul):
     '''

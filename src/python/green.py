@@ -271,7 +271,7 @@ def run_syn(home,project_name,source,station_file,green_path,model_name,integrat
             ntemp,etemp=rt2ne(array([r,r]),array([t,t]),az[k])
             n=ntemp[0]
             e=etemp[0]
-            savetxt(staname[k]+'.subfault'+num+'.SS.static.neu',(n,e,u))
+            savetxt(staname[k]+'.subfault'+num+'.SS.static.neu',(n,e,u,beta))
             statics=loadtxt(staname[k]+'.subfault'+num+'.DS.static.rtz')
             u=statics[2]/100
             r=statics[3]/100

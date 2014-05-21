@@ -1,13 +1,47 @@
 '''
 Diego Melgar, 03.2014
 
-Routines for solving dislocation ivnerse problems, static and dynamic.
+Routines for solving dislocation inverse problems, static and dynamic.
+
+Things in this module:
+    
+    * getG() - Assembles Green functions matrix for ALL data types
+    * makeG() - Assembles Green fucntions for a particular data type
+    * getdata() - Assembles data vector for inversion
+    * getLs() - Assembles spatial regularization matrix based on finite difference Laplacian
+    * getLt() - Assembles temporal regularization using finite difference first derivatives
+    * get_data_weights() - Assemble matrix of data weights
+
 '''
+
+
+
 def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epicenter,rupture_speed,
         num_windows,coord_type,decimate):
     '''
-    Either load G from file or parse gflist file and assemble it from previous computations
+    Assemble Green functions matrix. If requested will parse all available synthetics on file and build the matrix.
+    Otherwise, if it exists, it will be loaded from file 
+    
+    IN:
+        home: Home directory location
+        project_name: Name of the problem
+        fault_name: Name of fault description file
+        model_name: Name of velocity structure file
+        GF_list: Name of GF control file
+        G_from_file: if =0 build G from synthetics on file. If =1 then load from file
+        G_name: If building G fromsynthetics then this is the name G will be saved with
+            in binary .npy format. If loading from file this is the name to be looked for. 
+            It is not necessary to supply the .npy extension
+        epicenter: Epicenter coordinates
+        rupture_speed: Fastest rupture speed allowed in the problem
+        num_windows: Number of temporal rupture windows allowed
+        coord_type: =0 for cartesian, =1 for lat/lon
+        decimate: Constant decimationf actor applied to GFs, set =0 for no decimation
+        
+    OUT:
+        G: Fully assembled GF matrix
     '''
+    
     from numpy import arange,genfromtxt,where,loadtxt,array,c_,concatenate,save,load
     from os import remove
     from os.path import split
@@ -92,16 +126,22 @@ def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epic
     
 def makeG(home,project_name,fault_name,model_name,station_file,gftype,tdelay,decimate):
     '''
+    This routine is called from getG and will assemble the GFs from available synthetics
+    depending on data type requested (statics, dispalcement or velocity waveforms).
     
     IN:
         home: Home directory
         project_name: Name of the problem
         fault_name: Name of fault description file
+        model_name: Name of velocity structure file
         station_file: File with coordinates of stations and data types
-        integrate: =0 if you want output to be velocity, =1 if you want output to de displacement
+        gftype: ='static' if assembling static field GFs, ='disp' if assembling displacement
+            waveforms. ='vel' if assembling velocity waveforms.
+        tdelay: Vector of delay times to be applied to each time window
+        decimate: Constant decimationf actor applied to GFs, set =0 for no decimation
        
     OUT:
-        Nothing
+        G: Partially assembled GF with all synthetics from a particular data type
     '''
     from numpy import genfromtxt,loadtxt,zeros,r_,array
     from string import rjust
@@ -119,6 +159,10 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tdelay,dec
     Nsta=len(staname)
     insert_position=0
     #Loop over stations
+    if gftype.lower()=='static': #Initialize output matrix
+        G=zeros((Nsta*3,Nfaults*2))
+    else:
+        pass #Think about how to initialize for displacement and velo. waveforms
     for ksta in range(Nsta):
             if gftype.lower()=='static': #Make matrix of static GFs
                 print 'Assembling static GFs for station '+staname[ksta]
@@ -137,25 +181,13 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tdelay,dec
                     nds=coseis_ds[0]
                     eds=coseis_ds[1]
                     zds=coseis_ds[2]
-                    ##Apply rotational offset
-                    #rot=ds2rot(array([nss,nds]),beta)
-                    #nss=rot[0]
-                    #nds=rot[1]
-                    #rot=ds2rot(array([ess,eds]),beta)
-                    #ess=rot[0]
-                    #eds=rot[1]
-                    #rot=ds2rot(array([zss,zds]),beta)
-                    #zss=rot[0]
-                    #zds=rot[1]
                     #Place into G matrix
                     Gtemp[0,2*kfault]=nss   ; Gtemp[0,2*kfault+1]=nds    #North
                     Gtemp[1,2*kfault]=ess ; Gtemp[1,2*kfault+1]=eds  #East
                     Gtemp[2,2*kfault]=zss ; Gtemp[2,2*kfault+1]=zds  #Up
                     #Append to G
-                if ksta==0: #First station, create array 
-                    G=Gtemp
-                else: #Just append
-                    G=r_[G,Gtemp]
+                #Append to output matrix
+                G[ksta*3:ksta*3+3,:]=Gtemp
             if gftype.lower()=='disp' or gftype.lower=='vel':  #Full waveforms
                 if gftype.lower()=='disp':
                     vord='disp'
@@ -235,9 +267,19 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tdelay,dec
                 pass                                
     return G
       
+      
 def getdata(home,project_name,GF_list,decimate):
     '''
-    Assemble the data vector
+    Assemble the data vector for all data types
+    
+    IN:
+        home: Home directory
+        project_name: Name of the problem
+        GF_list: Name of GF control file
+        decimate: Constant decimationf actor applied to GFs, set =0 for no decimation
+        
+    OUT:
+        d: The data vector
     '''
     from numpy import genfromtxt,where,array,append,r_,concatenate
     from obspy import read
@@ -309,49 +351,28 @@ def getdata(home,project_name,GF_list,decimate):
     #Done, concatenate all and exit
     d=concatenate([dx for dx in [dstatic,ddisp,dvel,dtsun,dstrain] if dx.size > 0])
     return d
+          
     
-    
-def getLs(home,project_name,fault_name,nfaults,num_windows):
+def getLs(home,project_name,fault_name,nfaults,num_windows,bounds):
     '''
-    Make regularization matrix
-    '''
+    Make spatial regularization matrix based on finite difference Lapalce operator.
+    This routine will request adjustments depending on the boundary conditions requested
+    on the edges of the fault model.
     
-    from numpy import loadtxt,zeros
-    from scipy.linalg import block_diag
-    
-    #Load source
-    source=loadtxt(home+project_name+'/data/model_info/'+fault_name,ndmin=2)
-    N=len(source) #No. of subfaults
-    nstrike=nfaults[0]
-    ndip=nfaults[1]
-    #Initalize
-    L=zeros((2*N,2*N))
-    #Which L am I building?
-    print 'Making discrete Laplace operator regularization matrix...'
-    for kfault in range(N): #Loop over faults and fill regularization matrix
-        stencil=laplace_stencil(kfault,nstrike,ndip)
-        if type(stencil)!=bool: #No errors were reported
-            #Add strike slip branches of stencil
-            L[2*kfault,2*stencil]=1
-            #Add dip slip branches of stencil
-            L[2*kfault+1,2*stencil+1]=1
-            #Add strike slip central node with correction
-            L[2*kfault,2*kfault]=-4
-            #Add dip slip central node with correction
-            L[2*kfault+1,2*kfault+1]=-4
-    if num_windows==1: #Only one rupture speed
-        Lout=L 
-    else: #Multiple rupture speeds
-        Lout=L
-        for k in range(num_windows-1):
-            Lout=block_diag(Lout,L)
-    return Lout
+    IN:
+        home: Home directory
+        project_name: Name of the problem
+        fault_name: Name of fault description file
+        nfaults: Total number of faults in the model
+        num_windows: Number of rupture windows
+        bounds: A tuple with 4 strings corresponding to the boundary conditions requested by
+            the user on the edges fo the fault model. The ordering is top,bototm,left and right edges.
+            Possible values for each element of the tuple are 'free' for a free boundary condition
+            and 'locked' for a locked one. For example a bounds tuple with 3 locked edges and the top
+            edge free would be bounds=('free', 'locked', 'locked', 'locked')
 
-        
-    
-def getLs2(home,project_name,fault_name,nfaults,num_windows):
-    '''
-    Make regularization matrix
+    OUT:
+        Lout: The regularization matrix
     '''
     
     from numpy import loadtxt,zeros
@@ -366,8 +387,8 @@ def getLs2(home,project_name,fault_name,nfaults,num_windows):
     L=zeros((2*N,2*N))
     #Which L am I building?
     print 'Making discrete Laplace operator regularization matrix...'
-    for kfault in range(N): #Loop over faults and fill regularization matrix
-        stencil,values=laplace_stencil2(kfault,nstrike,ndip)
+    for kfault in range(N):#Loop over faults and fill regularization matrix
+        stencil,values=laplace_stencil(kfault,nstrike,ndip,bounds)
         #Add strike slip branches of stencil
         L[2*kfault,2*stencil]=values
         #Add dip slip branches of stencil
@@ -380,8 +401,42 @@ def getLs2(home,project_name,fault_name,nfaults,num_windows):
             Lout=block_diag(Lout,L)
     return Lout
         
-def getLt():
-    return 0
+        
+def getLt(home,project_name,fault_name,num_windows):
+    '''
+    Make temporal regularization matrix using forward differences for windows 1 
+    through N-1 and backwards differences for window N
+    
+    IN:
+        home: Home directory
+        project_name: Name of the problem
+        fault_name: Name of fault description file
+        num_windows: Number of temporal slip windows
+        
+    OUT:
+        L: A square matrix of derivatives
+    '''
+    
+    from numpy import loadtxt,zeros,eye,arange
+    
+    #Load source
+    source=loadtxt(home+project_name+'/data/model_info/'+fault_name,ndmin=2)
+    N=len(source) #No. of subfaults
+    if num_windows<2: #Duh
+        print 'WARNING temporal regularization is unecessary when only employing 1 time window. Returning zeros.'
+        Lout=zeros((2*N,2*N))
+        return Lout
+    #Initalize
+    L=eye(2*N*num_windows)
+    print 'Making first derivative temporal regularization matrix...'
+    #Forward difference indices
+    iforward=arange(N*2*(num_windows-1))
+    L[iforward,iforward+(2*N)]=-1
+    #Backwards differences for last window
+    iback=arange(N*2*(num_windows-1),N*2*num_windows)
+    L[iback,iback-(2*N)]=-1
+    return L
+
 
 def get_data_weights(home,project_name,GF_list,d,decimate):
     '''
@@ -452,7 +507,22 @@ def get_data_weights(home,project_name,GF_list,d,decimate):
     
 def write_model(home,project_name,run_name,fault_name,model_name,rupture_speed,num_windows,epicenter,sol,num):
     '''
-    Write model results
+    Write inversion results to .inv file
+    
+    IN:
+        home: Home directory location
+        project_name: Name of the problem
+        run_name: Name of inversion run
+        fault_name: Name of fault description file
+        model_name: Name of velocity structure file
+        rupture_speed: Fastest rupture speed allowed in the problem
+        num_windows: Number of temporal rupture windows allowed
+        epicenter: Epicenter coordinates
+        sol: The solution vector from the inversion
+        num: ID number of the inversion
+        GF_list: Name of GF control file
+    OUT:
+        Nothing
     '''
     
     from numpy import genfromtxt,loadtxt,arange,zeros,c_,savetxt,r_
@@ -498,7 +568,17 @@ def write_model(home,project_name,run_name,fault_name,model_name,rupture_speed,n
     
 def write_synthetics(home,project_name,run_name,GF_list,G,sol,ds,num):
     '''
-    Output synthetics as sac
+    Output synthetics as sac for displacement or velocity waveforms and ascii for static field
+    
+    IN:
+        home: Home directory location
+        project_name: Name of the problem
+        run_name: Name of inversion run
+        sol: The solution vector from the inversion
+        ds: The predicted data ds=G*m
+        num: ID number of the inversion
+    OUT:
+        Nothing
     '''
     
     from obspy import read
@@ -560,10 +640,35 @@ def write_synthetics(home,project_name,run_name,GF_list,G,sol,ds,num):
             
         
 def write_log(home,project_name,run_name,k,rupture_speed,num_windows,lambda_spatial,lambda_temporal,
-        beta,L2,Lm,VR,AIC,Mo,Mw,velmod,fault,g_name,gflist):
+        beta,L2,Lm,VR,ABIC,Mo,Mw,velmod,fault,g_name,gflist,solver):
     '''
-    Write ivnersion sumamry to file
+    Write inversion sumamry to .log file
+    
+    IN:
+        home: Home directory location
+        project_name: Name of the problem
+        run_name: Name of inversion run
+        k: Inversion run number
+        rupture_speed: Fastest rupture speed allowed
+        num_windows: Number of temporal rupture windows
+        lambda_spatial: Spatial regularization parameter
+        lambda_temporal: Temporal regularization parameter
+        beta: Angular offset applied to rake
+        L2: L2 norm of ivnersion L2=||Gm-d||
+        Lm: Model norm Lm=||L*m||
+        VR: Variance reduction
+        ABIC: Value of Akaike's Bayesian ifnormation criterion
+        Mo: Moment in N-m
+        Mw: Moment magnitude
+        velmod: Earth structure model used
+        fault: Fault model used
+        g_name: GF matrix used
+        gflist: GF control file sued
+        solver: Type of solver used
+    OUT:
+        Nothing
     '''
+    
     from string import rjust
     
     num=rjust(str(k),4,'0')
@@ -575,6 +680,7 @@ def write_log(home,project_name,run_name,k,rupture_speed,num_windows,lambda_spat
     f.write('Fault model: '+fault+'\n')
     f.write('G name: '+g_name+'\n')
     f.write('GF list: '+gflist+'\n')
+    f.write('Solver: '+solver+'\n')
     f.write('lambda_spatial = '+repr(lambda_spatial)+'\n')
     f.write('lambda_temporal = '+repr(lambda_temporal)+'\n')
     f.write('Beta(degs) = '+repr(beta)+'\n')
@@ -583,7 +689,7 @@ def write_log(home,project_name,run_name,k,rupture_speed,num_windows,lambda_spat
     f.write('L2 = '+repr(L2)+'\n')
     f.write('VR(%) = '+repr(VR)+'\n')
     f.write('Lm = '+repr(Lm)+'\n')
-    f.write('ABIC = '+repr(AIC)+'\n')
+    f.write('ABIC = '+repr(ABIC)+'\n')
     f.write('M0(N-m) = '+repr(Mo)+'\n')
     f.write('Mw = '+repr(Mw)+'\n')
     f.close()
@@ -592,9 +698,12 @@ def write_log(home,project_name,run_name,k,rupture_speed,num_windows,lambda_spat
     
 #==================              Random Tools            ======================
 
-def laplace_stencil2(ifault,nstrike,ndip):
+def laplace_stencil(ifault,nstrike,ndip,bounds):
     '''
     Find the index of the subfaults that make the laplacian stencil of fault number ifault
+    It assumes all boundaries are initally locked. After assigning stencil values it parses
+    the variable 'bounds' and makes corrections if any boundaries were requested to be
+    'free'.
     
     Usage:
         stencil=laplace_stencil(ifault,nstrike,ndip)
@@ -603,102 +712,91 @@ def laplace_stencil2(ifault,nstrike,ndip):
         ifault: subfault index number
         nstrike: number of along-strike fault segments
         ndip: number of along dip subfaults
+        bounds: A tuple with 4 strings corresponding to the boundary conditions requested by
+            the user on the edges fo the fault model. The ordering is top,bototm,left and right edges.
+            Possible values for each element of the tuple are 'free' for a free boundary condition
+            and 'locked' for a locked one. For example a bounds tuple with 3 locked edges and the top
+            edge free would be bounds=('free', 'locked', 'locked', 'locked')
     OUT:
         stencil: indices of the subfaults that contribute to the laplacian
+        values: nuemrical values of the stencil
     '''
     
     from numpy import array
     
+    #Get boundary conditions
+    top=bounds[0]
+    bottom=bounds[1]
+    left=bounds[2]
+    right=bounds[3]
+    #Create stencil
     row=ifault/nstrike #Row number corresponding to this subfault
     column=ifault-(nstrike*row)
     if nstrike<4 or ndip<4:
         print "ERROR: The fault model is too small for Laplacian regualrization. You need a minimum of 4 rows and 4 columns in the model."
         return False,False
     if row==0 and column==0: #Top right corner
-        stencil=array([ifault,ifault+1,ifault+2,ifault+3,ifault+nstrike,ifault+2*nstrike,ifault+3*nstrike])
-        values=array([4,-5,4,-1,-5,4,-1])
+        stencil=array([ifault,ifault+1,ifault+nstrike])
+        values=array([-4,1,1])
+        if top.lower()=='free':
+            values[2]+=1
+        if right.lower=='free':
+            values[1]+=1
         return stencil,values
     if row==0 and column==(nstrike-1): #Top left corner
-        stencil=array([ifault,ifault-1,ifault-2,ifault-3,ifault+nstrike,ifault+2*nstrike,ifault+3*nstrike])
-        values=array([4,-5,4,-1,-5,4,-1])
+        stencil=array([ifault,ifault-1,ifault+nstrike])
+        values=array([-4,1,1])
+        if top.lower()=='free':
+            values[2]+=1
+        if left.lower=='free':
+            values[1]+=1
         return stencil,values
     if row==(ndip-1) and column==0: #Bottom right corner
-        stencil=array([ifault,ifault+1,ifault+2,ifault+3,ifault-nstrike,ifault-2*nstrike,ifault-3*nstrike])
-        values=array([4,-5,4,-1,-5,4,-1])
+        stencil=array([ifault,ifault+1,ifault-nstrike])
+        values=([-4,1,1])
+        if bottom.lower()=='free':
+            values[2]+=1
+        if right.lower=='free':
+            values[1]+=1
         return stencil,values
     if row==(ndip-1) and column==(nstrike-1): #Bottom left corner
-        stencil=array([ifault,ifault-1,ifault-2,ifault-3,ifault-nstrike,ifault-2*nstrike,ifault-3*nstrike])
-        values=array([4,-5,4,-1,-5,4,-1])
+        stencil=array([ifault,ifault-1,ifault-nstrike])
+        values=array([-4,1,1,])
+        if bottom.lower()=='free':
+            values[2]+=1
+        if left.lower=='free':
+            values[1]+=1
         return stencil,values
     if row==0: #Top edge, NOT the corner
-        stencil=array([ifault,ifault+1,ifault-1,ifault+nstrike,ifault+2*nstrike,ifault+3*nstrike])
-        values=array([0,1,1,-5,4,-1])
+        stencil=array([ifault,ifault+1,ifault-1,ifault+nstrike])
+        values=array([-4,1,1,1])
+        if top.lower()=='free':
+            values[3]+=1
         return stencil,values
     if row==(ndip-1): #Bottom edge, NOT the corner
-        stencil=array([ifault,ifault-1,ifault+1,ifault-nstrike,ifault-2*nstrike,ifault-3*nstrike])
-        values=array([0,1,1,-5,4,-1])
+        stencil=array([ifault,ifault-1,ifault+1,ifault-nstrike])
+        values=array([-4,1,1,1])
+        if bottom.lower()=='free':
+            values[3]+=1
         return stencil,values
     if column==0: #Right edge, NOT the corner
-        stencil=array([ifault,ifault-nstrike,ifault+nstrike,ifault+1,ifault+2,ifault+3])
-        values=array([0,1,1,-5,4,-1])
+        stencil=array([ifault,ifault-nstrike,ifault+nstrike,ifault+1])
+        values=array([-4,1,1,1])
+        if right.lower()=='free':
+            values[3]+=1
         return stencil,values
     if column==(nstrike-1): #left edge, NOT the corner
-        stencil=array([ifault,ifault-nstrike,ifault+nstrike,ifault-1,ifault-2,ifault-3])
-        values=array([0,1,1,-5,4,-1])
+        stencil=array([ifault,ifault-nstrike,ifault+nstrike,ifault-1])
+        values=array([-4,1,1,1])
+        if left.lower()=='free':
+            values[3]+=1
         return stencil,values
     else: #Somewhere in the middle
         stencil=array([ifault,ifault-1,ifault+1,ifault-nstrike,ifault+nstrike])
         values=array([-4,1,1,1,1])
         return stencil,values
 
-def laplace_stencil(ifault,nstrike,ndip):
-    '''
-    Find the index of the subfaults that make the laplacian stencil of fault number ifault
-    
-    Usage:
-        stencil=laplace_stencil(ifault,nstrike,ndip)
-        
-    IN:
-        ifault: subfault index number
-        nstrike: number of along-strike fault segments
-        ndip: number of along dip subfaults
-        bounds: tuple containing information on the boundary conditions to be applied to the stencil
-    OUT:
-        stencil: indices of the subfaults that contribute to the laplacian
-        correction: number to be ADDED to the central node to account for the point being on a corner/edge
-    '''
-    
-    from numpy import array
-    
-    row=ifault/nstrike #Row number corresponding to this subfault
-    column=ifault-(nstrike*row)
-    if row==0 and column==0: #Top right corner
-        stencil=array([ifault+1,ifault+nstrike])
-        return stencil
-    if row==0 and column==(nstrike-1): #Top left corner
-        stencil=array([ifault-1,ifault+nstrike])
-        return stencil
-    if row==(ndip-1) and column==0: #Bottom right corner
-        stencil=array([ifault-nstrike,ifault+1])
-        return stencil
-    if row==(ndip-1) and column==(nstrike-1): #Bottom left corner
-        stencil=array([ifault-nstrike,ifault-1])
-        return stencil
-    if row==0: #Top edge, NOT the corner
-        stencil=array([ifault+1,ifault-1,ifault+nstrike])
-        return stencil
-    if row==(ndip-1): #Bottom edge, NOT the corner
-        stencil=array([ifault-1,ifault+1,ifault-nstrike])
-        return stencil
-    if column==0: #Right edge, NOT the corner
-        stencil=array([ifault-nstrike,ifault+nstrike,ifault+1])
-        return stencil
-    if column==(nstrike-1): #left edge, NOT the corner
-        stencil=array([ifault-nstrike,ifault+nstrike,ifault-1])
-        return stencil
-    else: #Somewhere in the middle
-        stencil=array([ifault-1,ifault+1,ifault-nstrike,ifault+nstrike])
-        return stencil
+
 
 def prep_synth(syn,st):
     '''
