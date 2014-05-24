@@ -1,9 +1,9 @@
 '''
 Diego Melgar, 03.2014
 
-Routines for solving dislocation inverse problems, static and dynamic.
+Routines for solving dislocation inverse problems, static and kinematic.
 
-Things in this module:
+Functions in this module:
     
     * getG() - Assembles Green functions matrix for ALL data types
     * makeG() - Assembles Green fucntions for a particular data type
@@ -42,16 +42,19 @@ def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epic
         G: Fully assembled GF matrix
     '''
     
-    from numpy import arange,genfromtxt,where,loadtxt,array,c_,concatenate,save,load
+    from numpy import arange,genfromtxt,where,loadtxt,array,c_,concatenate,save,load,dot
     from os import remove
     from os.path import split
     
     G_name=home+project_name+'/GFs/matrices/'+G_name
+    K_name=G_name+'.K'
     if G_from_file==1: #load from file
         if G_name[-3:]!='npy':
+            K_name=K_name+'.npy'
             G_name=G_name+'.npy'
         print 'Loading G from file '+G_name
         G=load(G_name)
+        K=load(K_name)
     else: #assemble G one data type at a time
         print 'Assembling G from synthetic computations...'
         #Read in GFlist and decide what to compute
@@ -95,7 +98,7 @@ def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epic
                 #Decide on delays for each time window (50% overlap)
                 trupt=arange(0,num_windows)*trise/2
                 for krup in range(num_windows):
-                    print 'Working on window '+str(krup)
+                    print 'Working on window '+str(krup+1)
                     tdelay=epi2subfault(epicenter,source,rupture_speed,trupt[krup])
                     Gdisp_temp=makeG(home,project_name,fault_name,model_name,split(mini_station)[1],gftype,tdelay,decimate)
                     if krup==0: #First rupture speed
@@ -118,11 +121,13 @@ def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epic
         Gstrain=array([])
         if GF[:,kgf].sum()>0:
             pass
-        #Done, now concatenate them all and save to binary file
+        #Done, now concatenate them all ccompute transpose product and save
         G=concatenate([g for g in [Gstatic,Gdisp,Gvel,Gtsun,Gstrain] if g.size > 0])
-        print 'Saving to '+G_name+' this might take just a second...'
+        K=dot(G.T,G)
+        print 'Computing G\'G and saving to '+G_name+' this might take just a second...'
         save(G_name,G)
-    return G
+        save(K_name,K)
+    return G,K
     
 def makeG(home,project_name,fault_name,model_name,station_file,gftype,tdelay,decimate):
     '''
@@ -143,10 +148,10 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tdelay,dec
     OUT:
         G: Partially assembled GF with all synthetics from a particular data type
     '''
-    from numpy import genfromtxt,loadtxt,zeros,r_,array
+    from numpy import genfromtxt,loadtxt,zeros
     from string import rjust
     from obspy import read
-    from forward import tshift,round_time
+    from forward import tshift
     from green import stdecimate
     
     #Load fault model
@@ -158,11 +163,12 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tdelay,dec
     datafiles=genfromtxt(station_file,dtype="S",usecols=3)
     Nsta=len(staname)
     insert_position=0
-    #Loop over stations
+    #Initalize G for faster assignments
     if gftype.lower()=='static': #Initialize output matrix
         G=zeros((Nsta*3,Nfaults*2))
     else:
-        pass #Think about how to initialize for displacement and velo. waveforms
+        pass #For disp or vel waveforms G is initalized below
+    #Loop over stations
     for ksta in range(Nsta):
             if gftype.lower()=='static': #Make matrix of static GFs
                 print 'Assembling static GFs for station '+staname[ksta]
@@ -172,6 +178,8 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tdelay,dec
                 syn_path=home+project_name+'/GFs/static/'
                 #Loop over subfaults
                 for kfault in range(Nfaults):
+                    if kfault%10==0:
+                        print '... working on subfault '+str(kfault)+' of '+str(Nfaults)
                     nfault='subfault'+rjust(str(int(source[kfault,0])),4,'0')
                     coseis_ss=loadtxt(syn_path+staname[ksta]+'.'+nfault+'.SS.static.neu')
                     nss=coseis_ss[0]
@@ -196,6 +204,8 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tdelay,dec
                 print 'Assembling '+vord+' waveform GFs for station '+staname[ksta]
                 #Loop over subfaults
                 for kfault in range(Nfaults):
+                    if kfault%10==0:
+                        print '... working on subfault '+str(kfault)+' of '+str(Nfaults)
                     #Get subfault GF directory
                     nsub='sub'+rjust(str(int(source[kfault,0])),4,'0')
                     nfault='subfault'+rjust(str(int(source[kfault,0])),4,'0')
@@ -231,24 +241,22 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tdelay,dec
                         ndata=stdecimate(ndata,decimate)
                         udata=stdecimate(udata,decimate) 
                     #Now time align stuff (This is where we might have some timing issues, check later, consider re-sampling to data time vector)                                       
-                    dt=ess[0].stats.delta
-                    ess[0].stats.starttime=round_time(ess[0].stats.starttime,dt)
+                    ess=resample_to_data(ess,edata)
                     ess=prep_synth(ess,edata)
-                    nss[0].stats.starttime=round_time(nss[0].stats.starttime,dt)
+                    nss=resample_to_data(nss,ndata)
                     nss=prep_synth(nss,ndata)
-                    zss[0].stats.starttime=round_time(zss[0].stats.starttime,dt)
+                    zss=resample_to_data(zss,udata)
                     zss=prep_synth(zss,udata)
-                    eds[0].stats.starttime=round_time(eds[0].stats.starttime,dt)
+                    eds=resample_to_data(eds,edata)
                     eds=prep_synth(eds,edata)
-                    nds=tshift(nds,tdelay[kfault])
-                    nds[0].stats.starttime=round_time(nds[0].stats.starttime,dt)
+                    nds=resample_to_data(nds,ndata)
                     nds=prep_synth(nds,ndata)
-                    zds[0].stats.starttime=round_time(zds[0].stats.starttime,dt)
+                    zds=resample_to_data(zds,udata)
                     zds=prep_synth(zds,udata)
                     #Insert into Gtemp then append to G
                     if kfault==0 and ksta==0: #It's the first subfault and station, initalize G
                         G=gdims(datafiles,Nfaults,decimate) #Survey all stations to decide size of G
-                    if kfault==0: #Initalize Gtemp
+                    if kfault==0: #Initalize Gtemp (different size for each station)
                         npts=edata[0].stats.npts
                         Gtemp=zeros([3*npts,Nfaults*2])      
                     #Insert synthetics into Gtemp
@@ -281,7 +289,7 @@ def getdata(home,project_name,GF_list,decimate):
     OUT:
         d: The data vector
     '''
-    from numpy import genfromtxt,where,array,append,r_,concatenate
+    from numpy import genfromtxt,where,array,append,r_,concatenate,zeros
     from obspy import read
     from forward import round_time
     from green import stdecimate
@@ -297,6 +305,7 @@ def getdata(home,project_name,GF_list,decimate):
     dstatic=array([])
     i=where(GF[:,kgf]==1)[0]
     for ksta in range(len(i)):
+            print 'Assembling static offsets from '+stations[i[ksta]]+' into data vector.'
             dtemp=genfromtxt(GFfiles[i[ksta],kgf])
             n=dtemp[0]
             e=dtemp[1]
@@ -307,7 +316,7 @@ def getdata(home,project_name,GF_list,decimate):
     ddisp=array([])
     i=where(GF[:,kgf]==1)[0]
     for ksta in range(len(i)):
-        print 'Assembling displacement waveforms from '+stations[i[ksta]]+' into inversion.'
+        print 'Assembling displacement waveforms from '+stations[i[ksta]]+' into data vector.'
         n=read(GFfiles[i[ksta],kgf]+'.n')
         e=read(GFfiles[i[ksta],kgf]+'.e')
         u=read(GFfiles[i[ksta],kgf]+'.u')
@@ -327,7 +336,7 @@ def getdata(home,project_name,GF_list,decimate):
     dvel=array([])
     i=where(GF[:,kgf]==1)[0]
     for ksta in range(len(i)):
-        print 'Assembling displacement waveforms from '+stations[i[ksta]]+' into inversion.'
+        print 'Assembling displacement waveforms from '+stations[i[ksta]]+' into data vector.'
         n=read(GFfiles[i[ksta],kgf]+'.n')
         e=read(GFfiles[i[ksta],kgf]+'.e')
         u=read(GFfiles[i[ksta],kgf]+'.u')
@@ -348,9 +357,11 @@ def getdata(home,project_name,GF_list,decimate):
     #Strain
     kgf=4
     dstrain=array([])            
-    #Done, concatenate all and exit
+    #Done, concatenate all, convert to column vector and exit
     d=concatenate([dx for dx in [dstatic,ddisp,dvel,dtsun,dstrain] if dx.size > 0])
-    return d
+    D=zeros((d.shape[0],1))
+    D[:,0]=d
+    return D
           
     
 def getLs(home,project_name,fault_name,nfaults,num_windows,bounds):
@@ -375,7 +386,7 @@ def getLs(home,project_name,fault_name,nfaults,num_windows,bounds):
         Lout: The regularization matrix
     '''
     
-    from numpy import loadtxt,zeros
+    from numpy import loadtxt,zeros,tile
     from scipy.linalg import block_diag
     
     #Load source
@@ -395,8 +406,9 @@ def getLs(home,project_name,fault_name,nfaults,num_windows,bounds):
         L[2*kfault+1,2*stencil+1]=values
     if num_windows==1: #Only one rupture speed
         Lout=L 
-    else: #Multiple rupture speeds
+    else: #Multiple rupture speeds, smooth total moment
         Lout=L
+        #Lout=tile(Lout,(1,num_windows))
         for k in range(num_windows-1):
             Lout=block_diag(Lout,L)
     return Lout
@@ -561,7 +573,7 @@ def write_model(home,project_name,run_name,fault_name,model_name,rupture_speed,n
     outdir=home+project_name+'/output/inverse_models/models/'+run_name+'.'+rjust(str(num),4,'0')+'.inv'
     #CHANGE this to rupture definition as #No  x            y        z(km)      str     dip      rake       rise    dura     slip    ss_len  ds_len rupt_time
     fmtout='%6i\t%.4f\t%.4f\t%8.4f\t%.2f\t%.2f\t%.2f\t%.2f\t%12.4e\t%12.4e%10.1f\t%10.1f\t%8.4f\t%.4e'
-    print 'Writing model results to file '+outdir
+    print '... writing model results to file '+outdir
     savetxt(outdir,out,fmtout,header='No,lon,lat,z(km),strike,dip,rise,dura,ss-slip(m),ds-slip(m),ss_len(m),ds_len(m),rupt_time(s),rigidity(Pa)')
         
     
@@ -585,7 +597,7 @@ def write_synthetics(home,project_name,run_name,GF_list,G,sol,ds,num):
     from numpy import array,savetxt,where,genfromtxt
     from string import rjust
     
-    print 'Computing and saving synthetics...'
+    print '... computing and saving synthetics...'
     num=rjust(str(num),4,'0')
     #Read gf file and decide what needs to get loaded
     gf_file=home+project_name+'/data/station_info/'+GF_list
@@ -802,6 +814,13 @@ def prep_synth(syn,st):
     '''
     Extend syntetic to start time of data and cut it to end time of data, make sure
     synthetic ALWAYS ends after data
+    
+    IN:
+        syn: Synthetic stream object
+        st: Data stream object
+        
+    OUT:
+        syn: Trimmed synthetic
     '''
     from numpy import zeros,r_
     #What's the difference ins tart times?
@@ -837,6 +856,8 @@ def gdims(datafiles,nfaults,decimate):
     from numpy import zeros
     
     npts=0
+    if decimate==0:
+        decimate=1
     for k in range(len(datafiles)):
         e=read(datafiles[k]+'.e')
         n=read(datafiles[k]+'.n')
@@ -855,6 +876,16 @@ def gdims(datafiles,nfaults,decimate):
 def mini_station_file(outfile,sta,lon,lat,gffiles):
     '''
     Make a temporary station file from a larger file
+    
+    IN:
+        outfile: Name of temporary station file
+        sta: Single station you wish to include int he temp file
+        lon: Station longitude
+        lat: Station latitude
+        gffiles: GF control file
+        
+    OUT:
+        Nothing
     '''
     f=open(outfile,'a')
     for k in range(len(sta)):
@@ -866,9 +897,17 @@ def mini_station_file(outfile,sta,lon,lat,gffiles):
             
 def epi2subfault(epicenter,source,vr,tr):
     '''
-    Compute time delays from epicetner to subfault based on a give rupture speed
+    Compute time delays from epicenter to subfault based on a give rupture speed Coordinates in 
+    lat/lon,depth(km), vr in km/s, tr is delay to apply to rupture speed in secs.
     
-    Coordinates in lat/lon,depth(km). vr in km/s, tr is delay to apply to rupture speed, returns tdelay in s
+    IN:
+        epicenter: Epicentral coordinates
+        source: Matrix of subfault coordinates
+        vr: Rupture velocity
+        tr: Timde delay to apply to rupture speed.
+        
+    OUT:
+        tdelay: Time delays in seconds to all subfaults
     '''
     from numpy import tile,sin,cos,deg2rad,sqrt
     #Compute distances from epi to subfault by converting to cartesian
@@ -892,6 +931,14 @@ def epi2subfault(epicenter,source,vr,tr):
 def get_stats(WG,sol,wd):
     '''
     Compute basic performance metrics of an inversion
+    
+    IN:
+        WG: Dataweights times GFs WG=W*G
+        sol: Soluction vector from inversion
+        wd: Data weights times data vector, wd=W*d
+    OUT:
+        L2: ||Gm-d||
+        Lm: ||Lm||
     '''
     
     from numpy.linalg import norm
@@ -901,12 +948,18 @@ def get_stats(WG,sol,wd):
     Lm=norm(sol)
     return L2,Lm
     
+    
 def get_VR(G,sol,d):
     '''
     Compute Variance reduction to the data
-    '''
     
-    from numpy.linalg import norm
+    IN:
+        G: GF matrix
+        sol: Solution  vector from inversion
+        d: data vector
+    OUT:
+        VR: Variance reduction (%)
+    '''
     
     ds=G.dot(sol)
     #Variance reduction
@@ -915,10 +968,25 @@ def get_VR(G,sol,d):
     VR=(1-(res.sum()/dnorm.sum()))*100
     return VR
     
-def get_ABIC(G,sol,d,lambda_s,lambda_t,Ls,Lt,Ls_rank,Lt_rank):
+    
+def get_ABIC(G,GTG,sol,d,lambda_s,lambda_t,Ls,LsLs,Lt,LtLt,Ls_rank,Lt_rank):
     '''
     Compute Akaike's Bayesian information criterion, for details see Ide et al. (1996)
     in BSSA, specifically equation 33.
+    
+    IN:
+        G: GFs matrix
+        sol Solution vector from inversion
+        d: Data vector
+        lambda_s: Spatial regularization parameter
+        lambda_t: Temporal regularization parameter
+        Ls: Spatial regularization matrix
+        Lt:Temporal reularization matrix
+        Ls_rank: Rank of Ls (#eigenvalues>0)
+        Lt_rank: Rank of Lt
+    OUT:
+        ABIC: Akike's Bayesian information criterion
+    
     '''
     
     from numpy import log
@@ -931,7 +999,7 @@ def get_ABIC(G,sol,d,lambda_s,lambda_t,Ls,Lt,Ls_rank,Lt_rank):
     #Likelihood exponent
     s=norm(d-G.dot(sol))**2+(lambda_s**2)*norm(Ls.dot(sol))**2+(lambda_t**2)*norm(Lt.dot(sol))**2
     #Total determinant
-    sq,q=slogdet(G.transpose().dot(G)+(lambda_s**2)*Ls.transpose().dot(Ls)+(lambda_t**2)*Lt.transpose().dot(Lt))
+    sq,q=slogdet(GTG+(lambda_s**2)*LsLs+(lambda_t**2)*LtLt)
     #Off you go, compute it
     a1=(N+Ls_rank+Lt_rank-M)*log(s)
     #Check for log(0) errors
@@ -946,10 +1014,6 @@ def get_ABIC(G,sol,d,lambda_s,lambda_t,Ls,Lt,Ls_rank,Lt_rank):
     #Add 'em up
     ABIC=a1-a2-a3+q
     return ABIC
-    
-    
-    
-    return 0
     
     
 def get_moment(home,project_name,fault_name,model_name,sol):
@@ -980,11 +1044,10 @@ def get_moment(home,project_name,fault_name,model_name,sol):
             A[i]=f[k,8]*f[k,9]
             i+=1
     #Compute moments
-    M0=mu*A*slip
+    M0=mu*A*slip[:,0]
     #Total up and copute magnitude
     M0=M0.sum()
     Mw=(2./3)*(log10(M0)-9.1)
-    
     return M0,Mw
     
     
@@ -1030,9 +1093,40 @@ def rot2ds(sol,beta):
         dsrot=sol[ids]
     #Rotate
     beta=deg2rad(beta)
-    ssds=array([[cos(beta),-sin(beta)],[sin(beta),cos(beta)]]).dot(vstack((ssrot,dsrot)))
+    ssds=array([[cos(beta),-sin(beta)],[sin(beta),cos(beta)]]).dot(vstack((ssrot.transpose(),dsrot.transpose())))
     #Re-insert in output vector
     out=zeros(sol.shape)
-    out[iss]=ssds[0,:]
-    out[ids]=ssds[1,:]
+    out[iss,0]=ssds[0,:]
+    out[ids,0]=ssds[1,:]
     return out
+    
+def resample_to_data(synth,data):
+    '''
+    Resample a synthetic to the time samples contained in the input data
+    IN:
+        synth: synthetic stream object
+        data: data stream object
+    OUT:
+        st: resampled synthetic
+    '''
+    from datetime import timedelta
+    from numpy import interp
+    from forward import round_time
+    
+    #Get data sampling interval
+    delta=data[0].stats.delta
+    #Get synthetic start time
+    t1synth=synth[0].stats.starttime
+    #Get start time sampled at data interval and correction encessary
+    t1=round_time(t1synth,delta)
+    dt=t1-t1synth #This is the correctiont hat needs to be applied
+    #Make current time vector
+    tsynth=synth[0].times()
+    tcorrect=tsynth+dt
+    #Interpolate to new time vector
+    synth_data=synth[0].data
+    synth_correct=interp(tcorrect,tsynth,synth_data)
+    #Place in output stream object
+    synth[0].starttime=t1
+    synth[0].data=synth_correct
+    return synth

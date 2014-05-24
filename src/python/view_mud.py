@@ -287,9 +287,12 @@ def model_tslice(rupt,out,dt,cumul):
         plt.close("all")
     
     
-def plot_synthetics(gflist,datapath,datasuffix,synthpath,synthsuffix,vord):
+def plot_synthetics(home,project_name,run_name,run_number,gflist,vord):
     '''
     Plot synthetics vs real data
+    
+    gflist: The GF control fiel that decides what to plot/not plot
+    datapath
     '''
     from obspy import read
     from numpy import genfromtxt,where
@@ -298,11 +301,14 @@ def plot_synthetics(gflist,datapath,datasuffix,synthpath,synthsuffix,vord):
     
     matplotlib.rcParams.update({'font.size': 16})
     #Decide what to plot
-    sta=genfromtxt(gflist,usecols=0,dtype='S')
-    gf=genfromtxt(gflist,usecols=[4,5],dtype='f')
+    sta=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=0,dtype='S')
+    gf=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=[4,5],dtype='f')
+    datapath=home+project_name+'/data/waveforms/'
+    synthpath=home+project_name+'/output/inverse_models/waveforms/'
     kgf=0 #disp
     i=where(gf[:,kgf]==1)[0]
     if gf[i,kgf].sum()>0:
+        datasuffix='kdisp'
         #Initalize the plot canvas
         plt.figure()
         nsta=len(i)
@@ -315,9 +321,9 @@ def plot_synthetics(gflist,datapath,datasuffix,synthpath,synthsuffix,vord):
             n=read(datapath+sta[i[k]]+'.'+datasuffix+'.n')
             e=read(datapath+sta[i[k]]+'.'+datasuffix+'.e')
             u=read(datapath+sta[i[k]]+'.'+datasuffix+'.u')
-            ns=read(synthpath+synthsuffix+'.'+sta[i[k]]+'.disp.n.sac')
-            es=read(synthpath+synthsuffix+'.'+sta[i[k]]+'.disp.e.sac')
-            us=read(synthpath+synthsuffix+'.'+sta[i[k]]+'.disp.u.sac')
+            ns=read(synthpath+run_name+'.'+run_number+'.'+sta[i[k]]+'.disp.n.sac')
+            es=read(synthpath+run_name+'.'+run_number+'.'+sta[i[k]]+'.disp.e.sac')
+            us=read(synthpath+run_name+'.'+run_number+'.'+sta[i[k]]+'.disp.u.sac')
             #Make plot
             dy=Dy*k
             rect=[left,bottom+dy,width,height]
@@ -348,7 +354,7 @@ def plot_synthetics(gflist,datapath,datasuffix,synthpath,synthsuffix,vord):
                 axn.legend(['Observed','Inversion'])
                 
 
-def plotABIC(home,run_name):
+def plotABIC(home,project_name,run_name):
     '''
     plot values of ABIC vs smoothing parameter for model selection
     '''
@@ -359,8 +365,8 @@ def plotABIC(home,run_name):
     #Text rendering
     pl.rc('font',family='serif')
     #Get list of log files
-    outdir=home+'output/inverse_models/models/'
-    plotdir=home+'/plots/'
+    outdir=home+project_name+'/output/inverse_models/models/'
+    plotdir=home+project_name+'/plots/'
     logs=glob(outdir+'*'+run_name+'*.log')
     ABIC=zeros(len(logs))
     ls=zeros(len(logs))
@@ -387,6 +393,49 @@ def plotABIC(home,run_name):
     print 'ABIC is minimized at inversion '+logs[imin]
     print '... lambda = '+repr(ls[imin])
     pl.show()
+    
+def plotABIC2D(home,project_name,run_name):
+    '''
+    plot 2D values of ABIC vs smoothing parameter for model selection
+    '''
+    from glob import glob
+    from numpy import zeros,argmin,log10
+    import matplotlib.pyplot as plt
+    
+    #Text rendering
+    plt.rc('font',family='serif')
+    #Get list of log files
+    outdir=home+project_name+'/output/inverse_models/models/'
+    plotdir=home+project_name+'/plots/'
+    logs=glob(outdir+'*'+run_name+'*.log')
+    ABIC=zeros(len(logs))
+    ls=zeros(len(logs))
+    lt=zeros(len(logs))
+    print 'Gathering statistics for '+str(len(logs))+' inversions...'
+    for k in range(len(logs)):
+        with open(logs[k]) as f:
+            for line in f:
+                if 'ABIC' in line:
+                    ABIC[k]=float(line.split('=')[1])
+                if 'lambda_spatial' in line:
+                    ls[k]=log10(float(line.split('=')[1]))
+                if 'lambda_temporal' in line:
+                    lt[k]=log10(float(line.split('=')[1]))
+    #Get the minimum
+    imin=argmin(ABIC)
+    #Plot the thing
+    plt.figure()
+    plt.scatter(ls,lt,marker='o',c=ABIC*1e-3,s=500,cmap=plt.cm.bone_r)
+    plt.ylabel(r'$\log(\lambda_t$)',fontsize=18)
+    plt.xlabel(r'$\log(\lambda_s$)',fontsize=18)
+    cb=plt.colorbar()
+    cb.set_label(r'ABIC $(\times10^3)$')
+    plt.scatter(ls[imin],lt[imin],marker='*',color='r',s=100)
+    plt.title(r'$\lambda_s^{min} = $%.4e , $\lambda_t^{min} = $%.4e' % (10**ls[imin],10**lt[imin]))
+    plt.show()
+    plt.savefig(plotdir+run_name+'.ABIC2D.png')
+    print 'ABIC is minimized at inversion '+logs[imin]
+    print '... ls = '+repr(10**ls[imin])+' , lt = '+repr(10**lt[imin])
         
     
 

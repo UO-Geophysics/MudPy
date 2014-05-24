@@ -260,32 +260,35 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
     Assemble G and d, determine smoothing and run the inversion
     '''
     import inverse as inv
-    from numpy import zeros,dot
-    from numpy.linalg import lstsq,matrix_rank
+    from numpy import zeros,dot,array
+    from numpy.linalg import lstsq
+    from scipy.sparse import csr_matrix as sparse
     from scipy.optimize import nnls
+    from datetime import datetime
     
+    t1=datetime.now()
     #Get data vector
     d=inv.getdata(home,project_name,GF_list,decimate)
     #Get GFs
-    G=inv.getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epicenter,
+    G,K=inv.getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epicenter,
                 rupture_speed,num_windows,coord_type,decimate)
-    #Define inversion quantities
-    K=G.transpose().dot(G)
-    x=G.transpose().dot(d)
     #Get regularization matrices (set to 0 matrix if not needed)
     if type(reg_spatial)!=bool:
         Ls=inv.getLs(home,project_name,fault_name,nfaults,num_windows,bounds)
+        Ninversion=len(reg_spatial)
     else:
         Ls=zeros(K.shape)
-        lambda_spatial=0
+        reg_spatial=array([0.])
+        Ninversion=1
     if type(reg_temporal)!=bool:
-        Lt=inv.getLt()
+        Lt=inv.getLt(home,project_name,fault_name,num_windows)
+        Ninversion=len(reg_temporal)*Ninversion
     else:
         Lt=zeros(K.shape)
-        lambda_temporal=0
+        reg_temporal=array([0.])
     #Get ranks for ABIC computation
-    Ls_rank=matrix_rank(Ls.transpose().dot(Ls))
-    Lt_rank=matrix_rank(Lt.transpose().dot(Lt))
+    Ls_rank=Ls.shape[0]
+    Lt_rank=Lt.shape[0]
     #Get data weights
     #w=get_data_weights(home,project_name,GF_list,d,decimate)
     ##Put eveG.shaperything together
@@ -297,49 +300,50 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
     #K=r_[WG,L]
     #wd=w*d
     #x=r_[wd,h]
+    #Make L's sparse
+    Ls=sparse(Ls)
+    Lt=sparse(Lt)
+    #Define inversion quantities
+    x=G.transpose().dot(d)
+    #Get regularization tranposes for ABIC
     LsLs=Ls.transpose().dot(Ls)
     LtLt=Lt.transpose().dot(Lt)
-    for k in range(len(reg_spatial)):
-        
-        #INSERTS START
-        lambda_spatial=reg_spatial[k]
-        print 'Running inversion at regularization levels: ls ='+repr(lambda_spatial)+' , lt = '+repr(lambda_temporal)
-        Kinv=K+(lambda_spatial**2)*LsLs+(lambda_temporal**2)*LtLt
-        if solver.lower()=='lstsq':
-            sol,res,rank,s=lstsq(Kinv,x)
-        elif solver.lower()=='nnls':
-            sol,res=nnls(Kinv,x)
-        else:
-            print 'ERROR: Unrecognized solver \''+solver+'\''
-        #Compute synthetics
-        ds=dot(G,sol)
-        #Get stats
-        L2,Lmodel=inv.get_stats(Kinv,sol,x)
-        VR=inv.get_VR(G,sol,d)
-        ABIC=inv.get_ABIC(G,sol,d,lambda_spatial,lambda_temporal,Ls,Lt,Ls_rank,Lt_rank)
-        #Get moment
-        Mo,Mw=inv.get_moment(home,project_name,fault_name,model_name,sol)
-        #If a rotational offset was applied then reverse it for output to file
-        if beta !=0:
-            sol=inv.rot2ds(sol,beta)
-        #Write log
-        inv.write_log(home,project_name,run_name,k,rupture_speed,num_windows,lambda_spatial,lambda_temporal,beta,
+    kout=0
+    dt=datetime.now()-t1
+    print 'Preprocessing wall time was '+str(dt)
+    print '\n--- RUNNING INVERSIONS ---\n'
+    ttotal=datetime.now()
+    for kt in range(len(reg_temporal)):
+        for ks in range(len(reg_spatial)):
+            t1=datetime.now()
+            lambda_spatial=reg_spatial[ks]
+            lambda_temporal=reg_temporal[kt]
+            print 'Running inversion '+str(kout+1)+' of '+str(Ninversion)+' at regularization levels: ls ='+repr(lambda_spatial)+' , lt = '+repr(lambda_temporal)
+            Kinv=K+(lambda_spatial**2)*LsLs.todense()+(lambda_temporal**2)*LtLt.todense()
+            if solver.lower()=='lstsq':
+                sol,res,rank,s=lstsq(Kinv,x)
+            elif solver.lower()=='nnls':
+                sol,res=nnls(Kinv,x)
+            else:
+                print 'ERROR: Unrecognized solver \''+solver+'\''
+            #Compute synthetics
+            ds=dot(G,sol)
+            #Get stats
+            L2,Lmodel=inv.get_stats(Kinv,sol,x)
+            VR=inv.get_VR(G,sol,d)
+            ABIC=inv.get_ABIC(G,K,sol,d,lambda_spatial,lambda_temporal,Ls,LsLs,Lt,LtLt,Ls_rank,Lt_rank)
+            #Get moment
+            Mo,Mw=inv.get_moment(home,project_name,fault_name,model_name,sol)
+            #If a rotational offset was applied then reverse it for output to file
+            if beta !=0:
+                sol=inv.rot2ds(sol,beta)
+            #Write log
+            inv.write_log(home,project_name,run_name,kout,rupture_speed,num_windows,lambda_spatial,lambda_temporal,beta,
                 L2,Lmodel,VR,ABIC,Mo,Mw,model_name,fault_name,G_name,GF_list,solver)
-        #Write output to file
-        inv.write_synthetics(home,project_name,run_name,GF_list,G,sol,ds,k)
-        inv.write_model(home,project_name,run_name,fault_name,model_name,rupture_speed,num_windows,epicenter,sol,k)
-        
-
-        
-        
-                
-
-
-######                 Le tools undt le trinkets                         #######
-                                
-
-        
-        
-        
-    
-        
+            #Write output to file
+            inv.write_synthetics(home,project_name,run_name,GF_list,G,sol,ds,kout)
+            inv.write_model(home,project_name,run_name,fault_name,model_name,rupture_speed,num_windows,epicenter,sol,kout)
+            kout+=1
+            dt1=datetime.now()-t1
+            dt2=datetime.now()-ttotal
+            print '... inversion wall time was '+str(dt1)+', total wall time elapsed is '+str(dt2)
