@@ -996,24 +996,24 @@ def get_ABIC(G,GTG,sol,d,lambda_s,lambda_t,Ls,LsLs,Lt,LtLt,Ls_rank,Lt_rank):
     N=d.size
     #Model parameters
     M=sol.size
-    #Likelihood exponent
-    s=norm(d-G.dot(sol))**2+(lambda_s**2)*norm(Ls.dot(sol))**2+(lambda_t**2)*norm(Lt.dot(sol))**2
-    #Total determinant
-    sq,q=slogdet(GTG+(lambda_s**2)*LsLs+(lambda_t**2)*LtLt)
     #Off you go, compute it
-    a1=(N+Ls_rank+Lt_rank-M)*log(s)
-    #Check for log(0) errors
-    if lambda_s>0:
-        a2=Ls_rank*log(lambda_s**2)
-    else:
-        a2=0
-    if lambda_t>0:
-        a3=Lt_rank*log(lambda_t**2)
-    else:
-        a3=0
-    #Add 'em up
-    ABIC=a1-a2-a3+q
-    return ABIC
+    if lambda_t>0: #There is only one contraint (no temporal regularization)
+        s=norm(d-G.dot(sol))**2+(lambda_s**2)*norm(Ls.dot(sol))**2
+        a1=N*log(s)
+        a2=M*log(lambda_s**2)
+        sq,a3=slogdet(GTG+(lambda_s**2)*LsLs)
+        #Add 'em up
+        ABIC=a1-a2+a3
+        return ABIC
+    else: #There is a double regularization, use Fukahata et al. definition
+        s=norm(d-G.dot(sol))**2+(lambda_s**2)*norm(Ls.dot(sol))**2+(lambda_t**2)*norm(Lt.dot(sol))**2
+        a1=N*log(s)
+        sq,a2=slogdet((lambda_s**2)+LsLs+(lambda_t**2)+LtLt)
+        sq,a3=slogdet(GTG+(lambda_s**2)*LsLs+(lambda_t**2)*LtLt)
+        #Add 'em up
+        ABIC=a1-a2+a3
+        return ABIC
+
     
     
 def get_moment(home,project_name,fault_name,model_name,sol):
