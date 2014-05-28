@@ -392,19 +392,15 @@ def stdecimate(st,factor):
     '''
     Decimate stream by a constant factor, i.e. factor=4 will go from 4hz to 1Hz data
     '''
-    from scipy.signal import resample
-    from numpy import zeros,ones,r_
+    from scipy.signal import filtfilt,butter
     
-    pad=10000
-    y=st[0].data
-    head=zeros(pad)
-    tail=ones(pad)*y[-1]
-    y=r_[head,y,tail]
-    y=resample(y,len(y)/factor)
-    y=y[pad/factor:-pad/factor]
+    #Anti-alias filter
+    b, a = butter(8, (1./factor)*0.9)
+    y = filtfilt(b, a, st[0].data)
     stout=st.copy()
     stout[0].data=y
-    stout[0].stats.delta=stout[0].stats.delta*factor
+    #Decimate
+    stout[0].decimate(factor,no_filter=True)
     return stout
     
 def rtrim(st,T):

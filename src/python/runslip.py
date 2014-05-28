@@ -260,7 +260,7 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
     Assemble G and d, determine smoothing and run the inversion
     '''
     import inverse as inv
-    from numpy import zeros,dot,array
+    from numpy import zeros,dot,array,squeeze,expand_dims,empty,tile
     from numpy.linalg import lstsq
     from scipy.sparse import csr_matrix as sparse
     from scipy.optimize import nnls
@@ -270,7 +270,7 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
     #Get data vector
     d=inv.getdata(home,project_name,GF_list,decimate)
     #Get GFs
-    G,K=inv.getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epicenter,
+    G=inv.getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epicenter,
                 rupture_speed,num_windows,coord_type,decimate)
     #Get regularization matrices (set to 0 matrix if not needed)
     if type(reg_spatial)!=bool:
@@ -286,28 +286,33 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
     else:
         Lt=zeros(K.shape)
         reg_temporal=array([0.])
-    #Get ranks for ABIC computation
-    Ls_rank=Ls.shape[0]
-    Lt_rank=Lt.shape[0]
-    #Get data weights
-    #w=get_data_weights(home,project_name,GF_list,d,decimate)
-    ##Put eveG.shaperything together
-    #print "Preparing solver..."
-    ##Make matrix of weights (Speedy impementation)
-    #W=empty(G.shape)
-    #W=tile(w,(G.shape[1],1)).T
-    #WG=W*G
-    #K=r_[WG,L]
-    #wd=w*d
-    #x=r_[wd,h]
     #Make L's sparse
     Ls=sparse(Ls)
     Lt=sparse(Lt)
-    #Define inversion quantities
-    x=G.transpose().dot(d)
     #Get regularization tranposes for ABIC
     LsLs=Ls.transpose().dot(Ls)
     LtLt=Lt.transpose().dot(Lt)
+    #inflate
+    Ls=Ls.todense()
+    Lt=Lt.todense()
+    LsLs=LsLs.todense()
+    LtLt=LtLt.todense()
+    #Get data weights
+    w=inv.get_data_weights(home,project_name,GF_list,d,decimate)
+    W=empty(G.shape)
+    W=tile(w,(G.shape[1],1)).T
+    WG=empty(G.shape)
+    WG=W*G
+    wd=w*d.squeeze()
+    wd=expand_dims(wd,axis=1)
+    #Clear up extraneous variables
+    W=None
+    w=None
+    #Define inversion quantities
+    x=WG.transpose().dot(wd)
+    print 'Computing G\'G'
+    K=(WG.T).dot(WG)
+    #off we go
     kout=0
     dt=datetime.now()-t1
     print 'Preprocessing wall time was '+str(dt)
@@ -319,11 +324,14 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
             lambda_spatial=reg_spatial[ks]
             lambda_temporal=reg_temporal[kt]
             print 'Running inversion '+str(kout+1)+' of '+str(Ninversion)+' at regularization levels: ls ='+repr(lambda_spatial)+' , lt = '+repr(lambda_temporal)
-            Kinv=K+(lambda_spatial**2)*LsLs.todense()+(lambda_temporal**2)*LtLt.todense()
+            Kinv=K+(lambda_spatial**2)*LsLs+(lambda_temporal**2)*LtLt
             if solver.lower()=='lstsq':
                 sol,res,rank,s=lstsq(Kinv,x)
             elif solver.lower()=='nnls':
+                x=squeeze(x.T)
                 sol,res=nnls(Kinv,x)
+                x=expand_dims(x,axis=1)
+                sol=expand_dims(sol,axis=1)
             else:
                 print 'ERROR: Unrecognized solver \''+solver+'\''
             #Compute synthetics
@@ -331,7 +339,7 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
             #Get stats
             L2,Lmodel=inv.get_stats(Kinv,sol,x)
             VR=inv.get_VR(G,sol,d)
-            ABIC=inv.get_ABIC(G,K,sol,d,lambda_spatial,lambda_temporal,Ls,LsLs,Lt,LtLt,Ls_rank,Lt_rank)
+            ABIC=inv.get_ABIC(G,K,sol,d,lambda_spatial,lambda_temporal,Ls,LsLs,Lt,LtLt)
             #Get moment
             Mo,Mw=inv.get_moment(home,project_name,fault_name,model_name,sol)
             #If a rotational offset was applied then reverse it for output to file

@@ -238,7 +238,48 @@ def get_mu(structure,zs):
     else: #Model is a halfspace
         mu=((1000*structure[0,1])**2)*structure[0,3]*1000
     return mu
+
+def get_source_time_function(mu,area,rise_time,t0):
+    '''
+    Compute source time function for a given rise time, right now it assumes 1m of slip
+    and a triangle STF
+    '''
+    from numpy import zeros,linspace,where
     
+    rise_time=float(rise_time)
+    #Initialize outputs
+    t=linspace(t0,t0+rise_time,1000)
+    Mdot=zeros(t.shape)
+    #Triangle gradient
+    m=4*mu*area/(rise_time**2)
+    #Upwards intercept
+    b1=-m*t0
+    #Downwards intercept
+    b2=m*(t0+rise_time)
+    #Assign moment rate
+    i=where(t<=t0+rise_time/2)[0]
+    Mdot[i]=m*t[i]+b1
+    i=where(t>t0+rise_time/2)[0]
+    Mdot[i]=-m*t[i]+b2   
+    return t,Mdot
+    
+def add2stf(t1,Mdot1,t2,Mdot2):
+    '''
+    Add two overlapping source time functions
+    '''
+    from numpy import interp,linspace
+    #Make interpolation vector
+    tstart=min(t1[0],t2[0])
+    tend=max(t1[-1],t2[-1])
+    ti=linspace(tstart,tend,10000)
+    #Interpolate
+    Mdot1_interp=interp(ti,t1,Mdot1,left=0,right=0)
+    Mdot2_interp=interp(ti,t2,Mdot2,left=0,right=0)
+    #Add them up
+    Mdot_out=Mdot1_interp+Mdot2_interp
+    return ti,Mdot_out
+    
+
 def add_traces(ss,ds,ssmult,dsmult):
     '''
     Add two stream objects with dip slip and strike slip contributions. This code will take

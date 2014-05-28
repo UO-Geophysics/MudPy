@@ -7,6 +7,30 @@ Some routines to make quick and not so quick plots of the forward modeling and
 inversion results
 '''
 
+import matplotlib
+cdict = {'red': ((0., 1, 1),
+                 (0.05, 1, 1),
+                 (0.11, 0, 0),
+                 (0.66, 1, 1),
+                 (0.89, 1, 1),
+                 (1, 0.5, 0.5)),
+         'green': ((0., 1, 1),
+                   (0.05, 1, 1),
+                   (0.11, 0, 0),
+                   (0.375, 1, 1),
+                   (0.64, 1, 1),
+                   (0.91, 0, 0),
+                   (1, 0, 0)),
+         'blue': ((0., 1, 1),
+                  (0.05, 1, 1),
+                  (0.11, 1, 1),
+                  (0.34, 1, 1),
+                  (0.65, 0, 0),
+                  (1, 0, 0))}
+
+whitejet = matplotlib.colors.LinearSegmentedColormap('whitejet',cdict,256)
+
+
 def quick_model_plot(rupt):
     '''
     Quick and dirty plot of a .rupt file
@@ -136,7 +160,7 @@ def tile_plot(rupt,nstrike,ndip):
              k+=1           
     #Plot
     plt.figure()
-    plt.scatter(istrike,idip,marker='o',c=slip,s=250,cmap=plt.cm.gnuplot_r)
+    plt.scatter(istrike,idip,marker='o',c=slip,s=250,cmap=whitejet)
     plt.ylabel('Along-dip index')
     plt.xlabel('Along-strike index')
     cb=plt.colorbar()
@@ -148,7 +172,48 @@ def tile_plot(rupt,nstrike,ndip):
     plt.grid()
     plt.title(rupt)
     plt.show()
+
+        
+def tile_moment(rupt,nstrike,ndip):
+    '''
+    Tile plot of subfault source-time functions
+    '''
     
+    
+    #Define canvas
+    fig, axes = plt.subplots(nrows=ndip, ncols=nstrike)
+    plt.subplots_adjust(left=0.05, bottom=0.05, right=0.95, top=0.95, wspace=0, hspace=0)
+    for k in range(nfault):
+
+        #Make plot
+        dy=Dy*k
+        rect=[left,bottom+dy,width,height]
+            axn=plt.axes(rect)
+            axn.plot(n[0].times(),n[0].data,'k',ns[0].times(),ns[0].data,'r')
+            axn.grid(which='both')
+            axn.set_ylabel(sta[i[k]])
+            rect=[left+width+0.03,bottom+dy,width,height]
+            axe=plt.axes(rect)
+            axe.plot(e[0].times(),e[0].data,'k',es[0].times(),es[0].data,'r')
+            axe.grid(which='both')
+            rect=[left+2*width+0.06,bottom+dy,width,height]
+            axz=plt.axes(rect)
+            axz.plot(u[0].times(),u[0].data,'k',us[0].times(),us[0].data,'r')
+            axz.grid(which='both')
+            if k==0:
+                axn.set_xlabel('Time (s)')
+                axe.set_xlabel('Time (s)')
+                axz.set_xlabel('Time (s)')
+            if k!=0:
+                axn.get_xaxis().set_ticklabels([])
+                axe.get_xaxis().set_ticklabels([])
+                axz.get_xaxis().set_ticklabels([])
+            if k==nsta-1:
+                axn.set_title('North (m)')
+                axe.set_title('East (m)')
+                axz.set_title('Up (m)')
+                axn.legend(['Observed','Inversion'])
+
 
 def plot_Rm(G,lambda_spatial,lambda_temporal,Ls,Lt,bounds,nstrike,ndip,maxR=0.2):
     '''
@@ -305,10 +370,16 @@ def plot_synthetics(home,project_name,run_name,run_number,gflist,vord):
     gf=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=[4,5],dtype='f')
     datapath=home+project_name+'/data/waveforms/'
     synthpath=home+project_name+'/output/inverse_models/waveforms/'
-    kgf=0 #disp
+    if vord.lower()=='d':
+        kgf=0 #disp
+        datasuffix='kdisp'
+        synthsuffix='disp'
+    elif vord.lower()=='v':
+        kgf=1 #disp
+        datasuffix='kvel'
+        synthsuffix='vel'
     i=where(gf[:,kgf]==1)[0]
     if gf[i,kgf].sum()>0:
-        datasuffix='kdisp'
         #Initalize the plot canvas
         plt.figure()
         nsta=len(i)
@@ -321,9 +392,9 @@ def plot_synthetics(home,project_name,run_name,run_number,gflist,vord):
             n=read(datapath+sta[i[k]]+'.'+datasuffix+'.n')
             e=read(datapath+sta[i[k]]+'.'+datasuffix+'.e')
             u=read(datapath+sta[i[k]]+'.'+datasuffix+'.u')
-            ns=read(synthpath+run_name+'.'+run_number+'.'+sta[i[k]]+'.disp.n.sac')
-            es=read(synthpath+run_name+'.'+run_number+'.'+sta[i[k]]+'.disp.e.sac')
-            us=read(synthpath+run_name+'.'+run_number+'.'+sta[i[k]]+'.disp.u.sac')
+            ns=read(synthpath+run_name+'.'+run_number+'.'+sta[i[k]]+'.'+synthsuffix+'.n.sac')
+            es=read(synthpath+run_name+'.'+run_number+'.'+sta[i[k]]+'.'+synthsuffix+'.e.sac')
+            us=read(synthpath+run_name+'.'+run_number+'.'+sta[i[k]]+'.'+synthsuffix+'.u.sac')
             #Make plot
             dy=Dy*k
             rect=[left,bottom+dy,width,height]
@@ -367,7 +438,7 @@ def plotABIC(home,project_name,run_name):
     #Get list of log files
     outdir=home+project_name+'/output/inverse_models/models/'
     plotdir=home+project_name+'/plots/'
-    logs=glob(outdir+'*'+run_name+'*.log')
+    logs=glob(outdir+'*'+run_name+'.????.log')
     ABIC=zeros(len(logs))
     ls=zeros(len(logs))
     print 'Gathering statistics for '+str(len(logs))+' inversions...'
@@ -407,7 +478,7 @@ def plotABIC2D(home,project_name,run_name):
     #Get list of log files
     outdir=home+project_name+'/output/inverse_models/models/'
     plotdir=home+project_name+'/plots/'
-    logs=glob(outdir+'*'+run_name+'*.log')
+    logs=glob(outdir+'*'+run_name+'.????.log')
     ABIC=zeros(len(logs))
     ls=zeros(len(logs))
     lt=zeros(len(logs))

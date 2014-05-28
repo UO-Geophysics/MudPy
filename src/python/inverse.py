@@ -110,7 +110,29 @@ def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epic
         kgf=4
         Gvel=array([])
         if GF[:,kgf].sum()>0:
-            pass
+            #Load fault file
+            source=loadtxt(home+project_name+'/data/model_info/'+fault_name,ndmin=2)
+            trise=source[0,7]
+            try:
+                remove(mini_station) #Cleanup  
+            except:
+                pass
+            #Make mini station file 
+            i=where(GF[:,kgf]==1)[0]
+            if len(i)>0: #There's actually something to do
+                mini_station_file(mini_station,stations[i],GF[i,0],GF[i,1],GFfiles[i,1])
+                gftype='vel'
+                #Decide on delays for each time window (50% overlap)
+                trupt=arange(0,num_windows)*trise/2
+                for krup in range(num_windows):
+                    print 'Working on window '+str(krup+1)
+                    tdelay=epi2subfault(epicenter,source,rupture_speed,trupt[krup])
+                    Gvel_temp=makeG(home,project_name,fault_name,model_name,split(mini_station)[1],gftype,tdelay,decimate)
+                    if krup==0: #First rupture speed
+                        Gvel=Gvel_temp
+                    else:
+                        Gvel=c_[Gvel,Gvel_temp]
+                remove(mini_station) #Cleanup 
         #Tsunami waveforms
         kgf=5
         Gtsun=array([])
@@ -123,11 +145,11 @@ def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epic
             pass
         #Done, now concatenate them all ccompute transpose product and save
         G=concatenate([g for g in [Gstatic,Gdisp,Gvel,Gtsun,Gstrain] if g.size > 0])
-        K=dot(G.T,G)
+        #K=dot(G.T,G)
         print 'Computing G\'G and saving to '+G_name+' this might take just a second...'
         save(G_name,G)
-        save(K_name,K)
-    return G,K
+        #save(K_name,K)
+    return G
     
 def makeG(home,project_name,fault_name,model_name,station_file,gftype,tdelay,decimate):
     '''
@@ -196,7 +218,7 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tdelay,dec
                     #Append to G
                 #Append to output matrix
                 G[ksta*3:ksta*3+3,:]=Gtemp
-            if gftype.lower()=='disp' or gftype.lower=='vel':  #Full waveforms
+            if gftype.lower()=='disp' or gftype.lower()=='vel':  #Full waveforms
                 if gftype.lower()=='disp':
                     vord='disp'
                 else:
@@ -218,10 +240,6 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tdelay,dec
                     eds=read(syn_path+staname[ksta]+'.'+nfault+'.DS.'+vord+'.e')
                     nds=read(syn_path+staname[ksta]+'.'+nfault+'.DS.'+vord+'.n')
                     zds=read(syn_path+staname[ksta]+'.'+nfault+'.DS.'+vord+'.z')
-                    #Load raw data, this will be used to trim the GFs
-                    edata=read(datafiles[ksta]+'.e')
-                    ndata=read(datafiles[ksta]+'.n')
-                    udata=read(datafiles[ksta]+'.u')
                     #Time shift them according to subfault rupture time, zero pad, round to dt interval,decimate
                     #and extend to maximum time
                     ess=tshift(ess,tdelay[kfault])
@@ -230,16 +248,24 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tdelay,dec
                     eds=tshift(eds,tdelay[kfault])
                     nds=tshift(nds,tdelay[kfault])
                     zds=tshift(zds,tdelay[kfault])
-                    if decimate>0:
+                    if decimate>0: 
                         ess=stdecimate(ess,decimate)
                         nss=stdecimate(nss,decimate)
                         zss=stdecimate(zss,decimate)    
                         eds=stdecimate(eds,decimate)
                         nds=stdecimate(nds,decimate)
                         zds=stdecimate(zds,decimate)
+                    if decimate>0 and kfault==0:#Only need to do this once
+                        #Load raw data, this will be used to trim the GFs
+                        edata=read(datafiles[ksta]+'.e')
+                        ndata=read(datafiles[ksta]+'.n')
+                        udata=read(datafiles[ksta]+'.u')
                         edata=stdecimate(edata,decimate)
                         ndata=stdecimate(ndata,decimate)
-                        udata=stdecimate(udata,decimate) 
+                        udata=stdecimate(udata,decimate)
+                        #How many points left in the tiem series
+                        npts=edata[0].stats.npts
+                        print "... "+str(npts)+" data points left over after decimation"
                     #Now time align stuff (This is where we might have some timing issues, check later, consider re-sampling to data time vector)                                       
                     ess=resample_to_data(ess,edata)
                     ess=prep_synth(ess,edata)
@@ -257,7 +283,6 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tdelay,dec
                     if kfault==0 and ksta==0: #It's the first subfault and station, initalize G
                         G=gdims(datafiles,Nfaults,decimate) #Survey all stations to decide size of G
                     if kfault==0: #Initalize Gtemp (different size for each station)
-                        npts=edata[0].stats.npts
                         Gtemp=zeros([3*npts,Nfaults*2])      
                     #Insert synthetics into Gtemp
                     Gtemp[0:npts,2*kfault]=nss[0].data
@@ -336,7 +361,7 @@ def getdata(home,project_name,GF_list,decimate):
     dvel=array([])
     i=where(GF[:,kgf]==1)[0]
     for ksta in range(len(i)):
-        print 'Assembling displacement waveforms from '+stations[i[ksta]]+' into data vector.'
+        print 'Assembling velocity waveforms from '+stations[i[ksta]]+' into data vector.'
         n=read(GFfiles[i[ksta],kgf]+'.n')
         e=read(GFfiles[i[ksta],kgf]+'.e')
         u=read(GFfiles[i[ksta],kgf]+'.u')
@@ -406,11 +431,11 @@ def getLs(home,project_name,fault_name,nfaults,num_windows,bounds):
         L[2*kfault+1,2*stencil+1]=values
     if num_windows==1: #Only one rupture speed
         Lout=L 
-    else: #Multiple rupture speeds, smooth total moment
+    else: #Multiple rupture speeds, smooth total moment laplacian
         Lout=L
-        #Lout=tile(Lout,(1,num_windows))
-        for k in range(num_windows-1):
-            Lout=block_diag(Lout,L)
+        Lout=tile(Lout,(1,num_windows))/num_windows
+        #for k in range(num_windows-1):
+        #    Lout=block_diag(Lout,L)
     return Lout
         
         
@@ -440,13 +465,26 @@ def getLt(home,project_name,fault_name,num_windows):
         return Lout
     #Initalize
     L=eye(2*N*num_windows)
+    #Ltest=zeros((N*num_windows,2*N*num_windows))
     print 'Making first derivative temporal regularization matrix...'
     #Forward difference indices
     iforward=arange(N*2*(num_windows-1))
     L[iforward,iforward+(2*N)]=-1
+    #
+    #i1=arange(0,N*num_windows)
+    #i2=arange(0,2*N*num_windows,2)
+    #Ltest[i1,i2]=1
+    #Ltest[i1,i2+1]=1
+    #i1=arange(0,N*num_windows-N)
+    #i2=arange(2*N,2*N*num_windows,2)
+    #Ltest[i1,i2]=-1
+    #Ltest[i1,i2+1]=-1
+    #Ltest=Ltest/2
+    #return Ltest
+    #
     #Backwards differences for last window
-    iback=arange(N*2*(num_windows-1),N*2*num_windows)
-    L[iback,iback-(2*N)]=-1
+    #iback=arange(N*2*(num_windows-1),N*2*num_windows)
+    #L[iback,iback-(2*N)]=-1
     return L
 
 
@@ -466,6 +504,9 @@ def get_data_weights(home,project_name,GF_list,d,decimate):
     #Initalize
     w=zeros(len(d))
     kinsert=0
+    #Deal with decimation
+    if decimate==0:
+        decimate=1
     #Static weights
     kgf=0
     i=where(GF[:,kgf]==1)[0]
@@ -854,6 +895,7 @@ def gdims(datafiles,nfaults,decimate):
     
     from obspy import read
     from numpy import zeros
+    from green import stdecimate
     
     npts=0
     if decimate==0:
@@ -863,7 +905,9 @@ def gdims(datafiles,nfaults,decimate):
         n=read(datafiles[k]+'.n')
         u=read(datafiles[k]+'.u')
         if e[0].stats.npts==n[0].stats.npts==u[0].stats.npts:
-            npts+=e[0].stats.npts/decimate
+            if decimate>1:
+                e=stdecimate(e,decimate)
+            npts+=e[0].stats.npts
         else:
             print str(e[0].stats.npts)+' pts in east component'
             print str(n[0].stats.npts)+' pts in north component'
@@ -969,7 +1013,7 @@ def get_VR(G,sol,d):
     return VR
     
     
-def get_ABIC(G,GTG,sol,d,lambda_s,lambda_t,Ls,LsLs,Lt,LtLt,Ls_rank,Lt_rank):
+def get_ABIC(G,GTG,sol,d,lambda_s,lambda_t,Ls,LsLs,Lt,LtLt):
     '''
     Compute Akaike's Bayesian information criterion, for details see Ide et al. (1996)
     in BSSA, specifically equation 33.
@@ -985,7 +1029,7 @@ def get_ABIC(G,GTG,sol,d,lambda_s,lambda_t,Ls,LsLs,Lt,LtLt,Ls_rank,Lt_rank):
         Ls_rank: Rank of Ls (#eigenvalues>0)
         Lt_rank: Rank of Lt
     OUT:
-        ABIC: Akike's Bayesian information criterion
+        ABIC: Akaike's Bayesian information criterion
     
     '''
     
@@ -997,7 +1041,7 @@ def get_ABIC(G,GTG,sol,d,lambda_s,lambda_t,Ls,LsLs,Lt,LtLt,Ls_rank,Lt_rank):
     #Model parameters
     M=sol.size
     #Off you go, compute it
-    if lambda_t>0: #There is only one contraint (no temporal regularization)
+    if lambda_t==0: #There is only one contraint (no temporal regularization)
         s=norm(d-G.dot(sol))**2+(lambda_s**2)*norm(Ls.dot(sol))**2
         a1=N*log(s)
         a2=M*log(lambda_s**2)
@@ -1006,9 +1050,10 @@ def get_ABIC(G,GTG,sol,d,lambda_s,lambda_t,Ls,LsLs,Lt,LtLt,Ls_rank,Lt_rank):
         ABIC=a1-a2+a3
         return ABIC
     else: #There is a double regularization, use Fukahata et al. definition
-        s=norm(d-G.dot(sol))**2+(lambda_s**2)*norm(Ls.dot(sol))**2+(lambda_t**2)*norm(Lt.dot(sol))**2
+        print '... computing 2d-ABIC'
+        s=(norm(d-G.dot(sol))**2)+((lambda_s**2)*(norm(Ls.dot(sol))**2))+((lambda_t**2)*(norm(Lt.dot(sol))**2))
         a1=N*log(s)
-        sq,a2=slogdet((lambda_s**2)+LsLs+(lambda_t**2)+LtLt)
+        sq,a2=slogdet((lambda_s**2)*LsLs+(lambda_t**2)*LtLt)
         sq,a3=slogdet(GTG+(lambda_s**2)*LsLs+(lambda_t**2)*LtLt)
         #Add 'em up
         ABIC=a1-a2+a3
@@ -1044,7 +1089,10 @@ def get_moment(home,project_name,fault_name,model_name,sol):
             A[i]=f[k,8]*f[k,9]
             i+=1
     #Compute moments
-    M0=mu*A*slip[:,0]
+    try:
+        M0=mu*A*slip[:,0]
+    except:
+        M0=mu*A*slip
     #Total up and copute magnitude
     M0=M0.sum()
     Mw=(2./3)*(log10(M0)-9.1)
