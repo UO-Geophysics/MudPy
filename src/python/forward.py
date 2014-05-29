@@ -239,7 +239,7 @@ def get_mu(structure,zs):
         mu=((1000*structure[0,1])**2)*structure[0,3]*1000
     return mu
 
-def get_source_time_function(mu,area,rise_time,t0):
+def get_source_time_function(mu,area,rise_time,t0,slip):
     '''
     Compute source time function for a given rise time, right now it assumes 1m of slip
     and a triangle STF
@@ -260,7 +260,8 @@ def get_source_time_function(mu,area,rise_time,t0):
     i=where(t<=t0+rise_time/2)[0]
     Mdot[i]=m*t[i]+b1
     i=where(t>t0+rise_time/2)[0]
-    Mdot[i]=-m*t[i]+b2   
+    Mdot[i]=-m*t[i]+b2 
+    Mdot=Mdot*slip  
     return t,Mdot
     
 def add2stf(t1,Mdot1,t2,Mdot2):
@@ -400,5 +401,17 @@ def upsample(st,delta):
     yi=f(ti)
     st[0].data=yi
     st[0].stats.delta=delta
+
+def lowpass(data,fcorner,fsample,order):
+    '''
+    Make a lowpass zero phase filter
+    '''
+    from scipy.signal import butter,filtfilt
+    fnyquist=fsample/2
+    b, a = butter(order, fcorner/(fnyquist))
+    data_filt=filtfilt(b,a,data)
+    return data_filt
+    
+    
 
     

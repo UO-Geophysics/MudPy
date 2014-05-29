@@ -17,7 +17,7 @@ Functions in this module:
 
 
 def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epicenter,rupture_speed,
-        num_windows,coord_type,decimate):
+        num_windows,coord_type,decimate,lowpass):
     '''
     Assemble Green functions matrix. If requested will parse all available synthetics on file and build the matrix.
     Otherwise, if it exists, it will be loaded from file 
@@ -54,7 +54,7 @@ def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epic
             G_name=G_name+'.npy'
         print 'Loading G from file '+G_name
         G=load(G_name)
-        K=load(K_name)
+        #K=load(K_name)
     else: #assemble G one data type at a time
         print 'Assembling G from synthetic computations...'
         #Read in GFlist and decide what to compute
@@ -77,7 +77,7 @@ def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epic
                 mini_station_file(mini_station,stations[i],GF[i,0],GF[i,1],GFfiles[i,0])
                 gftype='static'
                 tdelay=0
-                Gstatic=makeG(home,project_name,fault_name,model_name,split(mini_station)[1],gftype,tdelay,decimate)
+                Gstatic=makeG(home,project_name,fault_name,model_name,split(mini_station)[1],gftype,tdelay,decimate,lowpass)
                 remove(mini_station) #Cleanup  
         #Dispalcement waveform GFs
         kgf=3
@@ -100,7 +100,7 @@ def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epic
                 for krup in range(num_windows):
                     print 'Working on window '+str(krup+1)
                     tdelay=epi2subfault(epicenter,source,rupture_speed,trupt[krup])
-                    Gdisp_temp=makeG(home,project_name,fault_name,model_name,split(mini_station)[1],gftype,tdelay,decimate)
+                    Gdisp_temp=makeG(home,project_name,fault_name,model_name,split(mini_station)[1],gftype,tdelay,decimate,lowpass)
                     if krup==0: #First rupture speed
                         Gdisp=Gdisp_temp
                     else:
@@ -127,7 +127,7 @@ def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epic
                 for krup in range(num_windows):
                     print 'Working on window '+str(krup+1)
                     tdelay=epi2subfault(epicenter,source,rupture_speed,trupt[krup])
-                    Gvel_temp=makeG(home,project_name,fault_name,model_name,split(mini_station)[1],gftype,tdelay,decimate)
+                    Gvel_temp=makeG(home,project_name,fault_name,model_name,split(mini_station)[1],gftype,tdelay,decimate,lowpass)
                     if krup==0: #First rupture speed
                         Gvel=Gvel_temp
                     else:
@@ -151,7 +151,7 @@ def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epic
         #save(K_name,K)
     return G
     
-def makeG(home,project_name,fault_name,model_name,station_file,gftype,tdelay,decimate):
+def makeG(home,project_name,fault_name,model_name,station_file,gftype,tdelay,decimate,lowpass):
     '''
     This routine is called from getG and will assemble the GFs from available synthetics
     depending on data type requested (statics, dispalcement or velocity waveforms).
@@ -174,6 +174,7 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tdelay,dec
     from string import rjust
     from obspy import read
     from forward import tshift
+    from forward import lowpass as lfilt
     from green import stdecimate
     
     #Load fault model
@@ -240,6 +241,14 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tdelay,dec
                     eds=read(syn_path+staname[ksta]+'.'+nfault+'.DS.'+vord+'.e')
                     nds=read(syn_path+staname[ksta]+'.'+nfault+'.DS.'+vord+'.n')
                     zds=read(syn_path+staname[ksta]+'.'+nfault+'.DS.'+vord+'.z')
+                    if lowpass!=None: #Apply low pass filter to data
+                        fsample=1./ess[0].stats.delta
+                        ess[0].data=lfilt(ess[0].data,lowpass,fsample,9)
+                        nss[0].data=lfilt(nss[0].data,lowpass,fsample,9)
+                        zss[0].data=lfilt(zss[0].data,lowpass,fsample,9)
+                        eds[0].data=lfilt(eds[0].data,lowpass,fsample,9)
+                        nds[0].data=lfilt(nds[0].data,lowpass,fsample,9)
+                        zds[0].data=lfilt(zds[0].data,lowpass,fsample,9)
                     #Time shift them according to subfault rupture time, zero pad, round to dt interval,decimate
                     #and extend to maximum time
                     ess=tshift(ess,tdelay[kfault])
@@ -248,14 +257,14 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tdelay,dec
                     eds=tshift(eds,tdelay[kfault])
                     nds=tshift(nds,tdelay[kfault])
                     zds=tshift(zds,tdelay[kfault])
-                    if decimate>0: 
+                    if decimate!=None: 
                         ess=stdecimate(ess,decimate)
                         nss=stdecimate(nss,decimate)
                         zss=stdecimate(zss,decimate)    
                         eds=stdecimate(eds,decimate)
                         nds=stdecimate(nds,decimate)
                         zds=stdecimate(zds,decimate)
-                    if decimate>0 and kfault==0:#Only need to do this once
+                    if decimate!=None and kfault==0:#Only need to do this once
                         #Load raw data, this will be used to trim the GFs
                         edata=read(datafiles[ksta]+'.e')
                         ndata=read(datafiles[ksta]+'.n')
@@ -301,7 +310,7 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tdelay,dec
     return G
       
       
-def getdata(home,project_name,GF_list,decimate):
+def getdata(home,project_name,GF_list,decimate,lowpass):
     '''
     Assemble the data vector for all data types
     
@@ -318,6 +327,7 @@ def getdata(home,project_name,GF_list,decimate):
     from obspy import read
     from forward import round_time
     from green import stdecimate
+    from forward import lowpass as lfilt
     
 
     #Read gf file and decide what needs to get loaded
@@ -345,8 +355,13 @@ def getdata(home,project_name,GF_list,decimate):
         n=read(GFfiles[i[ksta],kgf]+'.n')
         e=read(GFfiles[i[ksta],kgf]+'.e')
         u=read(GFfiles[i[ksta],kgf]+'.u')
+        if lowpass!=None: #Apply low pass filter to data
+            fsample=1./n[0].stats.delta
+            n[0].data=lfilt(n[0].data,lowpass,fsample,9)
+            e[0].data=lfilt(e[0].data,lowpass,fsample,9)
+            u[0].data=lfilt(u[0].data,lowpass,fsample,9)
         #Decimate
-        if decimate>0:
+        if decimate!=None:
             n=stdecimate(n,decimate)
             e=stdecimate(e,decimate)
             u=stdecimate(u,decimate)
@@ -365,8 +380,13 @@ def getdata(home,project_name,GF_list,decimate):
         n=read(GFfiles[i[ksta],kgf]+'.n')
         e=read(GFfiles[i[ksta],kgf]+'.e')
         u=read(GFfiles[i[ksta],kgf]+'.u')
+        if lowpass!=None: #Apply low pass filter to data
+            fsample=1./n[0].stats.delta
+            n[0].data=lfilt(n[0].data,lowpass,fsample,9)
+            e[0].data=lfilt(e[0].data,lowpass,fsample,9)
+            u[0].data=lfilt(u[0].data,lowpass,fsample,9)
         #Decimate
-        if decimate>0:
+        if decimate!=None:
             n=stdecimate(n,decimate)
             e=stdecimate(e,decimate)
             u=stdecimate(u,decimate)
@@ -494,6 +514,7 @@ def get_data_weights(home,project_name,GF_list,d,decimate):
     '''    
     from numpy import genfromtxt,where,zeros,ones
     from obspy import read
+    from green import stdecimate
 
     print 'Computing data weights...'
     #Read gf file and decide what needs tog et loaded
@@ -505,7 +526,7 @@ def get_data_weights(home,project_name,GF_list,d,decimate):
     w=zeros(len(d))
     kinsert=0
     #Deal with decimation
-    if decimate==0:
+    if decimate==None:
         decimate=1
     #Static weights
     kgf=0
@@ -521,7 +542,9 @@ def get_data_weights(home,project_name,GF_list,d,decimate):
     for ksta in range(len(i)):
         #Read waveform to determine length of insert
         st=read(GFfiles[i[ksta],kgf]+'.n')
-        nsamples=st[0].stats.npts/decimate
+        if decimate!=None:
+            st=stdecimate(st,decimate)
+        nsamples=st[0].stats.npts
         wn=(1/weights[i[ksta],3])*ones(nsamples)
         w[kinsert:kinsert+nsamples]=wn
         kinsert=kinsert+nsamples
@@ -537,7 +560,9 @@ def get_data_weights(home,project_name,GF_list,d,decimate):
     for ksta in range(len(i)):
         #Read waveform to determine length of insert
         st=read(GFfiles[i[ksta],kgf]+'.n')
-        nsamples=st[0].stats.npts/decimate
+        if decimate!=None:
+            st=stdecimate(st,decimate)
+        nsamples=st[0].stats.npts
         wn=(1/weights[i[ksta],6])*ones(nsamples)
         w[kinsert:kinsert+nsamples]=wn
         kinsert=kinsert+nsamples
@@ -619,7 +644,7 @@ def write_model(home,project_name,run_name,fault_name,model_name,rupture_speed,n
         
     
     
-def write_synthetics(home,project_name,run_name,GF_list,G,sol,ds,num):
+def write_synthetics(home,project_name,run_name,GF_list,G,sol,ds,num,decimate):
     '''
     Output synthetics as sac for displacement or velocity waveforms and ascii for static field
     
@@ -637,6 +662,7 @@ def write_synthetics(home,project_name,run_name,GF_list,G,sol,ds,num):
     from obspy import read
     from numpy import array,savetxt,where,genfromtxt
     from string import rjust
+    from green import stdecimate
     
     print '... computing and saving synthetics...'
     num=rjust(str(num),4,'0')
@@ -665,6 +691,9 @@ def write_synthetics(home,project_name,run_name,GF_list,G,sol,ds,num):
             n=read(GFfiles[i[ksta],kgf]+'.n')
             e=read(GFfiles[i[ksta],kgf]+'.e')
             u=read(GFfiles[i[ksta],kgf]+'.u')
+            n=stdecimate(n,decimate)
+            e=stdecimate(e,decimate)
+            u=stdecimate(u,decimate)
             npts=n[0].stats.npts
             n[0].data=ds[kinsert:kinsert+npts]
             e[0].data=ds[kinsert+npts:kinsert+2*npts]
@@ -682,6 +711,9 @@ def write_synthetics(home,project_name,run_name,GF_list,G,sol,ds,num):
             n=read(GFfiles[i[ksta],kgf]+'.n')
             e=read(GFfiles[i[ksta],kgf]+'.e')
             u=read(GFfiles[i[ksta],kgf]+'.u')
+            n=stdecimate(n,decimate)
+            e=stdecimate(e,decimate)
+            u=stdecimate(u,decimate)
             npts=n[0].stats.npts
             n[0].data=ds[kinsert:kinsert+npts]
             e[0].data=ds[kinsert+npts:kinsert+2*npts]
@@ -898,14 +930,14 @@ def gdims(datafiles,nfaults,decimate):
     from green import stdecimate
     
     npts=0
-    if decimate==0:
+    if decimate==None:
         decimate=1
     for k in range(len(datafiles)):
         e=read(datafiles[k]+'.e')
         n=read(datafiles[k]+'.n')
         u=read(datafiles[k]+'.u')
         if e[0].stats.npts==n[0].stats.npts==u[0].stats.npts:
-            if decimate>1:
+            if decimate!=None:
                 e=stdecimate(e,decimate)
             npts+=e[0].stats.npts
         else:
@@ -970,7 +1002,30 @@ def epi2subfault(epicenter,source,vr,tr):
     tdelay=tdelay+tr
     return tdelay   
     
+  
+def d2epi(epicenter,source):
+    '''
+    Compute distance from subfault to epicenter
     
+    IN:
+        epicenter: Epicentral coordinates
+        source: Matrix of subfault coordinates
+        
+    OUT:
+        d: distance to epicenter
+    '''
+    from numpy import tile,sin,cos,deg2rad,sqrt
+    #Compute distances from epi to subfault by converting to cartesian
+    R=6371
+    epicenter=tile(epicenter,(len(source),1))
+    xepi=(R-epicenter[:,2])*sin(deg2rad(90-epicenter[:,1]))*cos(deg2rad(epicenter[:,0]))
+    yepi=(R-epicenter[:,2])*sin(deg2rad(90-epicenter[:,1]))*sin(deg2rad(epicenter[:,0]))
+    zepi=(R-epicenter[:,2])*cos(deg2rad(90-epicenter[:,1]))
+    x=(R-source[:,2])*sin(deg2rad(90-source[:,1]))*cos(deg2rad(source[:,0]))
+    y=(R-source[:,2])*sin(deg2rad(90-source[:,1]))*sin(deg2rad(source[:,0]))
+    z=(R-source[:,2])*cos(deg2rad(90-source[:,1]))
+    d=sqrt((xepi-x)**2+(yepi-y)**2+(zepi-z)**2) 
+    return d
 
 def get_stats(WG,sol,wd):
     '''

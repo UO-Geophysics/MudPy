@@ -131,6 +131,7 @@ def tile_plot(rupt,nstrike,ndip):
     
     from numpy import genfromtxt,unique,where,zeros
     import matplotlib.pyplot as plt
+    from matplotlib import cm
     
     f=genfromtxt(rupt)
     num=f[:,0]
@@ -160,7 +161,7 @@ def tile_plot(rupt,nstrike,ndip):
              k+=1           
     #Plot
     plt.figure()
-    plt.scatter(istrike,idip,marker='o',c=slip,s=250,cmap=whitejet)
+    plt.scatter(istrike,idip,marker='o',c=slip,s=250,cmap=cm.gist_stern_r)
     plt.ylabel('Along-dip index')
     plt.xlabel('Along-strike index')
     cb=plt.colorbar()
@@ -174,45 +175,164 @@ def tile_plot(rupt,nstrike,ndip):
     plt.show()
 
         
-def tile_moment(rupt,nstrike,ndip):
+def tile_moment(rupt,epicenter,nstrike,ndip):
     '''
     Tile plot of subfault source-time functions
     '''
+    import matplotlib.pyplot as plt
+    from matplotlib import cm
+    from numpy import genfromtxt,unique,zeros,where,meshgrid,linspace
+    from forward import get_source_time_function,add2stf
+    from inverse import d2epi
     
+    f=genfromtxt(rupt)
+    num=f[:,0]
+    nfault=nstrike*ndip
+    #Get slips
+    all_ss=f[:,8]
+    all_ds=f[:,9]
+    #Now parse for multiple rupture speeds
+    unum=unique(num)
+    #Count number of windows
+    nwin=len(where(num==unum[0])[0])
+    #Get rigidities
+    mu=f[0:len(unum),13]
+    #Get rise times
+    rise_time=f[0:len(unum),7]
+    #Get areas
+    area=f[0:len(unum),10]*f[0:len(unum),11]
+    #Get coordinates and compute distances
+    source=f[0:len(unum),1:4]
+    d=d2epi(epicenter,source)
+    #Define velocity limits
+    vfast=3.6
+    vslow=1.0
     
+    #Get indices for plot
+    istrike=zeros(nstrike*ndip)
+    idip=zeros(nstrike*ndip)
+    k=0
+    for i in range(ndip):
+         for j in range(nstrike):
+             istrike[k]=nstrike-j-1
+             idip[k]=i
+             k+=1  
     #Define canvas
-    fig, axes = plt.subplots(nrows=ndip, ncols=nstrike)
-    plt.subplots_adjust(left=0.05, bottom=0.05, right=0.95, top=0.95, wspace=0, hspace=0)
-    for k in range(nfault):
+    fig, axarr = plt.subplots(ndip, nstrike)
+    #Loop over subfaults
+    Mmax=0
+    for kfault in range(nfault):
+        if kfault%10==0:
+            print '... working on subfault '+str(kfault)+' of '+str(nfault)
+        #Get rupture times for subfault windows
+        i=where(num==unum[kfault])[0]
+        trup=f[i,12]
+        #Get slips on windows
+        ss=all_ss[i]
+        ds=all_ds[i]
+        #Add it up
+        slip=(ss**2+ds**2)**0.5
+        #Get first source time function
+        t1,M1=get_source_time_function(mu[kfault],area[kfault],rise_time[kfault],trup[0],slip[0])
+        #Loop over windows
+        for kwin in range(nwin-1):
+            #Get next source time function
+            t2,M2=get_source_time_function(mu[kfault],area[kfault],rise_time[kfault],trup[kwin+1],slip[kwin+1])
+            #Add the soruce time functions
+            t1,M1=add2stf(t1,M1,t2,M2)
+        #Track maximum moment
+        Mmax=max(Mmax,M1.max())
+        #Done now plot them
+        #get current axis
+        ax=axarr[idip[kfault], istrike[kfault]]
+        #Make contourf
+        Mc=linspace(0,0.98*max(M1),100)
+        T,M=meshgrid(t1,Mc)
+        i=where(T==0)[0]
+        T[i]=0.01
+        V=d[kfault]/T
+        im=ax.contourf(T,M,V,100,vmin=vslow,vmax=vfast,cmap=cm.spectral)
+        #Cover upper part
+        ax.fill_between(t1,y1=M1,y2=1.01*M1.max(),color='white')
+        #Plot curve
+        ax.plot(t1, M1,color='k')
+        ax.grid()
+        ax.set_xlim([t1[0],t1[-1]])
+        ax.xaxis.set_ticks(linspace(t1[0],t1[-1],5))
+        ax.xaxis.set_ticklabels([])
+        ax.yaxis.set_ticklabels([])
+    #Go back and rescale all subplots by maximum moment
+    for k in range(ndip):
+        for k2 in range(nstrike):
+            ax=axarr[k,k2]
+            ax.set_ylim([0,Mmax])
+    #Fix subplot arrangement
+    plt.subplots_adjust(left=0.02, bottom=0.02, right=0.9, top=0.98, wspace=0, hspace=0)
+    #Add colorbar
+    cbar_ax = fig.add_axes([0.91, 0.15, 0.01, 0.7])
+    cb=fig.colorbar(im, cax=cbar_ax)
+    cb.set_label('Reference rupture velocity (km/s)')
 
-        #Make plot
-        dy=Dy*k
-        rect=[left,bottom+dy,width,height]
-            axn=plt.axes(rect)
-            axn.plot(n[0].times(),n[0].data,'k',ns[0].times(),ns[0].data,'r')
-            axn.grid(which='both')
-            axn.set_ylabel(sta[i[k]])
-            rect=[left+width+0.03,bottom+dy,width,height]
-            axe=plt.axes(rect)
-            axe.plot(e[0].times(),e[0].data,'k',es[0].times(),es[0].data,'r')
-            axe.grid(which='both')
-            rect=[left+2*width+0.06,bottom+dy,width,height]
-            axz=plt.axes(rect)
-            axz.plot(u[0].times(),u[0].data,'k',us[0].times(),us[0].data,'r')
-            axz.grid(which='both')
-            if k==0:
-                axn.set_xlabel('Time (s)')
-                axe.set_xlabel('Time (s)')
-                axz.set_xlabel('Time (s)')
-            if k!=0:
-                axn.get_xaxis().set_ticklabels([])
-                axe.get_xaxis().set_ticklabels([])
-                axz.get_xaxis().set_ticklabels([])
-            if k==nsta-1:
-                axn.set_title('North (m)')
-                axe.set_title('East (m)')
-                axz.set_title('Up (m)')
-                axn.legend(['Observed','Inversion'])
+
+def source_time_function(rupt,epicenter):
+    '''
+    Tile plot of subfault source-time functions
+    '''
+    import matplotlib.pyplot as plt
+    from matplotlib import cm
+    from numpy import genfromtxt,unique,log10,where,floor
+    from forward import get_source_time_function,add2stf
+    from inverse import d2epi
+    
+    f=genfromtxt(rupt)
+    num=f[:,0]
+    #Get slips
+    all_ss=f[:,8]
+    all_ds=f[:,9]
+    #Now parse for multiple rupture speeds
+    unum=unique(num)
+    nfault=len(unum)
+    #Count number of windows
+    nwin=len(where(num==unum[0])[0])
+    #Get rigidities
+    mu=f[0:len(unum),13]
+    #Get rise times
+    rise_time=f[0:len(unum),7]
+    #Get areas
+    area=f[0:len(unum),10]*f[0:len(unum),11]
+    #Get coordinates and compute distances
+    source=f[0:len(unum),1:4]
+    d=d2epi(epicenter,source)
+    #Loop over subfaults
+    for kfault in range(nfault):
+        if kfault%10==0:
+            print '... working on subfault '+str(kfault)+' of '+str(nfault)
+        #Get rupture times for subfault windows
+        i=where(num==unum[kfault])[0]
+        trup=f[i,12]
+        #Get slips on windows
+        ss=all_ss[i]
+        ds=all_ds[i]
+        #Add it up
+        slip=(ss**2+ds**2)**0.5
+        if kfault==0:#Get first source time function
+            t1,M1=get_source_time_function(mu[kfault],area[kfault],rise_time[kfault],trup[0],slip[0])
+        #Loop over windows
+        for kwin in range(nwin-1):
+            #Get next source time function
+            t2,M2=get_source_time_function(mu[kfault],area[kfault],rise_time[kfault],trup[kwin+1],slip[kwin+1])
+            #Add the soruce time functions
+            t1,M1=add2stf(t1,M1,t2,M2)
+    #Get power
+    exp=floor(log10(M1.max()))
+    M1=M1/(10**exp)
+    plt.figure()
+    plt.fill(t1,M1,'b',alpha=0.5)
+    plt.plot(t1,M1,color='k')
+    plt.grid()
+    plt.xlabel('Time(s)')
+    plt.ylabel('Moment Rate ('+r'$\times 10^{'+str(int(exp))+r'}$Nm/s)')
+    
 
 
 def plot_Rm(G,lambda_spatial,lambda_temporal,Ls,Lt,bounds,nstrike,ndip,maxR=0.2):
@@ -352,7 +472,7 @@ def model_tslice(rupt,out,dt,cumul):
         plt.close("all")
     
     
-def plot_synthetics(home,project_name,run_name,run_number,gflist,vord):
+def plot_synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpass):
     '''
     Plot synthetics vs real data
     
@@ -363,6 +483,8 @@ def plot_synthetics(home,project_name,run_name,run_number,gflist,vord):
     from numpy import genfromtxt,where
     import matplotlib.pyplot as plt
     import matplotlib
+    from green import stdecimate 
+    from forward import lowpass as lfilter
     
     matplotlib.rcParams.update({'font.size': 16})
     #Decide what to plot
@@ -392,6 +514,15 @@ def plot_synthetics(home,project_name,run_name,run_number,gflist,vord):
             n=read(datapath+sta[i[k]]+'.'+datasuffix+'.n')
             e=read(datapath+sta[i[k]]+'.'+datasuffix+'.e')
             u=read(datapath+sta[i[k]]+'.'+datasuffix+'.u')
+            if lowpass!=None:
+                fsample=1./e[0].stats.delta
+                e[0].data=lfilter(e[0].data,lowpass,fsample,10)
+                n[0].data=lfilter(n[0].data,lowpass,fsample,10)
+                u[0].data=lfilter(u[0].data,lowpass,fsample,10)
+            if decimate!=None:
+                n=stdecimate(n,decimate)
+                e=stdecimate(e,decimate)
+                u=stdecimate(u,decimate)
             ns=read(synthpath+run_name+'.'+run_number+'.'+sta[i[k]]+'.'+synthsuffix+'.n.sac')
             es=read(synthpath+run_name+'.'+run_number+'.'+sta[i[k]]+'.'+synthsuffix+'.e.sac')
             us=read(synthpath+run_name+'.'+run_number+'.'+sta[i[k]]+'.'+synthsuffix+'.u.sac')

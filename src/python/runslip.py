@@ -254,8 +254,8 @@ def inversionGFs(home,project_name,GF_list,fault_name,model_name,dt,NFFT,coord_t
                                 
                                                         
 def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_from_file,G_name,epicenter,
-                rupture_speed,num_windows,coord_type,reg_spatial,reg_temporal,nfaults,beta,decimate,solver,
-                bounds):
+                rupture_speed,num_windows,coord_type,reg_spatial,reg_temporal,nfaults,beta,decimate,lowpass,
+                solver,bounds):
     '''
     Assemble G and d, determine smoothing and run the inversion
     '''
@@ -268,10 +268,25 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
     
     t1=datetime.now()
     #Get data vector
-    d=inv.getdata(home,project_name,GF_list,decimate)
+    d=inv.getdata(home,project_name,GF_list,decimate,lowpass)
     #Get GFs
     G=inv.getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epicenter,
                 rupture_speed,num_windows,coord_type,decimate)
+    #Get data weights
+    w=inv.get_data_weights(home,project_name,GF_list,d,decimate)
+    W=empty(G.shape)
+    W=tile(w,(G.shape[1],1)).T
+    WG=empty(G.shape)
+    WG=W*G
+    wd=w*d.squeeze()
+    wd=expand_dims(wd,axis=1)
+    #Clear up extraneous variables
+    W=None
+    w=None
+    #Define inversion quantities
+    x=WG.transpose().dot(wd)
+    print 'Computing G\'G'
+    K=(WG.T).dot(WG)
     #Get regularization matrices (set to 0 matrix if not needed)
     if type(reg_spatial)!=bool:
         Ls=inv.getLs(home,project_name,fault_name,nfaults,num_windows,bounds)
@@ -297,21 +312,6 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
     Lt=Lt.todense()
     LsLs=LsLs.todense()
     LtLt=LtLt.todense()
-    #Get data weights
-    w=inv.get_data_weights(home,project_name,GF_list,d,decimate)
-    W=empty(G.shape)
-    W=tile(w,(G.shape[1],1)).T
-    WG=empty(G.shape)
-    WG=W*G
-    wd=w*d.squeeze()
-    wd=expand_dims(wd,axis=1)
-    #Clear up extraneous variables
-    W=None
-    w=None
-    #Define inversion quantities
-    x=WG.transpose().dot(wd)
-    print 'Computing G\'G'
-    K=(WG.T).dot(WG)
     #off we go
     kout=0
     dt=datetime.now()-t1
@@ -339,7 +339,7 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
             #Get stats
             L2,Lmodel=inv.get_stats(Kinv,sol,x)
             VR=inv.get_VR(G,sol,d)
-            ABIC=inv.get_ABIC(G,K,sol,d,lambda_spatial,lambda_temporal,Ls,LsLs,Lt,LtLt)
+            ABIC=inv.get_ABIC(WG,K,sol,wd,lambda_spatial,lambda_temporal,Ls,LsLs,Lt,LtLt)
             #Get moment
             Mo,Mw=inv.get_moment(home,project_name,fault_name,model_name,sol)
             #If a rotational offset was applied then reverse it for output to file
@@ -349,7 +349,7 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
             inv.write_log(home,project_name,run_name,kout,rupture_speed,num_windows,lambda_spatial,lambda_temporal,beta,
                 L2,Lmodel,VR,ABIC,Mo,Mw,model_name,fault_name,G_name,GF_list,solver)
             #Write output to file
-            inv.write_synthetics(home,project_name,run_name,GF_list,G,sol,ds,kout)
+            inv.write_synthetics(home,project_name,run_name,GF_list,G,sol,ds,kout,decimate)
             inv.write_model(home,project_name,run_name,fault_name,model_name,rupture_speed,num_windows,epicenter,sol,kout)
             kout+=1
             dt1=datetime.now()-t1

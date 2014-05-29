@@ -395,7 +395,7 @@ def stdecimate(st,factor):
     from scipy.signal import filtfilt,butter
     
     #Anti-alias filter
-    b, a = butter(8, (1./factor)*0.9)
+    b, a = butter(10, 0.75/factor)
     y = filtfilt(b, a, st[0].data)
     stout=st.copy()
     stout[0].data=y
