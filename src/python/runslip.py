@@ -50,6 +50,8 @@ def init(home,project_name):
         makedirs(proj_dir+'output/inverse_models/models')
         makedirs(proj_dir+'output/forward_models')
         makedirs(proj_dir+'logs')
+        makedirs(proj_dir+'analysis')
+        makedirs(proj_dir+'analysis/frequency')
 
 
 #Extract fault geometry from rupture file
@@ -271,7 +273,7 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
     d=inv.getdata(home,project_name,GF_list,decimate,lowpass)
     #Get GFs
     G=inv.getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epicenter,
-                rupture_speed,num_windows,coord_type,decimate)
+                rupture_speed,num_windows,coord_type,decimate,lowpass)
     #Get data weights
     w=inv.get_data_weights(home,project_name,GF_list,d,decimate)
     W=empty(G.shape)

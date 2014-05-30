@@ -31,7 +31,7 @@ cdict = {'red': ((0., 1, 1),
 whitejet = matplotlib.colors.LinearSegmentedColormap('whitejet',cdict,256)
 
 
-def quick_model_plot(rupt):
+def quick_model(rupt):
     '''
     Quick and dirty plot of a .rupt file
     '''
@@ -71,7 +71,7 @@ def quick_model_plot(rupt):
     plt.title(rupt)
     plt.show()
     
-def quick_static_plot(gflist,datapath,run_name,run_num,c):
+def quick_static(gflist,datapath,run_name,run_num,c):
     '''
     Make quick quiver plot of static fields
     
@@ -124,7 +124,7 @@ def quick_static_plot(gflist,datapath,run_name,run_num,c):
     qscale_en=1
     plt.quiverkey(Q,X=0.1,Y=0.9,U=qscale_en,label=str(qscale_en)+'m')
     
-def tile_plot(rupt,nstrike,ndip):
+def tile_slip(rupt,nstrike,ndip):
     '''
     Quick and dirty plot of a .rupt file
     '''
@@ -335,7 +335,7 @@ def source_time_function(rupt,epicenter):
     
 
 
-def plot_Rm(G,lambda_spatial,lambda_temporal,Ls,Lt,bounds,nstrike,ndip,maxR=0.2):
+def Rm(G,lambda_spatial,lambda_temporal,Ls,Lt,bounds,nstrike,ndip,maxR=0.2):
     '''
     Plot model resolution matrix
     '''
@@ -375,7 +375,7 @@ def plot_Rm(G,lambda_spatial,lambda_temporal,Ls,Lt,bounds,nstrike,ndip,maxR=0.2)
     plt.show()
     return R
 
-def model_tslice(rupt,out,dt,cumul):
+def tslice(rupt,out,dt,cumul):
     '''
     Quick and dirty plot of a .rupt file
     '''
@@ -472,7 +472,7 @@ def model_tslice(rupt,out,dt,cumul):
         plt.close("all")
     
     
-def plot_synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpass):
+def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpass,t_lim,sort):
     '''
     Plot synthetics vs real data
     
@@ -480,15 +480,17 @@ def plot_synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,l
     datapath
     '''
     from obspy import read
-    from numpy import genfromtxt,where
+    from numpy import genfromtxt,where,argsort
     import matplotlib.pyplot as plt
     import matplotlib
     from green import stdecimate 
     from forward import lowpass as lfilter
     
-    matplotlib.rcParams.update({'font.size': 16})
+    matplotlib.rcParams.update({'font.size': 14})
     #Decide what to plot
     sta=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=0,dtype='S')
+    lon=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=[1],dtype='f')
+    lat=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=[2],dtype='f')
     gf=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=[4,5],dtype='f')
     datapath=home+project_name+'/data/waveforms/'
     synthpath=home+project_name+'/output/inverse_models/waveforms/'
@@ -500,63 +502,120 @@ def plot_synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,l
         kgf=1 #disp
         datasuffix='kvel'
         synthsuffix='vel'
-    i=where(gf[:,kgf]==1)[0]
-    if gf[i,kgf].sum()>0:
-        #Initalize the plot canvas
-        plt.figure()
-        nsta=len(i)
-        left=0.05
-        width=0.28
-        bottom=0.05
-        height=0.75/nsta
-        Dy=height+0.03
-        for k in range(len(i)):
-            n=read(datapath+sta[i[k]]+'.'+datasuffix+'.n')
-            e=read(datapath+sta[i[k]]+'.'+datasuffix+'.e')
-            u=read(datapath+sta[i[k]]+'.'+datasuffix+'.u')
-            if lowpass!=None:
-                fsample=1./e[0].stats.delta
-                e[0].data=lfilter(e[0].data,lowpass,fsample,10)
-                n[0].data=lfilter(n[0].data,lowpass,fsample,10)
-                u[0].data=lfilter(u[0].data,lowpass,fsample,10)
-            if decimate!=None:
-                n=stdecimate(n,decimate)
-                e=stdecimate(e,decimate)
-                u=stdecimate(u,decimate)
-            ns=read(synthpath+run_name+'.'+run_number+'.'+sta[i[k]]+'.'+synthsuffix+'.n.sac')
-            es=read(synthpath+run_name+'.'+run_number+'.'+sta[i[k]]+'.'+synthsuffix+'.e.sac')
-            us=read(synthpath+run_name+'.'+run_number+'.'+sta[i[k]]+'.'+synthsuffix+'.u.sac')
-            #Make plot
-            dy=Dy*k
-            rect=[left,bottom+dy,width,height]
-            axn=plt.axes(rect)
-            axn.plot(n[0].times(),n[0].data,'k',ns[0].times(),ns[0].data,'r')
-            axn.grid(which='both')
-            axn.set_ylabel(sta[i[k]])
-            rect=[left+width+0.03,bottom+dy,width,height]
-            axe=plt.axes(rect)
-            axe.plot(e[0].times(),e[0].data,'k',es[0].times(),es[0].data,'r')
-            axe.grid(which='both')
-            rect=[left+2*width+0.06,bottom+dy,width,height]
-            axz=plt.axes(rect)
-            axz.plot(u[0].times(),u[0].data,'k',us[0].times(),us[0].data,'r')
-            axz.grid(which='both')
-            if k==0:
-                axn.set_xlabel('Time (s)')
-                axe.set_xlabel('Time (s)')
-                axz.set_xlabel('Time (s)')
-            if k!=0:
-                axn.get_xaxis().set_ticklabels([])
-                axe.get_xaxis().set_ticklabels([])
-                axz.get_xaxis().set_ticklabels([])
-            if k==nsta-1:
-                axn.set_title('North (m)')
-                axe.set_title('East (m)')
-                axz.set_title('Up (m)')
-                axn.legend(['Observed','Inversion'])
+    #Decide on sorting
+    i=where(gf[:,kgf]==1)[0]  
+    if sort.lower()=='lon':
+        j=argsort(lon[i])[::-1]
+        i=i[j]
+    elif sort.lower()=='lat':
+        j=argsort(lat[i])[::-1] 
+        i=i[j]
+    nsta=len(i)
+    fig, axarr = plt.subplots(nsta, 3)  
+    for k in range(len(i)):
+        n=read(datapath+sta[i[k]]+'.'+datasuffix+'.n')
+        e=read(datapath+sta[i[k]]+'.'+datasuffix+'.e')
+        u=read(datapath+sta[i[k]]+'.'+datasuffix+'.u')
+        if lowpass!=None:
+            fsample=1./e[0].stats.delta
+            e[0].data=lfilter(e[0].data,lowpass,fsample,10)
+            n[0].data=lfilter(n[0].data,lowpass,fsample,10)
+            u[0].data=lfilter(u[0].data,lowpass,fsample,10)
+        if decimate!=None:
+            n=stdecimate(n,decimate)
+            e=stdecimate(e,decimate)
+            u=stdecimate(u,decimate)
+        ns=read(synthpath+run_name+'.'+run_number+'.'+sta[i[k]]+'.'+synthsuffix+'.n.sac')
+        es=read(synthpath+run_name+'.'+run_number+'.'+sta[i[k]]+'.'+synthsuffix+'.e.sac')
+        us=read(synthpath+run_name+'.'+run_number+'.'+sta[i[k]]+'.'+synthsuffix+'.u.sac')
+        #Make plot
+        axn=axarr[k,0]
+        axe=axarr[k,1]
+        axu=axarr[k,2]
+        axn.plot(n[0].times(),n[0].data,'k',ns[0].times(),ns[0].data,'r')
+        axn.grid(which='both')
+        axe.plot(e[0].times(),e[0].data,'k',es[0].times(),es[0].data,'r')
+        axe.grid(which='both')
+        axu.plot(u[0].times(),u[0].data,'k',us[0].times(),us[0].data,'r')
+        axu.grid(which='both')
+        axe.yaxis.set_ticklabels([])
+        axu.yaxis.set_ticklabels([])
+        axe.set_xlim(t_lim)
+        axn.set_xlim(t_lim)
+        axu.set_xlim(t_lim)
+        axn.yaxis.set_ticklabels([])
+        axe.yaxis.set_ticklabels([])
+        axu.yaxis.set_ticklabels([])
+        axn.yaxis.grid(False)
+        axe.yaxis.grid(False)
+        axu.yaxis.grid(False)
+        axn.yaxis.set_ticks([])
+        axe.yaxis.set_ticks([])
+        axu.yaxis.set_ticks([])
+        
+        #Annotations
+        trange=t_lim[1]-t_lim[0]
+        sign=1.
+        if abs(min(n[0].data))>max(n[0].data):
+            sign=-1. 
+        nmax='%.3f' % (sign*max(abs(n[0].data)))
+        sign=1.
+        if abs(min(ns[0].data))>max(ns[0].data):
+            sign=-1. 
+        nsmax='%.3f' % (sign*max(abs(ns[0].data)))
+        sign=1.
+        nlims=axn.get_ylim()
+        nrange=nlims[1]-nlims[0]
+        
+        if abs(min(e[0].data))>max(e[0].data):
+            sign=-1.         
+        emax='%.3f' % (sign*max(abs(e[0].data)))
+        sign=1.
+        if abs(min(es[0].data))>max(es[0].data):
+            sign=-1. 
+        esmax='%.3f' % (sign*max(abs(es[0].data)))
+        sign=1.
+        elims=axe.get_ylim()
+        erange=elims[1]-elims[0]
+        
+        if abs(min(u[0].data))>max(u[0].data):
+            sign=-1. 
+        umax='%.3f' % (sign*max(abs(u[0].data)))
+        sign=1.
+        if abs(min(us[0].data))>max(us[0].data):
+            sign=-1 
+        usmax='%.3f' % (sign*max(abs(us[0].data)))
+        sign=1.
+        ulims=axu.get_ylim()
+        urange=ulims[1]-ulims[0]
+        
+        axn.annotate(nmax,xy=(t_lim[0]+0.02*trange,nlims[0]+0.02*nrange),fontsize=12)
+        axe.annotate(emax,xy=(t_lim[0]+0.02*trange,elims[0]+0.02*erange),fontsize=12)
+        axu.annotate(umax,xy=(t_lim[0]+0.02*trange,ulims[0]+0.02*urange),fontsize=12)
+        axn.annotate(nsmax,xy=(t_lim[0]+0.02*trange,nlims[0]+0.8*nrange),fontsize=12,color='red')
+        axe.annotate(esmax,xy=(t_lim[0]+0.02*trange,elims[0]+0.8*erange),fontsize=12,color='red')
+        axu.annotate(usmax,xy=(t_lim[0]+0.02*trange,ulims[0]+0.8*urange),fontsize=12,color='red')
+        #Station name
+        axn.set_ylabel(sta[i[k]],rotation=0)
+        if k==0:
+            axn.set_title('North (m)')
+            axe.set_title('East (m)')
+            axu.set_title('Up (m)')
+        if k!=len(i)-1:
+            axn.xaxis.set_ticklabels([])
+            axe.xaxis.set_ticklabels([])
+            axu.xaxis.set_ticklabels([])
+            xtick=axn.xaxis.get_majorticklocs()
+            xtick=xtick[1:]
+        if k==len(i)-1: #Last plot
+            axe.set_xlabel('Time (s)')
+            axn.xaxis.set_ticks(xtick)
+            axe.xaxis.set_ticks(xtick)
+            axu.xaxis.set_ticks(xtick)
+    plt.subplots_adjust(left=0.2, bottom=0.05, right=0.8, top=0.95, wspace=0, hspace=0)
                 
 
-def plotABIC(home,project_name,run_name):
+def ABIC(home,project_name,run_name):
     '''
     plot values of ABIC vs smoothing parameter for model selection
     '''
@@ -596,7 +655,7 @@ def plotABIC(home,project_name,run_name):
     print '... lambda = '+repr(ls[imin])
     pl.show()
     
-def plotABIC2D(home,project_name,run_name):
+def ABIC2D(home,project_name,run_name):
     '''
     plot 2D values of ABIC vs smoothing parameter for model selection
     '''
@@ -640,6 +699,153 @@ def plotABIC2D(home,project_name,run_name):
     print '... ls = '+repr(10**ls[imin])+' , lt = '+repr(10**lt[imin])
         
     
+def coherence(home,project_name,run_name,run_number,GF_list,vord,f_lims):
+    '''
+    Plot coherences
+    '''
+    import matplotlib.pyplot as plt
+    from numpy import load,where,genfromtxt,array,log10
+    
+    force_lims=array([1./200,0.5])
+    sta=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=0,dtype='S')
+    gf=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=[4,5],dtype='f')
+    datapath=home+project_name+'/analysis/frequency/'
+    if vord.lower()=='d':
+        kgf=0 #disp
+        suffix='disp'
+    elif vord.lower()=='v':
+        kgf=1 #disp
+        suffix='vel'
+    i=where(gf[:,kgf]==1)[0]  
+    #Initalize canvas
+    fig, axarr = plt.subplots(len(i), 3)  
+    for k in range(len(i)):
+        #Read coherences
+        coh=load(datapath+run_name+'.'+run_number+'.'+sta[i[k]]+'.'+suffix+'.coh.npz')
+        fn=coh['fn']
+        fe=coh['fe']
+        fu=coh['fu']
+        cn=coh['cn']
+        ce=coh['ce']
+        cu=coh['cu']
+        #Let's plot them
+        #get current axis
+        axn=axarr[k,0]
+        axe=axarr[k,1]
+        axu=axarr[k,2]
+        #Plot
+        axn.semilogx(fn,cn)
+        axe.semilogx(fe,ce,'g')
+        axu.semilogx(fu,cu,'r')
+        axn.grid(which='both')
+        axe.grid(which='both')
+        axu.grid(which='both')
+        #Arrange axes
+        axn.set_xlim(f_lims)
+        axe.set_xlim(f_lims)
+        axu.set_xlim(f_lims)
+        axn.set_ylim([0,1])
+        axe.set_ylim([0,1])
+        axu.set_ylim([0,1])
+        #Text labels
+        axn.yaxis.set_ticks(array([0.25,0.5,0.75,1.0]))
+        axe.yaxis.set_ticks(array([0.25,0.5,0.75,1.0]))
+        axu.yaxis.set_ticks(array([0.25,0.5,0.75,1.0]))
+        axe.yaxis.set_ticklabels([])
+        axu.yaxis.set_ticklabels([])
+        axn.yaxis.set_ticklabels(['','0.5','','1.0'])
+        if k!=len(i)-1:
+            axn.xaxis.set_ticklabels([])
+            axe.xaxis.set_ticklabels([])
+            axu.xaxis.set_ticklabels([])
+        if k==0: #First plot add some labels
+            axn.set_title('North')
+            axe.set_title('East')
+            axu.set_title('Up')
+        if k==len(i)-1: #Last plot
+            axe.set_xlabel('Frequency (Hz)')
+        #Annotate with station name
+        xyannot=(axn.get_xlim()[0]+0.01*log10((log10(axn.get_xlim()[1])-log10(axn.get_xlim()[0]))),axn.get_ylim()[0]+0.05)
+        axn.annotate(sta[i[k]], xy=xyannot)
+    plt.subplots_adjust(left=0.25, bottom=0.05, right=0.75, top=0.95, wspace=0, hspace=0)
+            
+def average_coherence(home,project_name,run_name,run_number,GF_list,vord,num_components):
+    '''
+    Plot coherences
+    '''
+    import matplotlib.pyplot as plt
+    from numpy import load,where,genfromtxt,array,zeros,interp
+    
+    sta=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=0,dtype='S')
+    gf=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=[4,5],dtype='f')
+    datapath=home+project_name+'/analysis/frequency/'
+    if vord.lower()=='d':
+        kgf=0 #disp
+        suffix='disp'
+    elif vord.lower()=='v':
+        kgf=1 #disp
+        suffix='vel'
+    i=where(gf[:,kgf]==1)[0]  
+    for k in range(len(i)):
+        #Read coherences
+        coh=load(datapath+run_name+'.'+run_number+'.'+sta[i[k]]+'.'+suffix+'.coh.npz')
+        fn=coh['fn']
+        fe=coh['fe']
+        fu=coh['fu']
+        cn=coh['cn']
+        ce=coh['ce']
+        cu=coh['cu'] 
+        if k==0:
+            f=fn
+            c1=zeros(cn.shape)
+            c1e=zeros(cn.shape)
+            c1n=zeros(cn.shape) 
+            c1u=zeros(cn.shape)    
+        if num_components==1: #Average all
+            try:
+                c1+=cn
+                c1+=ce
+                c1+=cu
+            except: #Coherence is the wrong size
+                cn=interp(f,fn,cn)
+                ce=interp(f,fn,ce)
+                cu=interp(f,fn,cu)
+                c1+=cn
+                c1+=ce
+                c1+=cu
+        else:
+            try:
+                c1e+=ce
+                c1n+=cn
+                c1u+=cu
+            except: #Coherence is the wrong size
+                cn=interp(f,fn,cn)
+                ce=interp(f,fn,ce)
+                cu=interp(f,fn,cu)
+                c1n+=cn
+                c1e+=ce
+                c1u+=cu
+    #Normalize
+    c1=c1/(3*len(i))
+    c1e=c1e/len(i)
+    c1n=c1n/len(i)
+    c1u=c1u/len(i)
+    #Plot
+    plt.figure()
+    if num_components==1:
+        plt.semilogx(fn,c1)
+        plt.fill_between(fn,y1=0,y2=c1,color='r',alpha=0.5)
+        plt.xlabel('Frequency (Hz)')
+        plt.ylabel('Mean Coherence')
+        plt.grid(which='both')
+        plt.xlim(f.min(),f.max())
+    else:
+        plt.semilogx(fn,c1n,fe,c1e,fu,c1u)
+        plt.legend(['North','East','Up'])
+        plt.xlabel('Frequency (Hz)')
+        plt.ylabel('Mean Coherence')
+        plt.grid(which='both')
+        plt.xlim(f.min(),f.max())
 
 #########                  Supporting tools                       ##############
 
