@@ -235,20 +235,13 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tdelay,dec
                 strdepth='%.4f' % source[kfault,3]
                 syn_path=home+project_name+'/GFs/dynamic/'+model_name+'_'+strdepth+'.'+nsub+'/'
                 #Get synthetics
-                if kfault==0: #It's the first time, read from file
-                    ess0=read(syn_path+staname[ksta]+'.'+nfault+'.SS.'+vord+'.e')
-                    nss0=read(syn_path+staname[ksta]+'.'+nfault+'.SS.'+vord+'.n')
-                    zss0=read(syn_path+staname[ksta]+'.'+nfault+'.SS.'+vord+'.z')
-                    eds0=read(syn_path+staname[ksta]+'.'+nfault+'.DS.'+vord+'.e')
-                    nds0=read(syn_path+staname[ksta]+'.'+nfault+'.DS.'+vord+'.n')
-                    zds0=read(syn_path+staname[ksta]+'.'+nfault+'.DS.'+vord+'.z')
-                #Refer to copy of the data read from file (This avoids reading from file every time)
-                ess=ess0.copy()
-                nss=nss0.copy()
-                zss=zss0.copy()
-                eds=eds0.copy()
-                nds=nds0.copy()
-                zds=zds0.copy()
+                ess=read(syn_path+staname[ksta]+'.'+nfault+'.SS.'+vord+'.e')
+                nss=read(syn_path+staname[ksta]+'.'+nfault+'.SS.'+vord+'.n')
+                zss=read(syn_path+staname[ksta]+'.'+nfault+'.SS.'+vord+'.z')
+                eds=read(syn_path+staname[ksta]+'.'+nfault+'.DS.'+vord+'.e')
+                nds=read(syn_path+staname[ksta]+'.'+nfault+'.DS.'+vord+'.n')
+                zds=read(syn_path+staname[ksta]+'.'+nfault+'.DS.'+vord+'.z')
+                #Operations that only need to happen once on the data
                 if lowpass!=None: #Apply low pass filter to data
                     fsample=1./ess[0].stats.delta
                     ess[0].data=lfilt(ess[0].data,lowpass,fsample,9)
@@ -272,14 +265,15 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tdelay,dec
                     eds=stdecimate(eds,decimate)
                     nds=stdecimate(nds,decimate)
                     zds=stdecimate(zds,decimate)
-                if decimate!=None and kfault==0:#Only need to do this once
+                if kfault==0:#Only need to read data once
                     #Load raw data, this will be used to trim the GFs
                     edata=read(datafiles[ksta]+'.e')
                     ndata=read(datafiles[ksta]+'.n')
                     udata=read(datafiles[ksta]+'.u')
-                    edata=stdecimate(edata,decimate)
-                    ndata=stdecimate(ndata,decimate)
-                    udata=stdecimate(udata,decimate)
+                    if decimate!=None:
+                        edata=stdecimate(edata,decimate)
+                        ndata=stdecimate(ndata,decimate)
+                        udata=stdecimate(udata,decimate)
                     #How many points left in the tiem series
                     npts=edata[0].stats.npts
                     print "... "+str(npts)+" data points left over after decimation"
