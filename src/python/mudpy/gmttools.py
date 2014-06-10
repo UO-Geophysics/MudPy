@@ -83,3 +83,104 @@ def make_slip_slice():
         #Write outfile
         fname=out+rjust(str(kslice),4,'0')+'.'+outname+'.slip'
         savetxt(fname, c_[lon,lat,depth,ss,ds],fmt='%.6f\t%.6f\t%.4f\t%.2f\t%.2f')
+      
+def make_total_model(rupt):
+    from numpy import genfromtxt,unique,where,zeros,c_,savetxt
+    
+    f=genfromtxt(rupt)
+    num=f[:,0]
+    all_ss=f[:,8]
+    all_ds=f[:,9]
+    #Now parse for multiple rupture speeds
+    unum=unique(num)
+    ss=zeros(len(unum))
+    ds=zeros(len(unum))
+    lon=f[0:len(unum),1]
+    lat=f[0:len(unum),2]
+    for k in range(len(unum)):
+        i=where(unum[k]==num)
+        ss[k]=all_ss[i].sum()
+        ds[k]=all_ds[i].sum()
+    #Sum them
+    fname=rupt+'.total.slip'
+    savetxt(fname, c_[lon,lat,ss,ds],fmt='%.6f\t%.6f\t%6.2f\t%6.2f')
+    
+    
+def make_sliprate_slice(rupt,nstrike,ndip,epicenter,out,tmax,dt):
+    '''
+    '''
+    from numpy import genfromtxt,unique,zeros,where,arange,interp,c_,savetxt
+    from mudpy.forward import get_source_time_function,add2stf
+    from string import rjust
+    
+    f=genfromtxt(rupt)
+    num=f[:,0]
+    nfault=nstrike*ndip
+    unum=unique(num)
+    lon=f[0:len(unum),1]
+    lat=f[0:len(unum),2]
+    depth=f[0:len(unum),3]
+    #Get slips
+    all_ss=f[:,8]
+    all_ds=f[:,9]
+    #Now parse for multiple rupture speeds
+    unum=unique(num)
+    #Count number of windows
+    nwin=len(where(num==unum[0])[0])
+    #Get rigidities
+    mu=f[0:len(unum),13]
+    #Get rise times
+    rise_time=f[0:len(unum),7]
+    #Get areas
+    area=f[0:len(unum),10]*f[0:len(unum),11]
+    #Get indices for plot
+    istrike=zeros(nstrike*ndip)
+    idip=zeros(nstrike*ndip)
+    k=0
+    t=arange(0,tmax,dt)
+    for i in range(ndip):
+         for j in range(nstrike):
+             istrike[k]=nstrike-j-1
+             idip[k]=i
+             k+=1  
+    #Loop over subfaults
+    for kfault in range(nfault):
+        if kfault%10==0:
+            print '... working on subfault '+str(kfault)+' of '+str(nfault)
+        #Get rupture times for subfault windows
+        i=where(num==unum[kfault])[0]
+        trup=f[i,12]
+        #Get slips on windows
+        ss=all_ss[i]
+        ds=all_ds[i]
+        #Add it up
+        slip=(ss**2+ds**2)**0.5
+        #Get first source time function
+        t1,M1=get_source_time_function(mu[kfault],area[kfault],rise_time[kfault],trup[0],slip[0])
+        #Loop over windows
+        for kwin in range(nwin-1):
+            #Get next source time function
+            t2,M2=get_source_time_function(mu[kfault],area[kfault],rise_time[kfault],trup[kwin+1],slip[kwin+1])
+            #Add the soruce time functions
+            t1,M1=add2stf(t1,M1,t2,M2)
+        if kfault==0: #Intialize
+            M=zeros((len(t),nfault))
+            T=zeros((len(t),nfault))
+        Mout=interp(t,t1,M1)
+        M[:,kfault]=Mout
+        T[:,kfault]=t
+    #Now look through time slices
+    maxsr=0
+    print 'Writing files...'
+    for ktime in range(len(t)):
+        sliprate=zeros(lon.shape)
+        for kfault in range(nfault):
+            i=where(T[:,kfault]==t[ktime])[0]
+            sliprate[kfault]=M[i,kfault]/(mu[kfault]*area[kfault])
+        maxsr=max(maxsr,sliprate.max())
+        fname=out+rjust(str(ktime),4,'0')+'.sliprate'
+        savetxt(fname, c_[lon,lat,depth,sliprate],fmt='%.6f\t%.6f\t%.4f\t%.6f')
+    print 'Maximum slip rate was '+str(maxsr)+'m/s'
+    
+        
+

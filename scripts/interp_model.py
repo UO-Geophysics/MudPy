@@ -1,14 +1,14 @@
 from numpy import genfromtxt,sin,cos,deg2rad,rad2deg,zeros,arange,arctan,arccos,ones,savetxt
 
-f=genfromtxt('/Users/dmelgarm/Research/Slip_Inv/tohoku_tsunami/data/model_info/tohoku.fault')
+f=genfromtxt('/Volumes/Kanagawa/Slip_Inv/tohoku_tsunami/data/model_info/tohoku_dense2.fault')
 lon=f[:,1]
 lat=f[:,2]
 depth=f[:,3]
 st=f[:,4]
 dip=f[:,5]
 
-nstrike=21
-ndip=9
+nstrike=41
+ndip=17
 ninterp=2
 Ndip=2*ndip-1
 Nstrike=2*nstrike-1
@@ -89,4 +89,4 @@ fout[:,7]=ones(len(zout))*10
 fout[:,8]=ones(len(zout))*12500
 fout[:,9]=ones(len(zout))*12500
 
-savetxt('/Users/dmelgarm/Research/Slip_Inv/tohoku_tsunami/data/model_info/tohoku_dense.fault',fout,fmt='%i\t%8.4f\t%8.4f\t%10.6f\t%.2f\t%.2f\t%.4f\t%.3f\t%.4f\t%.4f')
+savetxt('/Volumes/Kanagawa/Slip_Inv/tohoku_tsunami/data/model_info/tohoku_dense4.fault',fout,fmt='%i\t%8.4f\t%8.4f\t%10.6f\t%.2f\t%.2f\t%.4f\t%.3f\t%.4f\t%.4f')

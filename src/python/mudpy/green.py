@@ -395,12 +395,12 @@ def stdecimate(st,factor):
     from scipy.signal import filtfilt,butter
     
     #Anti-alias filter
-    b, a = butter(10, 0.75/factor)
-    y = filtfilt(b, a, st[0].data)
+    b, a = butter(10, 1./factor)
+    y = filtfilt(b, a, st.data)
     stout=st.copy()
-    stout[0].data=y
+    stout.data=y
     #Decimate
-    stout[0].decimate(factor,no_filter=True)
+    stout.decimate(factor,no_filter=True)
     return stout
     
 def rtrim(st,T):

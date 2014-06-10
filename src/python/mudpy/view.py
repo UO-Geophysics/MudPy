@@ -81,8 +81,6 @@ def quick_static(gflist,datapath,run_name,run_num,c):
     '''
     import matplotlib.pyplot as plt
     from numpy import genfromtxt,where,zeros,meshgrid,linspace
-    from matplotlib.mlab import griddata
-    from matplotlib.colors import Colormap
 
     
     GF=genfromtxt(gflist,usecols=3)
@@ -111,7 +109,6 @@ def quick_static(gflist,datapath,run_name,run_num,c):
     plt.figure()
     xi = linspace(min(lon), max(lon), 500)
     yi = linspace(min(lat), max(lat), 500)
-    Z = griddata(lon, lat, u, xi, yi)
     X, Y = meshgrid(xi, yi)
     #c=Colormap('bwr')
     #plt.contourf(X,Y,Z,100)
@@ -131,7 +128,6 @@ def tile_slip(rupt,nstrike,ndip):
     
     from numpy import genfromtxt,unique,where,zeros
     import matplotlib.pyplot as plt
-    from matplotlib import cm
     
     f=genfromtxt(rupt)
     num=f[:,0]
@@ -279,10 +275,8 @@ def source_time_function(rupt,epicenter):
     Plot source time function of complete ru
     '''
     import matplotlib.pyplot as plt
-    from matplotlib import cm
     from numpy import genfromtxt,unique,log10,where,floor
     from mudpy.forward import get_source_time_function,add2stf
-    from mudpy.inverse import d2epi
     
     f=genfromtxt(rupt)
     num=f[:,0]
@@ -300,9 +294,6 @@ def source_time_function(rupt,epicenter):
     rise_time=f[0:len(unum),7]
     #Get areas
     area=f[0:len(unum),10]*f[0:len(unum),11]
-    #Get coordinates and compute distances
-    source=f[0:len(unum),1:4]
-    d=d2epi(epicenter,source)
     #Loop over subfaults
     for kfault in range(nfault):
         if kfault%10==0:
@@ -522,9 +513,9 @@ def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpas
             n[0].data=lfilter(n[0].data,lowpass,fsample,10)
             u[0].data=lfilter(u[0].data,lowpass,fsample,10)
         if decimate!=None:
-            n=stdecimate(n,decimate)
-            e=stdecimate(e,decimate)
-            u=stdecimate(u,decimate)
+            n[0]=stdecimate(n[0],decimate)
+            e[0]=stdecimate(e[0],decimate)
+            u[0]=stdecimate(u[0],decimate)
         ns=read(synthpath+run_name+'.'+run_number+'.'+sta[i[k]]+'.'+synthsuffix+'.n.sac')
         es=read(synthpath+run_name+'.'+run_number+'.'+sta[i[k]]+'.'+synthsuffix+'.e.sac')
         us=read(synthpath+run_name+'.'+run_number+'.'+sta[i[k]]+'.'+synthsuffix+'.u.sac')
@@ -598,9 +589,14 @@ def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpas
         #Station name
         axn.set_ylabel(sta[i[k]],rotation=0)
         if k==0:
-            axn.set_title('North (m)')
-            axe.set_title('East (m)')
-            axu.set_title('Up (m)')
+            if vord.lower()=='d':
+                axn.set_title('North (m)')
+                axe.set_title('East (m)')
+                axu.set_title('Up (m)')
+            else:
+                axn.set_title('North (m/s)')
+                axe.set_title('East (m/s)')
+                axu.set_title('Up (m/s)')
         if k!=len(i)-1:
             axn.xaxis.set_ticklabels([])
             axe.xaxis.set_ticklabels([])
@@ -668,11 +664,14 @@ def ABIC2D(home,project_name,run_name,(ABICmin,ABICmax)):
     plt.rc('font',family='serif')
     #Get list of log files
     outdir=home+project_name+'/output/inverse_models/models/'
-    for k in range(len(run_name)):
-        if k==0:
-            logs=glob(outdir+'*'+run_name[k]+'.????.log')
-        else:
-            logs+=glob(outdir+'*'+run_name[k]+'.????.log') 
+    if type(run_name)=='list':
+        for k in range(len(run_name)):
+            if k==0:
+                logs=glob(outdir+'*'+run_name[k]+'.????.log')
+            else:
+                logs+=glob(outdir+'*'+run_name[k]+'.????.log') 
+    else:
+        logs=glob(outdir+'*'+run_name+'.????.log')
     ABIC=zeros(len(logs))
     ls=zeros(len(logs))
     lt=zeros(len(logs))
@@ -697,27 +696,28 @@ def ABIC2D(home,project_name,run_name,(ABICmin,ABICmax)):
     plt.figure()
     plt.pcolormesh(lsi,lti,ABICi,cmap=plt.cm.spectral_r,vmin=ABICmin,vmax=ABICmax)
     cb=plt.colorbar()
-    plt.scatter(ls,lt,c='w',marker='o')
+    plt.scatter(ls,lt,c='w',marker='o',s=30)
     plt.ylabel(r'$\log(\lambda_t$)',fontsize=18)
     plt.xlabel(r'$\log(\lambda_s$)',fontsize=18)
     cb.set_label(r'ABIC $(\times10^3)$')
-    plt.scatter(ls[imin],lt[imin],marker='*',color='r',s=100)
+    plt.scatter(ls[imin],lt[imin],marker='*',color='r',s=125)
     plt.title(r'$\lambda_s^{min} = $%.4e , $\lambda_t^{min} = $%.4e' % (10**ls[imin],10**lt[imin]))
     plt.show()
     print 'ABIC is minimized at inversion '+logs[imin]
     print '... ls = '+repr(10**ls[imin])+' , lt = '+repr(10**lt[imin])
         
     
-def coherence(home,project_name,run_name,run_number,GF_list,vord,f_lims):
+def coherence(home,project_name,run_name,run_number,GF_list,vord,sort,f_lims):
     '''
     Plot coherences
     '''
     import matplotlib.pyplot as plt
-    from numpy import load,where,genfromtxt,array,log10
+    from numpy import load,where,genfromtxt,array,log10,argsort
     
-    force_lims=array([1./200,0.5])
     sta=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=0,dtype='S')
     gf=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=[4,5],dtype='f')
+    lon=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=[1],dtype='f')
+    lat=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=[2],dtype='f')
     datapath=home+project_name+'/analysis/frequency/'
     if vord.lower()=='d':
         kgf=0 #disp
@@ -726,6 +726,12 @@ def coherence(home,project_name,run_name,run_number,GF_list,vord,f_lims):
         kgf=1 #disp
         suffix='vel'
     i=where(gf[:,kgf]==1)[0]  
+    if sort.lower()=='lon':
+        j=argsort(lon[i])[::-1]
+        i=i[j]
+    elif sort.lower()=='lat':
+        j=argsort(lat[i])[::-1] 
+        i=i[j]
     #Initalize canvas
     fig, axarr = plt.subplots(len(i), 3)  
     for k in range(len(i)):
@@ -769,21 +775,30 @@ def coherence(home,project_name,run_name,run_number,GF_list,vord,f_lims):
             axu.xaxis.set_ticklabels([])
         if k==0: #First plot add some labels
             axn.set_title('North')
-            axe.set_title('East')
+            if vord.lower()=='d':
+                axe.set_title('Displacement Coherence\nEast')
+            else:
+                axe.set_title('Velocity Coherence\nEast')
             axu.set_title('Up')
         if k==len(i)-1: #Last plot
             axe.set_xlabel('Frequency (Hz)')
+            #l=axe.get_xticks().tolist()
+            #l[0]=''
+            #axe.xaxis.set_ticklabels(l)
+            #l=axu.get_xticks().tolist()
+            #l[0]=''
+            #axu.set_xticklabels(l)
         #Annotate with station name
         xyannot=(axn.get_xlim()[0]+0.01*log10((log10(axn.get_xlim()[1])-log10(axn.get_xlim()[0]))),axn.get_ylim()[0]+0.05)
         axn.annotate(sta[i[k]], xy=xyannot)
-    plt.subplots_adjust(left=0.25, bottom=0.05, right=0.75, top=0.95, wspace=0, hspace=0)
+    plt.subplots_adjust(left=0.25, bottom=0.05, right=0.75, top=0.9, wspace=0, hspace=0)
             
 def average_coherence(home,project_name,run_name,run_number,GF_list,vord,num_components):
     '''
     Plot coherences
     '''
     import matplotlib.pyplot as plt
-    from numpy import load,where,genfromtxt,array,zeros,interp
+    from numpy import load,where,genfromtxt,zeros,interp
     
     sta=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=0,dtype='S')
     gf=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=[4,5],dtype='f')

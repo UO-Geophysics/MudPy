@@ -1,17 +1,17 @@
 '''
-Diego Melgar, 02/2014
+Diego Melgar, 06/2014
 
 Parameter file
-Project: Tohoku tests
+Project: Tohoku forward tsunami modeling
 Comment: 
 '''
 
-import runslip,forward
+from mudpy import runslip,forward
 from obspy.core import UTCDateTime
 
 ########                            GLOBALS                             ########
 
-home='/Users/dmelgarm/Research/Slip_Inv/'
+home='/Volumes/Kanagawa/Slip_Inv/'
 project_name='tohoku_tsunami'
 ################################################################################
 
@@ -19,20 +19,20 @@ project_name='tohoku_tsunami'
 #####              What-do-you-want-to-do flags, 1=do, 0=leave be          #####
 
 init=0 #Initalize project
-make_green=0 #Compute GFs
+make_green=1 #Compute GFs
 make_synthetics=1 #Compute synthetics for a given model at given stations
 solve=0  # =1 solves forward problem or runs inverse calculation, =0 does nothing
 ###############################################################################
 
 ###############            Green function parameters               #############
 coord_type=1 #(=0 for cartesian, =1 for lat/lon (will use Earth flattening transform)
-hot_start=129  #Start at a certain subfault number
+hot_start=0  #Start at a certain subfault number
 static=0  #=1 computes static GFs only, =0 computes the complete waveform
 model_name='fnet_cmt.mod'   #Velocity model
-rupture_name='tohoku_dense_2split.rupt'   #Rupture model, not needed for inversion
-fault_name='tohoku_dense_2split.fault'    #Fault geometry
+rupture_name='tohoku_tsunami.rupt'   #Rupture model, not needed for inversion
+fault_name='tohoku_tsunami.fault'    #Fault geometry
 station_file='tsunami.sta'    #Station distribution
-NFFT=128 ; dt=5  #Time parameters
+NFFT=256 ; dt=2  #Time parameters
 dk=0.2 ; pmin=0 ; pmax=1 ; kmax=10   #fk integration parameters
 ################################################################################
 

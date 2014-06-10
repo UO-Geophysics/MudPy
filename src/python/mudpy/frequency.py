@@ -81,7 +81,7 @@ def allcoherence(home,project_name,run_name,run_number,GF_list,v_or_d,decimate,l
     import nitime.algorithms as tsa
     
     #Regularized coherence
-    eps=0.00001
+    eps=0.000001
     al=10.
     #Decide what I'm going to work on
     sta=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=0,dtype='S')
@@ -110,9 +110,9 @@ def allcoherence(home,project_name,run_name,run_number,GF_list,v_or_d,decimate,l
             n[0].data=lfilter(n[0].data,lowpass,fsample,10)
             u[0].data=lfilter(u[0].data,lowpass,fsample,10)
         if decimate!=None:
-            n=stdecimate(n,decimate)
-            e=stdecimate(e,decimate)
-            u=stdecimate(u,decimate)
+            n[0]=stdecimate(n[0],decimate)
+            e[0]=stdecimate(e[0],decimate)
+            u[0]=stdecimate(u[0],decimate)
         #Read synthetics
         nsyn=read(synthpath+run_name+'.'+run_number+'.'+sta[i[k]]+'.'+synthsuffix+'.n.sac')
         esyn=read(synthpath+run_name+'.'+run_number+'.'+sta[i[k]]+'.'+synthsuffix+'.e.sac')

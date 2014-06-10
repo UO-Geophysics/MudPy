@@ -411,7 +411,3 @@ def lowpass(data,fcorner,fsample,order):
     b, a = butter(order, fcorner/(fnyquist))
     data_filt=filtfilt(b,a,data)
     return data_filt
-    
-    
-
-    

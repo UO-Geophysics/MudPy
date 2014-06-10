@@ -98,6 +98,7 @@ def make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,stat
     from os import chdir,path,makedirs,remove
     from string import rjust
     import datetime
+    import gc
     
     tic=time.time()
     model_path=home+project_name+'/structure/'
@@ -136,6 +137,7 @@ def make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,stat
                 copy(flist[k],outgreen)
             #Cleanup
             rmtree(dirs[0])
+            gc.collect()
         else:  #Static GFs
             copy('staticgf',green_path+'static/'+model_name+'.static.'+strdepth+'.sub'+subfault)
             #Cleanup
@@ -173,6 +175,7 @@ def make_synthetics(home,project_name,station_file,fault_name,model_name,integra
     import datetime
     from numpy import loadtxt
     from string import rjust
+    import gc
     
     green_path=home+project_name+'/GFs/'
     station_file=home+project_name+'/data/station_info/'+station_file
@@ -191,6 +194,7 @@ def make_synthetics(home,project_name,station_file,fault_name,model_name,integra
         f=open(logpath+'make_synth.'+now+'.log','a')
         f.write(log)
         f.close()
+        gc.collect()
        
         
          
@@ -268,6 +272,8 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
     from scipy.sparse import csr_matrix as sparse
     from scipy.optimize import nnls
     from datetime import datetime
+    import gc
+    
     
 
     t1=datetime.now()
@@ -276,21 +282,26 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
     #Get GFs
     G=inv.getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epicenter,
                 rupture_speed,num_windows,coord_type,decimate,lowpass)
+    gc.collect()
     #Get data weights
-    w=inv.get_data_weights(home,project_name,GF_list,d,decimate)
-    W=empty(G.shape)
-    W=tile(w,(G.shape[1],1)).T
-    WG=empty(G.shape)
-    WG=W*G
-    wd=w*d.squeeze()
-    wd=expand_dims(wd,axis=1)
-    #Clear up extraneous variables
-    W=None
-    w=None
+    #w=inv.get_data_weights(home,project_name,GF_list,d,decimate)
+    #W=empty(G.shape)
+    #W=tile(w,(G.shape[1],1)).T
+    #WG=empty(G.shape)
+    #WG=W*G
+    #wd=w*d.squeeze()
+    #wd=expand_dims(wd,axis=1)
+    ##Clear up extraneous variables
+    #W=None
+    #w=None
+    ##Define inversion quantities
+    #x=WG.transpose().dot(wd)
+    #print 'Computing G\'G'
+    #K=(WG.T).dot(WG)
     #Define inversion quantities
-    x=WG.transpose().dot(wd)
+    x=G.transpose().dot(d)
     print 'Computing G\'G'
-    K=(WG.T).dot(WG)
+    K=(G.T).dot(G)
     #Get regularization matrices (set to 0 matrix if not needed)
     if type(reg_spatial)!=bool:
         Ls=inv.getLs(home,project_name,fault_name,nfaults,num_windows,bounds)
@@ -343,7 +354,8 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
             #Get stats
             L2,Lmodel=inv.get_stats(Kinv,sol,x)
             VR=inv.get_VR(G,sol,d)
-            ABIC=inv.get_ABIC(WG,K,sol,wd,lambda_spatial,lambda_temporal,Ls,LsLs,Lt,LtLt)
+            #ABIC=inv.get_ABIC(WG,K,sol,wd,lambda_spatial,lambda_temporal,Ls,LsLs,Lt,LtLt)
+            ABIC=inv.get_ABIC(G,K,sol,d,lambda_spatial,lambda_temporal,Ls,LsLs,Lt,LtLt)
             #Get moment
             Mo,Mw=inv.get_moment(home,project_name,fault_name,model_name,sol)
             #If a rotational offset was applied then reverse it for output to file
