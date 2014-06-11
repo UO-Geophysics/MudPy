@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 '''
 D.Melgar
 04/2014
@@ -664,7 +663,7 @@ def ABIC2D(home,project_name,run_name,(ABICmin,ABICmax)):
     plt.rc('font',family='serif')
     #Get list of log files
     outdir=home+project_name+'/output/inverse_models/models/'
-    if type(run_name)=='list':
+    if type(run_name)==list:
         for k in range(len(run_name)):
             if k==0:
                 logs=glob(outdir+'*'+run_name[k]+'.????.log')
@@ -690,7 +689,7 @@ def ABIC2D(home,project_name,run_name,(ABICmin,ABICmax)):
     #Grid
     ABIC=ABIC/1000
     lsi=linspace(ls.min(),ls.max(),100)
-    lti=linspace(ls.min(),lt.max(),100)
+    lti=linspace(lt.min(),lt.max(),100)
     ABICi=ml.griddata(ls,lt,ABIC,lsi,lti)
     #Plot the thing
     plt.figure()
