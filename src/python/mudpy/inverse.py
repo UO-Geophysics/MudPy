@@ -1307,8 +1307,6 @@ def model_covariance(home,project_name,run_name,run_number,fault_name,G_name,nfa
             if 'lambda_temporal' in line:
                 lt=float(line.split('=')[1])
     #Read data variances and make data covariance
-
-    
     #Dos trike slip and dip slip in different stages
     print 'Getting data covariance...'
     #Cd=data_covariance(gf_file,decimate)
@@ -1317,8 +1315,9 @@ def model_covariance(home,project_name,run_name,run_number,fault_name,G_name,nfa
     #Load G
     print 'Computing for SS model parameters'
     print 'Getting G...'
-    G_name=home+project_name+'/GFs/matrices/'+G_name
-    G_name='/Volumes/Kanagawa/Slip_Inv/tohoku_10s/GFs/matrices/fnet_20win_vr4_200s_velmult.g.npy'
+    #G_name=home+project_name+'/GFs/matrices/'+G_name
+    print 'Loading '+G_name
+    G_name="/Users/dmelgarm/Research/Slip_Inv/tohoku_10s/GFs/matrices/fnet_20win_vr4_200s_gps.g.npy"
     if G_name[-3:]!='npy':
             G_name=G_name+'.npy'
     G=load(G_name)
@@ -1358,7 +1357,7 @@ def model_covariance(home,project_name,run_name,run_number,fault_name,G_name,nfa
     G=None
     #Prep for output
     Cm_name=G_name.split('.npy')[0]+'.cov'
-    print 'Saving results...'
+    print 'Saving to '+Cm_name
     save(Cm_name,Cm)
     deltaT=datetime.now()-t0
     print 'Well that only took '+str(deltaT)

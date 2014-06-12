@@ -170,22 +170,36 @@ def tile_slip(rupt,nstrike,ndip):
     plt.show()
 
         
-def tile_moment(rupt,epicenter,nstrike,ndip):
+def tile_moment(rupt,epicenter,nstrike,ndip,covfile,beta):
     '''
     Tile plot of subfault source-time functions
     '''
     import matplotlib.pyplot as plt
     from matplotlib import cm
-    from numpy import genfromtxt,unique,zeros,where,meshgrid,linspace
+    from numpy import genfromtxt,unique,zeros,where,meshgrid,linspace,load,arange,expand_dims,squeeze
     from mudpy.forward import get_source_time_function,add2stf
-    from mudpy.inverse import d2epi
+    from mudpy.inverse import d2epi,ds2rot
     
+    #Load covariances
+    C=load(covfile)
     f=genfromtxt(rupt)
     num=f[:,0]
     nfault=nstrike*ndip
     #Get slips
     all_ss=f[:,8]
     all_ds=f[:,9]
+    all=zeros(len(all_ss)*2)
+    iss=2*arange(0,len(all)/2,1)
+    ids=2*arange(0,len(all)/2,1)+1
+    all[iss]=all_ss
+    all[ids]=all_ds
+    rot=ds2rot(expand_dims(all,1),beta)
+    #Compute CI
+    CIplus=squeeze(rot)+1.645*(C**0.5)
+    CIminus=squeeze(rot)-1.645*(C**0.5)
+    CIminus[CIminus<0]=0
+    slipCIplus=(CIplus[iss]**2+CIplus[ids]**2)**0.5
+    slipCIminus=(CIminus[iss]**2+CIminus[ids]**2)**0.5
     #Now parse for multiple rupture speeds
     unum=unique(num)
     #Count number of windows
@@ -227,14 +241,22 @@ def tile_moment(rupt,epicenter,nstrike,ndip):
         ds=all_ds[i]
         #Add it up
         slip=(ss**2+ds**2)**0.5
+        slip_plus=slipCIplus[i]
+        slip_minus=slipCIminus[i]
         #Get first source time function
         t1,M1=get_source_time_function(mu[kfault],area[kfault],rise_time[kfault],trup[0],slip[0])
+        t1plus,M1plus=get_source_time_function(mu[kfault],area[kfault],rise_time[kfault],trup[0],slip_plus[0])
+        t1minus,M1minus=get_source_time_function(mu[kfault],area[kfault],rise_time[kfault],trup[0],slip_minus[0])
         #Loop over windows
         for kwin in range(nwin-1):
             #Get next source time function
             t2,M2=get_source_time_function(mu[kfault],area[kfault],rise_time[kfault],trup[kwin+1],slip[kwin+1])
+            t2plus,M2plus=get_source_time_function(mu[kfault],area[kfault],rise_time[kfault],trup[kwin+1],slip_plus[kwin+1])
+            t2minus,M2minus=get_source_time_function(mu[kfault],area[kfault],rise_time[kfault],trup[kwin+1],slip_minus[kwin+1])
             #Add the soruce time functions
             t1,M1=add2stf(t1,M1,t2,M2)
+            t1plus,M1plus=add2stf(t1plus,M1plus,t2plus,M2plus)
+            t1minus,M1minus=add2stf(t1minus,M1minus,t2minus,M2minus)
         #Track maximum moment
         Mmax=max(Mmax,M1.max())
         #Done now plot them
@@ -249,8 +271,13 @@ def tile_moment(rupt,epicenter,nstrike,ndip):
         im=ax.contourf(T,M,V,100,vmin=vslow,vmax=vfast,cmap=cm.spectral)
         #Cover upper part
         ax.fill_between(t1,y1=M1,y2=1.01*M1.max(),color='white')
+        #Plot confidence intervals
+        ax.fill_between(t1,M1minus,M1plus,facecolor='grey',alpha=0.4)
+        ax.plot(t1,M1plus,color='black')
+        ax.plot(t1,M1minus,color='white')
         #Plot curve
         ax.plot(t1, M1,color='k')
+        
         ax.grid()
         ax.set_xlim([t1[0],t1[-1]])
         ax.xaxis.set_ticks(linspace(t1[0],t1[-1],5))
@@ -462,7 +489,7 @@ def tslice(rupt,out,dt,cumul):
         plt.close("all")
     
     
-def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpass,t_lim,sort):
+def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpass,t_lim,sort,scale,k_or_g):
     '''
     Plot synthetics vs real data
     
@@ -486,7 +513,10 @@ def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpas
     synthpath=home+project_name+'/output/inverse_models/waveforms/'
     if vord.lower()=='d':
         kgf=0 #disp
-        datasuffix='kdisp'
+        if k_or_g.lower()=='kal':
+            datasuffix='kdisp'
+        else:
+            datasuffix='disp'
         synthsuffix='disp'
     elif vord.lower()=='v':
         kgf=1 #disp
@@ -518,6 +548,13 @@ def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpas
         ns=read(synthpath+run_name+'.'+run_number+'.'+sta[i[k]]+'.'+synthsuffix+'.n.sac')
         es=read(synthpath+run_name+'.'+run_number+'.'+sta[i[k]]+'.'+synthsuffix+'.e.sac')
         us=read(synthpath+run_name+'.'+run_number+'.'+sta[i[k]]+'.'+synthsuffix+'.u.sac')
+        if scale!=None:
+            n[0].data=n[0].data/scale
+            ns[0].data=ns[0].data/scale
+            e[0].data=e[0].data/scale
+            es[0].data=es[0].data/scale
+            u[0].data=u[0].data/scale
+            us[0].data=us[0].data/scale
         #Make plot
         axn=axarr[k,0]
         axe=axarr[k,1]

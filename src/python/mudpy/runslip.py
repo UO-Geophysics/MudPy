@@ -37,6 +37,7 @@ def init(home,project_name):
         makedirs(proj_dir+'GFs/static')
         makedirs(proj_dir+'GFs/dynamic')
         makedirs(proj_dir+'GFs/matrices')
+        makedirs(proj_dir+'GFs/tsunami')
         makedirs(proj_dir+'data/waveforms')
         makedirs(proj_dir+'data/statics')
         makedirs(proj_dir+'data/station_info')
@@ -72,7 +73,7 @@ def rupt2fault(home,project_name,rupture_name):
 
 
 # Run green functions          
-def make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,static,hot_start,coord_type,dk,pmin,pmax,kmax):
+def make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,static,tsunami,hot_start,coord_type,dk,pmin,pmax,kmax):
     '''
     This routine set's up the computation of GFs for each subfault to all stations.
     The GFs are impulse sources, they don't yet depend on strike and dip.
@@ -122,7 +123,7 @@ def make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,stat
         #Move to correct directory
         strdepth='%.4f' % source[k,3]
         subfault=rjust(str(k+1),4,'0')
-        if static==0:
+        if static==0 and tsunami==0:
             #Move results to dynamic GF dir
             dirs=glob.glob('*.mod_'+strdepth)
             #Where am I writting this junk too?
@@ -138,6 +139,8 @@ def make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,stat
             #Cleanup
             rmtree(dirs[0])
             gc.collect()
+        elif static==0 and tsnuami==1: #Tsunami GFs
+            pass
         else:  #Static GFs
             copy('staticgf',green_path+'static/'+model_name+'.static.'+strdepth+'.sub'+subfault)
             #Cleanup
@@ -228,10 +231,14 @@ def inversionGFs(home,project_name,GF_list,fault_name,model_name,dt,NFFT,coord_t
             #decide what GF computation is required for this station
             if GF[k,2]==1: #Static offset
                 static=1
-                make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,static,hot_start,coord_type,dk,pmin,pmax,kmax)
+                tsunami=0
+                make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,static,tsunami,
+                            hot_start,coord_type,dk,pmin,pmax,kmax)
             if GF[k,3]==1 or GF[k,4]==1: #full waveform
                 static=0
-                make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,static,hot_start,coord_type,dk,pmin,pmax,kmax)
+                tsunami=0
+                make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,static,tsunami,
+                            hot_start,coord_type,dk,pmin,pmax,kmax)
             if GF[k,5]==1: #Tsunami (pending)
                 pass
             if GF[k,6]==1: #strain (pending)

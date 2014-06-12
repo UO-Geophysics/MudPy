@@ -58,6 +58,8 @@ def waveforms(home,project_name,rupture_name,station_file,model_name,integrate,h
         sta=staname[ksta]
         #Loop over sources (Add delays)
         for k in range(source.shape[0]):
+            if k%100==0:
+                print '... working on parameter '+str(k)+' of '+str(len(source))
             #Get subfault parameters
             nfault='subfault'+rjust(str(int(source[k,0])),4,'0')
             nsub='sub'+rjust(str(int(source[k,0])),4,'0')
@@ -76,20 +78,21 @@ def waveforms(home,project_name,rupture_name,station_file,model_name,integrate,h
             nds=read(syn_path+sta+'.'+nfault+'.DS.'+vord+'.n')
             zds=read(syn_path+sta+'.'+nfault+'.DS.'+vord+'.z')
             #Decide if resampling is required
-            if resample < (1/ess[0].stats.delta): #Downsample
-                ess[0].resample(resample)
-                nss[0].resample(resample)
-                zss[0].resample(resample)
-                eds[0].resample(resample)
-                nds[0].resample(resample)
-                zds[0].resample(resample)
-            elif resample > (1/ess[0].stats.delta): #Upsample
-                upsample(ess,1./resample)
-                upsample(nss,1./resample)
-                upsample(zss,1./resample)
-                upsample(eds,1./resample)
-                upsample(nds,1./resample)
-                upsample(zds,1./resample)
+            if resample!=None:
+                if resample < (1/ess[0].stats.delta): #Downsample
+                    ess[0].resample(resample)
+                    nss[0].resample(resample)
+                    zss[0].resample(resample)
+                    eds[0].resample(resample)
+                    nds[0].resample(resample)
+                    zds[0].resample(resample)
+                elif resample > (1/ess[0].stats.delta): #Upsample
+                    upsample(ess,1./resample)
+                    upsample(nss,1./resample)
+                    upsample(zss,1./resample)
+                    upsample(eds,1./resample)
+                    upsample(nds,1./resample)
+                    upsample(zds,1./resample)
             dt=ess[0].stats.delta
             #Time shift them according to subfault rupture time
             ess=tshift(ess,rtime)
@@ -104,7 +107,7 @@ def waveforms(home,project_name,rupture_name,station_file,model_name,integrate,h
             nds[0].stats.starttime=round_time(nds[0].stats.starttime,dt)
             zds=tshift(zds,rtime)
             zds[0].stats.starttime=round_time(zds[0].stats.starttime,dt)
-            if allclose(ss_slip+ds_slip,0)==False:  #Only add things that matter
+            if allclose((ss_slip**2+ds_slip**2)**0.5,0)==False:  #Only add things that matter
                 log=log+nfault+', SS='+str(ss_slip)+', DS='+str(ds_slip)+'\n'
                 #A'ight, add 'em up
                 etotal=add_traces(ess,eds,ss_slip,ds_slip)
