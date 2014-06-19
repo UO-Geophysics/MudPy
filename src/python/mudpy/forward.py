@@ -4,7 +4,7 @@ D. Melgar 02/2014
 Forward modeling routines
 '''
 
-def waveforms(home,project_name,rupture_name,station_file,model_name,integrate,hot_start,resample):
+def waveforms(home,project_name,rupture_name,station_file,model_name,integrate,tsunami,hot_start,resample):
     '''
     This routine will take synthetics and apply a slip dsitribution. It will delay each 
     subfault by the appropriate rupture time and linearly superimpose all of them. Output
@@ -28,6 +28,7 @@ def waveforms(home,project_name,rupture_name,station_file,model_name,integrate,h
     from obspy import read,Stream
     from string import rjust
     import datetime
+    import gc
     
     print 'Solving for dynamic problem'
     #Output where?
@@ -68,8 +69,11 @@ def waveforms(home,project_name,rupture_name,station_file,model_name,integrate,h
             ds_slip=source[k,9]
             rtime=source[k,12]
             #Where's the data
-            strdepth='%.4f' % zs 
-            syn_path=home+project_name+'/GFs/dynamic/'+model_name+'_'+strdepth+'.'+nsub+'/'
+            strdepth='%.4f' % zs
+            if tsunami==0: 
+                syn_path=home+project_name+'/GFs/dynamic/'+model_name+'_'+strdepth+'.'+nsub+'/'
+            else:
+                syn_path=home+project_name+'/GFs/tsunami/'+model_name+'_'+strdepth+'.'+nsub+'/'
             #Get synthetics
             ess=read(syn_path+sta+'.'+nfault+'.SS.'+vord+'.e')
             nss=read(syn_path+sta+'.'+nfault+'.SS.'+vord+'.n')
@@ -119,7 +123,7 @@ def waveforms(home,project_name,rupture_name,station_file,model_name,integrate,h
                 z=add_traces(z,ztotal,1,1)
             else:
                 log=log+"No slip on subfault "+nfault+', ignoring it...\n'
-                
+            gc.collect()
         #Save results
         e[0].data=e[0].data.filled()  #This is a workaround of a bug in obspy
         n[0].data=n[0].data.filled()

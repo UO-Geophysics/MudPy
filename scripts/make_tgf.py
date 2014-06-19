@@ -27,7 +27,7 @@ for klat in range(len(lat)):
 lonout=r_[lonout1,lonout2]
 latout=r_[latout1,latout2]
 
-f=open('/Users/dmelgarm/Research/Slip_Inv/tohoku_10s/data/station_info/tohoku.tgf','w')
+f=open('/Volumes/Kanagawa/Slip_Inv/tohoku_10s/data/station_info/tohoku.tgf','w')
 for k in range(len(lonout)):
      f.write('%s\t%.4f\t%.4f\n' %('t'+rjust(str(int(k)),3,'0'),lonout[k],latout[k]))
 f.close()

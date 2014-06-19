@@ -73,7 +73,8 @@ def rupt2fault(home,project_name,rupture_name):
 
 
 # Run green functions          
-def make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,static,tsunami,hot_start,coord_type,dk,pmin,pmax,kmax):
+def make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,static,tsunami,
+            hot_start,coord_type,dk,pmin,pmax,kmax):
     '''
     This routine set's up the computation of GFs for each subfault to all stations.
     The GFs are impulse sources, they don't yet depend on strike and dip.
@@ -93,7 +94,8 @@ def make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,stat
     OUT:
         Nothing
     '''
-    import time,glob,green
+    import time,glob
+    from mudpy import green
     from numpy import loadtxt
     from shutil import rmtree,copy
     from os import chdir,path,makedirs,remove
@@ -113,11 +115,11 @@ def make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,stat
     chdir(model_path)
     #Load source model for station-event distance computations
     source=loadtxt(fault_file,ndmin=2)
-    for k in range(source.shape[0]):
+    for k in range(hot_start,source.shape[0]):
         #Run comptuation for 1 subfault
         log=green.run_green(source[k,:],station_file,model_name,dt,NFFT,static,coord_type,dk,pmin,pmax,kmax)
         #Write log
-        f=open(logpath+'make_green.'+now+'.log','a')
+        f=open(logpath+'make_green.'+now+'.log','a')    
         f.write(log)
         f.close()
         #Move to correct directory
@@ -139,8 +141,22 @@ def make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,stat
             #Cleanup
             rmtree(dirs[0])
             gc.collect()
-        elif static==0 and tsnuami==1: #Tsunami GFs
-            pass
+        elif static==0 and tsunami==1: #Tsunami GFs
+            #Move results to tsunami GF dir
+            dirs=glob.glob('*.mod_'+strdepth)
+            #Where am I writting this junk too?
+            outgreen=green_path+'/tsunami/'+path.split(dirs[0])[1]+'.sub'+subfault
+            #Check if GF subdir already exists
+            if path.exists(outgreen)==False:
+                #It doesn't, make it, don't be lazy
+                makedirs(outgreen)
+            #Now copy GFs in, this will OVERWRITE EXISTING GFs of the same name
+            flist=glob.glob(dirs[0]+'/*')
+            for k in range(len(flist)):
+                copy(flist[k],outgreen)
+            #Cleanup
+            rmtree(dirs[0])
+            gc.collect()
         else:  #Static GFs
             copy('staticgf',green_path+'static/'+model_name+'.static.'+strdepth+'.sub'+subfault)
             #Cleanup
@@ -153,7 +169,7 @@ def make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,stat
 
 
 #Now make synthetics for source/station pairs
-def make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,beta,
+def make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,tsunami,beta,
                     hot_start,coord_type,time_epi):
     '''
     This routine will take the impulse response (GFs) and pass it into the routine that will
@@ -192,7 +208,7 @@ def make_synthetics(home,project_name,station_file,fault_name,model_name,integra
     #Now compute synthetics please, one sub fault at a time
     for k in range(hot_start,source.shape[0]):
         subfault=rjust(str(k+1),4,'0')
-        log=green.run_syn(home,project_name,source[k,:],station_file,green_path,model_name,integrate,static,
+        log=green.run_syn(home,project_name,source[k,:],station_file,green_path,model_name,integrate,static,tsunami,
                 subfault,coord_type,time_epi,beta)
         f=open(logpath+'make_synth.'+now+'.log','a')
         f.write(log)
@@ -202,8 +218,9 @@ def make_synthetics(home,project_name,station_file,fault_name,model_name,integra
         
          
 #Compute GFs for the ivenrse problem            
-def inversionGFs(home,project_name,GF_list,fault_name,model_name,dt,NFFT,coord_type,
-                green_flag,synth_flag,dk,pmin,pmax,kmax,beta,time_epi,hot_start):
+def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
+        dt,tsun_dt,NFFT,tsunNFFT,coord_type,green_flag,synth_flag,dk,pmin,
+        pmax,kmax,beta,time_epi,hot_start):
     '''
     This routine will read a .gflist file and compute the required GF type for each station
     '''
@@ -221,12 +238,13 @@ def inversionGFs(home,project_name,GF_list,fault_name,model_name,dt,NFFT,coord_t
         remove(home+project_name+'/data/station_info/'+station_file) #Cleanup
     except:
         pass
-    for k in range(hot_start,len(stations)):
+    for k in range(len(stations)):
         #Make dummy station file
         out=stations[k]+'\t'+repr(GF[k,0])+'\t'+repr(GF[k,1])
         f=open(home+project_name+'/data/station_info/'+station_file,'w')
         f.write(out)
         f.close()
+        print green_flag
         if green_flag==1:
             #decide what GF computation is required for this station
             if GF[k,2]==1: #Static offset
@@ -239,8 +257,12 @@ def inversionGFs(home,project_name,GF_list,fault_name,model_name,dt,NFFT,coord_t
                 tsunami=0
                 make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,static,tsunami,
                             hot_start,coord_type,dk,pmin,pmax,kmax)
-            if GF[k,5]==1: #Tsunami (pending)
-                pass
+            if GF[k,5]==1: #Tsunami
+                static=0
+                tsunami=1
+                station_file=tgf_file
+                make_green(home,project_name,station_file,fault_name,model_name,tsun_dt,tsunNFFT,static,
+                                tsunami,hot_start,coord_type,dk,pmin,pmax,kmax)
             if GF[k,6]==1: #strain (pending)
                 pass
             collect()
@@ -249,21 +271,26 @@ def inversionGFs(home,project_name,GF_list,fault_name,model_name,dt,NFFT,coord_t
             if GF[k,2]==1: #Static offset
                 integrate=0
                 static=1
-                make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,beta,hot_start,coord_type,time_epi)
+                tsunami=0
+                make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,tsunami,beta,hot_start,coord_type,time_epi)
             if GF[k,3]==1: #dispalcement waveform
                 integrate=1
                 static=0
-                make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,beta,hot_start,coord_type,time_epi)
+                tsunami=0
+                make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,tsunami,beta,hot_start,coord_type,time_epi)
             if GF[k,4]==1: #velocity waveform
                 integrate=0
                 static=0
-                make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,beta,hot_start,coord_type,time_epi)
+                tsunami=0
+                make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,tsunami,beta,hot_start,coord_type,time_epi)
             if GF[k,5]==1: #tsunami waveform
-                pass
+                integrate=1
+                static=0
+                tsunami=1
+                station_file=tgf_file
+                make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,tsunami,beta,hot_start,coord_type,time_epi)
             if GF[k,6]==1: #strain offsets
                 pass
-            
-    remove(home+project_name+'/data/station_info/'+station_file) #Cleanup
                     
                                 
                                                         

@@ -1315,9 +1315,9 @@ def model_covariance(home,project_name,run_name,run_number,fault_name,G_name,nfa
     #Load G
     print 'Computing for SS model parameters'
     print 'Getting G...'
-    #G_name=home+project_name+'/GFs/matrices/'+G_name
+    G_name=home+project_name+'/GFs/matrices/'+G_name
     print 'Loading '+G_name
-    G_name="/Users/dmelgarm/Research/Slip_Inv/tohoku_10s/GFs/matrices/fnet_20win_vr4_200s_gps.g.npy"
+    #G_name="/Users/dmelgarm/Research/Slip_Inv/tohoku_10s/GFs/matrices/fnet_20win_vr4_200s_gps.g.npy"
     if G_name[-3:]!='npy':
             G_name=G_name+'.npy'
     G=load(G_name)
@@ -1433,4 +1433,180 @@ def data_covariance(gf_file,decimate):
         sigma_vel=r_[sigman,sigmae,sigmau]
     Cd=diag(r_[sigma_static,sigma_disp,sigma_vel])
     return Cd
+    
+    
+    
+def move_seafloor(home,project_name,run_name,model_name,topo_file,topo_dx_file,topo_dy_file,
+                tgf_file,fault_name,time_epi,tsun_dt,maxt,dl=2./60):
+    '''
+    Create moving topography input files for geoclaw
+    '''
+    import datetime
+    from numpy import genfromtxt,zeros,arange,meshgrid,ones,c_,savetxt
+    from obspy import read
+    from string import rjust
+    from scipy.io import netcdf_file as netcdf
+    from scipy.interpolate import griddata
+
+    #Get station names
+    sta=genfromtxt(home+project_name+'/data/station_info/'+tgf_file)
+    lon=sta[:,1]
+    lat=sta[:,2]
+    loni=arange(lon.min(),lon.max()+dl,dl) #Fot grid interpolation
+    lati=arange(lat.min(),lat.max()+dl,dl)
+    loni,lati=meshgrid(loni,lati)
+    #Get fault file
+    f=genfromtxt(home+project_name+'/data/model_info/'+fault_name)
+    #Where is the data
+    green_dir=home+project_name+'/GFs/tsunami/'
+    #Define time deltas
+    td_max=datetime.timedelta(seconds=maxt)
+    td=datetime.timedelta(seconds=tsun_dt)
+    #Maximum tiem to be modeled
+    tmax=time_epi+td_max
+    Nt=(tmax-time_epi)/tsun_dt
+    #Read topo/bathy file
+    bathy=netcdf(topo_file,'r')
+    lonb=bathy.variables['lon'][:]
+    latb=bathy.variables['lat'][:]
+    z=bathy.variables['z'][:]
+    #Read derivatives
+    bathy_dx=netcdf(topo_dx_file,'r')
+    zdx=bathy_dx.variables['z'][:]
+    bathy_dy=netcdf(topo_dy_file,'r')
+    zdy=bathy_dy.variables['z'][:]
+    #Read slope file
+    for ksub in range(len(f)): #Loops through subfaults
+        if ksub%10==0:
+            print '... working on subfault '+str(ksub)+' of '+str(len(f))
+        #Depth string
+        zs=f[ksub,3]
+        strdepth='%.4f' % zs
+        #subfault number
+        sub=rjust(str(ksub+1),4,'0')
+        #Subfault dir
+        subdir=green_dir+model_name+'_'+strdepth+'.sub'+sub+'/'
+        for ksta in range(len(sta)):
+            if ksta%500==0:
+                print '... ... working on seafloor grid point '+str(ksta)+' of '+str(len(sta))
+            eds=read(subdir+rjust(str(int(sta[ksta,0])),4,'0')+'.subfault'+sub+'.DS.disp.e')
+            nds=read(subdir+rjust(str(int(sta[ksta,0])),4,'0')+'.subfault'+sub+'.DS.disp.n')
+            uds=read(subdir+rjust(str(int(sta[ksta,0])),4,'0')+'.subfault'+sub+'.DS.disp.z')
+            ess=read(subdir+rjust(str(int(sta[ksta,0])),4,'0')+'.subfault'+sub+'.SS.disp.e')
+            nss=read(subdir+rjust(str(int(sta[ksta,0])),4,'0')+'.subfault'+sub+'.SS.disp.n')
+            uss=read(subdir+rjust(str(int(sta[ksta,0])),4,'0')+'.subfault'+sub+'.SS.disp.z')
+            eds=interp_and_resample(eds,1.0,time_epi)
+            nds=interp_and_resample(nds,1.0,time_epi)
+            uds=interp_and_resample(uds,1.0,time_epi)
+            ess=interp_and_resample(ess,1.0,time_epi)
+            nss=interp_and_resample(nss,1.0,time_epi)
+            uss=interp_and_resample(uss,1.0,time_epi)
+            #Keep only data between time_epi and tmax
+            eds.trim(time_epi,tmax,fill_value=eds[0].data[-1],pad=True)
+            nds.trim(time_epi,tmax,fill_value=nds[0].data[-1],pad=True)
+            uds.trim(time_epi,tmax,fill_value=uds[0].data[-1],pad=True)
+            ess.trim(time_epi,tmax,fill_value=ess[0].data[-1],pad=True)
+            nss.trim(time_epi,tmax,fill_value=nss[0].data[-1],pad=True)
+            uss.trim(time_epi,tmax,fill_value=uss[0].data[-1],pad=True)
+            #Decimate to original smapling interval
+            eds[0].decimate(4,no_filter=True)
+            nds[0].decimate(4,no_filter=True)
+            uds[0].decimate(4,no_filter=True)
+            ess[0].decimate(4,no_filter=True)
+            nss[0].decimate(4,no_filter=True)
+            uss[0].decimate(4,no_filter=True)
+            #Initalize matrices
+            if ksta==0:
+                eDS=zeros((nss[0].stats.npts,len(sta)))
+                eSS=eDS.copy()
+                nDS=eDS.copy()
+                nSS=eDS.copy()
+                uDS=eDS.copy()
+                uSS=eDS.copy()
+            #Populate matrix
+            eDS[:,ksta]=eds[0].data
+            nDS[:,ksta]=nds[0].data
+            uDS[:,ksta]=uds[0].data
+            eSS[:,ksta]=ess[0].data
+            nSS[:,ksta]=nss[0].data
+            uSS[:,ksta]=uss[0].data
+        #Now go one epoch at a time, and interpolate all fields
+        print '... interpolating coseismic offsets to a regular grid'
+        nt_iter=uSS.shape[0]
+        for kt in range(nt_iter):
+            if kt%20==0:
+                print '... ... working on time slice '+str(kt)+' of '+str(nt_iter)
+            nds=griddata((lon,lat),nDS[kt,:],(loni,lati),method='cubic')
+            eds=griddata((lon,lat),eDS[kt,:],(loni,lati),method='cubic')
+            uds=griddata((lon,lat),uDS[kt,:],(loni,lati),method='cubic')
+            nss=griddata((lon,lat),nSS[kt,:],(loni,lati),method='cubic')
+            ess=griddata((lon,lat),eSS[kt,:],(loni,lati),method='cubic')
+            uss=griddata((lon,lat),uSS[kt,:],(loni,lati),method='cubic')
+            #Output vertical
+            uout_ds=uds
+            uout_ss=uss
+            #Apply effect of topography advection
+            uout_ds=uout_ds+zdx*eds+zdy*nds
+            uout_ss=uout_ss+zdx*ess+zdy*nss
+            #Convert to column format and append
+            xyz_ds=grd2xyz(uout_ds,loni,lati)
+            xyz_ss=grd2xyz(uout_ss,loni,lati)
+            tvec=(kt*tsun_dt)*ones((len(xyz_ds),1))
+            if kt==0: #Intialize
+                numel=uout_ds.size #Number of elements in grid
+                kwrite=numel #Where to write the data
+                dtopo_ds=zeros((numel*nt_iter,4))
+                dtopo_ss=zeros((numel*nt_iter,4))
+                dtopo_ds[0:kwrite,1:3]=xyz_ds[:,0:2]
+                dtopo_ss[0:kwrite,1:3]=xyz_ss[:,0:2]
+            else:
+                dtopo_ds[kwrite:kwrite+numel,:]=c_[tvec,xyz_ds]
+                dtopo_ss[kwrite:kwrite+numel,:]=c_[tvec,xyz_ss]
+                kwrite=kwrite+numel
+        print '... writting dtopo files'
+        savetxt(subdir+'DS.dtopo',dtopo_ds,fmt='%i\t%.6f\t%.6f\t%.4e')
+        savetxt(subdir+'SS.dtopo',dtopo_ss,fmt='%i\t%.6f\t%.6f\t%.4e')
+                
+            
+            
+            
+            
+    
+def grd2xyz(uout,lon,lat):
+    ''''
+    Write dtopo file
+    '''
+    from numpy import zeros
+    nlat=uout.shape[0]
+    nlon=uout.shape[1]
+    k=0
+    xyz=zeros((nlon*nlat,3))
+    for klat in range(1,nlat+1):
+        for klon in range(nlon):
+            xyz[k,0]=lon[-klat,klon]
+            xyz[k,1]=lat[-klat,klon]
+            xyz[k,2]=uout[-klat,klon]
+            k+=1
+    return xyz
+    
+            
+def interp_and_resample(st,dt,time_epi):
+    '''
+    First interpolate to dt sampling rate, then resmaple so a sample exists at the
+    epicentral time
+    '''
+    from numpy import interp,arange
+    from datetime import timedelta
+    stout=st.copy()
+    t=st[0].times()
+    t1=st[0].stats.starttime
+    mu=t1.microsecond
+    ti=arange(t[0]-mu/1e6,t[-1]-mu/1e6,dt)
+    y=st[0].data
+    yi=interp(ti,t,y)
+    stout[0].data=yi
+    stout[0].stats.delta=dt
+    stout[0].stats.starttime=t1-timedelta(microseconds=mu)
+    return stout
+    
     

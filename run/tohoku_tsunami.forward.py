@@ -21,24 +21,25 @@ project_name='tohoku_tsunami'
 init=0 #Initalize project
 make_green=1 #Compute GFs
 make_synthetics=1 #Compute synthetics for a given model at given stations
-solve=0  # =1 solves forward problem or runs inverse calculation, =0 does nothing
+solve=1  # =1 solves forward problem or runs inverse calculation, =0 does nothing
 ###############################################################################
 
 ###############            Green function parameters               #############
 coord_type=1 #(=0 for cartesian, =1 for lat/lon (will use Earth flattening transform)
 hot_start=0  #Start at a certain subfault number
 static=0  #=1 computes static GFs only, =0 computes the complete waveform
+tsunami=1
 model_name='fnet_cmt.mod'   #Velocity model
 rupture_name='tohoku_tsunami.rupt'   #Rupture model, not needed for inversion
 fault_name='tohoku_tsunami.fault'    #Fault geometry
 station_file='tsunami.sta'    #Station distribution
-NFFT=256 ; dt=2  #Time parameters
+NFFT=128 ; dt=4  #Time parameters
 dk=0.2 ; pmin=0 ; pmax=1 ; kmax=10   #fk integration parameters
 ################################################################################
 
 ############                 Synthetics parameters               ###############
 time_epi=UTCDateTime('2011-03-11T05:46:23')
-resample=4 #Resample synthetics to this rate (in Hz)
+resample=2 #Resample synthetics to this rate (in Hz)
 integrate=1 #=0 produces velocities, =1 makes displacements
 ################################################################################
 
@@ -49,7 +50,8 @@ if init==1:
 
 # Run green functions          
 if make_green==1: 
-    runslip.make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,static,hot_start,coord_type,dk,pmin,pmax,kmax)  
+    runslip.make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,
+    static,tsunami,hot_start,coord_type,dk,pmin,pmax,kmax)  
 
 #Now make synthetics for source/station pairs
 if make_synthetics==1:

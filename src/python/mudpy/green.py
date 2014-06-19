@@ -60,7 +60,7 @@ def run_green(source,station_file,model_name,dt,NFFT,static,coord_type,dk,pmin,p
     
     
     
-def run_syn(home,project_name,source,station_file,green_path,model_name,integrate,static,
+def run_syn(home,project_name,source,station_file,green_path,model_name,integrate,static,tsunami,
         subfault,coord_type,time_epi,beta):
     '''
     Use green functions and compute synthetics at stations for a single source
@@ -110,8 +110,10 @@ def run_syn(home,project_name,source,station_file,green_path,model_name,integrat
     ss_length=source[8]
     ds_length=source[9]
     strdepth='%.4f' % zs
-    if static==0:  #Where to save dynamic waveforms
+    if static==0 and tsunami==0:  #Where to save dynamic waveforms
         green_path=green_path+'dynamic/'+model_name+"_"+strdepth+".sub"+subfault+"/"
+    if static==0 and tsunami==1:  #Where to save dynamic waveforms
+        green_path=green_path+'tsunami/'+model_name+"_"+strdepth+".sub"+subfault+"/"
     print("--> Computing synthetics at stations for the source at ("+str(xs)+" , "+str(ys)+")")
     staname=genfromtxt(station_file,dtype="S6",usecols=0)
     if staname.shape==(): #Single staiton file

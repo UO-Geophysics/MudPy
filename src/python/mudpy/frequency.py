@@ -49,9 +49,9 @@ def allpsd(home,project_name,run_name,run_number,GF_list,d_or_s,v_or_d,decimate,
                 n[0].data=lfilter(n[0].data,lowpass,fsample,10)
                 u[0].data=lfilter(u[0].data,lowpass,fsample,10)
             if decimate!=None:
-                n=stdecimate(n,decimate)
-                e=stdecimate(e,decimate)
-                u=stdecimate(u,decimate)
+                n[0]=stdecimate(n[0],decimate)
+                e[0]=stdecimate(e[0],decimate)
+                u[0]=stdecimate(u[0],decimate)
         else: #Read synthetics
             n=read(path+run_name+'.'+run_number+'.'+sta[i[k]]+'.'+suffix+'.n.sac')
             e=read(path+run_name+'.'+run_number+'.'+sta[i[k]]+'.'+suffix+'.e.sac')
@@ -139,3 +139,62 @@ def allcoherence(home,project_name,run_name,run_number,GF_list,v_or_d,decimate,l
         #Write to file
         outname=run_name+'.'+run_number+'.'+sta[i[k]]+'.'+synthsuffix+'.coh'
         savez(outpath+outname,fn=fn,fe=fe,fu=fu,cn=cn,ce=ce,cu=cu) 
+        
+def source_spectra(home,project_name,run_name,run_number,rupt,nstrike,ndip):
+    '''
+    Tile plot of subfault source-time functions
+    '''
+    from numpy import genfromtxt,unique,zeros,where,arange,savez
+    from mudpy.forward import get_source_time_function,add2stf
+    import nitime.algorithms as tsa
+    from string import rjust
+    
+    outpath=home+project_name+'/analysis/frequency/'
+    f=genfromtxt(rupt)
+    num=f[:,0]
+    nfault=nstrike*ndip
+    #Get slips
+    all_ss=f[:,8]
+    all_ds=f[:,9]
+    all=zeros(len(all_ss)*2)
+    iss=2*arange(0,len(all)/2,1)
+    ids=2*arange(0,len(all)/2,1)+1
+    all[iss]=all_ss
+    all[ids]=all_ds
+    #Now parse for multiple rupture speeds
+    unum=unique(num)
+    #Count number of windows
+    nwin=len(where(num==unum[0])[0])
+    #Get rigidities
+    mu=f[0:len(unum),13]
+    #Get rise times
+    rise_time=f[0:len(unum),7]
+    #Get areas
+    area=f[0:len(unum),10]*f[0:len(unum),11]
+    for kfault in range(nfault):
+        if kfault%10==0:
+            print '... working on subfault '+str(kfault)+' of '+str(nfault)
+        #Get rupture times for subfault windows
+        i=where(num==unum[kfault])[0]
+        trup=f[i,12]
+        #Get slips on windows
+        ss=all_ss[i]
+        ds=all_ds[i]
+        #Add it up
+        slip=(ss**2+ds**2)**0.5
+        #Get first source time function
+        t1,M1=get_source_time_function(mu[kfault],area[kfault],rise_time[kfault],trup[0],slip[0])
+        #Loop over windows
+        for kwin in range(nwin-1):
+            #Get next source time function
+            t2,M2=get_source_time_function(mu[kfault],area[kfault],rise_time[kfault],trup[kwin+1],slip[kwin+1])
+            #Add the soruce time functions
+            t1,M1=add2stf(t1,M1,t2,M2)
+        #Convert to slip rate
+        s=M1/(mu[kfault]*area[kfault])
+        #Done now compute spectra of STF
+        fsample=1./(t1[1]-t1[0])
+        freq, psd, nu = tsa.multi_taper_psd(s,Fs=fsample,adaptive=True,jackknife=False,low_bias=True)
+        outname=run_name+'.'+run_number+'.sub'+rjust(str(kfault),4,'0')+'.stfpsd'
+        savez(outpath+outname,freq=freq,psd=psd) 
+        

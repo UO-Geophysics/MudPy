@@ -7,6 +7,7 @@ inversion results
 '''
 
 import matplotlib
+matplotlib.rcParams['pdf.fonttype'] = 42
 cdict = {'red': ((0., 1, 1),
                  (0.05, 1, 1),
                  (0.11, 0, 0),
@@ -180,8 +181,7 @@ def tile_moment(rupt,epicenter,nstrike,ndip,covfile,beta):
     from mudpy.forward import get_source_time_function,add2stf
     from mudpy.inverse import d2epi,ds2rot
     
-    #Load covariances
-    C=load(covfile)
+
     f=genfromtxt(rupt)
     num=f[:,0]
     nfault=nstrike*ndip
@@ -195,11 +195,14 @@ def tile_moment(rupt,epicenter,nstrike,ndip,covfile,beta):
     all[ids]=all_ds
     rot=ds2rot(expand_dims(all,1),beta)
     #Compute CI
-    CIplus=squeeze(rot)+1.645*(C**0.5)
-    CIminus=squeeze(rot)-1.645*(C**0.5)
-    CIminus[CIminus<0]=0
-    slipCIplus=(CIplus[iss]**2+CIplus[ids]**2)**0.5
-    slipCIminus=(CIminus[iss]**2+CIminus[ids]**2)**0.5
+    #Load covariances
+    if covfile!=None:
+        C=load(covfile)
+        CIplus=squeeze(rot)+1*(C**0.5)
+        CIminus=squeeze(rot)-1*(C**0.5)
+        CIminus[CIminus<0]=0
+        slipCIplus=(CIplus[iss]**2+CIplus[ids]**2)**0.5
+        slipCIminus=(CIminus[iss]**2+CIminus[ids]**2)**0.5
     #Now parse for multiple rupture speeds
     unum=unique(num)
     #Count number of windows
@@ -214,7 +217,7 @@ def tile_moment(rupt,epicenter,nstrike,ndip,covfile,beta):
     source=f[0:len(unum),1:4]
     d=d2epi(epicenter,source)
     #Define velocity limits
-    vfast=3.6
+    vfast=3.5
     vslow=1.0
     
     #Get indices for plot
@@ -241,22 +244,26 @@ def tile_moment(rupt,epicenter,nstrike,ndip,covfile,beta):
         ds=all_ds[i]
         #Add it up
         slip=(ss**2+ds**2)**0.5
-        slip_plus=slipCIplus[i]
-        slip_minus=slipCIminus[i]
+        if covfile !=None:
+            slip_plus=slipCIplus[i]
+            slip_minus=slipCIminus[i]
         #Get first source time function
         t1,M1=get_source_time_function(mu[kfault],area[kfault],rise_time[kfault],trup[0],slip[0])
-        t1plus,M1plus=get_source_time_function(mu[kfault],area[kfault],rise_time[kfault],trup[0],slip_plus[0])
-        t1minus,M1minus=get_source_time_function(mu[kfault],area[kfault],rise_time[kfault],trup[0],slip_minus[0])
+        if covfile !=None:
+            t1plus,M1plus=get_source_time_function(mu[kfault],area[kfault],rise_time[kfault],trup[0],slip_plus[0])
+            t1minus,M1minus=get_source_time_function(mu[kfault],area[kfault],rise_time[kfault],trup[0],slip_minus[0])
         #Loop over windows
         for kwin in range(nwin-1):
             #Get next source time function
             t2,M2=get_source_time_function(mu[kfault],area[kfault],rise_time[kfault],trup[kwin+1],slip[kwin+1])
-            t2plus,M2plus=get_source_time_function(mu[kfault],area[kfault],rise_time[kfault],trup[kwin+1],slip_plus[kwin+1])
-            t2minus,M2minus=get_source_time_function(mu[kfault],area[kfault],rise_time[kfault],trup[kwin+1],slip_minus[kwin+1])
+            if covfile !=None:
+                t2plus,M2plus=get_source_time_function(mu[kfault],area[kfault],rise_time[kfault],trup[kwin+1],slip_plus[kwin+1])
+                t2minus,M2minus=get_source_time_function(mu[kfault],area[kfault],rise_time[kfault],trup[kwin+1],slip_minus[kwin+1])
             #Add the soruce time functions
             t1,M1=add2stf(t1,M1,t2,M2)
-            t1plus,M1plus=add2stf(t1plus,M1plus,t2plus,M2plus)
-            t1minus,M1minus=add2stf(t1minus,M1minus,t2minus,M2minus)
+            if covfile !=None:
+                t1plus,M1plus=add2stf(t1plus,M1plus,t2plus,M2plus)
+                t1minus,M1minus=add2stf(t1minus,M1minus,t2minus,M2minus)
         #Track maximum moment
         Mmax=max(Mmax,M1.max())
         #Done now plot them
@@ -272,9 +279,10 @@ def tile_moment(rupt,epicenter,nstrike,ndip,covfile,beta):
         #Cover upper part
         ax.fill_between(t1,y1=M1,y2=1.01*M1.max(),color='white')
         #Plot confidence intervals
-        ax.fill_between(t1,M1minus,M1plus,facecolor='grey',alpha=0.4)
-        ax.plot(t1,M1plus,color='black')
-        ax.plot(t1,M1minus,color='white')
+        if covfile !=None:
+            ax.fill_between(t1,M1minus,M1plus,facecolor='grey',alpha=0.4)
+            ax.plot(t1,M1plus,color='black')
+            ax.plot(t1,M1minus,color='white',lw=2)
         #Plot curve
         ax.plot(t1, M1,color='k')
         
@@ -616,12 +624,12 @@ def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpas
         ulims=axu.get_ylim()
         urange=ulims[1]-ulims[0]
         
-        axn.annotate(nmax,xy=(t_lim[0]+0.02*trange,nlims[0]+0.02*nrange),fontsize=12)
-        axe.annotate(emax,xy=(t_lim[0]+0.02*trange,elims[0]+0.02*erange),fontsize=12)
-        axu.annotate(umax,xy=(t_lim[0]+0.02*trange,ulims[0]+0.02*urange),fontsize=12)
-        axn.annotate(nsmax,xy=(t_lim[0]+0.02*trange,nlims[0]+0.7*nrange),fontsize=12,color='red')
-        axe.annotate(esmax,xy=(t_lim[0]+0.02*trange,elims[0]+0.7*erange),fontsize=12,color='red')
-        axu.annotate(usmax,xy=(t_lim[0]+0.02*trange,ulims[0]+0.7*urange),fontsize=12,color='red')
+        axn.annotate(nmax,xy=(t_lim[1]-0.3*trange,nlims[0]+0.02*nrange),fontsize=12)
+        axe.annotate(emax,xy=(t_lim[1]-0.3*trange,elims[0]+0.02*erange),fontsize=12)
+        axu.annotate(umax,xy=(t_lim[1]-0.3*trange,ulims[0]+0.02*urange),fontsize=12)
+        axn.annotate(nsmax,xy=(t_lim[1]-0.3*trange,nlims[0]+0.7*nrange),fontsize=12,color='red')
+        axe.annotate(esmax,xy=(t_lim[1]-0.3*trange,elims[0]+0.7*erange),fontsize=12,color='red')
+        axu.annotate(usmax,xy=(t_lim[1]-0.3*trange,ulims[0]+0.7*urange),fontsize=12,color='red')
         #Station name
         axn.set_ylabel(sta[i[k]],rotation=0)
         if k==0:
@@ -638,12 +646,17 @@ def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpas
             axe.xaxis.set_ticklabels([])
             axu.xaxis.set_ticklabels([])
             xtick=axn.xaxis.get_majorticklocs()
-            xtick=xtick[1:]
+            ix=[1,3,5]
+            xtick=xtick[ix]
+            xticklabel=['','50','','150','','250','']
         if k==len(i)-1: #Last plot
             axe.set_xlabel('Time (s)')
-            axn.xaxis.set_ticks(xtick)
-            axe.xaxis.set_ticks(xtick)
-            axu.xaxis.set_ticks(xtick)
+            axn.xaxis.set_ticklabels(xticklabel)
+            axe.xaxis.set_ticklabels(xticklabel)
+            axu.xaxis.set_ticklabels(xticklabel)
+            #axn.xaxis.set_ticks(xtick)
+            #axe.xaxis.set_ticks(xtick)
+            #axu.xaxis.set_ticks(xtick)
     plt.subplots_adjust(left=0.2, bottom=0.05, right=0.8, top=0.95, wspace=0, hspace=0)
                 
 
@@ -828,6 +841,93 @@ def coherence(home,project_name,run_name,run_number,GF_list,vord,sort,f_lims):
         xyannot=(axn.get_xlim()[0]+0.01*log10((log10(axn.get_xlim()[1])-log10(axn.get_xlim()[0]))),axn.get_ylim()[0]+0.05)
         axn.annotate(sta[i[k]], xy=xyannot)
     plt.subplots_adjust(left=0.25, bottom=0.05, right=0.75, top=0.9, wspace=0, hspace=0)
+    
+def psds(home,project_name,run_name,run_number,GF_list,vord,sort,f_lims):
+    '''
+    Plot coherences
+    '''
+    import matplotlib.pyplot as plt
+    from numpy import load,where,genfromtxt,array,log10,argsort
+    
+    sta=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=0,dtype='S')
+    gf=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=[4,5],dtype='f')
+    lon=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=[1],dtype='f')
+    lat=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=[2],dtype='f')
+    datapath=home+project_name+'/analysis/frequency/'
+    if vord.lower()=='d':
+        kgf=0 #disp
+        suffix='kdisp'
+    elif vord.lower()=='v':
+        kgf=1 #disp
+        suffix='kvel'
+    i=where(gf[:,kgf]==1)[0]  
+    if sort.lower()=='lon':
+        j=argsort(lon[i])[::-1]
+        i=i[j]
+    elif sort.lower()=='lat':
+        j=argsort(lat[i])[::-1] 
+        i=i[j]
+    #Initalize canvas
+    fig, axarr = plt.subplots(len(i), 3)  
+    for k in range(len(i)):
+        #Read coherences
+        psd=load(datapath+sta[i[k]]+'.'+suffix+'.psd.npz')
+        fn=psd['fn']
+        fe=psd['fe']
+        fu=psd['fu']
+        npsd=psd['npsd']
+        epsd=psd['epsd']
+        upsd=psd['upsd']
+        #Let's plot them
+        #get current axis
+        axn=axarr[k,0]
+        axe=axarr[k,1]
+        axu=axarr[k,2]
+        #Plot
+        axn.semilogx(fn,npsd)
+        axe.semilogx(fe,epsd,'g')
+        axu.semilogx(fu,upsd,'r')
+        axn.grid(which='both')
+        axe.grid(which='both')
+        axu.grid(which='both')
+        #Arrange axes
+        axn.set_xlim(f_lims)
+        axe.set_xlim(f_lims)
+        axu.set_xlim(f_lims)
+        axn.set_ylim([npsd.min(),npsd.max()])
+        axe.set_ylim([npsd.min(),npsd.max()])
+        axu.set_ylim([npsd.min(),npsd.max()])
+        #Text labels
+        #axn.yaxis.set_ticks(array([0.25,0.5,0.75,1.0]))
+        #axe.yaxis.set_ticks(array([0.25,0.5,0.75,1.0]))
+        #axu.yaxis.set_ticks(array([0.25,0.5,0.75,1.0]))
+        axe.yaxis.set_ticklabels([])
+        axn.yaxis.set_ticklabels([])
+        axu.yaxis.set_ticklabels([])
+        #axn.yaxis.set_ticklabels(['','0.5','','1.0'])
+        if k!=len(i)-1:
+            axn.xaxis.set_ticklabels([])
+            axe.xaxis.set_ticklabels([])
+            axu.xaxis.set_ticklabels([])
+        if k==0: #First plot add some labels
+            axn.set_title('North')
+            if vord.lower()=='d':
+                axe.set_title('Displacement PSD(dB)\nEast')
+            else:
+                axe.set_title('Velocity PSD(dB)\nEast')
+            axu.set_title('Up')
+        if k==len(i)-1: #Last plot
+            axe.set_xlabel('Frequency (Hz)')
+            #l=axe.get_xticks().tolist()
+            #l[0]=''
+            #axe.xaxis.set_ticklabels(l)
+            #l=axu.get_xticks().tolist()
+            #l[0]=''
+            #axu.set_xticklabels(l)
+        #Annotate with station name
+        xyannot=(axn.get_xlim()[0]+0.01*log10((log10(axn.get_xlim()[1])-log10(axn.get_xlim()[0]))),axn.get_ylim()[0]+0.05)
+        axn.annotate(sta[i[k]], xy=xyannot)
+    plt.subplots_adjust(left=0.25, bottom=0.05, right=0.75, top=0.9, wspace=0, hspace=0)
             
 def average_coherence(home,project_name,run_name,run_number,GF_list,vord,num_components):
     '''
@@ -906,6 +1006,92 @@ def average_coherence(home,project_name,run_name,run_number,GF_list,vord,num_com
         plt.ylabel('Mean Coherence')
         plt.grid(which='both')
         plt.xlim(f.min(),f.max())
+        
+def stf_spectra(home,project_name,rupt,flims,dlims,normalize=True,stacks=None):
+    '''
+    Plot coherences
+    '''
+    import matplotlib.pyplot as plt
+    import matplotlib.colors as colors
+    import matplotlib.cm as cmx
+    from numpy import load,log10,genfromtxt,unique,arange,where,intersect1d
+    from string import rjust
+    
+    
+    datapath=home+project_name+'/analysis/frequency/'
+    f=genfromtxt(rupt)
+    rupt=rupt.split('/')[-1]
+    depth=f[:,3]
+    num=f[:,0]
+    #Now parse for multiple rupture speeds
+    unum=unique(num)
+    nfault=len(unum)
+    depth=depth[0:nfault]
+    # Using contourf to provide my colorbar info, then clearing the figure
+    Z = [[0,0],[0,0]]
+    cm = plt.get_cmap('brg') 
+    levels = arange(dlims[0],dlims[1]+0.1,0.1)
+    plt.figure()
+    c = plt.contourf(Z, levels, cmap=cm)
+    plt.clf()
+    cNorm  = colors.Normalize(vmin=depth.min(), vmax=depth.max())
+    scalarMap = cmx.ScalarMappable(norm=cNorm, cmap=cm)
+    if stacks==None:
+        for k in range(nfault):
+            #Read coherences
+            P=load(datapath+rupt.split('.')[0]+'.'+rupt.split('.')[1]+'.sub'+rjust(str(k),4,'0')+'.stfpsd.npz')
+            f=P['freq']
+            psd=P['psd']
+            i1=where(f>=flims[0])[0]
+            i2=where(f<=flims[1])[0]
+            i=intersect1d(i1,i2)
+            f=f[i]
+            psd=psd[i]
+            if normalize==True:
+                psd=psd/psd.max()
+            colorVal = scalarMap.to_rgba(depth[k])
+            plt.loglog(f,psd,color=colorVal)
+    else:
+        for k in range(len(stacks)):
+            current=stacks[k]
+            for ks in range(len(current)):
+                #Read coherences
+                P=load(datapath+rupt.split('.')[0]+'.'+rupt.split('.')[1]+'.sub'+rjust(str(current[ks]),4,'0')+'.stfpsd.npz')
+                f=P['freq']
+                psd=P['psd']
+                i1=where(f>=flims[0])[0]
+                i2=where(f<=flims[1])[0]
+                i=intersect1d(i1,i2)
+                f=f[i]
+                psd=psd[i]
+                if ks==0:
+                    p=psd
+                    z=depth[current[ks]]
+                else:
+                    p+=psd
+                    z+=depth[current[ks]]
+            if normalize==True:
+                p=p/p.max()
+            else:
+                p=p/len(current)
+            z=z/len(current)
+            colorVal = scalarMap.to_rgba(z)
+            plt.loglog(f,p,color=colorVal)
+    plt.xlim(flims)
+    plt.grid(which='both')
+    cb=plt.colorbar(c)
+    cb.set_label('Subfault depth (km)')
+    plt.xlabel('Frequency (Hz)')
+    if normalize==True:
+        plt.ylabel('Normalized Power')
+    else:
+        plt.ylabel('PSD (m/s)'+r'$^2$'+'/Hz')
+    plt.title('Slip Rate Spectra')
+
+        
+
+    
+
 
 #########                  Supporting tools                       ##############
 
