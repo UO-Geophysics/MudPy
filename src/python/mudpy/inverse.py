@@ -1317,7 +1317,6 @@ def model_covariance(home,project_name,run_name,run_number,fault_name,G_name,nfa
     print 'Getting G...'
     G_name=home+project_name+'/GFs/matrices/'+G_name
     print 'Loading '+G_name
-    #G_name="/Users/dmelgarm/Research/Slip_Inv/tohoku_10s/GFs/matrices/fnet_20win_vr4_200s_gps.g.npy"
     if G_name[-3:]!='npy':
             G_name=G_name+'.npy'
     G=load(G_name)
@@ -1566,10 +1565,99 @@ def move_seafloor(home,project_name,run_name,model_name,topo_file,topo_dx_file,t
         print '... writting dtopo files'
         savetxt(subdir+'DS.dtopo',dtopo_ds,fmt='%i\t%.6f\t%.6f\t%.4e')
         savetxt(subdir+'SS.dtopo',dtopo_ss,fmt='%i\t%.6f\t%.6f\t%.4e')
+             
                 
-            
-            
-            
+                      
+def tsunami_gf(home,project_name,model_name,fault_name,hot_start):
+    '''
+    Create Geoclaw parameter files and make system call to run simulation
+    '''
+    from numpy import genfromtxt
+    from string import rjust
+    from os import makedirs,chdir
+    from shutil import copy
+    from shlex import split
+    import subprocess
+
+    #Load fault file
+    f=genfromtxt(home+project_name+'/data/model_info/'+fault_name)
+    #Where is the data
+    green_dir=home+project_name+'/GFs/tsunami/'  
+    for ksub in range(hot_start,len(f)):
+        print '... working on subfault '+str(ksub)+' of '+str(len(f))
+        #Depth string
+        zs=f[ksub,3]        
+        strdepth='%.4f' % zs
+        #subfault number
+        sub=rjust(str(ksub+1),4,'0')
+        #Subfault dir
+        subdir=green_dir+model_name+'_'+strdepth+'.sub'+sub+'/'
+        #Make dirs, one for DS one for SS
+        try:
+            makedirs(subdir+'_DS')
+        except:
+            print 'Warning: DS directory already exists'
+        try:
+            makedirs(subdir+'_SS')
+        except:
+            print 'Warning: SS directory already exists'
+        #Move setrun.py and makefile into each directory
+        copy(home+project_name+'/data/station_info/setrun.py',subdir+'_DS/')
+        copy(home+project_name+'/data/station_info/Makefile',subdir+'_DS/')
+        copy(home+project_name+'/data/station_info/setrun.py',subdir+'_SS/')
+        copy(home+project_name+'/data/station_info/Makefile',subdir+'_SS/')
+        #Modify the dtopo declaration
+        dtopoDS=subdir+'DS.dtopo'
+        dtopoSS=subdir+'SS.dtopo'
+        s_ds = open(subdir+'_DS/setrun.py').read()
+        s_ss = open(subdir+'_SS/setrun.py').read()
+        s_ds = s_ds.replace('GF_dtopofile',dtopoDS)
+        s_ss = s_ss.replace('GF_dtopofile',dtopoSS)  
+        fpy = open(subdir+'_DS/setrun.py', 'w')
+        fpy.write(s_ds)
+        fpy.close()
+        fpy = open(subdir+'_SS/setrun.py', 'w')
+        fpy.write(s_ss)
+        fpy.close()
+        #Now run it
+        geoclawDS='make .output'
+        geoclawSS='make .output'
+        chdir(subdir+'_DS')
+        p=subprocess.Popen(split(geoclawDS),stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+        out,err=p.communicate()
+        chdir(subdir+'_SS')
+        p=subprocess.Popen(split(geoclawSS),stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+        out,err=p.communicate() 
+        
+                  
+def tsunami2sac(home,project_name,model_name,fault_name,hot_start):
+    '''
+    Create Geoclaw parameter files and make system call to run simulation
+    '''
+    from numpy import genfromtxt
+    from string import rjust
+    from obspy import read
+
+    #Load fault file
+    f=genfromtxt(home+project_name+'/data/model_info/'+fault_name)
+    #Load gauge correspondences
+    gauges=genfromtxt(home+project_name+'/data/station_info/gauges.dict',usecols=[0,3])
+    #Where is the data
+    green_dir=home+project_name+'/GFs/tsunami/'  
+    for ksub in range(hot_start,len(f)):
+        print '... working on subfault '+str(ksub)+' of '+str(len(f))
+        #Depth string
+        zs=f[ksub,3]        
+        strdepth='%.4f' % zs
+        #subfault number
+        sub=rjust(str(ksub+1),4,'0')
+        #Subfault dir
+        subdir=green_dir+model_name+'_'+strdepth+'.sub'+sub+'/'
+        #Read gauge.fort file
+        gds=genfromtxt(subdir+'_DS/_output/fort.gauge')
+        gss=genfromtxt(subdir+'_SS/_output/fort.gauge')
+        
+                  
             
     
 def grd2xyz(uout,lon,lat):

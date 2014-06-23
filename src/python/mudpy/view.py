@@ -1088,7 +1088,52 @@ def stf_spectra(home,project_name,rupt,flims,dlims,normalize=True,stacks=None):
         plt.ylabel('PSD (m/s)'+r'$^2$'+'/Hz')
     plt.title('Slip Rate Spectra')
 
+
+def dtopo_slices(dtopo_file,fault_file,out):
+    '''
+    Plot dtopo file
+    '''
+    from numpy import genfromtxt,unique,where,meshgrid
+    from scipy.interpolate import griddata
+    from matplotlib import pyplot as plt
+    from string import rjust
+    
+    dtopo=genfromtxt(dtopo_file)
+    f=genfromtxt(fault_file)
+    t=unique(dtopo[:,0])
+    #Get z ranges
+    z1=dtopo[:,3].min()
+    z2=dtopo[:,3].max()
+    zrange=max([-z1,z2])
+    #Loop over time slices
+    for kt in range(len(t)):
+        print 't = '+str(t[kt])
+        i=where(dtopo[:,0]==t[kt])[0]
+        lon=dtopo[i,1]
+        lat=dtopo[i,2]     
+        Lon=unique(dtopo[i,1])
+        Lat=unique(dtopo[i,2])
+        Lon,Lat=meshgrid(Lon,Lat)
+        z=dtopo[i,3]
+        Z=griddata((lon,lat),z,(Lon,Lat),method='linear')
+        plt.figure();
+        plt.imshow(Z,origin='lower',extent=(lon.min(),lon.max(),lat.min(),lat.max()),
+                    vmin=-zrange,vmax=zrange,cmap=plt.cm.seismic);
+        cb=plt.colorbar()
+        cb.set_label('Vertical deformation (m)')
+        plt.title('t = '+str(t[kt]))
+        plt.xlabel('Longitude (deg)')
+        plt.ylabel('Latitude (deg)')
+        plt.scatter(f[:,1],f[:,2],c='k',marker='x')
+        plt.savefig(out+rjust(str(kt),4,'0')+'vert.png')
+        plt.close("all")
         
+
+
+        
+        
+        
+ 
 
     
 
