@@ -62,7 +62,7 @@ def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epic
         mini_station=home+project_name+'/data/station_info/tempG.sta'
         stations=genfromtxt(gf_file,usecols=0,skip_header=1,dtype='S6')
         GF=genfromtxt(gf_file,usecols=[1,2,3,4,5,6,7],skip_header=1,dtype='f8')
-        GFfiles=genfromtxt(gf_file,usecols=[8,9,10],dtype='S')
+        GFfiles=genfromtxt(gf_file,usecols=[8,9,10,11,12],dtype='S')
         #static field GFs
         kgf=2
         Gstatic=array([])
@@ -126,7 +126,7 @@ def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epic
             #Make mini station file 
             i=where(GF[:,kgf]==1)[0]
             if len(i)>0: #There's actually something to do
-                mini_station_file(mini_station,stations[i],GF[i,0],GF[i,1],GFfiles[i,1])
+                mini_station_file(mini_station,stations[i],GF[i,0],GF[i,1],GFfiles[i,2])
                 gftype='vel'
                 #Decide on delays for each time window (50% overlap)
                 trupt=arange(0,num_windows)*trise/2
@@ -149,7 +149,35 @@ def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epic
         kgf=5
         Gtsun=array([])
         if GF[:,kgf].sum()>0:
-            pass
+            #Load fault file
+            source=loadtxt(home+project_name+'/data/model_info/'+fault_name,ndmin=2)
+            trise=source[0,7]
+            try:
+                remove(mini_station) #Cleanup  
+            except:
+                pass
+            #Make mini station file 
+            i=where(GF[:,kgf]==1)[0]
+            if len(i)>0: #There's actually something to do
+                mini_station_file(mini_station,stations[i],GF[i,0],GF[i,1],GFfiles[i,3])
+                gftype='tsun'
+                #Decide on delays for each time window (50% overlap)
+                trupt=arange(0,num_windows)*trise/2
+                for krup in range(num_windows):
+                    print 'Working on window '+str(krup+1)
+                    tdelay=epi2subfault(epicenter,source,rupture_speed,trupt[krup])
+                    if krup==0: #First rupture speed
+                        first_window=True
+                        Ess=[] ; Eds=[] ; Nss=[] ; Nds=[] ; Zss=[] ; Zds=[]
+                        Gtsun_temp,SS,DS = makeG(home,project_name,fault_name,model_name,split(mini_station)[1],
+                                                                gftype,tdelay,decimate,lowpass,first_window,Ess,Eds,Nss,Nds,Zss,Zds)
+                        Gtsun=Gtsun_temp
+                    else:
+                        first_window=False
+                        Gtsun_temp,SS,DS = makeG(home,project_name,fault_name,model_name,split(mini_station)[1],
+                                                                gftype,tdelay,decimate,lowpass,first_window,SS,DS,Nss,Nds,Zss,Zds)
+                        Gtsun=c_[Gtsun,Gtsun_temp]
+                remove(mini_station) #Cleanup 
         #Strain offsets
         kgf=6
         Gstrain=array([])
@@ -357,7 +385,70 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tdelay,dec
             insert_position+=3*npts #Update for next station
         return G,Ess,Eds,Nss,Nds,Zss,Zds
     if gftype.lower()=='tsun':
-        pass     
+        if first_window==True: #Read in GFs from file
+            ktrace=0
+            for ksta in range(Nsta):
+                print 'Reading green functions for station #'+str(ksta+1)+' of '+str(Nsta)
+                for kfault in range(Nfaults):
+                    #Get subfault GF directory
+                    nsub='sub'+rjust(str(int(source[kfault,0])),4,'0')
+                    nfault='subfault'+rjust(str(int(source[kfault,0])),4,'0')
+                    strdepth='%.4f' % source[kfault,3]
+                    syn_path=home+project_name+'/GFs/tsunami/'+model_name+'_'+strdepth+'.'+nsub+'/'
+                    #Get synthetics
+                    if kfault==0 and ksta==0: #It's the first one, initalize stream object
+                        SS=read(syn_path+staname[ksta]+'.ss.tsun')
+                        DS=read(syn_path+staname[ksta]+'.ds.tsun')
+                    else: #Just add to stream object
+                        SS+=read(syn_path+staname[ksta]+'.ss.tsun')
+                        DS+=read(syn_path+staname[ksta]+'.ds.tsun')
+                    ktrace+=1            
+        else:
+            SS=Ess.copy()
+            DS=Eds.copy()
+        #Read time series
+        for ksta in range(Nsta):
+            if ksta==0:
+                Data=read(datafiles[ksta])
+            else:
+                Data+=read(datafiles[ksta])         
+        #Finished reading, filtering, etc now time shift by rupture time and resmaple to data
+        ktrace=0
+        print "Aligning GFs and resampling to data times..."
+        for ksta in range(Nsta):
+            #Loop over subfaults
+            print '...Working on station #'+str(ksta+1)+' of '+str(Nsta)
+            for kfault in range(Nfaults):
+                #Assign current GFs
+                ss=Stream(Trace())
+                ds=Stream(Trace())
+                ss[0]=SS[ktrace].copy()
+                ds[0]=DS[ktrace].copy()
+                #Time shift them according to subfault rupture time, zero pad, round to dt interval,decimate
+                #and extend to maximum time
+                ss=tshift(ss,tdelay[kfault])
+                ds=tshift(ds,tdelay[kfault])
+                #Now time align stuff                                
+                ss=resample_synth_tsun(ss[0],Data[ksta])
+                ss=prep_synth(ss,Data[ksta])
+                ds=resample_synth_tsun(ds[0],Data[ksta])
+                ds=prep_synth(ds,Data[ksta])
+                #Insert into Gtemp then append to G
+                if kfault==0 and ksta==0: #It's the first subfault and station, initalize G
+                    G=gdims_tsun(datafiles,Nfaults,decimate) #Survey all stations to decide size of G
+                if kfault==0: #Initalize Gtemp (different size for each station)
+                    #How many points left in the tiem series
+                    npts=Data[ksta].stats.npts
+                    print "... ... "+str(npts)+" data points left over"
+                    Gtemp=zeros([npts,Nfaults*2])      
+                #Insert synthetics into Gtemp
+                Gtemp[0:npts,2*kfault]=ss.data
+                Gtemp[0:npts,2*kfault+1]=ds.data
+                ktrace+=1
+            #After looping through all subfaults Insert Gtemp into G
+            G[insert_position:insert_position+npts,:]=Gtemp
+            insert_position+=npts #Update for next station
+        return G,SS,DS             
     if gftype.lower()=='strain':
         pass                                
       
@@ -385,7 +476,7 @@ def getdata(home,project_name,GF_list,decimate,lowpass):
     #Read gf file and decide what needs to get loaded
     gf_file=home+project_name+'/data/station_info/'+GF_list
     GF=genfromtxt(gf_file,usecols=[3,4,5,6,7],skip_header=1,dtype='f8')
-    GFfiles=genfromtxt(gf_file,usecols=[8,9,10],dtype='S')  
+    GFfiles=genfromtxt(gf_file,usecols=[8,9,10,11,12],dtype='S')  
     stations=genfromtxt(gf_file,usecols=0,dtype='S')  
     #Read one column at a time
     kgf=0 #Static field
@@ -451,6 +542,11 @@ def getdata(home,project_name,GF_list,decimate,lowpass):
     #Tsunami
     kgf=3
     dtsun=array([])
+    i=where(GF[:,kgf]==1)[0]
+    for ksta in range(len(i)):
+        print 'Assembling tsunami waveforms from '+stations[i[ksta]]+' into data vector.'
+        tsun=read(GFfiles[i[ksta],kgf])
+        dtsun=append(dtsun,tsun)
     #Strain
     kgf=4
     dstrain=array([])            
@@ -570,8 +666,8 @@ def get_data_weights(home,project_name,GF_list,d,decimate):
     print 'Computing data weights...'
     #Read gf file and decide what needs tog et loaded
     gf_file=home+project_name+'/data/station_info/'+GF_list
-    GF=genfromtxt(gf_file,usecols=[3,4,5,6,7],skip_header=1,dtype='f8')
-    GFfiles=genfromtxt(gf_file,usecols=[8,9,10],dtype='S')
+    GF=genfromtxt(gf_file,usecols=[3,4,5,6,7,8],skip_header=1,dtype='f8')
+    GFfiles=genfromtxt(gf_file,usecols=[8,9,10,11,12],dtype='S')
     weights=genfromtxt(gf_file,usecols=range(13,28),dtype='f')
     #Initalize
     w=zeros(len(d))
@@ -625,6 +721,14 @@ def get_data_weights(home,project_name,GF_list,d,decimate):
         kinsert=kinsert+nsamples
     #Tsunami
     kgf=3
+    i=where(GF[:,kgf]==1)[0]
+    for ksta in range(len(i)):
+        #Read waveform to determine length of insert
+        st=read(GFfiles[i[ksta],kgf])
+        nsamples=st[0].stats.npts
+        wtsun=(1/weights[i[ksta],9])*ones(nsamples)
+        w[kinsert:kinsert+nsamples]=wtsun
+        kinsert=kinsert+nsamples
     #Strain
     kgf=4
     #Make W and exit
@@ -721,7 +825,7 @@ def write_synthetics(home,project_name,run_name,GF_list,G,sol,ds,num,decimate):
     gf_file=home+project_name+'/data/station_info/'+GF_list
     stations=genfromtxt(gf_file,usecols=[0],skip_header=1,dtype='S')
     GF=genfromtxt(gf_file,usecols=[3,4,5,6,7],skip_header=1,dtype='f8')
-    GFfiles=genfromtxt(gf_file,usecols=[8,9,10],skip_header=1,dtype='S')
+    GFfiles=genfromtxt(gf_file,usecols=[8,9,10,11,12],skip_header=1,dtype='S')
     #Separate into its constituent parts (statics,displacaments, velocities, etc...)
     kinsert=0
     #Statics
@@ -773,6 +877,18 @@ def write_synthetics(home,project_name,run_name,GF_list,G,sol,ds,num,decimate):
             n.write(home+project_name+'/output/inverse_models/waveforms/'+run_name+'.'+num+'.'+sta+'.vel.n.sac',format='SAC')
             e.write(home+project_name+'/output/inverse_models/waveforms/'+run_name+'.'+num+'.'+sta+'.vel.e.sac',format='SAC')
             u.write(home+project_name+'/output/inverse_models/waveforms/'+run_name+'.'+num+'.'+sta+'.vel.u.sac',format='SAC')
+    #Tsunami
+    kgf=3
+    i=where(GF[:,kgf]==1)[0]
+    if len(i)>0:
+        for ksta in range(len(i)):
+            sta=stations[i[ksta]]
+            tsun=read(GFfiles[i[ksta],kgf])
+            npts=tsun[0].stats.npts
+            synth=tsun.copy()
+            synth[0].data=ds[kinsert:kinsert+npts]
+            kinsert+=npts
+            synth.write(home+project_name+'/output/inverse_models/waveforms/'+run_name+'.'+num+'.'+sta+'.tsun',format='SAC')
             
         
 def write_log(home,project_name,run_name,k,rupture_speed,num_windows,lambda_spatial,lambda_temporal,
@@ -998,6 +1114,25 @@ def gdims(datafiles,nfaults,decimate):
             print 'ERROR: The 3 components of data are not the same length'
             return 'Error in forming G'
     G=zeros([3*npts,nfaults*2])
+    return G 
+
+def gdims_tsun(datafiles,nfaults,decimate):
+    '''
+    Survey the data files to determine what dimension G will be and return a matrix of zeros 
+    with the required dimensions
+    '''
+    
+    from obspy import read
+    from numpy import zeros
+    from mudpy.green import stdecimate
+    
+    npts=0
+    if decimate==None:
+        decimate=1
+    for k in range(len(datafiles)):
+        tsun=read(datafiles[k])
+        npts+=tsun[0].stats.npts
+    G=zeros([npts,nfaults*2])
     return G            
         
 def mini_station_file(outfile,sta,lon,lat,gffiles):
@@ -1282,6 +1417,37 @@ def resample_to_data(synth,data):
     #Place in output stream object
     synth.starttime=t1
     synth.data=synth_correct
+    return synth
+
+def resample_synth_tsun(synth,data):
+    '''
+    Resample a synthetic to the time samples contained in the input data
+    IN:
+        synth: synthetic stream object
+        data: data stream object
+    OUT:
+        st: resampled synthetic
+    '''
+    from numpy import interp,arange
+    from mudpy.forward import round_time
+    
+    #Get data sampling interval
+    delta=data.stats.delta
+    #Get synthetic start time
+    t1synth=synth.stats.starttime
+    #Get start time sampled at data interval and correction encessary
+    t1=round_time(t1synth,delta)
+    dt=t1-t1synth #This is the correctiont hat needs to be applied
+    #Make current time vector
+    tsynth=synth.times()
+    tcorrect=arange(tsynth[0],tsynth[-1],delta)+dt
+    #Interpolate to new time vector
+    synth_data=synth.data
+    synth_correct=interp(tcorrect,tsynth,synth_data)
+    #Place in output stream object
+    synth.starttime=t1
+    synth.data=synth_correct
+    synth.stats.delta=delta
     return synth
     
 def model_covariance(home,project_name,run_name,run_number,fault_name,G_name,nfaults,
@@ -1572,18 +1738,19 @@ def tsunami_gf(home,project_name,model_name,fault_name,hot_start):
     '''
     Create Geoclaw parameter files and make system call to run simulation
     '''
-    from numpy import genfromtxt
+    from numpy import genfromtxt,r_,arange
     from string import rjust
     from os import makedirs,chdir
     from shutil import copy
     from shlex import split
     import subprocess
+    import gc
 
     #Load fault file
     f=genfromtxt(home+project_name+'/data/model_info/'+fault_name)
     #Where is the data
     green_dir=home+project_name+'/GFs/tsunami/'  
-    for ksub in range(hot_start,len(f)):
+    for ksub in r_[172]:#range(hot_start,len(f)):
         print '... working on subfault '+str(ksub)+' of '+str(len(f))
         #Depth string
         zs=f[ksub,3]        
@@ -1623,25 +1790,29 @@ def tsunami_gf(home,project_name,model_name,fault_name,hot_start):
         geoclawDS='make .output'
         geoclawSS='make .output'
         chdir(subdir+'_DS')
-        p=subprocess.Popen(split(geoclawDS),stdout=subprocess.PIPE,stderr=subprocess.PIPE)
-        out,err=p.communicate()
+        #subprocess.call(split(geoclawDS))
+        #p.communicate()
+        gc.collect()
         chdir(subdir+'_SS')
-        p=subprocess.Popen(split(geoclawSS),stdout=subprocess.PIPE,stderr=subprocess.PIPE)
-        out,err=p.communicate() 
+        subprocess.call(split(geoclawSS))
+        #p.communicate() 
+        gc.collect()
         
                   
-def tsunami2sac(home,project_name,model_name,fault_name,hot_start):
+def tsunami2sac(home,project_name,model_name,fault_name,tlims,dt,time_epi,hot_start):
     '''
     Create Geoclaw parameter files and make system call to run simulation
     '''
-    from numpy import genfromtxt
+    from numpy import genfromtxt,where,intersect1d,arange,interp,r_
     from string import rjust
-    from obspy import read
+    from obspy import Stream,Trace
+    from datetime import timedelta
 
     #Load fault file
     f=genfromtxt(home+project_name+'/data/model_info/'+fault_name)
     #Load gauge correspondences
-    gauges=genfromtxt(home+project_name+'/data/station_info/gauges.dict',usecols=[0,3])
+    gaugesGC=genfromtxt(home+project_name+'/data/station_info/gauges.dict',usecols=0)
+    gauges=genfromtxt(home+project_name+'/data/station_info/gauges.dict',usecols=3,dtype='S')
     #Where is the data
     green_dir=home+project_name+'/GFs/tsunami/'  
     for ksub in range(hot_start,len(f)):
@@ -1656,9 +1827,45 @@ def tsunami2sac(home,project_name,model_name,fault_name,hot_start):
         #Read gauge.fort file
         gds=genfromtxt(subdir+'_DS/_output/fort.gauge')
         gss=genfromtxt(subdir+'_SS/_output/fort.gauge')
-        
-                  
-            
+        for kgauge in range(len(gauges)):
+            iss=where(gss[:,0]==gaugesGC[kgauge])[0]
+            ids=where(gds[:,0]==gaugesGC[kgauge])[0]
+            #Get time vectorre
+            tss=gss[iss,2]
+            tds=gds[ids,2]
+            #Get data
+            etass=gss[iss,6]
+            etads=gds[ids,6]
+            #Trim and resample to regular interval
+            itrim=intersect1d(where(tss>=tlims[0])[0],where(tss<=tlims[1])[0])
+            tss=tss[itrim]
+            etass=etass[itrim]
+            itrim=intersect1d(where(tds>=tlims[0])[0],where(tds<=tlims[1])[0])
+            tds=tds[itrim]
+            if tds[-1]<3550 or tss[-1]<3550:
+                print 'Subfault '+str(ksub+1)+' has incomplete data'
+            etads=etads[itrim]
+            ti=arange(tlims[0],tlims[1]+dt,dt)
+            etass=interp(ti,tss,etass)
+            etads=interp(ti,tds,etads)
+            tiout=arange(0,tlims[1]+dt,dt)
+            etass=interp(tiout,r_[0,ti],r_[0,etass])
+            etads=interp(tiout,r_[0,ti],r_[0,etads])
+            #Initalize stream objects
+            stds=Stream(Trace())
+            stss=Stream(Trace())
+            #Populate fields
+            stss[0].data=etass
+            stss[0].stats.delta=dt
+            stss[0].stats.starttime=time_epi
+            stds[0].data=etads
+            stds[0].stats.delta=dt
+            stds[0].stats.starttime=time_epi
+            #Write to file
+            stss.write(subdir+gauges[kgauge]+'.ss.tsun',format='SAC')
+            stds.write(subdir+gauges[kgauge]+'.ds.tsun',format='SAC')
+
+
     
 def grd2xyz(uout,lon,lat):
     ''''

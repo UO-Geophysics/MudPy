@@ -658,6 +658,82 @@ def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpas
             #axe.xaxis.set_ticks(xtick)
             #axu.xaxis.set_ticks(xtick)
     plt.subplots_adjust(left=0.2, bottom=0.05, right=0.8, top=0.95, wspace=0, hspace=0)
+    
+def tsunami_synthetics(home,project_name,run_name,run_number,gflist,t_lim,sort):
+    '''
+    Plot synthetics vs real data
+    
+    gflist: The GF control fiel that decides what to plot/not plot
+    datapath
+    '''
+    from obspy import read
+    from numpy import genfromtxt,where,argsort
+    import matplotlib.pyplot as plt
+    import matplotlib
+    from mudpy.green import stdecimate 
+    from mudpy.forward import lowpass as lfilter
+    
+    matplotlib.rcParams.update({'font.size': 14})
+    #Decide what to plot
+    sta=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=0,dtype='S')
+    lon=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=[1],dtype='f')
+    lat=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=[2],dtype='f')
+    gf=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=[6],dtype='f')
+    datapath=home+project_name+'/data/waveforms/'
+    synthpath=home+project_name+'/output/inverse_models/waveforms/'
+    #Decide on sorting
+    i=where(gf==1)[0]  
+    if sort.lower()=='lon':
+        j=argsort(lon[i])[::-1]
+        i=i[j]
+    elif sort.lower()=='lat':
+        j=argsort(lat[i])[::-1] 
+        i=i[j]
+    nsta=len(i)
+    fig, axarr = plt.subplots(nsta,1)  
+    for k in range(len(i)):
+        tsun=read(datapath+sta[i[k]]+'.tsun')
+        tsun_synth=read(synthpath+run_name+'.'+run_number+'.'+sta[i[k]]+'.tsun')
+        #Make plot
+        ax=axarr[k]
+        ax.plot(tsun[0].times(),tsun[0].data,'k',tsun_synth[0].times(),tsun_synth[0].data,'r')
+        ax.grid(which='both')
+        ax.yaxis.set_ticklabels([])
+        ax.set_xlim(t_lim)
+        ax.yaxis.grid(False)
+        ax.yaxis.set_ticks([])
+        #Annotations
+        trange=t_lim[1]-t_lim[0]
+        sign=1.
+        if abs(min(tsun[0].data))>max(tsun[0].data):
+            sign=-1. 
+        tsun_max='%.3f' % (sign*max(abs(tsun[0].data)))
+        sign=1.
+        if abs(min(tsun_synth[0].data))>max(tsun_synth[0].data):
+            sign=-1. 
+        tsun_synth_max='%.3f' % (sign*max(abs(tsun_synth[0].data)))
+        sign=1.
+        tsun_lims=ax.get_ylim()
+        tsun_range=tsun_lims[1]-tsun_lims[0]
+        
+        ax.annotate(tsun_max,xy=(t_lim[1]-0.3*trange,tsun_lims[0]+0.02*tsun_range),fontsize=12)
+        ax.annotate(tsun_synth_max,xy=(t_lim[1]-0.3*trange,tsun_lims[0]+0.7*tsun_range),fontsize=12,color='red')
+        #Station name
+        ax.set_ylabel(sta[i[k]],rotation=0)
+        #axn.set_title('North (m)')
+        #if k!=len(i)-1:
+        #    ax.xaxis.set_ticklabels([])
+        #    xtick=ax.xaxis.get_majorticklocs()
+        #    ix=[1,3,5]
+        #    xtick=xtick[ix]
+        #    xticklabel=['','50','','150','','250','']
+        if k==len(i)-1: #Last plot
+            ax.set_xlabel('Minutes after Origin Time')
+            #ax.xaxis.set_ticklabels(xticklabel)
+            #axn.xaxis.set_ticks(xtick)
+            #axe.xaxis.set_ticks(xtick)
+            #axu.xaxis.set_ticks(xtick)
+    plt.subplots_adjust(left=0.2, bottom=0.05, right=0.8, top=0.95, wspace=0, hspace=0)
                 
 
 def ABIC(home,project_name,run_name):

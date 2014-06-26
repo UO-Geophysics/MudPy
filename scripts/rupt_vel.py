@@ -20,7 +20,7 @@ z=zi[i,j]
 
 source=np.c_[lon,lat,z]
 d=d2epi(epicenter,source)
-t=np.arange(10,205,10)
+t=np.arange(1,205,1)
 v=3.5
 for k in range(len(t)):
     i1=np.where(d<v*t[k]+1)[0]
