@@ -4,7 +4,7 @@ D. Melgar 02/2014
 Forward modeling routines
 '''
 
-def waveforms(home,project_name,rupture_name,station_file,model_name,integrate,tsunami,hot_start,resample):
+def waveforms(home,project_name,rupture_name,station_file,model_name,run_name,integrate,tsunami,hot_start,resample):
     '''
     This routine will take synthetics and apply a slip dsitribution. It will delay each 
     subfault by the appropriate rupture time and linearly superimpose all of them. Output
@@ -58,79 +58,82 @@ def waveforms(home,project_name,rupture_name,station_file,model_name,integrate,t
         z=Stream()
         sta=staname[ksta]
         #Loop over sources (Add delays)
-        for k in range(source.shape[0]):
-            if k%100==0:
-                print '... working on parameter '+str(k)+' of '+str(len(source))
-            #Get subfault parameters
-            nfault='subfault'+rjust(str(int(source[k,0])),4,'0')
-            nsub='sub'+rjust(str(int(source[k,0])),4,'0')
-            zs=source[k,3]
-            ss_slip=source[k,8]
-            ds_slip=source[k,9]
-            rtime=source[k,12]
-            #Where's the data
-            strdepth='%.4f' % zs
-            if tsunami==0: 
-                syn_path=home+project_name+'/GFs/dynamic/'+model_name+'_'+strdepth+'.'+nsub+'/'
-            else:
-                syn_path=home+project_name+'/GFs/tsunami/'+model_name+'_'+strdepth+'.'+nsub+'/'
-            #Get synthetics
-            ess=read(syn_path+sta+'.'+nfault+'.SS.'+vord+'.e')
-            nss=read(syn_path+sta+'.'+nfault+'.SS.'+vord+'.n')
-            zss=read(syn_path+sta+'.'+nfault+'.SS.'+vord+'.z')
-            eds=read(syn_path+sta+'.'+nfault+'.DS.'+vord+'.e')
-            nds=read(syn_path+sta+'.'+nfault+'.DS.'+vord+'.n')
-            zds=read(syn_path+sta+'.'+nfault+'.DS.'+vord+'.z')
-            #Decide if resampling is required
-            if resample!=None:
-                if resample < (1/ess[0].stats.delta): #Downsample
-                    ess[0].resample(resample)
-                    nss[0].resample(resample)
-                    zss[0].resample(resample)
-                    eds[0].resample(resample)
-                    nds[0].resample(resample)
-                    zds[0].resample(resample)
-                elif resample > (1/ess[0].stats.delta): #Upsample
-                    upsample(ess,1./resample)
-                    upsample(nss,1./resample)
-                    upsample(zss,1./resample)
-                    upsample(eds,1./resample)
-                    upsample(nds,1./resample)
-                    upsample(zds,1./resample)
-            dt=ess[0].stats.delta
-            #Time shift them according to subfault rupture time
-            ess=tshift(ess,rtime)
-            ess[0].stats.starttime=round_time(ess[0].stats.starttime,dt)
-            nss=tshift(nss,rtime)
-            nss[0].stats.starttime=round_time(nss[0].stats.starttime,dt)
-            zss=tshift(zss,rtime)
-            zss[0].stats.starttime=round_time(zss[0].stats.starttime,dt)
-            eds=tshift(eds,rtime)
-            eds[0].stats.starttime=round_time(eds[0].stats.starttime,dt)
-            nds=tshift(nds,rtime)
-            nds[0].stats.starttime=round_time(nds[0].stats.starttime,dt)
-            zds=tshift(zds,rtime)
-            zds[0].stats.starttime=round_time(zds[0].stats.starttime,dt)
-            if allclose((ss_slip**2+ds_slip**2)**0.5,0)==False:  #Only add things that matter
-                log=log+nfault+', SS='+str(ss_slip)+', DS='+str(ds_slip)+'\n'
-                #A'ight, add 'em up
-                etotal=add_traces(ess,eds,ss_slip,ds_slip)
-                ntotal=add_traces(nss,nds,ss_slip,ds_slip)
-                ztotal=add_traces(zss,zds,ss_slip,ds_slip)
-                #Add to previous subfault's results
-                e=add_traces(e,etotal,1,1)
-                n=add_traces(n,ntotal,1,1)
-                z=add_traces(z,ztotal,1,1)
-            else:
-                log=log+"No slip on subfault "+nfault+', ignoring it...\n'
-            gc.collect()
-        #Save results
-        e[0].data=e[0].data.filled()  #This is a workaround of a bug in obspy
-        n[0].data=n[0].data.filled()
-        z[0].data=z[0].data.filled()
-        e.write(outpath+sta+'.'+vord+'.e',format='SAC')
-        n.write(outpath+sta+'.'+vord+'.n',format='SAC')
-        z.write(outpath+sta+'.'+vord+'.z',format='SAC')
+        try:
+            for k in range(source.shape[0]):
+                if k%100==0:
+                    print '... working on parameter '+str(k)+' of '+str(len(source))
+                #Get subfault parameters
+                nfault='subfault'+rjust(str(int(source[k,0])),4,'0')
+                nsub='sub'+rjust(str(int(source[k,0])),4,'0')
+                zs=source[k,3]
+                ss_slip=source[k,8]
+                ds_slip=source[k,9]
+                rtime=source[k,12]
+                #Where's the data
+                strdepth='%.4f' % zs
+                if tsunami==0: 
+                    syn_path=home+project_name+'/GFs/dynamic/'+model_name+'_'+strdepth+'.'+nsub+'/'
+                else:
+                    syn_path=home+project_name+'/GFs/tsunami/'+model_name+'_'+strdepth+'.'+nsub+'/'
+                #Get synthetics
+                ess=read(syn_path+sta+'.'+nfault+'.SS.'+vord+'.e')
+                nss=read(syn_path+sta+'.'+nfault+'.SS.'+vord+'.n')
+                zss=read(syn_path+sta+'.'+nfault+'.SS.'+vord+'.z')
+                eds=read(syn_path+sta+'.'+nfault+'.DS.'+vord+'.e')
+                nds=read(syn_path+sta+'.'+nfault+'.DS.'+vord+'.n')
+                zds=read(syn_path+sta+'.'+nfault+'.DS.'+vord+'.z')
+                #Decide if resampling is required
+                if resample!=None:
+                    if resample < (1/ess[0].stats.delta): #Downsample
+                        ess[0].resample(resample)
+                        nss[0].resample(resample)
+                        zss[0].resample(resample)
+                        eds[0].resample(resample)
+        	        nds[0].resample(resample)
+                        zds[0].resample(resample)
+                    elif resample > (1/ess[0].stats.delta): #Upsample
+                        upsample(ess,1./resample)
+                        upsample(nss,1./resample)
+                        upsample(zss,1./resample)
+                	upsample(eds,1./resample)
+                        upsample(nds,1./resample)
+                        upsample(zds,1./resample)
+                dt=ess[0].stats.delta
+                #Time shift them according to subfault rupture time
+                ess=tshift(ess,rtime)
+                ess[0].stats.starttime=round_time(ess[0].stats.starttime,dt)
+                nss=tshift(nss,rtime)
+                nss[0].stats.starttime=round_time(nss[0].stats.starttime,dt)
+                zss=tshift(zss,rtime)
+                zss[0].stats.starttime=round_time(zss[0].stats.starttime,dt)
+                eds=tshift(eds,rtime)
+                eds[0].stats.starttime=round_time(eds[0].stats.starttime,dt)
+                nds=tshift(nds,rtime)
+                nds[0].stats.starttime=round_time(nds[0].stats.starttime,dt)
+                zds=tshift(zds,rtime)
+                zds[0].stats.starttime=round_time(zds[0].stats.starttime,dt)
+                if allclose((ss_slip**2+ds_slip**2)**0.5,0)==False:  #Only add things that matter
+                    log=log+nfault+', SS='+str(ss_slip)+', DS='+str(ds_slip)+'\n'
+                    #A'ight, add 'em up
+                    etotal=add_traces(ess,eds,ss_slip,ds_slip)
+                    ntotal=add_traces(nss,nds,ss_slip,ds_slip)
+                    ztotal=add_traces(zss,zds,ss_slip,ds_slip)
+                    #Add to previous subfault's results
+                    e=add_traces(e,etotal,1,1)
+                    n=add_traces(n,ntotal,1,1)
+                    z=add_traces(z,ztotal,1,1)
+                else:
+                    log=log+"No slip on subfault "+nfault+', ignoring it...\n'
+                gc.collect()
+            #Save results
+            e[0].data=e[0].data.filled()  #This is a workaround of a bug in obspy
+            n[0].data=n[0].data.filled()
+            z[0].data=z[0].data.filled()
+            e.write(outpath+run_name+'.'+sta+'.'+vord+'.e',format='SAC')
+            n.write(outpath+run_name+'.'+sta+'.'+vord+'.n',format='SAC')
+            z.write(outpath+run_name+'.'+sta+'.'+vord+'.z',format='SAC')
+        except:
+            print 'An error coccured, skipping station'
     f=open(logpath+'waveforms.'+now+'.log','a')
     f.write(log)
     f.close()

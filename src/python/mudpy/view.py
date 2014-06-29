@@ -302,6 +302,7 @@ def tile_moment(rupt,epicenter,nstrike,ndip,covfile,beta):
     cbar_ax = fig.add_axes([0.91, 0.15, 0.01, 0.7])
     cb=fig.colorbar(im, cax=cbar_ax)
     cb.set_label('Reference rupture velocity (km/s)')
+    print 'Maximum moment was '+str(Mmax)+'N-m'
 
 
 def source_time_function(rupt,epicenter):
@@ -357,6 +358,7 @@ def source_time_function(rupt,epicenter):
     plt.grid()
     plt.xlabel('Time(s)')
     plt.ylabel('Moment Rate ('+r'$\times 10^{'+str(int(exp))+r'}$Nm/s)')
+    return t1,M1
     
 
 
@@ -659,7 +661,7 @@ def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpas
             #axu.xaxis.set_ticks(xtick)
     plt.subplots_adjust(left=0.2, bottom=0.05, right=0.8, top=0.95, wspace=0, hspace=0)
     
-def tsunami_synthetics(home,project_name,run_name,run_number,gflist,t_lim,sort):
+def tsunami_synthetics(home,project_name,run_name,run_number,gflist,t_lim,sort,scale):
     '''
     Plot synthetics vs real data
     
@@ -690,13 +692,13 @@ def tsunami_synthetics(home,project_name,run_name,run_number,gflist,t_lim,sort):
         j=argsort(lat[i])[::-1] 
         i=i[j]
     nsta=len(i)
-    fig, axarr = plt.subplots(nsta,1)  
+    fig, axarr = plt.subplots(4,2)  
     for k in range(len(i)):
         tsun=read(datapath+sta[i[k]]+'.tsun')
         tsun_synth=read(synthpath+run_name+'.'+run_number+'.'+sta[i[k]]+'.tsun')
         #Make plot
         ax=axarr[k]
-        ax.plot(tsun[0].times(),tsun[0].data,'k',tsun_synth[0].times(),tsun_synth[0].data,'r')
+        ax.plot(tsun[0].times()/60,tsun[0].data/scale[k],'k',tsun_synth[0].times()/60,tsun_synth[0].data/scale[k],'r')
         ax.grid(which='both')
         ax.yaxis.set_ticklabels([])
         ax.set_xlim(t_lim)
@@ -707,22 +709,22 @@ def tsunami_synthetics(home,project_name,run_name,run_number,gflist,t_lim,sort):
         sign=1.
         if abs(min(tsun[0].data))>max(tsun[0].data):
             sign=-1. 
-        tsun_max='%.3f' % (sign*max(abs(tsun[0].data)))
+        tsun_max='%.3f' % (sign*max(abs(tsun[0].data))/scale[k])
         sign=1.
         if abs(min(tsun_synth[0].data))>max(tsun_synth[0].data):
             sign=-1. 
-        tsun_synth_max='%.3f' % (sign*max(abs(tsun_synth[0].data)))
+        tsun_synth_max='%.3f' % (sign*max(abs(tsun_synth[0].data))/scale[k])
         sign=1.
         tsun_lims=ax.get_ylim()
         tsun_range=tsun_lims[1]-tsun_lims[0]
         
-        ax.annotate(tsun_max,xy=(t_lim[1]-0.3*trange,tsun_lims[0]+0.02*tsun_range),fontsize=12)
-        ax.annotate(tsun_synth_max,xy=(t_lim[1]-0.3*trange,tsun_lims[0]+0.7*tsun_range),fontsize=12,color='red')
+        ax.annotate(tsun_max,xy=(t_lim[1]-0.2*trange,tsun_lims[0]+0.02*tsun_range),fontsize=12)
+        ax.annotate(tsun_synth_max,xy=(t_lim[1]-0.2*trange,tsun_lims[0]+0.7*tsun_range),fontsize=12,color='red')
         #Station name
         ax.set_ylabel(sta[i[k]],rotation=0)
         #axn.set_title('North (m)')
-        #if k!=len(i)-1:
-        #    ax.xaxis.set_ticklabels([])
+        if k!=len(i)-1:
+            ax.xaxis.set_ticklabels([])
         #    xtick=ax.xaxis.get_majorticklocs()
         #    ix=[1,3,5]
         #    xtick=xtick[ix]
@@ -733,7 +735,7 @@ def tsunami_synthetics(home,project_name,run_name,run_number,gflist,t_lim,sort):
             #axn.xaxis.set_ticks(xtick)
             #axe.xaxis.set_ticks(xtick)
             #axu.xaxis.set_ticks(xtick)
-    plt.subplots_adjust(left=0.2, bottom=0.05, right=0.8, top=0.95, wspace=0, hspace=0)
+    plt.subplots_adjust(left=0.2, bottom=0.15, right=0.8, top=0.85, wspace=0, hspace=0)
                 
 
 def ABIC(home,project_name,run_name):

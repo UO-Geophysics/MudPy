@@ -282,7 +282,7 @@ ruptout[:,12]=zeros(len(latout))
 ruptout[:,13]=zeros(len(latout))
 ruptout=tile(ruptout,(20,1))
 #Read rupture modelr esults
-rupt=genfromtxt( u'/Users/dmelgarm/Research/Slip_Inv/tohoku_10s/output/inverse_models/models/20win_dv_final_0.5Hz_fine2.0019.inv')
+rupt=genfromtxt( u'/Volumes/Kanagawa/Slip_Inv/tohoku_10s/output/inverse_models/models/20win_42_fine2.0000.inv')
 #Now replace stuff
 iref_out=iref.copy()
 for k in range(19):
@@ -292,6 +292,6 @@ ruptout[:,8]=rupt[iref_out,8]
 ruptout[:,9]=rupt[iref_out,9]
 ruptout[:,12]=rupt[iref_out,12]
 ruptout[:,13]=rupt[iref_out,13]
-savetxt('/Volumes/Kanagawa/Slip_Inv/tohoku_tsunami/data/model_info/tohoku_tsunami.rupt',ruptout,fmt='%i\t%8.4f\t%8.4f\t%10.6f\t%.2f\t%.2f\t%.4f\t%.3f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e')
+savetxt('/Volumes/Kanagawa/Slip_Inv/tohoku_tsunami/data/model_info/tohoku_dvt.rupt',ruptout,fmt='%i\t%8.4f\t%8.4f\t%10.6f\t%.2f\t%.2f\t%.4f\t%.3f\t%.4f\t%.4f\t%.4f\t%.4f\t%9.4f\t%.4e')
 
 
