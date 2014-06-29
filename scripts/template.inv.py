@@ -13,7 +13,7 @@ from obspy.core import UTCDateTime
 ########                            GLOBALS                             ########
 home='/Users/dmelgarm/Research/Slip_Inv/'
 project_name='tohoku_10s'
-run_name='20win_dv_final_0.5Hz_fine1'
+run_name='20win_dv_final_0.5Hz'
 ################################################################################
 
 
@@ -23,7 +23,7 @@ init=0 #Initalize project
 make_green=0 #Compute GFs
 make_synthetics=0 #Compute synthetics for a given model at given stations
 G_from_file=1 # =0 read GFs and create a new G, =1 load G from file
-invert=1  # =1 runs inversion, =0 does nothing
+invert=0  # =1 runs inversion, =0 does nothing
 ###############################################################################
 
 ###############            Green function parameters               #############
