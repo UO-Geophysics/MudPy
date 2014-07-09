@@ -216,7 +216,115 @@ def coseismics(home,project_name,rupture_name,station_file):
         #Save results
         savetxt(outpath+sta+'.static.neu',(n,e,z))
             
-            
+def move_seafloor(home,project_name,run_name,model_name,topo_file,topo_dx_file,topo_dy_file,
+                tgf_file,fault_name,outname,time_epi,tsun_dt,maxt,dl=2./60,variance=None):
+    '''
+    Create moving topography input files for geoclaw
+    '''
+    import datetime
+    from numpy import genfromtxt,zeros,arange,meshgrid,ones,c_,savetxt,delete
+    from obspy import read
+    from string import rjust
+    #from scipy.io import netcdf_file as netcdf
+    from Scientific.IO.NetCDF import NetCDFFile as netcdf
+    from scipy.interpolate import griddata
+    from mudpy.inverse import interp_and_resample,grd2xyz
+    from scipy.ndimage.filters import gaussian_filter
+
+
+    #Get station names
+    sta=genfromtxt(home+project_name+'/data/station_info/'+tgf_file)
+    lon=sta[:,1]
+    lat=sta[:,2]
+    loni=arange(lon.min(),lon.max()+dl,dl) #Fot grid interpolation
+    lati=arange(lat.min(),lat.max()+dl,dl)
+    loni,lati=meshgrid(loni,lati)
+    #Get fault file
+    f=genfromtxt(home+project_name+'/data/model_info/'+fault_name)
+    #Where is the data
+    data_dir=home+project_name+'/output/forward_models/'
+    #Define time deltas
+    td_max=datetime.timedelta(seconds=maxt)
+    td=datetime.timedelta(seconds=tsun_dt)
+    #Maximum tiem to be modeled
+    tmax=time_epi+td_max
+    Nt=(tmax-time_epi)/tsun_dt
+    #Read derivatives
+    bathy_dx=netcdf(topo_dx_file,'r')
+    zdx=bathy_dx.variables['z'][:]
+    bathy_dy=netcdf(topo_dy_file,'r')
+    zdy=bathy_dy.variables['z'][:]
+    #Read slope file
+    kwrite=0
+    idelete=[]
+    for ksta in range(len(sta)):
+        if ksta%500==0:
+            print '... ... working on seafloor grid point '+str(ksta)+' of '+str(len(sta))
+        try: #If no data then delete
+            e=read(data_dir+run_name+'.'+rjust(str(int(sta[ksta,0])),4,'0')+'.disp.e')
+            n=read(data_dir+run_name+'.'+rjust(str(int(sta[ksta,0])),4,'0')+'.disp.n')
+            u=read(data_dir+run_name+'.'+rjust(str(int(sta[ksta,0])),4,'0')+'.disp.z')
+            e=interp_and_resample(e,1.0,time_epi)
+            n=interp_and_resample(n,1.0,time_epi)
+            u=interp_and_resample(u,1.0,time_epi)
+            #Keep only data between time_epi and tmax
+            e.trim(time_epi,tmax,fill_value=e[0].data[-1],pad=True)
+            n.trim(time_epi,tmax,fill_value=n[0].data[-1],pad=True)
+            u.trim(time_epi,tmax,fill_value=u[0].data[-1],pad=True)
+            #Decimate to original smapling interval
+            #eds[0].decimate(4,no_filter=True)
+            #nds[0].decimate(4,no_filter=True)
+	        #uds[0].decimate(4,no_filter=True)
+            #Initalize matrices
+            if ksta==0:
+                emat=zeros((n[0].stats.npts,len(sta)))
+                nmat=emat.copy()
+                umat=emat.copy()
+            #Populate matrix
+            emat[:,kwrite]=e[0].data
+            nmat[:,kwrite]=n[0].data
+            umat[:,kwrite]=u[0].data
+            kwrite+=1
+        except: #Data was missing, delete from lat,lon
+            print 'No data for station '+str(ksta)+', deleting from coordinates list'
+            idelete.append(ksta)
+    #Clean up missing data
+    lat=delete(lat,idelete)
+    lon=delete(lon,idelete)
+    emat=emat[:,:-len(idelete)]
+    nmat=nmat[:,:-len(idelete)]
+    umat=umat[:,:-len(idelete)]
+    
+    #Now go one epoch at a time, and interpolate all fields
+    print '... interpolating coseismic offsets to a regular grid'
+    nt_iter=umat.shape[0]
+    for kt in range(nt_iter):
+        if kt%20==0:
+            print '... ... working on time slice '+str(kt)+' of '+str(nt_iter)
+        ninterp=griddata((lon,lat),nmat[kt,:],(loni,lati),method='cubic')
+        einterp=griddata((lon,lat),emat[kt,:],(loni,lati),method='cubic')
+        uinterp=griddata((lon,lat),umat[kt,:],(loni,lati),method='cubic')
+        #Output vertical
+        uout=uinterp
+        #Apply effect of topography advection
+        uout=uout+zdx*einterp+zdy*ninterp
+        #print 'no horiz'
+        #Filter?
+        if variance!=None:
+            uout=gaussian_filter(uout,variance)
+        #Convert to column format and append
+        xyz=grd2xyz(uout,loni,lati)
+        tvec=(kt*tsun_dt)*ones((len(xyz),1))
+        if kt==0: #Intialize
+            numel=uout.size #Number of elements in grid
+            kwrite=numel #Where to write the data
+            dtopo=zeros((numel*nt_iter,4))
+            dtopo[0:kwrite,1:3]=xyz[:,0:2]
+        else:
+            dtopo[kwrite:kwrite+numel,:]=c_[tvec,xyz]
+            kwrite=kwrite+numel
+    print '... writting dtopo files'
+    savetxt(data_dir+outname+'.dtopo',dtopo,fmt='%i\t%.6f\t%.6f\t%.4e')        
             
 ###########                Tools and trinkets                      #############
     

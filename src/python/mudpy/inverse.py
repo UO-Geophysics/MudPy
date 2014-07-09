@@ -1623,7 +1623,10 @@ def move_seafloor(home,project_name,run_name,model_name,topo_file,topo_dx_file,t
     #Get fault file
     f=genfromtxt(home+project_name+'/data/model_info/'+fault_name)
     #Where is the data
-    green_dir=home+project_name+'/GFs/tsunami/'
+    if fwd_or_inv.lower()=='inv':
+        green_dir=home+project_name+'/GFs/tsunami/'
+    else:
+        green_dir=home+project_name+'/output/forward_models/'
     #Define time deltas
     td_max=datetime.timedelta(seconds=maxt)
     td=datetime.timedelta(seconds=tsun_dt)

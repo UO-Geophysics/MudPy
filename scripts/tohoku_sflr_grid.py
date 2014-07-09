@@ -90,6 +90,7 @@ for klon in range(len(lon)):
         k+=1
 lon7=lonout ; lat7=latout
 
+#This is the coarse grid
 lon=np.arange(140,145+dc,dc)
 lat=np.arange(35,41+dc,dc)
 k=0
@@ -102,10 +103,47 @@ for klon in range(len(lon)):
         k+=1
 lon8=lonout ; lat8=latout
 
-lon=np.r_[lon1,lon2,lon3,lon4,lon5,lon6,lon7,lon8]
-lat=np.r_[lat1,lat2,lat3,lat4,lat5,lat6,lat7,lat8]
+lon=np.arange(140.5,142+df,df)
+lat=np.arange(37,38.5+df,df)
+k=0
+lonout=np.zeros(len(lon)*len(lat))
+latout=lonout.copy()
+for klon in range(len(lon)):
+    for klat in range(len(lat)):
+        lonout[k]=lon[klon]
+        latout[k]=lat[klat]
+        k+=1
+lon9=lonout ; lat9=latout
 
-f=open('/Volumes/Kanagawa/Slip_Inv/tohoku_tsunami/data/station_info/tsunami.sta','w')
+lon=np.arange(141.0,143+df,df)
+lat=np.arange(38.5,40.5+df,df)
+k=0
+lonout=np.zeros(len(lon)*len(lat))
+latout=lonout.copy()
+for klon in range(len(lon)):
+    for klat in range(len(lat)):
+        lonout[k]=lon[klon]
+        latout[k]=lat[klat]
+        k+=1
+lon10=lonout ; lat10=latout
+
+lon=np.arange(142.1,142.7+df,df)
+lat=np.arange(37.4,38.4+df,df)
+k=0
+lonout=np.zeros(len(lon)*len(lat))
+latout=lonout.cospy()
+for klon in range(len(lon)):
+    for klat in range(len(lat)):
+        lonout[k]=lon[klon]
+        latout[k]=lat[klat]
+        k+=1
+lon11=lonout ; lat11=latout
+
+lon=np.r_[lon1,lon2,lon3,lon4,lon5,lon6,lon7,lon8,lon9,lon10,lon11]
+lat=np.r_[lat1,lat2,lat3,lat4,lat5,lat6,lat7,lat8,lat9,lat10,lat11]
+
+
+f=open('/Volumes/Kanagawa/Slip_Inv/tohoku_tsunami_norefine/data/station_info/tsunami.sta','w')
 for k in range(len(lon)):
     f.write('%s\t%.4f\t%.4f\n' %(rjust(str(k),4,'0'),lon[k],lat[k]))
 f.close()

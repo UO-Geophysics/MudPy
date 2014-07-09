@@ -1182,7 +1182,7 @@ def dtopo_slices(dtopo_file,fault_file,out):
     #Get z ranges
     z1=dtopo[:,3].min()
     z2=dtopo[:,3].max()
-    zrange=max([-z1,z2])
+    zrange=10#max([-z1,z2])
     #Loop over time slices
     for kt in range(len(t)):
         print 't = '+str(t[kt])
