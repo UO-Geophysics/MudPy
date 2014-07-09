@@ -16,7 +16,7 @@ def init(home,project_name):
     OUT:
         Nothing
     '''
-    from shutil import rmtree
+    from shutil import rmtree,copy
     from os import path,makedirs
     clob='y'
     proj_dir=home+project_name+'/'
@@ -44,6 +44,7 @@ def init(home,project_name):
         makedirs(proj_dir+'data/model_info')
         makedirs(proj_dir+'structure')
         makedirs(proj_dir+'plots')
+        makedirs(proj_dir+'scripts')
         makedirs(proj_dir+'forward_models')
         makedirs(proj_dir+'output/inverse_models')
         makedirs(proj_dir+'output/inverse_models/statics')
@@ -53,6 +54,12 @@ def init(home,project_name):
         makedirs(proj_dir+'logs')
         makedirs(proj_dir+'analysis')
         makedirs(proj_dir+'analysis/frequency')
+        #Copy templates into appropriate files
+        mudpy=environ['MUD']+'/run/'
+        copy(mudpy+'template.fault',proj_dir+'data/model_info/')
+        copy(mudpy+'template.gflist',proj_dir+'data/station_info/')
+        copy(mudpy+'template.sta',proj_dir+'data/station_info/')
+        copy(mudpy+'template.mod',proj_dir+'structure/')
 
 
 #Extract fault geometry from rupture file
