@@ -30,7 +30,7 @@ def run_green(source,station_file,model_name,dt,NFFT,static,coord_type,dk,pmin,p
     diststr=''
     for k in range(len(d)):
         diststr=diststr+' %.3f' % d[k] #Truncate distance to 3 decimal palces (meters)
-    if static==0: #Compute full waveform, dk=0.1 is hardcoded right now, works up to 1500-2000km
+    if static==0: #Compute full waveform
         if coord_type==0: #Cartesian coords NO Earth flattening
             command=split("fk.pl -M"+model_name+"/"+depth+" -N"+str(NFFT)+"/"+str(dt)+'/1/'+repr(dk)+' -P'+repr(pmin)+'/'+repr(pmax)+'/'+repr(kmax)+diststr)
             print "fk.pl -M"+model_name+"/"+depth+"60 -N"+str(NFFT)+"/"+str(dt)+'/1/'+repr(dk)+'-P '+repr(pmin)+'/'+repr(pmax)+'/'+repr(kmax)+diststr
