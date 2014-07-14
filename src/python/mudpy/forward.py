@@ -217,7 +217,7 @@ def coseismics(home,project_name,rupture_name,station_file):
         savetxt(outpath+sta+'.static.neu',(n,e,z))
             
 def move_seafloor(home,project_name,run_name,model_name,topo_file,topo_dx_file,topo_dy_file,
-                tgf_file,fault_name,outname,time_epi,tsun_dt,maxt,dl=2./60,variance=None):
+                tgf_file,fault_name,outname,time_epi,tsun_dt,maxt,ymb,dl=2./60,variance=None):
     '''
     Create moving topography input files for geoclaw
     '''
@@ -231,7 +231,9 @@ def move_seafloor(home,project_name,run_name,model_name,topo_file,topo_dx_file,t
     from mudpy.inverse import interp_and_resample,grd2xyz
     from scipy.ndimage.filters import gaussian_filter
 
-
+    #Staright line coordinates
+    m=ymb[0]
+    b=ymb[1]
     #Get station names
     sta=genfromtxt(home+project_name+'/data/station_info/'+tgf_file)
     lon=sta[:,1]
@@ -289,13 +291,21 @@ def move_seafloor(home,project_name,run_name,model_name,topo_file,topo_dx_file,t
             print 'No data for station '+str(ksta)+', deleting from coordinates list'
             idelete.append(ksta)
     #Clean up missing data
-    lat=delete(lat,idelete)
-    lon=delete(lon,idelete)
-    emat=emat[:,:-len(idelete)]
-    nmat=nmat[:,:-len(idelete)]
-    umat=umat[:,:-len(idelete)]
+    if len(idelete)==0:
+        lat=delete(lat,idelete)
+        lon=delete(lon,idelete)
+        emat=emat[:,:-len(idelete)]
+        nmat=nmat[:,:-len(idelete)]
+        umat=umat[:,:-len(idelete)]
     
     #Now go one epoch at a time, and interpolate all fields
+    #Get mask for applying horizontal effect
+    mask=zeros(loni.shape)
+    for k1 in range(loni.shape[0]):
+        for k2 in range(loni.shape[1]):
+            if (lati[k1,k2]-b)/m>loni[k1,k2]: #Point is to the left, do not apply horizontal effect
+                mask[k1,k2]=NaN
+    imask1,imask2=where(mask==0)#Points tot he right DO apply horiz. effect
     print '... interpolating coseismic offsets to a regular grid'
     nt_iter=umat.shape[0]
     for kt in range(nt_iter):
@@ -307,7 +317,7 @@ def move_seafloor(home,project_name,run_name,model_name,topo_file,topo_dx_file,t
         #Output vertical
         uout=uinterp
         #Apply effect of topography advection
-        uout=uout+zdx*einterp+zdy*ninterp
+        uout[imask1,imask2]=uout[imask1,imask2]+zdx[imask1,imask2]*einterp[imask1,imask2]+zdy[imask1,imask2]*ninterp[imask1,imask2]
         #print 'no horiz'
         #Filter?
         if variance!=None:
