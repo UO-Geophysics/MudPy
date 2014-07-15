@@ -291,7 +291,7 @@ def move_seafloor(home,project_name,run_name,model_name,topo_file,topo_dx_file,t
             print 'No data for station '+str(ksta)+', deleting from coordinates list'
             idelete.append(ksta)
     #Clean up missing data
-    if len(idelete)==0:
+    if len(idelete)!=0:
         lat=delete(lat,idelete)
         lon=delete(lon,idelete)
         emat=emat[:,:-len(idelete)]
