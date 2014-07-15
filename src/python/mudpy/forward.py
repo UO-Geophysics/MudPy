@@ -217,7 +217,7 @@ def coseismics(home,project_name,rupture_name,station_file):
         savetxt(outpath+sta+'.static.neu',(n,e,z))
             
 def move_seafloor(home,project_name,run_name,model_name,topo_file,topo_dx_file,topo_dy_file,
-                tgf_file,fault_name,outname,time_epi,tsun_dt,maxt,ymb,dl=2./60,variance=None):
+                tgf_file,fault_name,outname,time_epi,tsun_dt,maxt,ymb,dl=2./60,variance=None,static=False):
     '''
     Create moving topography input files for geoclaw
     '''
@@ -225,8 +225,7 @@ def move_seafloor(home,project_name,run_name,model_name,topo_file,topo_dx_file,t
     from numpy import genfromtxt,zeros,arange,meshgrid,ones,c_,savetxt,delete
     from obspy import read
     from string import rjust
-    #from scipy.io import netcdf_file as netcdf
-    from Scientific.IO.NetCDF import NetCDFFile as netcdf
+    from scipy.io import netcdf_file as netcdf
     from scipy.interpolate import griddata
     from mudpy.inverse import interp_and_resample,grd2xyz
     from scipy.ndimage.filters import gaussian_filter
@@ -263,29 +262,45 @@ def move_seafloor(home,project_name,run_name,model_name,topo_file,topo_dx_file,t
         if ksta%500==0:
             print '... ... working on seafloor grid point '+str(ksta)+' of '+str(len(sta))
         try: #If no data then delete
-            e=read(data_dir+run_name+'.'+rjust(str(int(sta[ksta,0])),4,'0')+'.disp.e')
-            n=read(data_dir+run_name+'.'+rjust(str(int(sta[ksta,0])),4,'0')+'.disp.n')
-            u=read(data_dir+run_name+'.'+rjust(str(int(sta[ksta,0])),4,'0')+'.disp.z')
-            e=interp_and_resample(e,1.0,time_epi)
-            n=interp_and_resample(n,1.0,time_epi)
-            u=interp_and_resample(u,1.0,time_epi)
-            #Keep only data between time_epi and tmax
-            e.trim(time_epi,tmax,fill_value=e[0].data[-1],pad=True)
-            n.trim(time_epi,tmax,fill_value=n[0].data[-1],pad=True)
-            u.trim(time_epi,tmax,fill_value=u[0].data[-1],pad=True)
-            #Decimate to original smapling interval
-            #eds[0].decimate(4,no_filter=True)
-            #nds[0].decimate(4,no_filter=True)
+            if static==False: #We're reading waveforms
+                e=read(data_dir+run_name+'.'+rjust(str(int(sta[ksta,0])),4,'0')+'.disp.e')
+                n=read(data_dir+run_name+'.'+rjust(str(int(sta[ksta,0])),4,'0')+'.disp.n')
+                u=read(data_dir+run_name+'.'+rjust(str(int(sta[ksta,0])),4,'0')+'.disp.z')
+                e=interp_and_resample(e,1.0,time_epi)
+                n=interp_and_resample(n,1.0,time_epi)
+                u=interp_and_resample(u,1.0,time_epi)
+                #Keep only data between time_epi and tmax
+                e.trim(time_epi,tmax,fill_value=e[0].data[-1],pad=True)
+                n.trim(time_epi,tmax,fill_value=n[0].data[-1],pad=True)
+                u.trim(time_epi,tmax,fill_value=u[0].data[-1],pad=True)
+                #Decimate to original smapling interval
+                #eds[0].decimate(4,no_filter=True)
+                #nds[0].decimate(4,no_filter=True)
 	        #uds[0].decimate(4,no_filter=True)
-            #Initalize matrices
-            if ksta==0:
-                emat=zeros((n[0].stats.npts,len(sta)))
-                nmat=emat.copy()
-                umat=emat.copy()
-            #Populate matrix
-            emat[:,kwrite]=e[0].data
-            nmat[:,kwrite]=n[0].data
-            umat[:,kwrite]=u[0].data
+                #Initalize matrices
+                if ksta==0:
+                    emat=zeros((n[0].stats.npts,len(sta)))
+                    nmat=emat.copy()
+                    umat=emat.copy()
+                #Populate matrix
+                emat[:,kwrite]=e[0].data
+                nmat[:,kwrite]=n[0].data
+                umat[:,kwrite]=u[0].data
+            else:
+                neu=genfromtxt(data_dir+rjust(str(int(sta[ksta,0])),4,'0')+'.static.neu')
+                n=neu[0]
+                e=neu[1]
+                u=neu[2]
+                tsun_dt=1.0
+                maxt=1.0
+                if ksta==0:
+                    emat=zeros((1,len(sta)))
+                    nmat=emat.copy()
+                    umat=emat.copy()
+                                #Populate matrix
+                emat[:,kwrite]=e
+                nmat[:,kwrite]=n
+                umat[:,kwrite]=u
             kwrite+=1
         except: #Data was missing, delete from lat,lon
             print 'No data for station '+str(ksta)+', deleting from coordinates list'
@@ -317,7 +332,8 @@ def move_seafloor(home,project_name,run_name,model_name,topo_file,topo_dx_file,t
         #Output vertical
         uout=uinterp
         #Apply effect of topography advection
-        uout[imask1,imask2]=uout[imask1,imask2]+zdx[imask1,imask2]*einterp[imask1,imask2]+zdy[imask1,imask2]*ninterp[imask1,imask2]
+        #uout[imask1,imask2]=uout[imask1,imask2]+zdx[imask1,imask2]*einterp[imask1,imask2]+zdy[imask1,imask2]*ninterp[imask1,imask2]
+        uout=uout+zdx*einterp+zdy*ninterp
         #print 'no horiz'
         #Filter?
         if variance!=None:
@@ -331,6 +347,15 @@ def move_seafloor(home,project_name,run_name,model_name,topo_file,topo_dx_file,t
             dtopo=zeros((numel*nt_iter,4))
             dtopo[0:kwrite,1:3]=xyz[:,0:2]
         else:
+            dtopo[kwrite:kwrite+numel,:]=c_[tvec,xyz]
+            kwrite=kwrite+numel
+        if static==True:
+            tvec=ones(tvec.shape)
+            numel=uout.size*2 #Number of elements in grid
+            kwrite=numel/2 #Where to write the data
+            dtopo=zeros((numel*nt_iter,4))
+            dtopo[0:kwrite,1:3]=xyz[:,0:2]
+            dtopo[kwrite:kwrite+numel,1:3]=xyz[:,0:2]
             dtopo[kwrite:kwrite+numel,:]=c_[tvec,xyz]
             kwrite=kwrite+numel
     print '... writting dtopo files'
