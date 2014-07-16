@@ -230,7 +230,7 @@ def move_seafloor(home,project_name,run_name,model_name,topo_file,topo_dx_file,t
     from mudpy.inverse import interp_and_resample,grd2xyz
     from scipy.ndimage.filters import gaussian_filter
 
-    #Staright line coordinates
+    #Straight line coordinates
     m=ymb[0]
     b=ymb[1]
     #Get station names
@@ -246,10 +246,8 @@ def move_seafloor(home,project_name,run_name,model_name,topo_file,topo_dx_file,t
     data_dir=home+project_name+'/output/forward_models/'
     #Define time deltas
     td_max=datetime.timedelta(seconds=maxt)
-    td=datetime.timedelta(seconds=tsun_dt)
     #Maximum tiem to be modeled
     tmax=time_epi+td_max
-    Nt=(tmax-time_epi)/tsun_dt
     #Read derivatives
     bathy_dx=netcdf(topo_dx_file,'r')
     zdx=bathy_dx.variables['z'][:]
@@ -273,10 +271,6 @@ def move_seafloor(home,project_name,run_name,model_name,topo_file,topo_dx_file,t
                 e.trim(time_epi,tmax,fill_value=e[0].data[-1],pad=True)
                 n.trim(time_epi,tmax,fill_value=n[0].data[-1],pad=True)
                 u.trim(time_epi,tmax,fill_value=u[0].data[-1],pad=True)
-                #Decimate to original smapling interval
-                #eds[0].decimate(4,no_filter=True)
-                #nds[0].decimate(4,no_filter=True)
-	        #uds[0].decimate(4,no_filter=True)
                 #Initalize matrices
                 if ksta==0:
                     emat=zeros((n[0].stats.npts,len(sta)))
@@ -330,10 +324,9 @@ def move_seafloor(home,project_name,run_name,model_name,topo_file,topo_dx_file,t
         einterp=griddata((lon,lat),emat[kt,:],(loni,lati),method='cubic')
         uinterp=griddata((lon,lat),umat[kt,:],(loni,lati),method='cubic')
         #Output vertical
-        uout=uinterp
+        uout=uinterp.copy()
         #Apply effect of topography advection
-        #uout[imask1,imask2]=uout[imask1,imask2]+zdx[imask1,imask2]*einterp[imask1,imask2]+zdy[imask1,imask2]*ninterp[imask1,imask2]
-        uout=uout+zdx*einterp+zdy*ninterp
+        uout[imask1,imask2]=uout[imask1,imask2]+zdx[imask1,imask2]*einterp[imask1,imask2]+zdy[imask1,imask2]*ninterp[imask1,imask2]
         #print 'no horiz'
         #Filter?
         if variance!=None:

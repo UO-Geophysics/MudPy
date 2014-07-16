@@ -1,2 +1,9 @@
 *.pyc
 .DS_Store
+/src/fk*.o
+/src/fk/build/*
+/src/fk/fk
+/src/fk/hk
+/src/fk/st_fk
+/src/fk/syn
+/src/fk/trac
