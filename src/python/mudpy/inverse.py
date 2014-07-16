@@ -815,7 +815,7 @@ def write_synthetics(home,project_name,run_name,GF_list,G,sol,ds,num,decimate):
     '''
     
     from obspy import read
-    from numpy import array,savetxt,where,genfromtxt
+    from numpy import array,savetxt,where,genfromtxt,squeeze
     from string import rjust
     from mudpy.green import stdecimate
     
@@ -846,13 +846,14 @@ def write_synthetics(home,project_name,run_name,GF_list,G,sol,ds,num,decimate):
             n=read(GFfiles[i[ksta],kgf]+'.n')
             e=read(GFfiles[i[ksta],kgf]+'.e')
             u=read(GFfiles[i[ksta],kgf]+'.u')
-            n[0]=stdecimate(n[0],decimate)
-            e[0]=stdecimate(e[0],decimate)
-            u[0]=stdecimate(u[0],decimate)
+            if decimate != None:
+                n[0]=stdecimate(n[0],decimate)
+                e[0]=stdecimate(e[0],decimate)
+                u[0]=stdecimate(u[0],decimate)
             npts=n[0].stats.npts
-            n[0].data=ds[kinsert:kinsert+npts]
-            e[0].data=ds[kinsert+npts:kinsert+2*npts]
-            u[0].data=ds[kinsert+2*npts:kinsert+3*npts]
+            n[0].data=squeeze(ds[kinsert:kinsert+npts])
+            e[0].data=squeeze(ds[kinsert+npts:kinsert+2*npts])
+            u[0].data=squeeze(ds[kinsert+2*npts:kinsert+3*npts])
             kinsert+=3*npts
             n.write(home+project_name+'/output/inverse_models/waveforms/'+run_name+'.'+num+'.'+sta+'.disp.n.sac',format='SAC')
             e.write(home+project_name+'/output/inverse_models/waveforms/'+run_name+'.'+num+'.'+sta+'.disp.e.sac',format='SAC')
@@ -866,13 +867,14 @@ def write_synthetics(home,project_name,run_name,GF_list,G,sol,ds,num,decimate):
             n=read(GFfiles[i[ksta],kgf]+'.n')
             e=read(GFfiles[i[ksta],kgf]+'.e')
             u=read(GFfiles[i[ksta],kgf]+'.u')
-            n[0]=stdecimate(n[0],decimate)
-            e[0]=stdecimate(e[0],decimate)
-            u[0]=stdecimate(u[0],decimate)
+            if decimate !=None:
+                n[0]=stdecimate(n[0],decimate)
+                e[0]=stdecimate(e[0],decimate)
+                u[0]=stdecimate(u[0],decimate)
             npts=n[0].stats.npts
-            n[0].data=ds[kinsert:kinsert+npts]
-            e[0].data=ds[kinsert+npts:kinsert+2*npts]
-            u[0].data=ds[kinsert+2*npts:kinsert+3*npts]
+            n[0].data=squeeze(ds[kinsert:kinsert+npts])
+            e[0].data=squeeze(ds[kinsert+npts:kinsert+2*npts])
+            u[0].data=squeeze(ds[kinsert+2*npts:kinsert+3*npts])
             kinsert+=3*npts
             n.write(home+project_name+'/output/inverse_models/waveforms/'+run_name+'.'+num+'.'+sta+'.vel.n.sac',format='SAC')
             e.write(home+project_name+'/output/inverse_models/waveforms/'+run_name+'.'+num+'.'+sta+'.vel.e.sac',format='SAC')
@@ -1070,7 +1072,7 @@ def prep_synth(syn,st):
     if dt>=0: #Synthetic starts before data, pad with zeros
         #How many zeros do I need
         npad=dt/st.stats.delta
-        z=zeros(npad)
+        z=zeros(int(npad))
         syn.data=r_[z,syn.data]
         syn.stats.starttime=t1st
     else: #Synthetic starts after the waveform, crop to start fo waveform

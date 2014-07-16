@@ -18,11 +18,11 @@ run_name='20win_42_fine2'
 
 #####              What-do-you-want-to-do flags, 1=do, 0=leave be          #####
 
-init=0 #Initalize project
+init=1 #Initalize project
 make_green=0 #Compute GFs
 make_synthetics=0 #Compute synthetics for a given model at given stations
-G_from_file=1 # =0 read GFs and create a new G, =1 load G from file
-invert=1  # =1 runs inversion, =0 does nothing
+G_from_file=0 # =0 read GFs and create a new G, =1 load G from file
+invert=0  # =1 runs inversion, =0 does nothing
 ###############################################################################
 
 ###############            Green function parameters               #############
