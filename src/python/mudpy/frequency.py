@@ -144,7 +144,7 @@ def source_spectra(home,project_name,run_name,run_number,rupt,nstrike,ndip):
     '''
     Tile plot of subfault source-time functions
     '''
-    from numpy import genfromtxt,unique,zeros,where,arange,savez
+    from numpy import genfromtxt,unique,zeros,where,arange,savez,mean
     from mudpy.forward import get_source_time_function,add2stf
     import nitime.algorithms as tsa
     from string import rjust
@@ -192,6 +192,8 @@ def source_spectra(home,project_name,run_name,run_number,rupt,nstrike,ndip):
             t1,M1=add2stf(t1,M1,t2,M2)
         #Convert to slip rate
         s=M1/(mu[kfault]*area[kfault])
+        #remove mean
+        s=s-mean(s)
         #Done now compute spectra of STF
         fsample=1./(t1[1]-t1[0])
         freq, psd, nu = tsa.multi_taper_psd(s,Fs=fsample,adaptive=True,jackknife=False,low_bias=True)

@@ -262,3 +262,24 @@ def make_slip_slice(rupt,nstrike,ndip,epicenter,out,tmax,dt):
         savetxt(fname, c_[lon,lat,depth,slip],fmt='%.6f\t%.6f\t%.4f\t%.6f')
     print 'Maximum slip rate was '+str(maxsr)+'m/s'      
 
+def make_psvelo(stafile,directory,fout,run_name,run_number):
+    '''
+    Make psvelo file
+    '''
+    from numpy import genfromtxt,zeros,savetxt
+    from glob import glob
+    
+    
+    sta=genfromtxt(stafile,usecols=0,dtype='S')
+    out=zeros((len(sta),6))
+    lonlat=genfromtxt(stafile,usecols=[1,2],dtype='S')
+    for k in range(len(sta)):
+        out[k,0:2]=lonlat[k,:]
+        #neu=genfromtxt(glob(directory+sta[k]+'*.neu')[0])
+        neu=genfromtxt(glob(directory+run_name+'.'+run_number+'.'+sta[k]+'*.neu')[0])
+        out[k,2]=neu[1] #East
+        out[k,3]=neu[0] #North
+        out[k,4]=neu[0] #East sigma
+        out[k,5]=neu[0] #North sigma
+    savetxt(fout,out,fmt='%10.4f\t%10.4f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t')
+    

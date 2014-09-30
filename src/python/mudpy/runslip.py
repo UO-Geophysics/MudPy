@@ -303,60 +303,70 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
                                                         
 def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_from_file,G_name,epicenter,
                 rupture_speed,num_windows,coord_type,reg_spatial,reg_temporal,nfaults,beta,decimate,lowpass,
-                solver,bounds):
+                solver,bounds,weight=False):
     '''
     Assemble G and d, determine smoothing and run the inversion
     '''
     from mudpy import inverse as inv
-    from numpy import zeros,dot,array,squeeze,expand_dims,empty,tile,floor
+    from numpy import zeros,dot,array,squeeze,expand_dims,empty,tile,floor,eye
     from numpy.linalg import lstsq
     from scipy.sparse import csr_matrix as sparse
     from scipy.optimize import nnls
     from datetime import datetime
     import gc
+    from scipy.linalg import block_diag
     
     
 
     t1=datetime.now()
     #Get data vector
     d=inv.getdata(home,project_name,GF_list,decimate,lowpass)
+    #Normalize data
+    wdvt=block_diag(eye(17400)/1,eye(17400)/(1./36))
+    d=wdvt.dot(d)
     #Get GFs
     G=inv.getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epicenter,
                 rupture_speed,num_windows,coord_type,decimate,lowpass)
+    G=wdvt.dot(G)
+    wdvt=None
     gc.collect()
     #Get data weights
-    #w=inv.get_data_weights(home,project_name,GF_list,d,decimate)
-    #W=empty(G.shape)
-    #W=tile(w,(G.shape[1],1)).T
-    #WG=empty(G.shape)
-    #WG=W*G
-    #wd=w*d.squeeze()
-    #wd=expand_dims(wd,axis=1)
-    ##Clear up extraneous variables
-    #W=None
-    #w=None
-    ##Define inversion quantities
-    #x=WG.transpose().dot(wd)
-    #print 'Computing G\'G'
-    #K=(WG.T).dot(WG)
-    #Define inversion quantities
-    x=G.transpose().dot(d)
-    print 'Computing G\'G'
-    K=(G.T).dot(G)
+    if weight==True:
+        w=inv.get_data_weights(home,project_name,GF_list,d,decimate)
+        W=empty(G.shape)
+        W=tile(w,(G.shape[1],1)).T
+        WG=empty(G.shape)
+        WG=W*G
+        wd=w*d.squeeze()
+        wd=expand_dims(wd,axis=1)
+        #Clear up extraneous variables
+        W=None
+        w=None
+        #Define inversion quantities
+        x=WG.transpose().dot(wd)
+        print 'Computing G\'G'
+        K=(WG.T).dot(WG)
+    else:
+        #Define inversion quantities if no weightd
+        x=G.transpose().dot(d)
+        print 'Computing G\'G'
+        K=(G.T).dot(G)
     #Get regularization matrices (set to 0 matrix if not needed)
-    if type(reg_spatial)!=bool:
+    static=False #Is it jsut a static ivnersio?
+    if reg_spatial!=None:
         Ls=inv.getLs(home,project_name,fault_name,nfaults,num_windows,bounds)
         Ninversion=len(reg_spatial)
     else:
         Ls=zeros(K.shape)
         reg_spatial=array([0.])
         Ninversion=1
-    if type(reg_temporal)!=bool:
+    if reg_temporal!=None:
         Lt=inv.getLt(home,project_name,fault_name,num_windows)
         Ninversion=len(reg_temporal)*Ninversion
     else:
         Lt=zeros(K.shape)
         reg_temporal=array([0.])
+        static=True
     #Make L's sparse
     Ls=sparse(Ls)
     Lt=sparse(Lt)
@@ -380,7 +390,12 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
             lambda_spatial=reg_spatial[ks]
             lambda_temporal=reg_temporal[kt]
             print 'Running inversion '+str(kout+1)+' of '+str(Ninversion)+' at regularization levels: ls ='+repr(lambda_spatial)+' , lt = '+repr(lambda_temporal)
-            Kinv=K+(lambda_spatial**2)*LsLs+(lambda_temporal**2)*LtLt
+            if static==True: #Only statics inversion no Lt matrix
+                Kinv=K+(lambda_spatial**2)*LsLs
+                Lt=eye(len(K))
+                LtLt=Lt.T.dot(Lt)
+            else: #Mixed inversion
+                Kinv=K+(lambda_spatial**2)*LsLs#+(lambda_temporal**2)*LtLt
             if solver.lower()=='lstsq':
                 sol,res,rank,s=lstsq(Kinv,x)
             elif solver.lower()=='nnls':
@@ -395,6 +410,7 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
             #Get stats
             L2,Lmodel=inv.get_stats(Kinv,sol,x)
             VR=inv.get_VR(G,sol,d)
+            #VR=inv.get_VR(WG,sol,wd)
             #ABIC=inv.get_ABIC(WG,K,sol,wd,lambda_spatial,lambda_temporal,Ls,LsLs,Lt,LtLt)
             ABIC=inv.get_ABIC(G,K,sol,d,lambda_spatial,lambda_temporal,Ls,LsLs,Lt,LtLt)
             #Get moment

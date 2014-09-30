@@ -104,6 +104,51 @@ def plot_transect(path,N,tsunlims,dlims,dt,xyannot):
             print t[-1,1]
     plt.subplots_adjust(left=0.2, bottom=0.1, right=0.8, top=0.9, wspace=0, hspace=0)
         
+       
+def gauge2sac(gauge_file,dictionary,xyfile,outdir,time_epi,dt):
+    '''
+    Convert output from fort.gauge file intop individual sac files
+    ''' 
+    from numpy import genfromtxt,unique,where,arange,interp
+    from obspy import Stream,Trace
+    from obspy.core.util.attribdict import AttribDict
+
+    
+    #Read gauge file
+    gauges=genfromtxt(gauge_file)
+    #Read names
+    plume_name=genfromtxt(dictionary,usecols=0,dtype='S')
+    claw_name=genfromtxt(dictionary,usecols=1)
+    lat=genfromtxt(xyfile,usecols=2)
+    lon=genfromtxt(xyfile,usecols=3)
+    #Find unique stations
+    gauge_list=unique(gauges[:,0])
+    for k in range(len(gauge_list)):
+        print k
+        st=Stream(Trace())
+        i=where(gauges[:,0]==gauge_list[k])[0]
+        data=gauges[i,6]
+        time=gauges[i,2]
+        ti=arange(0,time.max(),dt)
+        tsunami=interp(ti,time,data)
+        st[0].data=tsunami
+        st[0].stats.starttime=time_epi
+        st[0].stats.delta=dt
+        iname=where(claw_name==gauge_list[k])[0][0]
+        st[0].stats.station=plume_name[iname]
+        sac=AttribDict()
+        sac.stla=lat[iname]
+        sac.stlo=lon[iname]
+        sac.evla=46.607
+        sac.evlo=153.230
+        #sac.iztype='IO'
+        st[0].stats['sac']=sac
+        st.write(outdir+'/'+plume_name[iname]+'.tsun.sac',format='SAC')
         
+
+        
+        
+        
+    
     
     

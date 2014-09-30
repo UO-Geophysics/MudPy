@@ -4,7 +4,7 @@ D. Melgar 02/2014
 Forward modeling routines
 '''
 
-def waveforms(home,project_name,rupture_name,station_file,model_name,run_name,integrate,tsunami,hot_start,resample):
+def waveforms(home,project_name,rupture_name,station_file,model_name,run_name,integrate,tsunami,hot_start,resample,beta):
     '''
     This routine will take synthetics and apply a slip dsitribution. It will delay each 
     subfault by the appropriate rupture time and linearly superimpose all of them. Output
@@ -24,7 +24,7 @@ def waveforms(home,project_name,rupture_name,station_file,model_name,run_name,in
     OUT:
         Nothing
     '''
-    from numpy import loadtxt,genfromtxt,allclose
+    from numpy import loadtxt,genfromtxt,allclose,vstack,deg2rad,array,sin,cos
     from obspy import read,Stream
     from string import rjust
     import datetime
@@ -68,6 +68,13 @@ def waveforms(home,project_name,rupture_name,station_file,model_name,run_name,in
                 zs=source[k,3]
                 ss_slip=source[k,8]
                 ds_slip=source[k,9]
+                #Rotate
+                if beta != None:
+                    beta_rot=deg2rad(beta)
+                    R=array([[cos(beta_rot),sin(beta_rot)],[-sin(beta_rot),cos(beta_rot)]])
+                    rot=R.dot(vstack((ss_slip,ds_slip)))
+                    ss_slip=rot[0]
+                    ds_slip=rot[1]
                 rtime=source[k,12]
                 #Where's the data
                 strdepth='%.4f' % zs
@@ -89,13 +96,13 @@ def waveforms(home,project_name,rupture_name,station_file,model_name,run_name,in
                         nss[0].resample(resample)
                         zss[0].resample(resample)
                         eds[0].resample(resample)
-        	        nds[0].resample(resample)
+                        nds[0].resample(resample)
                         zds[0].resample(resample)
                     elif resample > (1/ess[0].stats.delta): #Upsample
                         upsample(ess,1./resample)
                         upsample(nss,1./resample)
                         upsample(zss,1./resample)
-                	upsample(eds,1./resample)
+                        upsample(eds,1./resample)
                         upsample(nds,1./resample)
                         upsample(zds,1./resample)
                 dt=ess[0].stats.delta
@@ -131,7 +138,7 @@ def waveforms(home,project_name,rupture_name,station_file,model_name,run_name,in
             z[0].data=z[0].data.filled()
             e.write(outpath+run_name+'.'+sta+'.'+vord+'.e',format='SAC')
             n.write(outpath+run_name+'.'+sta+'.'+vord+'.n',format='SAC')
-            z.write(outpath+run_name+'.'+sta+'.'+vord+'.z',format='SAC')
+            z.write(outpath+run_name+'.'+sta+'.'+vord+'.u',format='SAC')
         except:
             print 'An error coccured, skipping station'
     f=open(logpath+'waveforms.'+now+'.log','a')
@@ -557,3 +564,314 @@ def lowpass(data,fcorner,fsample,order):
     b, a = butter(order, fcorner/(fnyquist))
     data_filt=filtfilt(b,a,data)
     return data_filt
+    
+def inv2coulomb(rupt,epicenter,fout):
+    '''
+    Convert .inv file to Coulomb-ready .inp file
+    
+    IN:
+        rupt - path ro rupture (.inv) file
+    '''
+    import pyproj
+    from numpy import genfromtxt,unique,zeros,where,deg2rad,sin,cos
+    
+    #Read fault
+    f=genfromtxt(rupt)
+    #Get total slip by identifying unique fault numbers
+    u=unique(f[:,0])
+    ss=zeros(len(u))
+    ds=zeros(len(u))
+    all_ss=f[:,8]
+    all_ds=f[:,9]
+    for k in range(len(u)):
+        i=where(u[k]==f[:,0])
+        ss[k]=all_ss[i].sum()
+        ds[k]=all_ds[i].sum()
+    #Sum them
+    slip=(ss**2+ds**2)**0.5
+    #Get rake
+    rake=ssds2rake(ss,ds)
+    #Convert coordinate subfault centers to local cartesian
+    g = pyproj.Geod(ellps='WGS84') # Use WGS84 ellipsoid.
+    x=zeros(len(u))
+    y=zeros(len(u))
+    for k in range(len(u)):
+        baz,az,d=pyproj.Geod.inv(g,f[k,1],f[k,2],epicenter[0],epicenter[1])
+        x[k]=(d/1000)*sin(deg2rad(az))
+        y[k]=(d/1000)*cos(deg2rad(az))
+    #Get width and length to get coordiantes of top corners and strike,dip
+    width=f[:,10]/1000
+    length=f[:,11]/1000
+    strike=f[:,4]
+    dip=f[:,5]
+    depth=f[:,3]
+    top_mid_x=zeros(len(u))
+    top_mid_y=zeros(len(u))
+    top_direction=strike-90 #This is the angle that points towards the top edge of the fault
+    xstart=zeros(len(u))
+    ystart=zeros(len(u))
+    xfin=zeros(len(u))
+    yfin=zeros(len(u))
+    ztop=zeros(len(u))
+    zbot=zeros(len(u))
+    for k in range(len(u)):
+        top_mid_x[k]=x[k]+((width[k]/2)*cos(deg2rad(dip[k])))*sin(deg2rad(top_direction[k]))
+        top_mid_y[k]=y[k]+((width[k]/2)*cos(deg2rad(dip[k])))*cos(deg2rad(top_direction[k]))
+        xstart[k]=top_mid_x[k]+(width[k]/2)*sin(deg2rad(strike[k]-180))
+        ystart[k]=top_mid_y[k]+(width[k]/2)*cos(deg2rad(strike[k]-180))
+        xfin[k]=top_mid_x[k]+(width[k]/2)*sin(deg2rad(strike[k]))
+        yfin[k]=top_mid_y[k]+(width[k]/2)*cos(deg2rad(strike[k]))
+        ztop[k]=depth[k]-(length[k]/2)*sin(deg2rad(dip[k]))
+        zbot[k]=depth[k]+(length[k]/2)*sin(deg2rad(dip[k]))
+    #Write to file and then manually add the ehaders and footers by copy pasting from some NEIC file (LAZY!)
+    f=open(fout,'w')
+    for k in range(len(u)):
+        out='1   %10.4f %10.4f %10.4f %10.4f 100 %10.4f %10.4f %10.4f %10.4f %10.4f %i\n' % (xstart[k],ystart[k],xfin[k],yfin[k],rake[k],slip[k],dip[k],ztop[k],zbot[k],k)
+        f.write(out)
+    f.close()
+    
+def coulomb_xy2latlon(f,epicenter,fout):
+    '''
+    Change the x-y coordinates of a Coulomb file to lat/lon
+    '''
+    from numpy import genfromtxt,zeros,rad2deg,arctan,isnan,savetxt
+    import pyproj
+    
+    s=genfromtxt('/Users/dmelgarm/bin/coulomb34/output_files/Element_conditions_tohoku_fine.csv')
+    x=s[:,1]
+    y=s[:,2]
+    #Now use pyproj to dead reckon anf get lat/lon coordinates of subfaults
+    g = pyproj.Geod(ellps='WGS84')
+    #first get azimuths of all points, go by quadrant
+    az=zeros(x.shape)
+    for k in range(len(x)):
+        if x[k]>0 and y[k]>0:
+            az[k]=rad2deg(arctan(x[k]/y[k]))
+        if x[k]<0 and y[k]>0:
+            az[k]=360+rad2deg(arctan(x[k]/y[k]))
+        if x[k]<0 and y[k]<0:
+            az[k]=180+rad2deg(arctan(x[k]/y[k]))
+        if x[k]>0 and y[k]<0:
+            az[k]=180+rad2deg(arctan(x[k]/y[k]))
+    #Quadrant correction
+    #Now horizontal distances
+    d=((x**2+y**2)**0.5)*1000
+    #Now reckon
+    lo=zeros(len(d))
+    la=zeros(len(d))
+    for k in range(len(d)):
+        if isnan(az[k]): #No azimuth because I'm on the epicenter
+            print 'Point on epicenter'
+            lo[k]=epicenter[0]
+            la[k]=epicenter[1]
+        else:
+            lo[k],la[k],ba=g.fwd(epicenter[0],epicenter[1],az[k],d[k])
+    s[:,1]=lo
+    s[:,2]=la
+    savetxt(fout,s)
+    
+    
+      
+def ssds2rake(ss,ds):
+    '''
+    Compute rake angle in degrees
+    '''
+    from numpy import arctan,rad2deg,pi,zeros
+    try:
+        rake=zeros(len(ss))
+    except:
+        rake=zeros(1)
+    for k in range(len(rake)):
+        if ss[k]>0 and ds[k]>0:
+            rake[k]=arctan(ds[k]/ss[k])
+        elif ds[k]>0 and ss[k]<0:
+            rake[k]=pi+arctan(ds[k]/ss[k])
+        elif ds[k]<0 and ss[k]<0:
+            rake[k]=pi+arctan(ds[k]/ss[k])
+        elif ds[k]<0 and ss[k]>0:
+            rake[k]=2*pi+arctan(ds[k]/ss[k])
+    rake=rad2deg(rake)
+    return rake
+    
+def makefault(strike,dip,nstrike,ndip,rake,dx_dip,dx_strike,epicenter,num_updip,num_downdip,fout):
+    '''
+    Make a planar fault
+    '''
+    from numpy import arange,sin,cos,deg2rad,r_,ones,arctan,rad2deg,zeros,isnan,unique,where,argsort
+    import pyproj
+    
+    strike=155
+    proj_angle=180-strike #Angle to use for sin.cos projection (comes from strike)
+    y=arange(-nstrike/2+1,nstrike/2+1)*dx_strike
+    x=arange(-nstrike/2+1,nstrike/2+1)*dx_strike
+    z=ones(x.shape)*epicenter[2]
+    y=y*cos(deg2rad(strike))
+    x=x*sin(deg2rad(strike))
+    #Move up 7 slots
+    x=x-x[15]
+    y=y-y[15]
+    
+    #Save teh zero line
+    y0=y.copy()
+    x0=x.copy()
+    z0=z.copy()
+    #Initlaize temp for projection up/down dip
+    xtemp=x0.copy()
+    ytemp=y0.copy()
+    ztemp=z0.copy()
+    #Get delta h and delta z for up/ddx_dip=1own dip projection
+    dh=dx_dip*cos(deg2rad(dip))
+    dz=dx_dip*sin(deg2rad(dip))
+    #Project updip lines
+    for k in range(num_updip):
+        xtemp=xtemp+dh*cos(deg2rad(proj_angle))
+        ytemp=ytemp+dh*sin(deg2rad(proj_angle))
+        ztemp=ztemp-dz
+        x=r_[x,xtemp]
+        y=r_[y,ytemp]
+        z=r_[z,ztemp]
+    #Now downdip lines
+    xtemp=x0.copy()
+    ytemp=y0.copy()
+    ztemp=z0.copy()
+    for k in range(num_downdip):
+        xtemp=xtemp-dh*cos(deg2rad(proj_angle))
+        ytemp=ytemp-dh*sin(deg2rad(proj_angle))
+        ztemp=ztemp+dz
+        x=r_[x,xtemp]
+        y=r_[y,ytemp]
+        z=r_[z,ztemp]
+    #Now use pyproj to dead reckon anf get lat/lon coordinates of subfaults
+    g = pyproj.Geod(ellps='WGS84')
+    #first get azimuths of all points, go by quadrant
+    az=zeros(x.shape)
+    for k in range(len(x)):
+        if x[k]>0 and y[k]>0:
+            az[k]=rad2deg(arctan(x[k]/y[k]))
+        if x[k]<0 and y[k]>0:
+            az[k]=360+rad2deg(arctan(x[k]/y[k]))
+        if x[k]<0 and y[k]<0:
+            az[k]=180+rad2deg(arctan(x[k]/y[k]))
+        if x[k]>0 and y[k]<0:
+            az[k]=180+rad2deg(arctan(x[k]/y[k]))
+    #Quadrant correction
+    #Now horizontal distances
+    d=((x**2+y**2)**0.5)*1000
+    #Now reckon
+    lo=zeros(len(d))
+    la=zeros(len(d))
+    for k in range(len(d)):
+        if isnan(az[k]): #No azimuth because I'm on the epicenter
+            print 'Point on epicenter'
+            lo[k]=epicenter[0]
+            la[k]=epicenter[1]
+        else:
+            lo[k],la[k],ba=g.fwd(epicenter[0],epicenter[1],az[k],d[k]) 
+    #Sort them from top right to left along dip
+    zunique=unique(z)
+    for k in range(len(zunique)):
+        i=where(z==zunique[k])[0] #This finds all faults at a certain depth
+        isort=argsort(la[i]) #This sorths them south to north
+        if k==0: #First loop
+            laout=la[i][isort]
+            loout=lo[i][isort]
+            zout=z[i][isort]
+        else:
+            laout=r_[laout,la[i][isort]]
+            loout=r_[loout,lo[i][isort]]
+            zout=r_[zout,z[i][isort]]
+    #Write to file
+    f=open(fout,'w')
+    for k in range(len(x)):   
+        out='%.6f\t%.6f\t%.3f\n' % (loout[k],laout[k],zout[k])
+        f.write(out)
+    f.close()
+    
+    
+def make_checkerboard(rupt,nstrike,ndip,fout,nwin):
+    '''
+    Make checekrboard for resolution analysis
+    '''
+    from numpy import genfromtxt,unique,arange,union1d,savetxt
+   
+    f=genfromtxt(rupt)
+    u=unique(f[:,0])
+    f=f[0:len(u),:]
+    #Set strike-slip/dip_slip to zero
+    f[:,8]=0
+    f[:,9]=0
+    #1 and 2
+    i1=arange(0,nstrike,4)
+    i2=arange(1,nstrike,4)
+    i=union1d(i1,i2)
+    j1=arange(21,2*nstrike,4)
+    j2=arange(22,2*nstrike,4)
+    j=union1d(j1,j2)
+    ij=union1d(i,j)
+    f[ij,9]=1
+    # 3 and 4
+    i1=arange(44,3*nstrike,4)
+    i2=arange(45,3*nstrike,4)
+    i=union1d(i1,i2)
+    j1=arange(65,4*nstrike,4)
+    j2=arange(66,4*nstrike,4)
+    j=union1d(j1,j2)
+    ij=union1d(i,j)
+    f[ij,9]=1
+    # 5 and 6
+    i1=arange(84,5*nstrike,4)
+    i2=arange(85,5*nstrike,4)
+    i=union1d(i1,i2)
+    j1=arange(105,6*nstrike,4)
+    j2=arange(106,6*nstrike,4)
+    j=union1d(j1,j2)
+    ij=union1d(i,j)
+    f[ij,9]=1
+    # 7 and 8
+    i1=arange(128,7*nstrike,4)
+    i2=arange(129,7*nstrike,4)
+    i=union1d(i1,i2)
+    j1=arange(149,8*nstrike,4)
+    j2=arange(150,8*nstrike,4)
+    j=union1d(j1,j2)
+    ij=union1d(i,j)
+    f[ij,9]=1
+    # 9
+    i1=arange(168,9*nstrike,4)
+    i2=arange(169,9*nstrike,4)
+    ij=union1d(i1,i2)
+    f[ij,9]=1
+    #Write to file
+    fmt='%6i\t%.4f\t%.4f\t%8.4f\t%.2f\t%.2f\t%.2f\t%.2f\t%12.4e\t%12.4e%10.1f\t%10.1f\t%8.4f\t%.4e'
+    savetxt(fout,f,fmt)
+    
+def model_resolution(Gfile,outdir,fault,nwindows,Ls,Lt,lambda_s,lambda_t):
+    '''
+    Compute model resolution matrix and output to GMT plottable file
+    '''
+    from numpy import load,diag,arange,zeros,genfromtxt,savetxt,c_
+    from scipy.linalg import inv
+    
+    #read fault model
+    lon=genfromtxt(fault,usecols=1)
+    lat=genfromtxt(fault,usecols=2)
+    nfaults=len(lon)
+    nfaults_total=nfaults*nwindows
+    G=load(Gfile)
+    LsLs=Ls.T.dot(Ls)
+    LtLt=Lt.T.dot(Lt)
+    R=(inv(G.T.dot(G)+(lambda_s**2)*LsLs+(lambda_t**2)*LtLt).dot(G.T)).dot(G)
+    r=diag(R)
+    R=None
+    rout=zeros(nfaults)
+    #Go one subfault at a time average ss and ds individually then average total ss and total ds
+    for k in range(nfaults):
+        iss=arange(2*k,nfaults_total,nfaults)
+        ids=arange(2*k+1,nfaults_total,nfaults)
+        rss=r[iss].mean()
+        rds=r[ids].mean()
+        rout[k]=max([rss,rds])
+    fout=Gfile.split('/')[-1]
+    fout=outdir+fout.split('.')[0]+fout.split('.')[1]+'.R'
+    savetxt(fout,c_[lon,lat,rout],fmt='%10.6f\t%10.6f\t%8.4f')
+    

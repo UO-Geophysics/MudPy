@@ -71,7 +71,7 @@ def quick_model(rupt):
     plt.title(rupt)
     plt.show()
     
-def quick_static(gflist,datapath,run_name,run_num,c):
+def quick_static(gflist,datapath,run_name,run_num,c,scale):
     '''
     Make quick quiver plot of static fields
     
@@ -113,21 +113,24 @@ def quick_static(gflist,datapath,run_name,run_num,c):
     #c=Colormap('bwr')
     #plt.contourf(X,Y,Z,100)
     #plt.colorbar()
-    Q=plt.quiver(lon,lat,e,n,width=0.001,color=c)
+    Q=plt.quiver(lon,lat,e,n,width=0.01,color=c)
     plt.scatter(lon,lat,color='b')
     plt.grid()
     plt.title(datapath+run_name+run_num)
     plt.show()
-    qscale_en=1
+    qscale_en=0.00001
     plt.quiverkey(Q,X=0.1,Y=0.9,U=qscale_en,label=str(qscale_en)+'m')
     
-def tile_slip(rupt,nstrike,ndip):
+def tile_slip(rupt,nstrike,ndip,geographic=False,epicenter=0,epicenter_line=0):
     '''
     Quick and dirty plot of a .rupt file
+    epicenter is the coordinates, epcienter line is the down dip lien number where 
+    the epcienter is
     '''
     
-    from numpy import genfromtxt,unique,where,zeros
+    from numpy import genfromtxt,unique,where,zeros,arange,pi,tile
     import matplotlib.pyplot as plt
+    from obspy.core.util.geodetics import gps2DistAzimuth
     
     f=genfromtxt(rupt)
     num=f[:,0]
@@ -146,6 +149,20 @@ def tile_slip(rupt,nstrike,ndip):
     #Get unit rake vector
     rakess=ss/slip
     rakeds=ds/slip
+    if geographic==True: #Get geographic coordinates to compute along strike and along dip distance
+        lon=f[(epicenter_line-1)*nstrike:epicenter_line*nstrike,1] #Only compute line at the epicenter depth
+        lat=f[(epicenter_line-1)*nstrike:epicenter_line*nstrike,2]    
+        depth=-f[:,3]
+        depth=depth[0:len(unum)]
+        along_strike=zeros(nstrike)
+        for k in range(len(lat)):
+            out=gps2DistAzimuth(epicenter[1],epicenter[0],lat[k],lon[k])
+            if lat[k]<epicenter[1]: #It's to the south
+                along_strike[k]=out[0]/1000
+            else:
+                along_strike[k]=-out[0]/1000
+        #Now tile
+        along_strike=tile(along_strike,ndip)
     #Get indices for plot
     istrike=zeros(nstrike*ndip)
     idip=zeros(nstrike*ndip)
@@ -154,19 +171,29 @@ def tile_slip(rupt,nstrike,ndip):
          for j in range(nstrike):
              istrike[k]=nstrike-j
              idip[k]=ndip-i
-             k+=1           
+             k+=1          
     #Plot
     plt.figure()
-    plt.scatter(istrike,idip,marker='o',c=slip,s=250,cmap=whitejet)
-    plt.ylabel('Along-dip index')
-    plt.xlabel('Along-strike index')
-    cb=plt.colorbar()
+    if geographic==False:
+        plt.scatter(istrike,idip,marker='o',c=slip,s=250,cmap=whitejet)
+        cb=plt.colorbar()
+        plt.ylabel('Along-dip index')
+        plt.xlabel('Along-strike index')
+        plt.xlim(istrike.min()-1,istrike.max()+1)
+        plt.ylim(idip.min()-1,idip.max()+1)
+        plt.quiver(istrike,idip,rakess,rakeds,color='green',width=0.002)
+        plt.axis('equal')
+        plt.grid()
+    else:
+        plt.scatter(along_strike,depth,marker='o',c=slip,s=250,cmap=whitejet)
+        cb=plt.colorbar()
+        plt.ylabel('Depth (km)')
+        plt.xlabel('Along-strike distance (km)')
+        plt.xlim(along_strike.min()-1,along_strike.max()+1)
+        plt.ylim(depth.min()-1,depth.max()+1)
+        plt.scatter(0,-epicenter[2],marker='*',color='#00FF00',s=350)
+        plt.quiver(along_strike,depth,rakess,rakeds,color='g',width=0.0035)
     cb.set_label('Slip (m)')
-    plt.axis('equal')
-    plt.xlim(istrike.min()-1,istrike.max()+1)
-    plt.ylim(idip.min()-1,idip.max()+1)
-    plt.quiver(istrike,idip,rakess,rakeds,color='green',width=0.002)
-    plt.grid()
     plt.title(rupt)
     plt.show()
 
@@ -1087,12 +1114,12 @@ def average_coherence(home,project_name,run_name,run_number,GF_list,vord,num_com
         
 def stf_spectra(home,project_name,rupt,flims,dlims,normalize=True,stacks=None):
     '''
-    Plot coherences
+    Plot source time functions
     '''
     import matplotlib.pyplot as plt
     import matplotlib.colors as colors
     import matplotlib.cm as cmx
-    from numpy import load,log10,genfromtxt,unique,arange,where,intersect1d
+    from numpy import load,genfromtxt,unique,arange,where,intersect1d
     from string import rjust
     
     

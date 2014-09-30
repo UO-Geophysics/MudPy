@@ -77,7 +77,11 @@ def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epic
                 mini_station_file(mini_station,stations[i],GF[i,0],GF[i,1],GFfiles[i,0])
                 gftype='static'
                 tdelay=0
-                Gstatic=makeG(home,project_name,fault_name,model_name,split(mini_station)[1],gftype,tdelay,decimate,lowpass)
+                #Gstatic=makeG(home,project_name,fault_name,model_name,split(mini_station)[1],gftype,tdelay,decimate,lowpass)
+                Ess=[] ; Eds=[] ; Nss=[] ; Nds=[] ; Zss=[] ; Zds=[]
+                first_window=True
+                Gstatic= makeG(home,project_name,fault_name,model_name,split(mini_station)[1],
+                                                                gftype,tdelay,decimate,lowpass,first_window,Ess,Eds,Nss,Nds,Zss,Zds)
                 remove(mini_station) #Cleanup  
         #Dispalcement waveform GFs
         kgf=3
@@ -258,7 +262,7 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tdelay,dec
                 #Append to G
             #Append to output matrix
             G[ksta*3:ksta*3+3,:]=Gtemp   
-            return G    
+        return G    
     if gftype.lower()=='disp' or gftype.lower()=='vel':  #Full waveforms
         if gftype.lower()=='disp':
             vord='disp'
@@ -1285,6 +1289,7 @@ def get_ABIC(G,GTG,sol,d,lambda_s,lambda_t,Ls,LsLs,Lt,LtLt):
     M=sol.size
     #Off you go, compute it
     if lambda_t==0: #There is only one contraint (no temporal regularization)
+        print "... Static ABIC requested"
         s=norm(d-G.dot(sol))**2+(lambda_s**2)*norm(Ls.dot(sol))**2
         a1=N*log(s)
         a2=M*log(lambda_s**2)
