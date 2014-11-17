@@ -121,7 +121,7 @@ def quick_static(gflist,datapath,run_name,run_num,c,scale):
     qscale_en=0.00001
     plt.quiverkey(Q,X=0.1,Y=0.9,U=qscale_en,label=str(qscale_en)+'m')
     
-def tile_slip(rupt,nstrike,ndip,geographic=False,epicenter=0,epicenter_line=0):
+def tile_slip(rupt,nstrike,ndip,(slip_min,slip_max),geographic=False,epicenter=0,epicenter_line=0):
     '''
     Quick and dirty plot of a .rupt file
     epicenter is the coordinates, epcienter line is the down dip lien number where 
@@ -150,6 +150,25 @@ def tile_slip(rupt,nstrike,ndip,geographic=False,epicenter=0,epicenter_line=0):
     rakess=ss/slip
     rakeds=ds/slip
     if geographic==True: #Get geographic coordinates to compute along strike and along dip distance
+        #Add aftershocks
+        afters=genfromtxt('/Users/dmelgar/Napa2014/hardebeck_afters.txt')
+        lonaf=afters[:,2]
+        lataf=afters[:,1]
+        zaf=-afters[:,3]
+        xaf=zeros(zaf.shape)
+        for k in range(len(lataf)):
+            out=gps2DistAzimuth(epicenter[1],epicenter[0],lataf[k],lonaf[k])
+            xaf[k]=(out[0]/1000)
+            if lataf[k]>epicenter[1]: #If it's tot he left of epcietner it's engative
+                xaf[k]=-xaf[k]
+        #Done with afters
+        #Do same thing for centroid position
+        loncent=-122.313
+        latcent=38.26
+        zcent=-4
+        out=gps2DistAzimuth(epicenter[1],epicenter[0],latcent,loncent)
+        xcent=-(out[0]/1000)
+        #Done with centroid
         lon=f[(epicenter_line-1)*nstrike:epicenter_line*nstrike,1] #Only compute line at the epicenter depth
         lat=f[(epicenter_line-1)*nstrike:epicenter_line*nstrike,2]    
         depth=-f[:,3]
@@ -173,9 +192,9 @@ def tile_slip(rupt,nstrike,ndip,geographic=False,epicenter=0,epicenter_line=0):
              idip[k]=ndip-i
              k+=1          
     #Plot
-    plt.figure()
     if geographic==False:
-        plt.scatter(istrike,idip,marker='o',c=slip,s=250,cmap=whitejet)
+        plt.figure()
+        plt.scatter(istrike,idip,marker='o',c=slip,s=250,cmap=whitejet,vmin=slip_min,vmax=slip_max)
         cb=plt.colorbar()
         plt.ylabel('Along-dip index')
         plt.xlabel('Along-strike index')
@@ -183,18 +202,27 @@ def tile_slip(rupt,nstrike,ndip,geographic=False,epicenter=0,epicenter_line=0):
         plt.ylim(idip.min()-1,idip.max()+1)
         plt.quiver(istrike,idip,rakess,rakeds,color='green',width=0.002)
         plt.axis('equal')
-        plt.grid()
+        plt.grid()    
+        plt.title(rupt)
     else:
-        plt.scatter(along_strike,depth,marker='o',c=slip,s=250,cmap=whitejet)
+        
+        rakess=rakess*slip
+        rakeds=rakeds*slip
+        plt.figure(num=None, figsize=(8, 4), dpi=80)
+        plt.scatter(along_strike,depth,marker='s',linewidth=0.5,edgecolor='#CCCCCC',c=slip,s=250,cmap=whitejet,vmin=slip_min,vmax=slip_max)
         cb=plt.colorbar()
         plt.ylabel('Depth (km)')
         plt.xlabel('Along-strike distance (km)')
         plt.xlim(along_strike.min()-1,along_strike.max()+1)
         plt.ylim(depth.min()-1,depth.max()+1)
-        plt.scatter(0,-epicenter[2],marker='*',color='#00FF00',s=350)
-        plt.quiver(along_strike,depth,rakess,rakeds,color='g',width=0.0035)
+        plt.scatter(0,-epicenter[2],marker='*',edgecolor='k',facecolor='#00FF00',s=350,linewidth=2)
+        plt.scatter(xcent,zcent,marker='D',edgecolor='black',facecolor='',s=120,linewidth=2)
+        plt.quiver(along_strike,depth,rakess,rakeds,color='green',width=0.0035,scale=20)
+        print xcent
+        print zcent
+        plt.scatter(xaf,zaf,edgecolor='k',s=5)
     cb.set_label('Slip (m)')
-    plt.title(rupt)
+    plt.subplots_adjust(left=0.1, bottom=0.15, right=0.9, top=0.95, wspace=0, hspace=0)
     plt.show()
 
         
@@ -275,7 +303,7 @@ def tile_moment(rupt,epicenter,nstrike,ndip,covfile,beta):
             slip_plus=slipCIplus[i]
             slip_minus=slipCIminus[i]
         #Get first source time function
-        t1,M1=get_source_time_function(mu[kfault],area[kfault],rise_time[kfault],trup[0],slip[0])
+        t1,M1=get_source_time_function(mu[kfault],area[kfautilelt],rise_time[kfault],trup[0],slip[0])
         if covfile !=None:
             t1plus,M1plus=get_source_time_function(mu[kfault],area[kfault],rise_time[kfault],trup[0],slip_plus[0])
             t1minus,M1minus=get_source_time_function(mu[kfault],area[kfault],rise_time[kfault],trup[0],slip_minus[0])
@@ -295,7 +323,7 @@ def tile_moment(rupt,epicenter,nstrike,ndip,covfile,beta):
         Mmax=max(Mmax,M1.max())
         #Done now plot them
         #get current axis
-        ax=axarr[idip[kfault], istrike[kfault]]
+        ax=axarr[int(idip[kfault]), int(istrike[kfault])]
         #Make contourf
         Mc=linspace(0,0.98*max(M1),100)
         T,M=meshgrid(t1,Mc)
@@ -557,7 +585,7 @@ def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpas
         synthsuffix='disp'
     elif vord.lower()=='v':
         kgf=1 #disp
-        datasuffix='kvel'
+        datasuffix='vel'
         synthsuffix='vel'
     #Decide on sorting
     i=where(gf[:,kgf]==1)[0]  
@@ -687,7 +715,62 @@ def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpas
             #axe.xaxis.set_ticks(xtick)
             #axu.xaxis.set_ticks(xtick)
     plt.subplots_adjust(left=0.2, bottom=0.05, right=0.8, top=0.95, wspace=0, hspace=0)
+
+def static_synthetics(home,project_name,run_name,run_number,gflist,sscale,qscale):
+    '''
+    Plot synthetics vs real data
     
+    gflist: The GF control fiel that decides what to plot/not plot
+    datapath
+    sscale: scales the synthetics if some weight has been applied
+    qscale: scale fo the quiver plot arrows
+    '''
+    from numpy import genfromtxt,where,zeros
+    import matplotlib.pyplot as plt
+    import matplotlib
+    
+    matplotlib.rcParams.update({'font.size': 14})
+    #Decide what to plot
+    sta=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=0,dtype='S')
+    lon_all=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=[1],dtype='f')
+    lat_all=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=[2],dtype='f')
+    gf=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=[3],dtype='f')
+    datapath=home+project_name+'/data/statics/'
+    synthpath=home+project_name+'/output/inverse_models/statics/'
+    i=where(gf==1)[0] #Which stations have statics?
+    lon=lon_all[i]
+    lat=lat_all[i]
+    n=zeros(len(i))
+    e=zeros(len(i))
+    u=zeros(len(i))
+    ns=zeros(len(i))
+    es=zeros(len(i))
+    us=zeros(len(i))
+    for k in range(len(i)):
+        neu=genfromtxt(datapath+sta[i[k]]+'.neu')
+        n[k]=neu[0] ; e[k]=neu[1] ; u[k]=neu[2]
+        neus=genfromtxt(synthpath+run_name+'.'+run_number+'.'+sta[i[k]]+'.static.neu')
+        ns[k]=neus[0] ; es[k]=neus[1] ; us[k]=neus[2]
+        if sscale!=None:
+            ns=ns/sscale
+            es=es/sscale
+            us=us/sscale
+    #Make plot    
+    plt.figure()
+    plt.subplot(121)
+    plt.quiver(lon,lat,e,n,color='k',scale=qscale)
+    plt.quiver(lon,lat,es,ns,color='r',scale=qscale)
+    plt.grid()
+    plt.title('Horizontals')
+    plt.subplot(122)
+    plt.quiver(lon,lat,zeros(len(u)),u,color='k',scale=qscale)
+    plt.quiver(lon+0.05,lat,zeros(len(us)),us,color='r',scale=qscale)
+    plt.grid()
+    plt.title('Verticals')
+    #plt.legend('Data','Synth')
+    plt.suptitle('Statics for run '+project_name+': '+run_name+'.'+run_number)
+    
+            
 def tsunami_synthetics(home,project_name,run_name,run_number,gflist,t_lim,sort,scale):
     '''
     Plot synthetics vs real data

@@ -43,12 +43,11 @@ def waveforms(home,project_name,rupture_name,station_file,model_name,run_name,in
     #Load stations
     station_file=home+project_name+'/data/station_info/'+station_file
     staname=genfromtxt(station_file,dtype="S6",usecols=0)
-    #What am I processing v or d?
+    #What am I processing v or d ?
     if integrate==1:
         vord='disp'
     else:
         vord='vel'
-        
     #Loop over stations
     for ksta in range(hot_start,len(staname)):
         print 'Working on station '+staname[ksta]+' ('+str(ksta+1)+'/'+str(len(staname))+')'
@@ -78,7 +77,7 @@ def waveforms(home,project_name,rupture_name,station_file,model_name,run_name,in
                 rtime=source[k,12]
                 #Where's the data
                 strdepth='%.4f' % zs
-                if tsunami==0: 
+                if tsunami==False: 
                     syn_path=home+project_name+'/GFs/dynamic/'+model_name+'_'+strdepth+'.'+nsub+'/'
                 else:
                     syn_path=home+project_name+'/GFs/tsunami/'+model_name+'_'+strdepth+'.'+nsub+'/'
@@ -133,9 +132,6 @@ def waveforms(home,project_name,rupture_name,station_file,model_name,run_name,in
                     log=log+"No slip on subfault "+nfault+', ignoring it...\n'
                 gc.collect()
             #Save results
-            e[0].data=e[0].data.filled()  #This is a workaround of a bug in obspy
-            n[0].data=n[0].data.filled()
-            z[0].data=z[0].data.filled()
             e.write(outpath+run_name+'.'+sta+'.'+vord+'.e',format='SAC')
             n.write(outpath+run_name+'.'+sta+'.'+vord+'.n',format='SAC')
             z.write(outpath+run_name+'.'+sta+'.'+vord+'.u',format='SAC')
@@ -222,7 +218,59 @@ def coseismics(home,project_name,rupture_name,station_file):
             print 'z='+str(z)
         #Save results
         savetxt(outpath+sta+'.static.neu',(n,e,z))
+
+def tsunami_waveforms(home,project_name,fault_name,rupture_name,station_file,model_name,run_name,GF_list,G_from_file,G_name,epicenter,
+                rupture_speed,num_windows,coord_type,decimate,lowpass,resample,beta):            
+    '''
+    Forward compute tsunami waveforms the right way, load the GF matrix and just multiply by fault model
+    '''
+    from mudpy.inverse import getG
+    from numpy import genfromtxt,zeros,arange,deg2rad,cos,sin,vstack,array,where
+    from obspy import read
+
+    #Read GFs
+    G=getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epicenter,
+                rupture_speed,num_windows,coord_type,decimate,lowpass)
+    #Read rupture model and convert into vector
+    ss=genfromtxt(home+project_name+'/forward_models/'+rupture_name,usecols=8)
+    ds=genfromtxt(home+project_name+'/forward_models/'+rupture_name,usecols=9)
+    #Rotate by beta
+    if beta != None:
+        beta_rot=deg2rad(beta)
+        R=array([[cos(beta_rot),sin(beta_rot)],[-sin(beta_rot),cos(beta_rot)]])
+        rot=R.dot(vstack((ss,ds)))
+        ss_rot=rot[0,:]
+        ds_rot=rot[1,:]
+    #Assemble into column vector
+    m=zeros(len(ss)*2)
+    iss=arange(0,len(m),2)
+    ids=arange(1,len(m),2)
+    m[iss]=ss_rot
+    m[ids]=ds_rot
+    #Multiply
+    dtsun=G.dot(m)
+    #Write to file (Modified from inverse.write_synthetics)
+    #Read gf file and decide what needs to get loaded
+    gf_file=home+project_name+'/data/station_info/'+GF_list
+    stations=genfromtxt(gf_file,usecols=[0],skip_header=1,dtype='S')
+    GF=genfromtxt(gf_file,usecols=[3,4,5,6,7],skip_header=1,dtype='f8')
+    GFfiles=genfromtxt(gf_file,usecols=[8,9,10,11,12],skip_header=1,dtype='S')
+    #Separate into its constituent parts (statics,displacaments, velocities, etc...)
+    kinsert=0
+    kgf=3
+    i=where(GF[:,kgf]==1)[0]
+    if len(i)>0:
+        for ksta in range(len(i)):
+            sta=stations[i[ksta]]
+            tsun=read(GFfiles[i[ksta],kgf])
+            npts=tsun[0].stats.npts
+            synth=tsun.copy()
+            synth[0].data=dtsun[kinsert:kinsert+npts]
+            kinsert+=npts
+            synth.write(home+project_name+'/output/forward_models/'+run_name+'.'+sta+'.tsun',format='SAC')
             
+                        
+                                                
 def move_seafloor(home,project_name,run_name,model_name,topo_file,topo_dx_file,topo_dy_file,
                 tgf_file,fault_name,outname,time_epi,tsun_dt,maxt,ymb,dl=2./60,variance=None,static=False):
     '''
@@ -560,8 +608,14 @@ def lowpass(data,fcorner,fsample,order):
     Make a lowpass zero phase filter
     '''
     from scipy.signal import butter,filtfilt
+    from numpy import size,array
+    
+    if size(fcorner)==2:
+        ftype='bandpass'
+    else:
+        ftype='lowpass'
     fnyquist=fsample/2
-    b, a = butter(order, fcorner/(fnyquist))
+    b, a = butter(order, array(fcorner)/(fnyquist),ftype)
     data_filt=filtfilt(b,a,data)
     return data_filt
     
@@ -700,7 +754,8 @@ def makefault(strike,dip,nstrike,ndip,rake,dx_dip,dx_strike,epicenter,num_updip,
     from numpy import arange,sin,cos,deg2rad,r_,ones,arctan,rad2deg,zeros,isnan,unique,where,argsort
     import pyproj
     
-    strike=155
+    strike=163
+    dip=74
     proj_angle=180-strike #Angle to use for sin.cos projection (comes from strike)
     y=arange(-nstrike/2+1,nstrike/2+1)*dx_strike
     x=arange(-nstrike/2+1,nstrike/2+1)*dx_strike
@@ -708,8 +763,8 @@ def makefault(strike,dip,nstrike,ndip,rake,dx_dip,dx_strike,epicenter,num_updip,
     y=y*cos(deg2rad(strike))
     x=x*sin(deg2rad(strike))
     #Move up 7 slots
-    x=x-x[15]
-    y=y-y[15]
+    #x=x-x[15]
+    #y=y-y[15]
     
     #Save teh zero line
     y0=y.copy()
@@ -781,9 +836,15 @@ def makefault(strike,dip,nstrike,ndip,rake,dx_dip,dx_strike,epicenter,num_updip,
             loout=r_[loout,lo[i][isort]]
             zout=r_[zout,z[i][isort]]
     #Write to file
+    strike=ones(loout.shape)*strike
+    dip=ones(loout.shape)*dip
+    tw=ones(loout.shape)*0.5
+    rise=ones(loout.shape)*1
+    L=ones(loout.shape)*1000
+    W=ones(loout.shape)*1000
     f=open(fout,'w')
     for k in range(len(x)):   
-        out='%.6f\t%.6f\t%.3f\n' % (loout[k],laout[k],zout[k])
+        out='%i\t%.6f\t%.6f\t%.3f%i\t%i\t%.1f\t%.1f\t%.2f\t%.2f\n' % (k,loout[k],laout[k],zout[k],strike[k],dip[k],tw[k],rise[k],L[k],W[k])
         f.write(out)
     f.close()
     
@@ -849,29 +910,82 @@ def model_resolution(Gfile,outdir,fault,nwindows,Ls,Lt,lambda_s,lambda_t):
     '''
     Compute model resolution matrix and output to GMT plottable file
     '''
-    from numpy import load,diag,arange,zeros,genfromtxt,savetxt,c_
+    from numpy import load,diag,arange,zeros,genfromtxt,savetxt,c_,r_,eye
     from scipy.linalg import inv
     
     #read fault model
     lon=genfromtxt(fault,usecols=1)
     lat=genfromtxt(fault,usecols=2)
     nfaults=len(lon)
-    nfaults_total=nfaults*nwindows
-    G=load(Gfile)
+    nfaults_total=nfaults*nwindows*2
+    #G=load(Gfile)
+    ##Tsunami weights
+    #W=eye(G.shape[0])
+    #W[4302:,4302:]=W[4302:,4302:]*2
+    #W=W*1.1
+    #G=W.dot(G)
+    ##
+    #Vel weights
+    #W=eye(G.shape[0])*4.5
+    #G=W.dot(G)
+    #
+    ##Combine everything
+    Gdisp=load(Gfile_disp)
+    Gvel=load(Gfile_vel)
+    W=eye(Gvel.shape[0])*4.5
+    Gvel=W.dot(Gvel)
+    #Gtsun=load(Gfile_tsun)
+    #W=eye(Gtsun.shape[0])
+    #W[4302:,4302:]=W[4302:,4302:]*2
+    #W=W*1.1
+    #Gtsun=W.dot(Gtsun)
+    G=r_[Gdisp,Gvel]
+    Gdisp=Gvel=None
     LsLs=Ls.T.dot(Ls)
-    LtLt=Lt.T.dot(Lt)
-    R=(inv(G.T.dot(G)+(lambda_s**2)*LsLs+(lambda_t**2)*LtLt).dot(G.T)).dot(G)
+    #LtLt=Lt.T.dot(Lt)
+    #R=(inv(G.T.dot(G)+(lambda_s**2)*LsLs+(lambda_t**2)*LtLt).dot(G.T)).dot(G)
+    R=(inv(G.T.dot(G)+(lambda_s**2)*LsLs).dot(G.T)).dot(G)
     r=diag(R)
     R=None
     rout=zeros(nfaults)
     #Go one subfault at a time average ss and ds individually then average total ss and total ds
-    for k in range(nfaults):
-        iss=arange(2*k,nfaults_total,nfaults)
-        ids=arange(2*k+1,nfaults_total,nfaults)
-        rss=r[iss].mean()
-        rds=r[ids].mean()
-        rout[k]=max([rss,rds])
+    #for k in range(nfaults):
+    #    iss=arange(2*k,nfaults_total,nfaults)
+    #    ids=arange(2*k+1,nfaults_total,nfaults)
+    #    rss=r[iss].mean()
+    #    rds=r[ids].mean()
+    #    #rout[k]=max([rss,rds])
+    #    rout[k]=rds
+    rout=r[arange(1,len(r),2)]
     fout=Gfile.split('/')[-1]
     fout=outdir+fout.split('.')[0]+fout.split('.')[1]+'.R'
     savetxt(fout,c_[lon,lat,rout],fmt='%10.6f\t%10.6f\t%8.4f')
     
+def trim_add_noise(data_path,checker_path,search_pattern):
+    '''
+    Trim checkerboard data and Add gaussian noise to data
+    
+    data_path='/Volumes/Kanagawa/Slip_Inv/tohoku_10s/data/waveforms/'
+    search_pattern='checker.*disp*'
+    checker_path='/Volumes/Kanagawa/Slip_Inv/tohoku_10s/output/forward_models/'    
+    '''
+    from numpy import var
+    from numpy.random import normal
+    from glob import glob
+    from obspy import read
+    
+    checker_files=glob(checker_path+search_pattern)
+    for k in range(len(checker_files)):
+        ch=read(checker_files[k])
+        #Find corresponding data file
+        sta=checker_files[k].split('/')[-1].split('.')[1]
+        vord=checker_files[k].split('/')[-1].split('.')[2]
+        comp=checker_files[k].split('/')[-1].split('.')[3]
+        data_file=glob(data_path+sta+'*'+vord+'*'+comp)
+        st=read(data_file[0])
+        ch.trim(starttime=st[0].stats.starttime,endtime=st[0].stats.endtime)
+        #determine variance
+        v=2e-5 #vel
+        noise=normal(loc=0.0, scale=v**0.5, size=ch[0].stats.npts)
+        ch[0].data=ch[0].data+noise
+        ch.write(checker_files[k],format='SAC')

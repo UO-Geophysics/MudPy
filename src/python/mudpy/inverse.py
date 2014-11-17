@@ -17,7 +17,7 @@ Functions in this module:
 
 
 def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epicenter,rupture_speed,
-        num_windows,coord_type,decimate,lowpass):
+        num_windows,coord_type,decimate,bandpass):
     '''
     Assemble Green functions matrix. If requested will parse all available synthetics on file and build the matrix.
     Otherwise, if it exists, it will be loaded from file 
@@ -42,7 +42,7 @@ def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epic
         G: Fully assembled GF matrix
     '''
     
-    from numpy import arange,genfromtxt,where,loadtxt,array,c_,concatenate,save,load
+    from numpy import arange,genfromtxt,where,loadtxt,array,c_,concatenate,save,load,size
     from os import remove
     from os.path import split
     
@@ -81,7 +81,7 @@ def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epic
                 Ess=[] ; Eds=[] ; Nss=[] ; Nds=[] ; Zss=[] ; Zds=[]
                 first_window=True
                 Gstatic= makeG(home,project_name,fault_name,model_name,split(mini_station)[1],
-                                                                gftype,tdelay,decimate,lowpass,first_window,Ess,Eds,Nss,Nds,Zss,Zds)
+                                                                gftype,tdelay,decimate,bandpass,first_window,Ess,Eds,Nss,Nds,Zss,Zds)
                 remove(mini_station) #Cleanup  
         #Dispalcement waveform GFs
         kgf=3
@@ -108,12 +108,12 @@ def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epic
                         first_window=True
                         Ess=[] ; Eds=[] ; Nss=[] ; Nds=[] ; Zss=[] ; Zds=[]
                         Gdisp_temp,Ess,Eds,Nss,Nds,Zss,Zds = makeG(home,project_name,fault_name,model_name,split(mini_station)[1],
-                                                                gftype,tdelay,decimate,lowpass,first_window,Ess,Eds,Nss,Nds,Zss,Zds)
+                                                                gftype,tdelay,decimate,bandpass,first_window,Ess,Eds,Nss,Nds,Zss,Zds)
                         Gdisp=Gdisp_temp
                     else:
                         first_window=False
                         Gdisp_temp,Ess,Eds,Nss,Nds,Zss,Zds = makeG(home,project_name,fault_name,model_name,split(mini_station)[1],
-                                                                gftype,tdelay,decimate,lowpass,first_window,Ess,Eds,Nss,Nds,Zss,Zds)
+                                                                gftype,tdelay,decimate,bandpass,first_window,Ess,Eds,Nss,Nds,Zss,Zds)
                         Gdisp=c_[Gdisp,Gdisp_temp]
                 remove(mini_station) #Cleanup 
         #Velocity waveforms
@@ -141,12 +141,12 @@ def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epic
                         first_window=True
                         Ess=[] ; Eds=[] ; Nss=[] ; Nds=[] ; Zss=[] ; Zds=[]
                         Gvel_temp,Ess,Eds,Nss,Nds,Zss,Zds = makeG(home,project_name,fault_name,model_name,split(mini_station)[1],
-                                                                gftype,tdelay,decimate,lowpass,first_window,Ess,Eds,Nss,Nds,Zss,Zds)
+                                                                gftype,tdelay,decimate,bandpass,first_window,Ess,Eds,Nss,Nds,Zss,Zds)
                         Gvel=Gvel_temp
                     else:
                         first_window=False
                         Gvel_temp,Ess,Eds,Nss,Nds,Zss,Zds = makeG(home,project_name,fault_name,model_name,split(mini_station)[1],
-                                                                gftype,tdelay,decimate,lowpass,first_window,Ess,Eds,Nss,Nds,Zss,Zds)
+                                                                gftype,tdelay,decimate,bandpass,first_window,Ess,Eds,Nss,Nds,Zss,Zds)
                         Gvel=c_[Gvel,Gvel_temp]
                 remove(mini_station) #Cleanup 
         #Tsunami waveforms
@@ -174,12 +174,12 @@ def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epic
                         first_window=True
                         Ess=[] ; Eds=[] ; Nss=[] ; Nds=[] ; Zss=[] ; Zds=[]
                         Gtsun_temp,SS,DS = makeG(home,project_name,fault_name,model_name,split(mini_station)[1],
-                                                                gftype,tdelay,decimate,lowpass,first_window,Ess,Eds,Nss,Nds,Zss,Zds)
+                                                                gftype,tdelay,decimate,bandpass,first_window,Ess,Eds,Nss,Nds,Zss,Zds)
                         Gtsun=Gtsun_temp
                     else:
                         first_window=False
                         Gtsun_temp,SS,DS = makeG(home,project_name,fault_name,model_name,split(mini_station)[1],
-                                                                gftype,tdelay,decimate,lowpass,first_window,SS,DS,Nss,Nds,Zss,Zds)
+                                                                gftype,tdelay,decimate,bandpass,first_window,SS,DS,Nss,Nds,Zss,Zds)
                         Gtsun=c_[Gtsun,Gtsun_temp]
                 remove(mini_station) #Cleanup 
         #Strain offsets
@@ -188,14 +188,23 @@ def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epic
         if GF[:,kgf].sum()>0:
             pass
         #Done, now concatenate them all ccompute transpose product and save
-        G=concatenate([g for g in [Gstatic,Gdisp,Gvel,Gtsun,Gstrain] if g.size > 0])
-        #K=dot(G.T,G)
-        print 'Computing G\'G and saving to '+G_name+' this might take just a second...'
+        if num_windows==1: #Only one window
+            G=concatenate([g for g in [Gstatic,Gdisp,Gvel,Gtsun,Gstrain] if g.size > 0])
+        elif num_windows>1: #Multiple windows, this means we need tot ile the statics if they exist
+            if size(Gstatic)!=0: #Static is not empty, need to tile it
+                Gstatic_nwin=Gstatic.copy()
+                for nwin in range(num_windows-1):
+                    Gstatic_nwin=c_[Gstatic_nwin,Gstatic]
+                Gstatic=Gstatic_nwin.copy()
+                Gstatic_nwin=None #Release memory
+            G=concatenate([g for g in [Gstatic,Gdisp,Gvel,Gtsun,Gstrain] if g.size > 0])
+        print 'Saving GF matrix to '+G_name+' this might take just a second...'
         save(G_name,G)
         #save(K_name,K)
     return G
     
-def makeG(home,project_name,fault_name,model_name,station_file,gftype,tdelay,decimate,lowpass,first_window,Ess,Eds,Nss,Nds,Zss,Zds):
+    
+def makeG(home,project_name,fault_name,model_name,station_file,gftype,tdelay,decimate,bandpass,first_window,Ess,Eds,Nss,Nds,Zss,Zds):
     '''
     This routine is called from getG and will assemble the GFs from available synthetics
     depending on data type requested (statics, dispalcement or velocity waveforms).
@@ -294,14 +303,14 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tdelay,dec
                         Nds+=read(syn_path+staname[ksta]+'.'+nfault+'.DS.'+vord+'.n')
                         Zds+=read(syn_path+staname[ksta]+'.'+nfault+'.DS.'+vord+'.z')
                     #Perform operations that need to only happen once (filtering and decimation)
-                    if lowpass!=None: #Apply low pass filter to data
+                    if bandpass!=None: #Apply low pass filter to data
                         fsample=1./Ess[0].stats.delta
-                        Ess[ktrace].data=lfilt(Ess[ktrace].data,lowpass,fsample,9)
-                        Nss[ktrace].data=lfilt(Nss[ktrace].data,lowpass,fsample,9)
-                        Zss[ktrace].data=lfilt(Zss[ktrace].data,lowpass,fsample,9)
-                        Eds[ktrace].data=lfilt(Eds[ktrace].data,lowpass,fsample,9)
-                        Nds[ktrace].data=lfilt(Nds[ktrace].data,lowpass,fsample,9)
-                        Zds[ktrace].data=lfilt(Zds[ktrace].data,lowpass,fsample,9)
+                        Ess[ktrace].data=lfilt(Ess[ktrace].data,bandpass,fsample,4)
+                        Nss[ktrace].data=lfilt(Nss[ktrace].data,bandpass,fsample,4)
+                        Zss[ktrace].data=lfilt(Zss[ktrace].data,bandpass,fsample,4)
+                        Eds[ktrace].data=lfilt(Eds[ktrace].data,bandpass,fsample,4)
+                        Nds[ktrace].data=lfilt(Nds[ktrace].data,bandpass,fsample,4)
+                        Zds[ktrace].data=lfilt(Zds[ktrace].data,bandpass,fsample,4)
                     if decimate!=None: 
                         Ess[ktrace]=stdecimate(Ess[ktrace],decimate)
                         Nss[ktrace]=stdecimate(Nss[ktrace],decimate)
@@ -457,7 +466,7 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tdelay,dec
         pass                                
       
       
-def getdata(home,project_name,GF_list,decimate,lowpass):
+def getdata(home,project_name,GF_list,decimate,bandpass):
     '''
     Assemble the data vector for all data types
     
@@ -502,11 +511,11 @@ def getdata(home,project_name,GF_list,decimate,lowpass):
         n=read(GFfiles[i[ksta],kgf]+'.n')
         e=read(GFfiles[i[ksta],kgf]+'.e')
         u=read(GFfiles[i[ksta],kgf]+'.u')
-        if lowpass!=None: #Apply low pass filter to data
+        if bandpass!=None: #Apply low pass filter to data
             fsample=1./n[0].stats.delta
-            n[0].data=lfilt(n[0].data,lowpass,fsample,9)
-            e[0].data=lfilt(e[0].data,lowpass,fsample,9)
-            u[0].data=lfilt(u[0].data,lowpass,fsample,9)
+            n[0].data=lfilt(n[0].data,bandpass,fsample,8)
+            e[0].data=lfilt(e[0].data,bandpass,fsample,8)
+            u[0].data=lfilt(u[0].data,bandpass,fsample,8)
         #Decimate
         if decimate!=None:
             n[0]=stdecimate(n[0],decimate)
@@ -527,11 +536,11 @@ def getdata(home,project_name,GF_list,decimate,lowpass):
         n=read(GFfiles[i[ksta],kgf]+'.n')
         e=read(GFfiles[i[ksta],kgf]+'.e')
         u=read(GFfiles[i[ksta],kgf]+'.u')
-        if lowpass!=None: #Apply low pass filter to data
+        if bandpass!=None: #Apply low pass filter to data
             fsample=1./n[0].stats.delta
-            n[0].data=lfilt(n[0].data,lowpass,fsample,9)
-            e[0].data=lfilt(e[0].data,lowpass,fsample,9)
-            u[0].data=lfilt(u[0].data,lowpass,fsample,9)
+            n[0].data=lfilt(n[0].data,bandpass,fsample,8)
+            e[0].data=lfilt(e[0].data,bandpass,fsample,8)
+            u[0].data=lfilt(u[0].data,bandpass,fsample,8)
         #Decimate
         if decimate!=None:
             n[0]=stdecimate(n[0],decimate)

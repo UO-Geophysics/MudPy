@@ -132,7 +132,7 @@ def make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,stat
         #Move to correct directory
         strdepth='%.4f' % source[k,3]
         subfault=rjust(str(k+1),4,'0')
-        if static==0 and tsunami==0:
+        if static==0 and tsunami==False:
             #Move results to dynamic GF dir
             dirs=glob.glob('*.mod_'+strdepth)
             #Where am I writting this junk too?
@@ -148,7 +148,7 @@ def make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,stat
             #Cleanup
             rmtree(dirs[0])
             gc.collect()
-        elif static==0 and tsunami==1: #Tsunami GFs
+        elif static==0 and tsunami==True: #Tsunami GFs
             #Move results to tsunami GF dir
             dirs=glob.glob('*.mod_'+strdepth)
             #Where am I writting this junk too?
@@ -256,17 +256,17 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
             #decide what GF computation is required for this station
             if GF[k,2]==1: #Static offset
                 static=1
-                tsunami=0
+                tsunami=False
                 make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,static,tsunami,
                             hot_start,coord_type,dk,pmin,pmax,kmax)
             if GF[k,3]==1 or GF[k,4]==1: #full waveform
                 static=0
-                tsunami=0
+                tsunami=False
                 make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,static,tsunami,
                             hot_start,coord_type,dk,pmin,pmax,kmax)
             if GF[k,5]==1: #Tsunami
                 static=0
-                tsunami=1
+                tsunami=True
                 station_file=tgf_file
                 make_green(home,project_name,station_file,fault_name,model_name,tsun_dt,tsunNFFT,static,
                                 tsunami,hot_start,coord_type,dk,pmin,pmax,kmax)
@@ -278,22 +278,22 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
             if GF[k,2]==1: #Static offset
                 integrate=0
                 static=1
-                tsunami=0
+                tsunami=False
                 make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,tsunami,beta,hot_start,coord_type,time_epi)
             if GF[k,3]==1: #dispalcement waveform
                 integrate=1
                 static=0
-                tsunami=0
+                tsunami=False
                 make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,tsunami,beta,hot_start,coord_type,time_epi)
             if GF[k,4]==1: #velocity waveform
                 integrate=0
                 static=0
-                tsunami=0
+                tsunami=False
                 make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,tsunami,beta,hot_start,coord_type,time_epi)
             if GF[k,5]==1: #tsunami waveform
                 integrate=1
                 static=0
-                tsunami=1
+                tsunami=True
                 station_file=tgf_file
                 make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,tsunami,beta,hot_start,coord_type,time_epi)
             if GF[k,6]==1: #strain offsets
@@ -302,33 +302,27 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
                                 
                                                         
 def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_from_file,G_name,epicenter,
-                rupture_speed,num_windows,coord_type,reg_spatial,reg_temporal,nfaults,beta,decimate,lowpass,
+                rupture_speed,num_windows,coord_type,reg_spatial,reg_temporal,nfaults,beta,decimate,bandpass,
                 solver,bounds,weight=False):
     '''
     Assemble G and d, determine smoothing and run the inversion
     '''
     from mudpy import inverse as inv
-    from numpy import zeros,dot,array,squeeze,expand_dims,empty,tile,floor,eye
+    from numpy import zeros,dot,array,squeeze,expand_dims,empty,tile,eye
     from numpy.linalg import lstsq
     from scipy.sparse import csr_matrix as sparse
     from scipy.optimize import nnls
     from datetime import datetime
     import gc
-    from scipy.linalg import block_diag
     
     
 
     t1=datetime.now()
     #Get data vector
-    d=inv.getdata(home,project_name,GF_list,decimate,lowpass)
-    #Normalize data
-    wdvt=block_diag(eye(17400)/1,eye(17400)/(1./36))
-    d=wdvt.dot(d)
+    d=inv.getdata(home,project_name,GF_list,decimate,bandpass=None)
     #Get GFs
     G=inv.getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epicenter,
-                rupture_speed,num_windows,coord_type,decimate,lowpass)
-    G=wdvt.dot(G)
-    wdvt=None
+                rupture_speed,num_windows,coord_type,decimate,bandpass)
     gc.collect()
     #Get data weights
     if weight==True:
@@ -395,7 +389,7 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
                 Lt=eye(len(K))
                 LtLt=Lt.T.dot(Lt)
             else: #Mixed inversion
-                Kinv=K+(lambda_spatial**2)*LsLs#+(lambda_temporal**2)*LtLt
+                Kinv=K+(lambda_spatial**2)*LsLs+(lambda_temporal**2)*LtLt
             if solver.lower()=='lstsq':
                 sol,res,rank,s=lstsq(Kinv,x)
             elif solver.lower()=='nnls':
@@ -411,7 +405,7 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
             L2,Lmodel=inv.get_stats(Kinv,sol,x)
             VR=inv.get_VR(G,sol,d)
             #VR=inv.get_VR(WG,sol,wd)
-            #ABIC=inv.get_ABIC(WG,K,sol,wd,lambda_spatial,lambda_temporal,Ls,LsLs,Lt,LtLt)
+            #A)BIC=inv.get_ABIC(WG,K,sol,wd,lambda_spatial,lambda_temporal,Ls,LsLs,Lt,LtLt)
             ABIC=inv.get_ABIC(G,K,sol,d,lambda_spatial,lambda_temporal,Ls,LsLs,Lt,LtLt)
             #Get moment
             Mo,Mw=inv.get_moment(home,project_name,fault_name,model_name,sol)
