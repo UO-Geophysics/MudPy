@@ -105,6 +105,93 @@ def make_total_model(rupt):
     savetxt(fname, c_[lon,lat,ss,ds],fmt='%.6f\t%.6f\t%6.2f\t%6.2f')
     
     
+    
+def make_sliprate_ruptfiles(rupt,nstrike,ndip,epicenter,out,tmax,dt):
+    '''
+    Make sliprate .rupt files for plotting several frames with tile_slip and
+    animating with ffmpeg. Only write dip slip component regardless of the actual
+    rake angle. We're just plotting scalar slip rate... 
+    '''
+    from numpy import genfromtxt,unique,zeros,where,arange,interp,c_,savetxt
+    from mudpy.forward import get_source_time_function,add2stf
+    from string import rjust
+    
+    f=genfromtxt(rupt)
+    num=f[:,0]
+    nfault=nstrike*ndip
+    unum=unique(num)
+    lon=f[0:len(unum),1]
+    lat=f[0:len(unum),2]
+    depth=f[0:len(unum),3]
+    #Get slips
+    all_ss=f[:,8]
+    all_ds=f[:,9]
+    #Now parse for multiple rupture speeds
+    unum=unique(num)
+    #Count number of windows
+    nwin=len(where(num==unum[0])[0])
+    #Get rigidities
+    mu=f[0:len(unum),13]
+    #Get rise times
+    rise_time=f[0:len(unum),7]
+    #Get areas
+    area=f[0:len(unum),10]*f[0:len(unum),11]
+    #Get indices for plot
+    istrike=zeros(nstrike*ndip)
+    idip=zeros(nstrike*ndip)
+    k=0
+    t=arange(0,tmax,dt)
+    for i in range(ndip):
+         for j in range(nstrike):
+             istrike[k]=nstrike-j-1
+             idip[k]=i
+             k+=1  
+    #Loop over subfaults
+    for kfault in range(nfault):
+        if kfault%10==0:
+            print '... working on subfault '+str(kfault)+' of '+str(nfault)
+        #Get rupture times for subfault windows
+        i=where(num==unum[kfault])[0]
+        trup=f[i,12]
+        #Get slips on windows
+        ss=all_ss[i]
+        ds=all_ds[i]
+        #Add it up
+        slip=(ss**2+ds**2)**0.5
+        #Get first source time function
+        t1,M1=get_source_time_function(mu[kfault],area[kfault],rise_time[kfault],trup[0],slip[0])
+        #Loop over windows
+        for kwin in range(nwin-1):
+            #Get next source time function
+            t2,M2=get_source_time_function(mu[kfault],area[kfault],rise_time[kfault],trup[kwin+1],slip[kwin+1])
+            #Add the soruce time functions
+            t1,M1=add2stf(t1,M1,t2,M2)
+        if kfault==0: #Intialize
+            M=zeros((len(t),nfault))
+            T=zeros((len(t),nfault))
+        Mout=interp(t,t1,M1)
+        M[:,kfault]=Mout
+        T[:,kfault]=t
+    #Now look through time slices
+    maxsr=0
+    #First retain original rupture information
+    ruptout=f[0:len(unum),:]
+    ruptout[:,8]=0 #Set SS to 0
+    print 'Writing files...'
+    for ktime in range(len(t)):
+        sliprate=zeros(lon.shape)
+        for kfault in range(nfault):
+            i=where(T[:,kfault]==t[ktime])[0]
+            sliprate[kfault]=M[i,kfault]/(mu[kfault]*area[kfault])
+        ruptout[:,9]=sliprate #Assign slip rate to SS component    
+        maxsr=max(maxsr,sliprate.max())
+        fname=out+rjust(str(ktime),4,'0')+'.sliprate'
+        #Write as a rupt file
+        fmtout='%6i\t%.4f\t%.4f\t%8.4f\t%.2f\t%.2f\t%.2f\t%.2f\t%12.4e\t%12.4e%10.1f\t%10.1f\t%8.4f\t%.4e'
+        savetxt(fname,ruptout,fmtout,header='No,lon,lat,z(km),strike,dip,rise,dura,ss-slip(m),ds-slip(m),ss_len(m),ds_len(m),rupt_time(s),rigidity(Pa)')
+    print 'Maximum slip rate was '+str(maxsr)+'m/s'    
+    
+    
 def make_sliprate_slice(rupt,nstrike,ndip,epicenter,out,tmax,dt):
     '''
     '''
@@ -180,6 +267,7 @@ def make_sliprate_slice(rupt,nstrike,ndip,epicenter,out,tmax,dt):
         fname=out+rjust(str(ktime),4,'0')+'.sliprate'
         savetxt(fname, c_[lon,lat,depth,sliprate],fmt='%.6f\t%.6f\t%.4f\t%.6f')
     print 'Maximum slip rate was '+str(maxsr)+'m/s'
+    
     
 def make_slip_slice(rupt,nstrike,ndip,epicenter,out,tmax,dt):
     '''
@@ -261,6 +349,8 @@ def make_slip_slice(rupt,nstrike,ndip,epicenter,out,tmax,dt):
         fname=out+rjust(str(ktime),4,'0')+'.slip'
         savetxt(fname, c_[lon,lat,depth,slip],fmt='%.6f\t%.6f\t%.4f\t%.6f')
     print 'Maximum slip rate was '+str(maxsr)+'m/s'      
+
+
 
 def make_psvelo(stafile,directory,fout,run_name,run_number):
     '''

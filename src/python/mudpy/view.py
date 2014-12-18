@@ -187,7 +187,7 @@ def tile_slip(rupt,nstrike,ndip,(slip_min,slip_max),geographic=False,epicenter=0
     idip=zeros(nstrike*ndip)
     k=0
     for i in range(ndip):
-         for j in range(nstrike):
+         for j in range(nstrike):Slip_inv
              istrike[k]=nstrike-j
              idip[k]=ndip-i
              k+=1          
@@ -216,23 +216,231 @@ def tile_slip(rupt,nstrike,ndip,(slip_min,slip_max),geographic=False,epicenter=0
         plt.xlim(along_strike.min()-1,along_strike.max()+1)
         plt.ylim(depth.min()-1,depth.max()+1)
         plt.scatter(0,-epicenter[2],marker='*',edgecolor='k',facecolor='#00FF00',s=350,linewidth=2)
-        plt.scatter(xcent,zcent,marker='D',edgecolor='black',facecolor='',s=120,linewidth=2)
+        #plt.scatter(xcent,zcent,marker='D',edgecolor='black',facecolor='',s=120,linewidth=2)
         plt.quiver(along_strike,depth,rakess,rakeds,color='green',width=0.0035,scale=20)
         print xcent
         print zcent
         plt.scatter(xaf,zaf,edgecolor='k',s=5)
-    cb.set_label('Slip (m)')
+    cb.set_label('Slip(m)')
     plt.subplots_adjust(left=0.1, bottom=0.15, right=0.9, top=0.95, wspace=0, hspace=0)
     plt.show()
 
+
+def tile_resolution(rupt,resfile,nstrike,ndip,(res_min,res_max),epicenter=0,epicenter_line=0):
+    '''
+    Quick and dirty plot of a .rupt file
+    epicenter is the coordinates, epcienter line is the down dip lien number where 
+    the epcienter is
+    '''
+    
+    from numpy import genfromtxt,unique,where,zeros,arange,pi,tile
+    import matplotlib.pyplot as plt
+    from obspy.core.util.geodetics import gps2DistAzimuth
+    from matplotlib import cm
+    
+    f=genfromtxt(rupt)
+    num=f[:,0]
+    unum=unique(num)
+    res=genfromtxt(resfile,usecols=2)*30
+    res2=genfromtxt(u'/Users/dmelgar/Slip_inv/Napa_seis/analysis/resolution/seis_vonly_1winnpy.R',usecols=2)*5
+    res=res+res2
+    #Do same thing for centroid position
+    loncent=-122.313
+    latcent=38.26
+    zcent=-4
+    out=gps2DistAzimuth(epicenter[1],epicenter[0],latcent,loncent)
+    xcent=-(out[0]/1000)
+    #Done with centroid
+    lon=f[(epicenter_line-1)*nstrike:epicenter_line*nstrike,1] #Only compute line at the epicenter depth
+    lat=f[(epicenter_line-1)*nstrike:epicenter_line*nstrike,2]    
+    depth=-f[:,3]
+    depth=depth[0:len(unum)]
+    along_strike=zeros(nstrike)
+    for k in range(len(lat)):
+        out=gps2DistAzimuth(epicenter[1],epicenter[0],lat[k],lon[k])
+        if lat[k]<epicenter[1]: #It's to the south
+            along_strike[k]=out[0]/1000
+        else:
+            along_strike[k]=-out[0]/1000
+    #Now tile
+    along_strike=tile(along_strike,ndip)
+    #Get indices for plot
+    istrike=zeros(nstrike*ndip)
+    idip=zeros(nstrike*ndip)
+    k=0
+    for i in range(ndip):
+         for j in range(nstrike):
+             istrike[k]=nstrike-j
+             idip[k]=ndip-i
+             k+=1          
+    #Plot
+    plt.figure(num=None, figsize=(8, 4), dpi=80)
+    plt.scatter(along_strike,depth,marker='s',linewidth=0.5,edgecolor='#CCCCCC',c=res,s=250,cmap=cm.gist_stern,vmin=res_min,vmax=res_max)
+    cb=plt.colorbar()
+    plt.ylabel('Depth (km)')
+    plt.xlabel('Along-strike distance (km)')
+    plt.xlim(along_strike.min()-1,along_strike.max()+1)
+    plt.ylim(depth.min()-1,depth.max()+1)
+    plt.scatter(0,-epicenter[2],marker='*',edgecolor='k',facecolor='#00FF00',s=350,linewidth=2)
+    plt.scatter(xcent,zcent,marker='D',edgecolor='black',facecolor='',s=120,linewidth=2)
+    cb.set_label('Resolution')
+    plt.subplots_adjust(left=0.1, bottom=0.15, right=0.9, top=0.95, wspace=0, hspace=0)
+    plt.show()
+
+
+   
+def tile_slip_movieframes(home,project_name,sliprate_path,nstrike,ndip,(slip_min,slip_max),dt,geographic=False,epicenter=0,epicenter_line=0):
+    '''
+    Quick and dirty plot of a .rupt file
+    epicenter is the coordinates, epcienter line is the down dip lien number where 
+    the epcienter is
+    '''
+    
+    from numpy import genfromtxt,zeros,tile,linspace,pi,cos,sin,ones,meshgrid,arange,r_
+    import matplotlib.pyplot as plt
+    from obspy.core.util.geodetics import gps2DistAzimuth
+    from glob import glob
+    from string import rjust,ljust
+    from matplotlib.mlab import griddata
+    
+    #Get sliprate files
+    files=glob(sliprate_path+'*.sliprate')
+    for kframe in range(len(files)):
+        print kframe
+        f=genfromtxt(files[kframe])
+        slip=f[:,9]
+        #Add aftershocks
+        afters=genfromtxt('/Users/dmelgar/Napa2014/hardebeck_afters.txt')
+        lonaf=afters[:,2]
+        lataf=afters[:,1]
+        zaf=-afters[:,3]
+        xaf=zeros(zaf.shape)
+        for k in range(len(lataf)):
+            out=gps2DistAzimuth(epicenter[1],epicenter[0],lataf[k],lonaf[k])
+            xaf[k]=(out[0]/1000)
+            if lataf[k]>epicenter[1]: #If it's tot he left of epcietner it's engative
+                xaf[k]=-xaf[k]
+        #Done with afters
+        #Do same thing for centroid position
+        loncent=-122.313
+        latcent=38.26
+        zcent=-4
+        out=gps2DistAzimuth(epicenter[1],epicenter[0],latcent,loncent)
+        xcent=-(out[0]/1000)
+        #Done with centroid
+        lon=f[(epicenter_line-1)*nstrike:epicenter_line*nstrike,1] #Only compute line at the epicenter depth
+        lat=f[(epicenter_line-1)*nstrike:epicenter_line*nstrike,2]    
+        depth=-f[:,3]
+        along_strike=zeros(nstrike)
+        for k in range(len(lat)):
+            out=gps2DistAzimuth(epicenter[1],epicenter[0],lat[k],lon[k])
+            if lat[k]<epicenter[1]: #It's to the south
+                along_strike[k]=out[0]/1000
+            else:
+                along_strike[k]=-out[0]/1000
+        #Now tile
+        along_strike=tile(along_strike,ndip)
+        #Get indices for plot
+        istrike=zeros(nstrike*ndip)
+        idip=zeros(nstrike*ndip)
+        k=0
+        for i in range(ndip):
+            for j in range(nstrike):
+                istrike[k]=nstrike-j
+                idip[k]=ndip-i
+                k+=1          
+        #Make rupture velocity contours
+        theta=linspace(0,2*pi,100)
+        t=dt*kframe #Current time
+        print "t="+str(t)
+        r20=(2.0*t)*ones(100)
+        x20=r20*cos(theta)
+        y20=r20*sin(theta)-epicenter[2]
+        r25=(2.5*t)*ones(100)
+        x25=r25*cos(theta)
+        y25=r25*sin(theta)-epicenter[2]
+        r30=(3.0*t)*ones(100)
+        x30=r30*cos(theta)
+        y30=r30*sin(theta)-epicenter[2]
+        #Plot
+        plt.figure(num=None, figsize=(8, 4), dpi=80)
+        #This plots slip as individual markers
+        #plt.scatter(along_strike,depth,marker='s',linewidth=0.5,edgecolor='#CCCCCC',c=slip,s=250,cmap=whitejet,vmin=slip_min,vmax=slip_max)
+        #cb=plt.colorbar()
+        #End single marker
+        #This interpolates and plots the slip as a surface
+        #First get limits of plot
+        xlim=[along_strike.min()-0.5,along_strike.max()+0.5]
+        ylim=[depth.min()-0.5,depth.max()+0.5]
+        #Fix edges
+        x1=along_strike[0:nstrike]
+        y1=(depth[0]+0.5)*ones(x1.shape)
+        z1=slip[0:nstrike]
+        x2=along_strike[-nstrike:]
+        y2=(depth[-1]-0.5)*ones(x2.shape)
+        z2=slip[-nstrike:]
+        x3=along_strike[arange(0,nstrike*ndip,nstrike)]+0.5
+        y3=depth[arange(0,nstrike*ndip,nstrike)]
+        z3=slip[arange(0,nstrike*ndip,nstrike)]
+        x4=along_strike[arange(nstrike-1,nstrike*ndip,nstrike)]-0.5
+        y4=depth[arange(nstrike-1,nstrike*ndip,nstrike)]
+        z4=slip[arange(nstrike-1,nstrike*ndip,nstrike)]
+        x5=along_strike[0]+0.5
+        y5=depth[0]+0.5
+        z5=slip[0]
+        x6=along_strike[nstrike-1]-0.5
+        y6=depth[nstrike-1]+0.5
+        z6=slip[nstrike-1]
+        x7=along_strike[-nstrike]+0.5
+        y7=depth[-nstrike]-0.5
+        z7=slip[nstrike-1]
+        x8=along_strike[-1]-0.5
+        y8=depth[-1]-0.5
+        z8=slip[-1]
+        along_strike=r_[along_strike,x1,x2,x3,x4,x5,x6,x7,x8]
+        depth=r_[depth,y1,y2,y3,y4,y5,y6,y7,y8]
+        slip=r_[slip,z1,z2,z3,z4,z5,z6,z7,z8]
+        x=linspace(along_strike.min()-0.5,along_strike.max()+0.5,100)  #Adjsut for the width of the subfault
+        y=linspace(depth.min()-0.49,depth.max()+0.49,100)   #Adjsut for height of subfault
+        X, Y = meshgrid(x, y)
+        sliprate=griddata(along_strike,depth,slip,X,Y)
+        plt.scatter(along_strike,depth,marker='s',linewidth=0.0,edgecolor='',c=slip,s=250,cmap=whitejet,vmin=slip_min,vmax=slip_max)
+        cb=plt.colorbar()
+        plt.contourf(X,Y,sliprate,100,vmin=slip_min,vmax=slip_max,cmap=whitejet)
+        plt.grid()
+        #End interpolated 
+        plt.ylabel('Depth (km)')
+        plt.xlabel('Along-strike distance (km)')
+        plt.xlim(xlim)
+        plt.ylim(ylim)
+        plt.scatter(0,-epicenter[2],marker='*',edgecolor='k',facecolor='#00FF00',s=350,linewidth=2)
+        plt.scatter(xcent,zcent,marker='D',edgecolor='black',facecolor='',s=120,linewidth=2)
+
+        plt.scatter(xaf,zaf,edgecolor='k',s=5)
+        plt.plot(x20,y20,'--',c='grey')
+        plt.plot(x25,y25,'--',c='grey')
+        plt.plot(x30,y30,'--',c='grey')
+
+        cb.set_label('Slip rate (m/s)')
+        plt.subplots_adjust(left=0.1, bottom=0.15, right=0.9, top=0.95, wspace=0, hspace=0)
+        plot_name=home+project_name+'/plots/sliprate.'+rjust(str(kframe),4,'0')+'.png'
+        plt.title('t = '+ljust(str(kframe*dt),4,'0')+'s')
+        plt.savefig(plot_name)     
+        ts=kframe*dt
+        if ts==1.0 or ts==2.0 or ts==3.0 or ts==4.0 or ts==5.0 or ts==6.0 or ts==7.0 or ts==8.0:
+            plot_name=home+project_name+'/plots/sliprate.'+rjust(str(kframe),4,'0')+'.eps'
+            plt.savefig(plot_name) 
+            print 'Saved EPS frame'
+        plt.close("all")
         
-def tile_moment(rupt,epicenter,nstrike,ndip,covfile,beta):
+                       
+def tile_moment(rupt,epicenter,nstrike,ndip,covfile,beta,(vfast,vslow)):
     '''
     Tile plot of subfault source-time functions
     '''
     import matplotlib.pyplot as plt
     from matplotlib import cm
-    from numpy import genfromtxt,unique,zeros,where,meshgrid,linspace,load,arange,expand_dims,squeeze
+    from numpy import genfromtxt,unique,zeros,where,meshgrid,linspace,load,arange,expand_dims,squeeze,tile
     from mudpy.forward import get_source_time_function,add2stf
     from mudpy.inverse import d2epi,ds2rot
     
@@ -272,8 +480,6 @@ def tile_moment(rupt,epicenter,nstrike,ndip,covfile,beta):
     source=f[0:len(unum),1:4]
     d=d2epi(epicenter,source)
     #Define velocity limits
-    vfast=3.5
-    vslow=1.0
     
     #Get indices for plot
     istrike=zeros(nstrike*ndip)
@@ -303,7 +509,7 @@ def tile_moment(rupt,epicenter,nstrike,ndip,covfile,beta):
             slip_plus=slipCIplus[i]
             slip_minus=slipCIminus[i]
         #Get first source time function
-        t1,M1=get_source_time_function(mu[kfault],area[kfautilelt],rise_time[kfault],trup[0],slip[0])
+        t1,M1=get_source_time_function(mu[kfault],area[kfault],rise_time[kfault],trup[0],slip[0])
         if covfile !=None:
             t1plus,M1plus=get_source_time_function(mu[kfault],area[kfault],rise_time[kfault],trup[0],slip_plus[0])
             t1minus,M1minus=get_source_time_function(mu[kfault],area[kfault],rise_time[kfault],trup[0],slip_minus[0])
@@ -354,8 +560,15 @@ def tile_moment(rupt,epicenter,nstrike,ndip,covfile,beta):
     #Fix subplot arrangement
     plt.subplots_adjust(left=0.02, bottom=0.02, right=0.9, top=0.98, wspace=0, hspace=0)
     #Add colorbar
+    T2=T.copy()
+    M2=M.copy()
+    M2[:,:]=0
+    vfill=linspace(1.0,3.0,10000)
+    V2=tile(vfill[::-1],(100,1))
+    ax=axarr[0,0]
+    im2=ax.contourf(T2,M2,V2,100,vmin=vslow,vmax=vfast,cmap=cm.spectral)
     cbar_ax = fig.add_axes([0.91, 0.15, 0.01, 0.7])
-    cb=fig.colorbar(im, cax=cbar_ax)
+    cb=fig.colorbar(im2, cax=cbar_ax)
     cb.set_label('Reference rupture velocity (km/s)')
     print 'Maximum moment was '+str(Mmax)+'N-m'
 
@@ -413,6 +626,7 @@ def source_time_function(rupt,epicenter):
     plt.grid()
     plt.xlabel('Time(s)')
     plt.ylabel('Moment Rate ('+r'$\times 10^{'+str(int(exp))+r'}$Nm/s)')
+    plt.subplots_adjust(left=0.3, bottom=0.3, right=0.7, top=0.7, wspace=0, hspace=0)
     return t1,M1
     
 
@@ -466,7 +680,7 @@ def tslice(rupt,out,dt,cumul):
     import matplotlib.pyplot as plt
     from string import rjust
     
-    delta_t=0.01
+    delta_t=0.05
     f=genfromtxt(rupt)
     trupt=f[:,12]
     trise=f[:,7]
@@ -681,14 +895,20 @@ def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpas
         ulims=axu.get_ylim()
         urange=ulims[1]-ulims[0]
         
-        axn.annotate(nmax,xy=(t_lim[1]-0.3*trange,nlims[0]+0.02*nrange),fontsize=12)
-        axe.annotate(emax,xy=(t_lim[1]-0.3*trange,elims[0]+0.02*erange),fontsize=12)
-        axu.annotate(umax,xy=(t_lim[1]-0.3*trange,ulims[0]+0.02*urange),fontsize=12)
-        axn.annotate(nsmax,xy=(t_lim[1]-0.3*trange,nlims[0]+0.7*nrange),fontsize=12,color='red')
-        axe.annotate(esmax,xy=(t_lim[1]-0.3*trange,elims[0]+0.7*erange),fontsize=12,color='red')
-        axu.annotate(usmax,xy=(t_lim[1]-0.3*trange,ulims[0]+0.7*urange),fontsize=12,color='red')
+        #axn.annotate(nmax,xy=(t_lim[1]-0.3*trange,nlims[0]+0.02*nrange),fontsize=12)
+        #axe.annotate(emax,xy=(t_lim[1]-0.3*trange,elims[0]+0.02*erange),fontsize=12)
+        #axu.annotate(umax,xy=(t_lim[1]-0.3*trange,ulims[0]+0.02*urange),fontsize=12)
+        #axn.annotate(nsmax,xy=(t_lim[1]-0.3*trange,nlims[0]+0.7*nrange),fontsize=12,color='red')
+        #axe.annotate(esmax,xy=(t_lim[1]-0.3*trange,elims[0]+0.7*erange),fontsize=12,color='red')
+        #axu.annotate(usmax,xy=(t_lim[1]-0.3*trange,ulims[0]+0.7*urange),fontsize=12,color='red')
+        axn.annotate(nmax,xy=(t_lim[1]-0.25*trange,nlims[0]+0.02*nrange),fontsize=12)
+        axe.annotate(emax,xy=(t_lim[1]-0.25*trange,elims[0]+0.02*erange),fontsize=12)
+        axu.annotate(umax,xy=(t_lim[1]-0.25*trange,ulims[0]+0.02*urange),fontsize=12)
+        axn.annotate(nsmax,xy=(t_lim[1]-0.25*trange,nlims[0]+0.7*nrange),fontsize=12,color='red')
+        axe.annotate(esmax,xy=(t_lim[1]-0.25*trange,elims[0]+0.7*erange),fontsize=12,color='red')
+        axu.annotate(usmax,xy=(t_lim[1]-0.25*trange,ulims[0]+0.7*urange),fontsize=12,color='red')
         #Station name
-        axn.set_ylabel(sta[i[k]],rotation=0)
+        axn.set_ylabel(sta[i[k]],rotation=90)
         if k==0:
             if vord.lower()=='d':
                 axn.set_title('North (m)')
@@ -703,9 +923,14 @@ def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpas
             axe.xaxis.set_ticklabels([])
             axu.xaxis.set_ticklabels([])
             xtick=axn.xaxis.get_majorticklocs()
-            ix=[1,3,5]
+            #ix=[1,3,5]
+            #ix=[2,4,6]
+            ix=[1,3,5,7]
+            ix=0
             xtick=xtick[ix]
-            xticklabel=['','50','','150','','250','']
+            #xticklabel=['','50','','150','','250',''] #Tohoku
+            #xticklabel=['0','','20','','40','','60'] #Napa preferred
+            xticklabel=['','10','','30','','50','','70'] #Napa preferred
         if k==len(i)-1: #Last plot
             axe.set_xlabel('Time (s)')
             axn.xaxis.set_ticklabels(xticklabel)
@@ -736,7 +961,8 @@ def static_synthetics(home,project_name,run_name,run_number,gflist,sscale,qscale
     lat_all=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=[2],dtype='f')
     gf=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=[3],dtype='f')
     datapath=home+project_name+'/data/statics/'
-    synthpath=home+project_name+'/output/inverse_models/statics/'
+    #synthpath=home+project_name+'/output/inverse_models/statics/'
+    synthpath=home+project_name+'/output/forward_models/'
     i=where(gf==1)[0] #Which stations have statics?
     lon=lon_all[i]
     lat=lat_all[i]
@@ -747,9 +973,11 @@ def static_synthetics(home,project_name,run_name,run_number,gflist,sscale,qscale
     es=zeros(len(i))
     us=zeros(len(i))
     for k in range(len(i)):
-        neu=genfromtxt(datapath+sta[i[k]]+'.neu')
+        #neu=genfromtxt(datapath+sta[i[k]]+'.neu')
+        neu=genfromtxt(datapath+sta[i[k]]+'.static.neu')
         n[k]=neu[0] ; e[k]=neu[1] ; u[k]=neu[2]
-        neus=genfromtxt(synthpath+run_name+'.'+run_number+'.'+sta[i[k]]+'.static.neu')
+        #neus=genfromtxt(synthpath+run_name+'.'+run_number+'.'+sta[i[k]]+'.static.neu')
+        neus=genfromtxt(synthpath+sta[i[k]]+'.static.neu')
         ns[k]=neus[0] ; es[k]=neus[1] ; us[k]=neus[2]
         if sscale!=None:
             ns=ns/sscale

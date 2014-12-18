@@ -754,8 +754,9 @@ def makefault(strike,dip,nstrike,ndip,rake,dx_dip,dx_strike,epicenter,num_updip,
     from numpy import arange,sin,cos,deg2rad,r_,ones,arctan,rad2deg,zeros,isnan,unique,where,argsort
     import pyproj
     
-    strike=163
-    dip=74
+    strike=353
+    dip=88
+    #proj_angle=180-strike #Angle to use for sin.cos projection (comes from strike)
     proj_angle=180-strike #Angle to use for sin.cos projection (comes from strike)
     y=arange(-nstrike/2+1,nstrike/2+1)*dx_strike
     x=arange(-nstrike/2+1,nstrike/2+1)*dx_strike
@@ -844,7 +845,7 @@ def makefault(strike,dip,nstrike,ndip,rake,dx_dip,dx_strike,epicenter,num_updip,
     W=ones(loout.shape)*1000
     f=open(fout,'w')
     for k in range(len(x)):   
-        out='%i\t%.6f\t%.6f\t%.3f%i\t%i\t%.1f\t%.1f\t%.2f\t%.2f\n' % (k,loout[k],laout[k],zout[k],strike[k],dip[k],tw[k],rise[k],L[k],W[k])
+        out='%i\t%.6f\t%.6f\t%.3f\t%i\t%i\t%.1f\t%.1f\t%.2f\t%.2f\n' % (k+1,loout[k],laout[k],zout[k],strike[k],dip[k],tw[k],rise[k],L[k],W[k])
         f.write(out)
     f.close()
     
@@ -918,7 +919,7 @@ def model_resolution(Gfile,outdir,fault,nwindows,Ls,Lt,lambda_s,lambda_t):
     lat=genfromtxt(fault,usecols=2)
     nfaults=len(lon)
     nfaults_total=nfaults*nwindows*2
-    #G=load(Gfile)
+    G=load(Gfile)
     ##Tsunami weights
     #W=eye(G.shape[0])
     #W[4302:,4302:]=W[4302:,4302:]*2
@@ -930,17 +931,17 @@ def model_resolution(Gfile,outdir,fault,nwindows,Ls,Lt,lambda_s,lambda_t):
     #G=W.dot(G)
     #
     ##Combine everything
-    Gdisp=load(Gfile_disp)
-    Gvel=load(Gfile_vel)
-    W=eye(Gvel.shape[0])*4.5
-    Gvel=W.dot(Gvel)
+    #Gdisp=load(Gfile_disp)
+    #Gvel=load(Gfile_vel)
+    #W=eye(Gvel.shape[0])*4.5
+    #Gvel=W.dot(Gvel)
     #Gtsun=load(Gfile_tsun)
     #W=eye(Gtsun.shape[0])
     #W[4302:,4302:]=W[4302:,4302:]*2
     #W=W*1.1
     #Gtsun=W.dot(Gtsun)
-    G=r_[Gdisp,Gvel]
-    Gdisp=Gvel=None
+    #G=r_[Gdisp,Gvel]
+    #Gdisp=Gvel=None
     LsLs=Ls.T.dot(Ls)
     #LtLt=Lt.T.dot(Lt)
     #R=(inv(G.T.dot(G)+(lambda_s**2)*LsLs+(lambda_t**2)*LtLt).dot(G.T)).dot(G)
@@ -956,7 +957,8 @@ def model_resolution(Gfile,outdir,fault,nwindows,Ls,Lt,lambda_s,lambda_t):
     #    rds=r[ids].mean()
     #    #rout[k]=max([rss,rds])
     #    rout[k]=rds
-    rout=r[arange(1,len(r),2)]
+    #rout=r[arange(1,len(r),2)] #Saves ds
+    rout=r[arange(0,len(r),2)] #Saves ss
     fout=Gfile.split('/')[-1]
     fout=outdir+fout.split('.')[0]+fout.split('.')[1]+'.R'
     savetxt(fout,c_[lon,lat,rout],fmt='%10.6f\t%10.6f\t%8.4f')
