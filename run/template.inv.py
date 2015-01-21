@@ -10,7 +10,7 @@ from mudpy import runslip
 import numpy as np
 from obspy.core import UTCDateTime
 ########                            GLOBALS                             ########
-home='/Volumes/Kanagawa/Slip_Inv/'
+home='/SLip_inv/Kanagawa/Slip_Inv/'
 project_name='tohoku_10s'
 run_name='20win_42_fine2'
 ################################################################################
@@ -18,9 +18,9 @@ run_name='20win_42_fine2'
 
 #####              What-do-you-want-to-do flags, 1=do, 0=leave be          #####
 
-init=1 #Initalize project
-make_green=0 #Compute GFs
-make_synthetics=0 #Compute synthetics for a given model at given stations
+init=0 #Initalize project
+make_green=1 #Compute GFs
+make_synthetics=1 #Compute synthetics for a given model at given stations
 G_from_file=0 # =0 read GFs and create a new G, =1 load G from file
 invert=0  # =1 runs inversion, =0 does nothing
 ###############################################################################
@@ -47,8 +47,8 @@ epicenter=np.array([142.68,38.19,21.0])    #lon,lat,depth(positive in km)
 time_epi=UTCDateTime('2011-03-11T05:46:23')
 rupture_speed=3.5 #Fastest rupture allowed in km/s
 num_windows=20
-reg_spatial=np.logspace(0.25,0.35,num=2) #Set to False if you don't want to use it
-reg_temporal=np.logspace(0,0,num=1) #Set to False if don't want to use it
+reg_spatial=np.logspace(-6,2,num=8) #Set to False if you don't want to use it
+reg_temporal=np.logspace(-6,2,num=8) #Set to False if don't want to use it
 nstrike=21 ; ndip=9 ; nfaults=(nstrike,ndip)
 beta=45 #Rotational offset (in degrees) applied to rake (0 for normal)
 solver='nnls' # 'lstsq','nnls'

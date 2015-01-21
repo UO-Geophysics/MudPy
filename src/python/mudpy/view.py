@@ -187,7 +187,7 @@ def tile_slip(rupt,nstrike,ndip,(slip_min,slip_max),geographic=False,epicenter=0
     idip=zeros(nstrike*ndip)
     k=0
     for i in range(ndip):
-         for j in range(nstrike):Slip_inv
+         for j in range(nstrike):
              istrike[k]=nstrike-j
              idip[k]=ndip-i
              k+=1          

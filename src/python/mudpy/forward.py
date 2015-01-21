@@ -754,9 +754,9 @@ def makefault(strike,dip,nstrike,ndip,rake,dx_dip,dx_strike,epicenter,num_updip,
     from numpy import arange,sin,cos,deg2rad,r_,ones,arctan,rad2deg,zeros,isnan,unique,where,argsort
     import pyproj
     
-    strike=353
-    dip=88
-    #proj_angle=180-strike #Angle to use for sin.cos projection (comes from strike)
+    strike=155
+    dip=78
+    #proj_angle=180-strike #Angle to use fofilesr sin.cos projection (comes from strike)
     proj_angle=180-strike #Angle to use for sin.cos projection (comes from strike)
     y=arange(-nstrike/2+1,nstrike/2+1)*dx_strike
     x=arange(-nstrike/2+1,nstrike/2+1)*dx_strike
