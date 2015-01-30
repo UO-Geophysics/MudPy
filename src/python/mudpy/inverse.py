@@ -42,7 +42,7 @@ def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epic
         G: Fully assembled GF matrix
     '''
     
-    from numpy import arange,genfromtxt,where,loadtxt,array,c_,concatenate,save,load,size
+    from numpy import arange,genfromtxt,where,loadtxt,array,c_,concatenate,save,load,size,tile
     from os import remove
     from os.path import split
     
@@ -89,7 +89,7 @@ def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epic
         if GF[:,kgf].sum()>0:
             #Load fault file
             source=loadtxt(home+project_name+'/data/model_info/'+fault_name,ndmin=2)
-            trise=source[0,7]
+            trise=source[:,7]
             try:
                 remove(mini_station) #Cleanup  
             except:
@@ -100,10 +100,12 @@ def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epic
                 mini_station_file(mini_station,stations[i],GF[i,0],GF[i,1],GFfiles[i,1])
                 gftype='disp'
                 #Decide on delays for each time window (50% overlap)
-                trupt=arange(0,num_windows)*trise/2
+                delay_multiplier=tile(arange(0,num_windows),(len(trise),1)).T
+                trupt=tile(trise/2,(num_windows,1))
+                trupt=trupt*delay_multiplier
                 for krup in range(num_windows):
                     print 'Working on window '+str(krup+1)
-                    tdelay=epi2subfault(epicenter,source,rupture_speed,trupt[krup])
+                    tdelay=epi2subfault(epicenter,source,rupture_speed,trupt[krup,:])
                     if krup==0: #First rupture speed
                         first_window=True
                         Ess=[] ; Eds=[] ; Nss=[] ; Nds=[] ; Zss=[] ; Zds=[]
@@ -122,7 +124,7 @@ def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epic
         if GF[:,kgf].sum()>0:
             #Load fault file
             source=loadtxt(home+project_name+'/data/model_info/'+fault_name,ndmin=2)
-            trise=source[0,7]
+            trise=source[:,7]
             try:
                 remove(mini_station) #Cleanup  
             except:
@@ -133,10 +135,12 @@ def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epic
                 mini_station_file(mini_station,stations[i],GF[i,0],GF[i,1],GFfiles[i,2])
                 gftype='vel'
                 #Decide on delays for each time window (50% overlap)
-                trupt=arange(0,num_windows)*trise/2
+                delay_multiplier=tile(arange(0,num_windows),(len(trise),1)).T
+                trupt=tile(trise/2,(num_windows,1))
+                trupt=trupt*delay_multiplier
                 for krup in range(num_windows):
                     print 'Working on window '+str(krup+1)
-                    tdelay=epi2subfault(epicenter,source,rupture_speed,trupt[krup])
+                    tdelay=epi2subfault(epicenter,source,rupture_speed,trupt[krup,:])
                     if krup==0: #First rupture speed
                         first_window=True
                         Ess=[] ; Eds=[] ; Nss=[] ; Nds=[] ; Zss=[] ; Zds=[]

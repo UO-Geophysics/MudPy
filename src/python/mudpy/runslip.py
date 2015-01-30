@@ -303,7 +303,7 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
                                                         
 def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_from_file,G_name,epicenter,
                 rupture_speed,num_windows,coord_type,reg_spatial,reg_temporal,nfaults,beta,decimate,bandpass,
-                solver,bounds,weight=False):
+                solver,bounds,weight=False,Ltype=2):
     '''
     Assemble G and d, determine smoothing and run the inversion
     '''
@@ -346,9 +346,13 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
         print 'Computing G\'G'
         K=(G.T).dot(G)
     #Get regularization matrices (set to 0 matrix if not needed)
-    static=False #Is it jsut a static ivnersio?
+    static=False #Is it jsut a static inversion?
     if reg_spatial!=None:
-        Ls=inv.getLs(home,project_name,fault_name,nfaults,num_windows,bounds)
+        if Ltype==2: #Laplacian smoothing
+            Ls=inv.getLs(home,project_name,fault_name,nfaults,num_windows,bounds)
+        else: #Tikhonov smoothing
+            N=nfaults[0]*nfaults[1]*num_windows*2 #Get total no. of model parameters
+            Ls=eye(N) 
         Ninversion=len(reg_spatial)
     else:
         Ls=zeros(K.shape)
@@ -405,7 +409,7 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
             L2,Lmodel=inv.get_stats(Kinv,sol,x)
             VR=inv.get_VR(G,sol,d)
             #VR=inv.get_VR(WG,sol,wd)
-            #A)BIC=inv.get_ABIC(WG,K,sol,wd,lambda_spatial,lambda_temporal,Ls,LsLs,Lt,LtLt)
+            #ABIC=inv.get_ABIC(WG,K,sol,wd,lambda_spatial,lambda_temporal,Ls,LsLs,Lt,LtLt)
             ABIC=inv.get_ABIC(G,K,sol,d,lambda_spatial,lambda_temporal,Ls,LsLs,Lt,LtLt)
             #Get moment
             Mo,Mw=inv.get_moment(home,project_name,fault_name,model_name,sol)

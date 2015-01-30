@@ -218,8 +218,6 @@ def tile_slip(rupt,nstrike,ndip,(slip_min,slip_max),geographic=False,epicenter=0
         plt.scatter(0,-epicenter[2],marker='*',edgecolor='k',facecolor='#00FF00',s=350,linewidth=2)
         #plt.scatter(xcent,zcent,marker='D',edgecolor='black',facecolor='',s=120,linewidth=2)
         plt.quiver(along_strike,depth,rakess,rakeds,color='green',width=0.0035,scale=20)
-        print xcent
-        print zcent
         plt.scatter(xaf,zaf,edgecolor='k',s=5)
     cb.set_label('Slip(m)')
     plt.subplots_adjust(left=0.1, bottom=0.15, right=0.9, top=0.95, wspace=0, hspace=0)
@@ -817,9 +815,9 @@ def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpas
         u=read(datapath+sta[i[k]]+'.'+datasuffix+'.u')
         if lowpass!=None:
             fsample=1./e[0].stats.delta
-            e[0].data=lfilter(e[0].data,lowpass,fsample,10)
-            n[0].data=lfilter(n[0].data,lowpass,fsample,10)
-            u[0].data=lfilter(u[0].data,lowpass,fsample,10)
+            e[0].data=lfilter(e[0].data,lowpass,fsample,2)
+            n[0].data=lfilter(n[0].data,lowpass,fsample,2)
+            u[0].data=lfilter(u[0].data,lowpass,fsample,2)
         if decimate!=None:
             n[0]=stdecimate(n[0],decimate)
             e[0]=stdecimate(e[0],decimate)
@@ -930,7 +928,8 @@ def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpas
             xtick=xtick[ix]
             #xticklabel=['','50','','150','','250',''] #Tohoku
             #xticklabel=['0','','20','','40','','60'] #Napa preferred
-            xticklabel=['','10','','30','','50','','70'] #Napa preferred
+            #xticklabel=['','10','','30','','50','','70'] #Napa preferred
+            xticklabel=['','50','100','150',''] #Iquique preferred
         if k==len(i)-1: #Last plot
             axe.set_xlabel('Time (s)')
             axn.xaxis.set_ticklabels(xticklabel)
@@ -961,8 +960,8 @@ def static_synthetics(home,project_name,run_name,run_number,gflist,sscale,qscale
     lat_all=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=[2],dtype='f')
     gf=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=[3],dtype='f')
     datapath=home+project_name+'/data/statics/'
-    #synthpath=home+project_name+'/output/inverse_models/statics/'
-    synthpath=home+project_name+'/output/forward_models/'
+    synthpath=home+project_name+'/output/inverse_models/statics/'
+    #synthpath=home+project_name+'/output/forward_models/'
     i=where(gf==1)[0] #Which stations have statics?
     lon=lon_all[i]
     lat=lat_all[i]
@@ -973,11 +972,11 @@ def static_synthetics(home,project_name,run_name,run_number,gflist,sscale,qscale
     es=zeros(len(i))
     us=zeros(len(i))
     for k in range(len(i)):
-        #neu=genfromtxt(datapath+sta[i[k]]+'.neu')
-        neu=genfromtxt(datapath+sta[i[k]]+'.static.neu')
+        neu=genfromtxt(datapath+sta[i[k]]+'.neu')
+        #neu=genfromtxt(datapath+sta[i[k]]+'.static.neu')
         n[k]=neu[0] ; e[k]=neu[1] ; u[k]=neu[2]
-        #neus=genfromtxt(synthpath+run_name+'.'+run_number+'.'+sta[i[k]]+'.static.neu')
-        neus=genfromtxt(synthpath+sta[i[k]]+'.static.neu')
+        neus=genfromtxt(synthpath+run_name+'.'+run_number+'.'+sta[i[k]]+'.static.neu')
+        #neus=genfromtxt(synthpath+sta[i[k]]+'.static.neu')
         ns[k]=neus[0] ; es[k]=neus[1] ; us[k]=neus[2]
         if sscale!=None:
             ns=ns/sscale
@@ -1156,7 +1155,7 @@ def ABIC2D(home,project_name,run_name,(ABICmin,ABICmax)):
     ABIC=ABIC/1000
     lsi=linspace(ls.min(),ls.max(),100)
     lti=linspace(lt.min(),lt.max(),100)
-    ABICi=ml.griddata(ls,lt,ABIC,lsi,lti)
+    ABICi=ml.griddata(ls,lt,ABIC,lsi,lti,interp='linear')
     #Plot the thing
     plt.figure()
     plt.pcolormesh(lsi,lti,ABICi,cmap=plt.cm.spectral_r,vmin=ABICmin,vmax=ABICmax)
