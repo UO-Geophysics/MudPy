@@ -30,7 +30,7 @@ def waveforms(home,project_name,rupture_name,station_file,model_name,run_name,in
     import datetime
     import gc
     
-    print 'Solving for dynamic problem'
+    print 'Solving for kinematic problem'
     #Output where?
     outpath=home+project_name+'/output/forward_models/'
     logpath=home+project_name+'/logs/'
@@ -140,6 +140,117 @@ def waveforms(home,project_name,rupture_name,station_file,model_name,run_name,in
     f=open(logpath+'waveforms.'+now+'.log','a')
     f.write(log)
     f.close()
+        
+        
+        
+def waveforms_matrix(home,project_name,fault_name,rupture_name,station_file,GF_list,
+                model_name,run_name,epicenter,time_epi,integrate,tsunami,hot_start,
+                resample,beta,rupture_speed,num_windows,dt,NFFT):
+    '''
+    To supplant waveforms() it needs to include resmapling and all that jazz...
+    
+    This routine will take synthetics and apply a slip dsitribution. It will delay each 
+    subfault by the appropriate rupture time and linearly superimpose all of them. Output
+    will be one sac waveform file per direction of motion (NEU) for each station defined in the
+    station_file. Depending on the specified rake angle at each subfault the code will compute 
+    the contribution to dip and strike slip directions. It will also compute the moment at that
+    subfault and scale it according to the unit amount of momeent (1e15 N-m)
+    
+    IN:
+        home: Home directory
+        project_name: Name of the problem
+        rupture_name: Name of rupture description file
+        station_file: File with coordinates of stations
+        model_Name: Name of Earth structure model file
+        integrate: =0 if you want output to be velocity, =1 if you want output to de displacement
+       
+    OUT:
+        Nothing
+    '''
+    from numpy import loadtxt,genfromtxt,allclose,vstack,deg2rad,array,sin,cos,where,zeros,arange
+    from obspy import read,Stream,Trace
+    from string import rjust
+    import datetime
+    import gc
+    from mudpy.inverse import getG
+    from linecache import getline
+    
+    print 'Solving for kinematic problem'
+    #Output where?
+    outpath=home+project_name+'/output/forward_models/'
+    logpath=home+project_name+'/logs/'
+    log=''
+    #Time for log file
+    now=datetime.datetime.now()
+    now=now.strftime('%b-%d-%H%M')
+    #load source
+    #source=loadtxt(home+project_name+'/forward_models/'+rupture_name,ndmin=2)
+    #Load stations
+    station_file=home+project_name+'/data/station_info/'+station_file
+    staname=genfromtxt(station_file,dtype="S6",usecols=0)
+    #Now load rupture model
+    mss=genfromtxt(home+project_name+'/forward_models/'+rupture_name,usecols=8)
+    mds=genfromtxt(home+project_name+'/forward_models/'+rupture_name,usecols=9)
+    m=zeros(2*len(mss))
+    i=arange(0,2*len(mss),2)
+    m[i]=mss
+    i=arange(1,2*len(mds),2)
+    m[i]=mds
+    #What am I processing v or d ?
+    if integrate==1:
+        vord='disp'
+    else:
+        vord='vel'
+    #Load gflist
+    gfsta=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=0,skip_header=1,dtype='S6')
+    #Loop over stations
+    for ksta in range(hot_start,len(staname)):
+        print 'Working on station '+staname[ksta]+' ('+str(ksta+1)+'/'+str(len(staname))+')'
+        #Initalize output
+        n=Stream()
+        e=Stream()
+        z=Stream()
+        sta=staname[ksta]
+        #Make dummy data
+        ndummy=Stream(Trace())
+        ndummy[0].data=zeros(int(NFFT))
+        ndummy[0].stats.delta=dt
+        ndummy[0].stats.starttime=time_epi
+        edummy=ndummy.copy()
+        udummy=ndummy.copy()
+        ndummy.write(home+project_name+'/data/waveforms/'+gfsta[ksta]+'.'+vord+'.n',format='SAC')
+        edummy.write(home+project_name+'/data/waveforms/'+gfsta[ksta]+'.'+vord+'.e',format='SAC')
+        udummy.write(home+project_name+'/data/waveforms/'+gfsta[ksta]+'.'+vord+'.u',format='SAC')
+        #Extract only one station from GF_list file
+        ista=int(where(gfsta==staname[ksta])[0])+2
+        #Make mini GF_file
+        tmpgf='tmpfwd.gflist'
+        gflist=getline(home+project_name+'/data/station_info/'+GF_list,ista)
+        f=open(home+project_name+'/data/station_info/'+tmpgf,'w')
+        f.write('# Headers\n')
+        f.write(gflist)
+        f.close()
+        #Get matrix for one station to all sources
+        G_from_file=False
+        G_name='tmpfwd'
+        G=getG(home,project_name,fault_name,model_name,tmpgf,G_from_file,G_name,epicenter,
+                rupture_speed,num_windows,decimate=None,bandpass=None,tsunami=True)
+        # Matrix multiply and separate data streams
+        d=G.dot(m)
+        n=ndummy.copy()
+        e=edummy.copy()
+        u=udummy.copy()
+        ncut=len(d)/3
+        n[0].data=d[0:ncut]
+        e[0].data=d[ncut:2*ncut]
+        u[0].data=d[2*ncut:3*ncut]
+        # Write to file
+        n.write(home+project_name+'/output/forward_models/'+run_name+'.'+gfsta[ksta]+'.'+vord+'.n',format='SAC')
+        e.write(home+project_name+'/output/forward_models/'+run_name+'.'+gfsta[ksta]+'.'+vord+'.e',format='SAC')
+        u.write(home+project_name+'/output/forward_models/'+run_name+'.'+gfsta[ksta]+'.'+vord+'.u',format='SAC')
+
+        
+
         
 
 def coseismics(home,project_name,rupture_name,station_file):
@@ -271,32 +382,29 @@ def tsunami_waveforms(home,project_name,fault_name,rupture_name,station_file,mod
             
                         
                                                 
-def move_seafloor(home,project_name,run_name,model_name,topo_file,topo_dx_file,topo_dy_file,
-                tgf_file,fault_name,outname,time_epi,tsun_dt,maxt,ymb,dl=2./60,variance=None,static=False):
+def move_seafloor(home,project_name,run_name,topo_dx_file,topo_dy_file,tgf_file,
+        outname,time_epi,tsun_dt,maxt,coast_file,topo_effect=True,variance=None,static=False):
     '''
     Create moving topography input files for geoclaw
     '''
     import datetime
-    from numpy import genfromtxt,zeros,arange,meshgrid,ones,c_,savetxt,delete
+    from numpy import genfromtxt,zeros,meshgrid,ones,c_,savetxt,delete,where,nan,argmin
     from obspy import read
     from string import rjust
     from scipy.io import netcdf_file as netcdf
+    from netCDF4 import Dataset
     from scipy.interpolate import griddata
     from mudpy.inverse import interp_and_resample,grd2xyz
     from scipy.ndimage.filters import gaussian_filter
 
-    #Straight line coordinates
-    m=ymb[0]
-    b=ymb[1]
+
     #Get station names
     sta=genfromtxt(home+project_name+'/data/station_info/'+tgf_file)
+    stanames=genfromtxt(home+project_name+'/data/station_info/'+tgf_file,usecols=0,dtype='S')
     lon=sta[:,1]
     lat=sta[:,2]
-    loni=arange(lon.min(),lon.max()+dl,dl) #Fot grid interpolation
-    lati=arange(lat.min(),lat.max()+dl,dl)
-    loni,lati=meshgrid(loni,lati)
     #Get fault file
-    f=genfromtxt(home+project_name+'/data/model_info/'+fault_name)
+    #f=genfromtxt(home+project_name+'/data/model_info/'+fault_name)
     #Where is the data
     data_dir=home+project_name+'/output/forward_models/'
     #Define time deltas
@@ -304,10 +412,14 @@ def move_seafloor(home,project_name,run_name,model_name,topo_file,topo_dx_file,t
     #Maximum tiem to be modeled
     tmax=time_epi+td_max
     #Read derivatives
-    bathy_dx=netcdf(topo_dx_file,'r')
-    zdx=bathy_dx.variables['z'][:]
-    bathy_dy=netcdf(topo_dy_file,'r')
-    zdy=bathy_dy.variables['z'][:]
+    bathy_dx=Dataset(topo_dx_file,'r',format='NETCDF4')
+    zdx=bathy_dx.variables['z'][:].data
+    bathy_dy=Dataset(topo_dy_file,'r',format='NETCDF4')
+    zdy=bathy_dy.variables['z'][:].data
+    #Make interpolation quantities
+    loni=bathy_dx.variables['x'][:]
+    lati=bathy_dx.variables['y'][:]
+    loni,lati=meshgrid(loni,lati)
     #Read slope file
     kwrite=0
     idelete=[]
@@ -316,9 +428,12 @@ def move_seafloor(home,project_name,run_name,model_name,topo_file,topo_dx_file,t
             print '... ... working on seafloor grid point '+str(ksta)+' of '+str(len(sta))
         try: #If no data then delete
             if static==False: #We're reading waveforms
-                e=read(data_dir+run_name+'.'+rjust(str(int(sta[ksta,0])),4,'0')+'.disp.e')
-                n=read(data_dir+run_name+'.'+rjust(str(int(sta[ksta,0])),4,'0')+'.disp.n')
-                u=read(data_dir+run_name+'.'+rjust(str(int(sta[ksta,0])),4,'0')+'.disp.z')
+                #e=read(data_dir+run_name+'.'+rjust(str(int(sta[ksta,0])),4,'0')+'.disp.e')
+                #n=read(data_dir+run_name+'.'+rjust(str(int(sta[ksta,0])),4,'0')+'.disp.n')
+                #u=read(data_dir+run_name+'.'+rjust(str(int(sta[ksta,0])),4,'0')+'.disp.z')
+                e=read(data_dir+run_name+'.'+stanames[ksta]+'.disp.e')
+                n=read(data_dir+run_name+'.'+stanames[ksta]+'.disp.n')
+                u=read(data_dir+run_name+'.'+stanames[ksta]+'.disp.u')
                 e=interp_and_resample(e,1.0,time_epi)
                 n=interp_and_resample(n,1.0,time_epi)
                 u=interp_and_resample(u,1.0,time_epi)
@@ -363,13 +478,20 @@ def move_seafloor(home,project_name,run_name,model_name,topo_file,topo_dx_file,t
         umat=umat[:,:-len(idelete)]
     
     #Now go one epoch at a time, and interpolate all fields
-    #Get mask for applying horizontal effect
-    mask=zeros(loni.shape)
-    for k1 in range(loni.shape[0]):
-        for k2 in range(loni.shape[1]):
-            if (lati[k1,k2]-b)/m>loni[k1,k2]: #Point is to the left, do not apply horizontal effect
-                mask[k1,k2]=NaN
-    imask1,imask2=where(mask==0)#Points tot he right DO apply horiz. effect
+    #Only apply topo effect to some points
+    if coast_file!=None:
+        #Straight line coordinates
+        coast=genfromtxt(coast_file,skip_header=1)
+        #Get mask for applying horizontal effect
+        mask=zeros(loni.shape)
+        for k1 in range(loni.shape[0]):
+            for k2 in range(loni.shape[1]):
+                #if (lati[k1,k2]-b)/m>loni[k1,k2]: #Point is to the left (or right), do not apply horizontal effect
+                #Find two closest lat,lon points
+                ip=argmin(abs(lati[k1,k2]-coast[:,1]))
+                if loni[k1,k2]>coast[ip,0]:
+                    mask[k1,k2]=nan
+        imask1,imask2=where(mask==0)#Points tot he right DO apply horiz. effect
     print '... interpolating coseismic offsets to a regular grid'
     nt_iter=umat.shape[0]
     for kt in range(nt_iter):
@@ -381,7 +503,14 @@ def move_seafloor(home,project_name,run_name,model_name,topo_file,topo_dx_file,t
         #Output vertical
         uout=uinterp.copy()
         #Apply effect of topography advection
-        uout[imask1,imask2]=uout[imask1,imask2]+zdx[imask1,imask2]*einterp[imask1,imask2]+zdy[imask1,imask2]*ninterp[imask1,imask2]
+        if topo_effect==False:
+            print 'WARNING: No topography effect added'
+        else:
+            print 'Applying topo effect'
+            if coast_file==None: #Apply everywhere
+                uout=uout+zdx*einterp+zdy*ninterp
+            else: #Don't apply topo effect on dry land
+                uout[imask1,imask2]=uout[imask1,imask2]+zdx[imask1,imask2]*einterp[imask1,imask2]+zdy[imask1,imask2]*ninterp[imask1,imask2]
         #print 'no horiz'
         #Filter?
         if variance!=None:
@@ -407,7 +536,8 @@ def move_seafloor(home,project_name,run_name,model_name,topo_file,topo_dx_file,t
             dtopo[kwrite:kwrite+numel,:]=c_[tvec,xyz]
             kwrite=kwrite+numel
     print '... writting dtopo files'
-    savetxt(data_dir+outname+'.dtopo',dtopo,fmt='%i\t%.6f\t%.6f\t%.4e')        
+    savetxt(data_dir+outname+'.dtopo',dtopo,fmt='%i\t%.6f\t%.6f\t%.4e')   
+    print 'Output to '+data_dir+outname+'.dtopo' 
             
 ###########                Tools and trinkets                      #############
     
@@ -618,6 +748,8 @@ def lowpass(data,fcorner,fsample,order):
     b, a = butter(order, array(fcorner)/(fnyquist),ftype)
     data_filt=filtfilt(b,a,data)
     return data_filt
+    
+
     
 def inv2coulomb(rupt,epicenter,fout):
     '''
@@ -991,3 +1123,122 @@ def trim_add_noise(data_path,checker_path,search_pattern):
         noise=normal(loc=0.0, scale=v**0.5, size=ch[0].stats.npts)
         ch[0].data=ch[0].data+noise
         ch.write(checker_files[k],format='SAC')
+        
+def padGFs():
+    '''
+    Pad GFs with some extra zeros or with last value
+    '''
+    from glob import glob
+    from obspy import read
+    from numpy import ones,r_
+    pad=200
+    folders=glob('/Users/dmelgar/Slip_inv/maule/GFs/tsunami/*sub*')
+    for k in range(len(folders)):
+        print str(k)+' / '+str(len(folders))
+        esubs=glob(folders[k]+'/*disp.e')
+        nsubs=glob(folders[k]+'/*disp.n')
+        zsubs=glob(folders[k]+'/*disp.z')
+        for ksub in range(len(esubs)):
+            e=read(esubs[ksub])
+            n=read(nsubs[ksub])
+            z=read(zsubs[ksub])
+            
+            e[0].data=r_[e[0].data,ones(pad)*e[0].data[-1]]
+            e.write(esubs[ksub],format='SAC')
+            
+            n[0].data=r_[n[0].data,ones(pad)*n[0].data[-1]]
+            n.write(nsubs[ksub],format='SAC')
+            
+            z[0].data=r_[z[0].data,ones(pad)*z[0].data[-1]]
+            z.write(zsubs[ksub],format='SAC')
+            
+def make_grid(lon_min,lon_max,lat_min,lat_max,delta_lon,delta_lat,out_file):
+    '''
+    Make a regular grid of points for GF computations
+    '''
+    
+    from numpy import arange
+    from string import rjust
+    
+    lon=arange(lon_min,lon_max+delta_lon,delta_lon)
+    lat=arange(lat_min,lat_max+delta_lat,delta_lat)
+    k=0
+    f=open(out_file,'w')
+    for i in range(len(lon)):
+        for j in range(len(lat)):
+            out='%s\t%10.4f\t%10.4f\n' %('NP'+rjust(str(k),4,'0'),lon[i],lat[j])
+            f.write(out)
+            k+=1
+    f.close()
+        
+    
+def usgs2fault(usgs_model,out_file):
+    '''
+    Convert USGS finite fault to .fault
+    '''
+    from numpy import genfromtxt,ones,arange,savetxt,c_
+    
+    lon=genfromtxt(usgs_model,usecols=1)
+    lat=genfromtxt(usgs_model,usecols=0)
+    z=genfromtxt(usgs_model,usecols=2)
+    st=genfromtxt(usgs_model,usecols=5)
+    dip=genfromtxt(usgs_model,usecols=6)
+    
+    no=arange(1,len(lon)+1)
+    H=15e3*ones(len(lon))
+    W=20e3*ones(len(lon))
+    tri=0.5*ones(len(lon))
+    rt=20*ones(len(lon))
+    
+    out=c_[no,lon,lat,z,st,dip,tri,rt,H,W]
+    savetxt(out_file,out,fmt='%d\t%10.4f\t%10.4f\t%8.4f\t%6.1f\t%6.1f\t%.1f\t%.1f\t%.1f\t%.1f')
+    
+def usgs2rupt(usgs_model,out_file):
+    '''
+    Convert USGS finite fault to .fault
+    '''
+    from numpy import genfromtxt,ones,arange,savetxt,c_,deg2rad,cos,sin,zeros
+    
+    lon=genfromtxt(usgs_model,usecols=1)
+    lat=genfromtxt(usgs_model,usecols=0)
+    z=genfromtxt(usgs_model,usecols=2)
+    st=genfromtxt(usgs_model,usecols=5)
+    dip=genfromtxt(usgs_model,usecols=6)
+    rake=genfromtxt(usgs_model,usecols=4)
+    slip=genfromtxt(usgs_model,usecols=3)
+    #Parse rake out into SS and DS
+    ss=(slip/100)*cos(deg2rad(rake))
+    ds=(slip/100)*sin(deg2rad(rake))
+    
+    no=arange(1,len(lon)+1)
+    H=15e3*ones(len(lon))
+    W=20e3*ones(len(lon))
+    tri=0.5*ones(len(lon))
+    rt=20*ones(len(lon))
+    time=zeros(len(lon))
+    mu=zeros(len(lon))
+
+    out=c_[no,lon,lat,z,st,dip,tri,rt,ss,ds,H,W,time,mu]
+    savetxt(out_file,out,fmt='%d\t%10.4f\t%10.4f\t%8.4f\t%6.1f\t%6.1f\t%.1f\t%.1f\t%8.4f\t%8.4f\t%.1f\t%.1f\t%d\t%d')
+    
+def grid2xyz(home,project_name,sta_file,out_file):
+    '''
+    Read forward calculated station files and make an xyz file for plotting
+    '''
+    
+    from numpy import genfromtxt
+    
+    sta=genfromtxt(sta_file,usecols=0,dtype='S')
+    lon=genfromtxt(sta_file,usecols=1)
+    lat=genfromtxt(sta_file,usecols=2)
+    f=open(out_file,'w')
+    for k in range(len(sta)):
+        neu=genfromtxt(home+project_name+'/output/forward_models/'+sta[k]+'.static.neu')
+        n=neu[0]
+        e=neu[1]
+        u=neu[2]
+        out='%s\t%10.4f\t%10.4f\t%10.4f\t%10.4f\t%10.4f\n' %(sta[k],lon[k],lat[k],n,e,u)
+        f.write(out)
+    f.close()
+        
+    

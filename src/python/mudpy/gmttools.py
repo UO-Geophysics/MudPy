@@ -92,6 +92,27 @@ def make_total_model(rupt):
     all_ds=f[:,9]
     #Now parse for multiple rupture speeds
     unum=unique(num)
+    ss=zeros((len(unum),1))
+    ds=zeros((len(unum),1))
+    lon=f[0:len(unum),1]
+    lat=f[0:len(unum),2]
+    for k in range(len(unum)):
+        i=where(unum[k]==num)
+        ss[k]=all_ss[i].sum()
+        ds[k]=all_ds[i].sum()
+    #Sum them
+    fname=rupt+'.total'
+    savetxt(fname, c_[f[0:len(unum),0:8],ss,ds,f[0:len(unum),10:12],f[0:len(unum),13]],fmt='%d\t%10.4f\t%10.4f\t%8.4f\t%8.2f\t%6.2f\t%6.2f\t%6.2f\t%12.4e\t%12.4e\t%8.2f\t%8.2f\t%8.4e')
+    
+def make_subfault(rupt):
+    from numpy import genfromtxt,unique,where,zeros,c_,savetxt
+    
+    f=genfromtxt(rupt)
+    num=f[:,0]
+    all_ss=f[:,8]
+    all_ds=f[:,9]
+    #Now parse for multiple rupture speeds
+    unum=unique(num)
     ss=zeros(len(unum))
     ds=zeros(len(unum))
     lon=f[0:len(unum),1]
@@ -102,7 +123,7 @@ def make_total_model(rupt):
         ds[k]=all_ds[i].sum()
     #Sum them
     fname=rupt+'.total.slip'
-    savetxt(fname, c_[lon,lat,ss,ds],fmt='%.6f\t%.6f\t%6.2f\t%6.2f')
+    savetxt(fname, c_[lon,lat,ss,ds],fmt='%.6f\t%.6f\t%6.2f\t%6.2f',header='# No,lon,lat,z(km),strike,dip,rise,duration(s),ss-slip(m),ds-slip(m),ss_len(m),ds_len(m),rigidity(Pa)')
     
     
     
@@ -219,16 +240,7 @@ def make_sliprate_slice(rupt,nstrike,ndip,epicenter,out,tmax,dt):
     rise_time=f[0:len(unum),7]
     #Get areas
     area=f[0:len(unum),10]*f[0:len(unum),11]
-    #Get indices for plot
-    istrike=zeros(nstrike*ndip)
-    idip=zeros(nstrike*ndip)
-    k=0
     t=arange(0,tmax,dt)
-    for i in range(ndip):
-         for j in range(nstrike):
-             istrike[k]=nstrike-j-1
-             idip[k]=i
-             k+=1  
     #Loop over subfaults
     for kfault in range(nfault):
         if kfault%10==0:
@@ -372,4 +384,115 @@ def make_psvelo(stafile,directory,fout,run_name,run_number):
         out[k,4]=neu[0] #East sigma
         out[k,5]=neu[0] #North sigma
     savetxt(fout,out,fmt='%10.4f\t%10.4f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t')
+    
+
+def final_dtopo(dtopo_file,out_file):
+    '''
+    Extract final displacememnt from dtopo file
+    '''
+    from numpy import genfromtxt,savetxt,where
+    
+    #Read dtopo
+    dtopo=genfromtxt(dtopo_file)
+    tmax=dtopo[:,0].max()
+    i=where(dtopo[:,0]==tmax)[0]
+    out=dtopo[i,1:]
+    savetxt(out_file,out,fmt='%10.6f\t%10.6f\t%10.6f')
+
+
+
+def gmtColormap(fileName):
+      '''
+      Convert a cpt GMT color palette file into a matplotlib colormap object.
+      Note that not all default GMT palettes can be converted with this method.
+      For example hot.cpt will fail but seis.cpt will be fine. If you need
+      more cpt files checkout cpt-city (http://soliton.vm.bytemark.co.uk/pub/cpt-city/)
+      
+      Usage:
+          cm = gmtColormap(fileName)
+        
+      IN:
+          fileName: Absolute path to cpt file
+      OUT:
+          cm: matplotlib colormap obejct
+          
+      Example:
+          
+          colorMap = gmtColormap('/opt/local/share/gmt/cpt/haxby.cpt')
+          
+      you can then use your colorMap object as you would any other matplotlib
+      object, for example:
+         
+         pcolor(x,y,cmap=colorMap)
+          
+      
+      Diego Melgar 2,2014, modified from original by James Boyle
+      '''
+      
+      from matplotlib import colors
+      import colorsys
+      import numpy as N
+
+      f = open(fileName)
+      lines = f.readlines()
+      f.close()
+
+      x = []
+      r = []
+      g = []
+      b = []
+      colorModel = "RGB"
+      for l in lines:
+          ls = l.split()
+          if l[0] == "#":
+             if ls[-1] == "HSV":
+                 colorModel = "HSV"
+                 continue
+             else:
+                 continue
+          if ls[0] == "B" or ls[0] == "F" or ls[0] == "N":
+             pass
+          else:
+              x.append(float(ls[0]))
+              r.append(float(ls[1]))
+              g.append(float(ls[2]))
+              b.append(float(ls[3]))
+              xtemp = float(ls[4])
+              rtemp = float(ls[5])
+              gtemp = float(ls[6])
+              btemp = float(ls[7])
+
+      x.append(xtemp)
+      r.append(rtemp)
+      g.append(gtemp)
+      b.append(btemp)
+
+      x = N.array( x )
+      r = N.array( r )
+      g = N.array( g )
+      b = N.array( b )
+      if colorModel == "HSV":
+         for i in range(r.shape[0]):
+             rr,gg,bb = colorsys.hsv_to_rgb(r[i]/360.,g[i],b[i])
+             r[i] = rr ; g[i] = gg ; b[i] = bb
+      if colorModel == "HSV":
+         for i in range(r.shape[0]):
+             rr,gg,bb = colorsys.hsv_to_rgb(r[i]/360.,g[i],b[i])
+             r[i] = rr ; g[i] = gg ; b[i] = bb
+      if colorModel == "RGB":
+          r = r/255.
+          g = g/255.
+          b = b/255.
+      xNorm = (x - x[0])/(x[-1] - x[0])
+
+      red = []
+      blue = []
+      green = []
+      for i in range(len(x)):
+          red.append([xNorm[i],r[i],r[i]])
+          green.append([xNorm[i],g[i],g[i]])
+          blue.append([xNorm[i],b[i],b[i]])
+      colorDict = {"red":red, "green":green, "blue":blue}
+      cmap=colors.LinearSegmentedColormap('cmap',colorDict,256)
+      return (cmap)
     

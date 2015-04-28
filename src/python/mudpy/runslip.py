@@ -81,7 +81,7 @@ def rupt2fault(home,project_name,rupture_name):
 
 # Run green functions          
 def make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,static,tsunami,
-            hot_start,coord_type,dk,pmin,pmax,kmax):
+            hot_start,dk,pmin,pmax,kmax):
     '''
     This routine set's up the computation of GFs for each subfault to all stations.
     The GFs are impulse sources, they don't yet depend on strike and dip.
@@ -124,7 +124,7 @@ def make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,stat
     source=loadtxt(fault_file,ndmin=2)
     for k in range(hot_start,source.shape[0]):
         #Run comptuation for 1 subfault
-        log=green.run_green(source[k,:],station_file,model_name,dt,NFFT,static,coord_type,dk,pmin,pmax,kmax)
+        log=green.run_green(source[k,:],station_file,model_name,dt,NFFT,static,dk,pmin,pmax,kmax)
         #Write log
         f=open(logpath+'make_green.'+now+'.log','a')    
         f.write(log)
@@ -177,7 +177,7 @@ def make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,stat
 
 #Now make synthetics for source/station pairs
 def make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,tsunami,beta,
-                    hot_start,coord_type,time_epi):
+                    hot_start,time_epi):
     '''
     This routine will take the impulse response (GFs) and pass it into the routine that will
     convovle them with the source time function according to each subfaults strike and dip.
@@ -216,7 +216,7 @@ def make_synthetics(home,project_name,station_file,fault_name,model_name,integra
     for k in range(hot_start,source.shape[0]):
         subfault=rjust(str(k+1),4,'0')
         log=green.run_syn(home,project_name,source[k,:],station_file,green_path,model_name,integrate,static,tsunami,
-                subfault,coord_type,time_epi,beta)
+                subfault,time_epi,beta)
         f=open(logpath+'make_synth.'+now+'.log','a')
         f.write(log)
         f.close()
@@ -226,7 +226,7 @@ def make_synthetics(home,project_name,station_file,fault_name,model_name,integra
          
 #Compute GFs for the ivenrse problem            
 def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
-        dt,tsun_dt,NFFT,tsunNFFT,coord_type,green_flag,synth_flag,dk,pmin,
+        dt,tsun_dt,NFFT,tsunNFFT,green_flag,synth_flag,dk,pmin,
         pmax,kmax,beta,time_epi,hot_start):
     '''
     This routine will read a .gflist file and compute the required GF type for each station
@@ -258,18 +258,21 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
                 static=1
                 tsunami=False
                 make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,static,tsunami,
-                            hot_start,coord_type,dk,pmin,pmax,kmax)
+                            hot_start,dk,pmin,pmax,kmax)
             if GF[k,3]==1 or GF[k,4]==1: #full waveform
                 static=0
-                tsunami=False
+                if tgf_file==None: # I am computing for stations on land
+                    tsunami=False
+                else: #I am computing seafloor deformation for tsunami GFs, eventaully
+                    tsunami=True
                 make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,static,tsunami,
-                            hot_start,coord_type,dk,pmin,pmax,kmax)
+                            hot_start,dk,pmin,pmax,kmax)
             if GF[k,5]==1: #Tsunami
                 static=0
                 tsunami=True
                 station_file=tgf_file
                 make_green(home,project_name,station_file,fault_name,model_name,tsun_dt,tsunNFFT,static,
-                                tsunami,hot_start,coord_type,dk,pmin,pmax,kmax)
+                                tsunami,hot_start,dk,pmin,pmax,kmax)
             if GF[k,6]==1: #strain (pending)
                 pass
             collect()
@@ -279,30 +282,36 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
                 integrate=0
                 static=1
                 tsunami=False
-                make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,tsunami,beta,hot_start,coord_type,time_epi)
+                make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,tsunami,beta,hot_start,time_epi)
             if GF[k,3]==1: #dispalcement waveform
                 integrate=1
                 static=0
-                tsunami=False
-                make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,tsunami,beta,hot_start,coord_type,time_epi)
+                if tgf_file==None: # I am computing for stations on land
+                    tsunami=False
+                else: #I am computing seafloor deformation for tsunami GFs, eventaully
+                    tsunami=True
+                make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,tsunami,beta,hot_start,time_epi)
             if GF[k,4]==1: #velocity waveform
                 integrate=0
                 static=0
-                tsunami=False
-                make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,tsunami,beta,hot_start,coord_type,time_epi)
+                if tgf_file==None: # I am computing for stations on land
+                    tsunami=False
+                else: #I am computing seafloor deformation for tsunami GFs, eventaully
+                    tsunami=True
+                make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,tsunami,beta,hot_start,time_epi)
             if GF[k,5]==1: #tsunami waveform
                 integrate=1
                 static=0
                 tsunami=True
                 station_file=tgf_file
-                make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,tsunami,beta,hot_start,coord_type,time_epi)
+                make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,tsunami,beta,hot_start,time_epi)
             if GF[k,6]==1: #strain offsets
                 pass
                     
                                 
                                                         
 def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_from_file,G_name,epicenter,
-                rupture_speed,num_windows,coord_type,reg_spatial,reg_temporal,nfaults,beta,decimate,bandpass,
+                rupture_speed,num_windows,reg_spatial,reg_temporal,nfaults,beta,decimate,bandpass,
                 solver,bounds,weight=False,Ltype=2):
     '''
     Assemble G and d, determine smoothing and run the inversion
@@ -322,10 +331,11 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
     d=inv.getdata(home,project_name,GF_list,decimate,bandpass=None)
     #Get GFs
     G=inv.getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epicenter,
-                rupture_speed,num_windows,coord_type,decimate,bandpass)
+                rupture_speed,num_windows,decimate,bandpass)
     gc.collect()
     #Get data weights
     if weight==True:
+        print 'Applying data weights'
         w=inv.get_data_weights(home,project_name,GF_list,d,decimate)
         W=empty(G.shape)
         W=tile(w,(G.shape[1],1)).T

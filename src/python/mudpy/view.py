@@ -929,7 +929,7 @@ def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpas
             #xticklabel=['','50','','150','','250',''] #Tohoku
             #xticklabel=['0','','20','','40','','60'] #Napa preferred
             #xticklabel=['','10','','30','','50','','70'] #Napa preferred
-            xticklabel=['','50','100','150',''] #Iquique preferred
+            xticklabel=['','','40','','80','','120','','160',''] #Iquique preferred
         if k==len(i)-1: #Last plot
             axe.set_xlabel('Time (s)')
             axn.xaxis.set_ticklabels(xticklabel)
@@ -1029,13 +1029,13 @@ def tsunami_synthetics(home,project_name,run_name,run_number,gflist,t_lim,sort,s
         j=argsort(lat[i])[::-1] 
         i=i[j]
     nsta=len(i)
-    fig, axarr = plt.subplots(4,2)  
+    fig, axarr = plt.subplots(nsta,1)  
     for k in range(len(i)):
         tsun=read(datapath+sta[i[k]]+'.tsun')
         tsun_synth=read(synthpath+run_name+'.'+run_number+'.'+sta[i[k]]+'.tsun')
         #Make plot
         ax=axarr[k]
-        ax.plot(tsun[0].times()/60,tsun[0].data/scale[k],'k',tsun_synth[0].times()/60,tsun_synth[0].data/scale[k],'r')
+        ax.plot(tsun[0].times()/60,tsun[0].data/scale,'k',tsun_synth[0].times()/60,tsun_synth[0].data/scale,'r')
         ax.grid(which='both')
         ax.yaxis.set_ticklabels([])
         ax.set_xlim(t_lim)
@@ -1046,11 +1046,11 @@ def tsunami_synthetics(home,project_name,run_name,run_number,gflist,t_lim,sort,s
         sign=1.
         if abs(min(tsun[0].data))>max(tsun[0].data):
             sign=-1. 
-        tsun_max='%.3f' % (sign*max(abs(tsun[0].data))/scale[k])
+        tsun_max='%.3f' % (sign*max(abs(tsun[0].data))/scale)
         sign=1.
         if abs(min(tsun_synth[0].data))>max(tsun_synth[0].data):
             sign=-1. 
-        tsun_synth_max='%.3f' % (sign*max(abs(tsun_synth[0].data))/scale[k])
+        tsun_synth_max='%.3f' % (sign*max(abs(tsun_synth[0].data))/scale)
         sign=1.
         tsun_lims=ax.get_ylim()
         tsun_range=tsun_lims[1]-tsun_lims[0]
@@ -1058,7 +1058,7 @@ def tsunami_synthetics(home,project_name,run_name,run_number,gflist,t_lim,sort,s
         ax.annotate(tsun_max,xy=(t_lim[1]-0.2*trange,tsun_lims[0]+0.02*tsun_range),fontsize=12)
         ax.annotate(tsun_synth_max,xy=(t_lim[1]-0.2*trange,tsun_lims[0]+0.7*tsun_range),fontsize=12,color='red')
         #Station name
-        ax.set_ylabel(sta[i[k]],rotation=0)
+        ax.set_ylabel(sta[i[k]],rotation=90)
         #axn.set_title('North (m)')
         if k!=len(i)-1:
             ax.xaxis.set_ticklabels([])
@@ -1519,7 +1519,7 @@ def dtopo_slices(dtopo_file,fault_file,out):
     #Get z ranges
     z1=dtopo[:,3].min()
     z2=dtopo[:,3].max()
-    zrange=10#max([-z1,z2])
+    zrange=max([-z1,z2])
     #Loop over time slices
     for kt in range(len(t)):
         print 't = '+str(t[kt])
@@ -1543,6 +1543,41 @@ def dtopo_slices(dtopo_file,fault_file,out):
         plt.savefig(out+rjust(str(kt),4,'0')+'vert.png')
         plt.close("all")
         
+
+def plot_grd(grdfile,zlims,cmap,flip_lon=False):
+    '''
+    Quick plot of any GMT grd file, this will only work for NETCDF4 files, 
+    i.e. if you use GMT5. If you are outdated and use NETCDF3 you can edit this
+    to use scipy.io.netcdf_file instead.
+    
+    grdfile - path to file
+    '''
+    from netCDF4 import Dataset
+    from numpy import meshgrid,genfromtxt
+    import matplotlib.pyplot as plt
+
+    grd = Dataset(grdfile, 'r', format='NETCDF4')
+    try:
+        x=grd.variables['x'][:]
+        y=grd.variables['y'][:]
+        z=grd.variables['z'][:]
+    except:
+        x=grd.variables['lon'][:]
+        y=grd.variables['lat'][:]
+        z=grd.variables['z'][:]
+    if flip_lon:
+        x=x-360
+    X,Y=meshgrid(x,y)
+    plt.figure()
+    plt.title(grdfile)
+    plt.pcolormesh(X,Y,z,vmin=zlims[0],vmax=zlims[1],cmap=cmap)
+    plt.colorbar()
+    plt.xlabel('Longitude')
+    plt.ylabel('Latitude')
+    plt.show()
+
+
+
 
 
         

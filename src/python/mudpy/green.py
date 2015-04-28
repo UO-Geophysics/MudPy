@@ -3,7 +3,7 @@ Diego Melgar 01/2014
 Green functions routines for source models
 '''
 
-def run_green(source,station_file,model_name,dt,NFFT,static,coord_type,dk,pmin,pmax,kmax):
+def run_green(source,station_file,model_name,dt,NFFT,static,dk,pmin,pmax,kmax):
     '''
     Compute GFs using Zhu & Rivera code for a given velocity model, source depth
     and station file. This function will make an external system call to fk.pl
@@ -25,33 +25,21 @@ def run_green(source,station_file,model_name,dt,NFFT,static,coord_type,dk,pmin,p
     depth='%.4f' % source[3]
     print("--> Computing GFs for source depth "+str(depth)+"km")
     #Get station distances to source
-    d,az=src2sta(station_file,source,coord_type)
+    d,az=src2sta(station_file,source)
     #Make distance string for system call
     diststr=''
     for k in range(len(d)):
         diststr=diststr+' %.3f' % d[k] #Truncate distance to 3 decimal palces (meters)
     if static==0: #Compute full waveform
-        if coord_type==0: #Cartesian coords NO Earth flattening
-            command=split("fk.pl -M"+model_name+"/"+depth+" -N"+str(NFFT)+"/"+str(dt)+'/1/'+repr(dk)+' -P'+repr(pmin)+'/'+repr(pmax)+'/'+repr(kmax)+diststr)
-            print "fk.pl -M"+model_name+"/"+depth+"60 -N"+str(NFFT)+"/"+str(dt)+'/1/'+repr(dk)+'-P '+repr(pmin)+'/'+repr(pmax)+'/'+repr(kmax)+diststr
-            p=subprocess.Popen(command,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
-            out,err=p.communicate() 
-        if coord_type==1: #Lat/Lon coords, trigger Earth flattening
-            command=split("fk.pl -M"+model_name+"/"+depth+"/f -N"+str(NFFT)+"/"+str(dt)+'/1/'+repr(dk)+' -P'+repr(pmin)+'/'+repr(pmax)+'/'+repr(kmax)+diststr)
-            print "fk.pl -M"+model_name+"/"+depth+"/f -N"+str(NFFT)+"/"+str(dt)+'/1/'+repr(dk)+' -P'+repr(pmin)+'/'+repr(pmax)+'/'+repr(kmax)+diststr
-            p=subprocess.Popen(command,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
-            out,err=p.communicate() 
+        command=split("fk.pl -M"+model_name+"/"+depth+"/f -N"+str(NFFT)+"/"+str(dt)+'/1/'+repr(dk)+' -P'+repr(pmin)+'/'+repr(pmax)+'/'+repr(kmax)+diststr)
+        print "fk.pl -M"+model_name+"/"+depth+"/f -N"+str(NFFT)+"/"+str(dt)+'/1/'+repr(dk)+' -P'+repr(pmin)+'/'+repr(pmax)+'/'+repr(kmax)+diststr
+        p=subprocess.Popen(command,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+        out,err=p.communicate() 
     else: #Compute only statics
-        if coord_type==0: #Cartesian coords NO Earth flattening
-            command=split("fk.pl -M"+model_name+"/"+depth+"/k -N1 "+diststr)
-            print "fk.pl -M"+model_name+"/"+depth+"/k -N1 "+diststr
-            p=subprocess.Popen(command,stdout=open('staticgf','w'),stderr=subprocess.PIPE)
-            out,err=p.communicate()
-        if coord_type==1: #Lat/Lon coords, trigger Earth flattening
-            command=split("fk.pl -M"+model_name+"/"+depth+"/f -N1 "+diststr)
-            print "fk.pl -M"+model_name+"/"+depth+"/f -N1 "+diststr
-            p=subprocess.Popen(command,stdout=open('staticgf','w'),stderr=subprocess.PIPE)
-            out,err=p.communicate()  
+        command=split("fk.pl -M"+model_name+"/"+depth+"/f -N1 "+diststr)
+        print "fk.pl -M"+model_name+"/"+depth+"/f -N1 "+diststr
+        p=subprocess.Popen(command,stdout=open('staticgf','w'),stderr=subprocess.PIPE)
+        out,err=p.communicate()  
     #Log output
     print out
     print err
@@ -61,7 +49,7 @@ def run_green(source,station_file,model_name,dt,NFFT,static,coord_type,dk,pmin,p
     
     
 def run_syn(home,project_name,source,station_file,green_path,model_name,integrate,static,tsunami,
-        subfault,coord_type,time_epi,beta):
+        subfault,time_epi,beta):
     '''
     Use green functions and compute synthetics at stations for a single source
     and multiple stations. This code makes an external system call to syn.c first it
@@ -119,7 +107,7 @@ def run_syn(home,project_name,source,station_file,green_path,model_name,integrat
     if staname.shape==(): #Single staiton file
         staname=array([staname])
     #Compute distances and azmuths
-    d,az=src2sta(station_file,source,coord_type)
+    d,az=src2sta(station_file,source)
     #Get moment corresponding to 1 meter of slip on subfault
     mu=get_mu(structure,zs)
     Mo=mu*ss_length*ds_length*1
@@ -314,7 +302,7 @@ def cartesian_azimuth(x,y,xs,ys):
     az[i]=pi+az[i]
     return rad2deg(az)
     
-def src2sta(station_file,source,coord_type):
+def src2sta(station_file,source):
     '''
     Compute cartesian source to station distances and azimuths for all station/source pairs.
     
@@ -343,13 +331,9 @@ def src2sta(station_file,source,coord_type):
     baz=zeros(x.shape)
     xs=source[1]
     ys=source[2]
-    if coord_type==0: #Cartesian
-        d=((x-xs)**2+(y-ys)**2)**0.5
-        az=cartesian_azimuth(x,y,xs,ys)
-    else: #Lat/lon coordinates
-        for k in range(len(x)):
-            d[k],az[k],baz[k]=gps2DistAzimuth(ys,xs,y[k],x[k])
-        d=d/1000
+    for k in range(len(x)):
+        d[k],az[k],baz[k]=gps2DistAzimuth(ys,xs,y[k],x[k])
+    d=d/1000
     return d,az
     
 def origin_time(st,time_epi,tb):
@@ -417,5 +401,38 @@ def rtrim(st,T):
     T=timedelta(seconds=T)
     stout[0].trim(starttime=start,endtime=start+T)
     return stout
+    
+def triangle_stf(rise_time,dt):
+    '''
+    Make a triangle source time function of a given duration at a given sampling rate
+    Area under triangle ahs to be one.
+    '''
+    
+    from numpy import arange,r_
+    
+    rise_time=float(rise_time)
+    t1=arange(0,rise_time/2,dt)
+    t2=arange(rise_time/2,rise_time+dt,dt)
+    
+    m1=(4.*dt)/(rise_time**2)
+    m2=-m1
+    b2=(4.*dt)/rise_time
+    
+    y1=m1*t1
+    y2=m2*t2+b2
+    
+    t=r_[t1,t2]
+    stf=r_[y1,y2]
+    return t,stf
+    
+def dreger_stf(rise_time,zeta,dt):
+    '''
+    '''
+    from numpy import arange
+    
+    rise_time=float(rise_time)
+    t=arange(0,rise_time/2,dt)
+    
+    
     
 

@@ -1,11 +1,12 @@
+
 import numpy as np
 from scipy.interpolate import griddata
 from mudpy.inverse import d2epi
 from string import rjust
 
-epicenter=np.array([142.68,38.19,21.0]) 
-f=np.genfromtxt(u'/Users/dmelgarm/Research/Slip_Inv/tohoku_10s/data/model_info/tohoku.fault')
-out='/Users/dmelgarm/scripts/GMT/RTOkada/'
+epicenter=np.array([-70.769,-19.610,25.0])
+f=np.genfromtxt(u'/Users/dmelgar/Slip_inv/iquique_joint/data/model_info/iquique_coarse.fault')
+out='/Users/dmelgar/code/GMT/Iquique/rupt_vel/'
 lon=f[:,1]
 lat=f[:,2]
 z=f[:,3]
@@ -20,8 +21,8 @@ z=zi[i,j]
 
 source=np.c_[lon,lat,z]
 d=d2epi(epicenter,source)
-t=np.arange(1,205,1)
-v=1.5
+t=np.arange(1,150,1)
+v=2.0
 for k in range(len(t)):
     i1=np.where(d<v*t[k]+1)[0]
     i2=np.where(d>v*t[k]-1)[0]
