@@ -251,7 +251,6 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
         f=open(home+project_name+'/data/station_info/'+station_file,'w')
         f.write(out)
         f.close()
-        print green_flag
         if green_flag==1:
             #decide what GF computation is required for this station
             if GF[k,2]==1: #Static offset
@@ -273,8 +272,11 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
                 station_file=tgf_file
                 make_green(home,project_name,station_file,fault_name,model_name,tsun_dt,tsunNFFT,static,
                                 tsunami,hot_start,dk,pmin,pmax,kmax)
-            if GF[k,6]==1: #strain (pending)
-                pass
+            if GF[k,6]==1: #InSAR LOS
+                static=1
+                tsunami=False
+                make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,static,tsunami,
+                            hot_start,dk,pmin,pmax,kmax)
             collect()
         if synth_flag==1:
             #Decide which synthetics are required
@@ -305,8 +307,12 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
                 tsunami=True
                 station_file=tgf_file
                 make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,tsunami,beta,hot_start,time_epi)
-            if GF[k,6]==1: #strain offsets
-                pass
+            if GF[k,6]==1: # InSAR LOS
+                integrate=0
+                static=1
+                tsunami=False
+                make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,tsunami,beta,hot_start,time_epi)
+            
                     
                                 
                                                         
@@ -408,7 +414,11 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
                 sol,res,rank,s=lstsq(Kinv,x)
             elif solver.lower()=='nnls':
                 x=squeeze(x.T)
-                sol,res=nnls(Kinv,x)
+                try:
+                    sol,res=nnls(Kinv,x)
+                except:
+                    print '+++ WARNING: No solution found, writting zeros.'
+                    sol=zeros(G.shape[1])
                 x=expand_dims(x,axis=1)
                 sol=expand_dims(sol,axis=1)
             else:
@@ -417,7 +427,7 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
             ds=dot(G,sol)
             #Get stats
             L2,Lmodel=inv.get_stats(Kinv,sol,x)
-            VR=inv.get_VR(G,sol,d)
+            VR=inv.get_VR(home,project_name,GF_list,sol,d,ds,decimate)
             #VR=inv.get_VR(WG,sol,wd)
             #ABIC=inv.get_ABIC(WG,K,sol,wd,lambda_spatial,lambda_temporal,Ls,LsLs,Lt,LtLt)
             ABIC=inv.get_ABIC(G,K,sol,d,lambda_spatial,lambda_temporal,Ls,LsLs,Lt,LtLt)

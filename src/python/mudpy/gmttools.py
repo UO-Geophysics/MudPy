@@ -83,8 +83,8 @@
 #        fname=out+rjust(str(kslice),4,'0')+'.'+outname+'.slip'
 #        savetxt(fname, c_[lon,lat,depth,ss,ds],fmt='%.6f\t%.6f\t%.4f\t%.2f\t%.2f')
       
-def make_total_model(rupt):
-    from numpy import genfromtxt,unique,where,zeros,c_,savetxt
+def make_total_model(rupt,thresh):
+    from numpy import genfromtxt,unique,where,zeros,c_,savetxt,sqrt
     
     f=genfromtxt(rupt)
     num=f[:,0]
@@ -100,7 +100,10 @@ def make_total_model(rupt):
         i=where(unum[k]==num)
         ss[k]=all_ss[i].sum()
         ds[k]=all_ds[i].sum()
-    #Sum them
+    #Apply threshold
+    i=where(sqrt(ss**2+ds**2)<thresh)[0]
+    ss[i]=0
+    ds[i]=0
     fname=rupt+'.total'
     savetxt(fname, c_[f[0:len(unum),0:8],ss,ds,f[0:len(unum),10:12],f[0:len(unum),13]],fmt='%d\t%10.4f\t%10.4f\t%8.4f\t%8.2f\t%6.2f\t%6.2f\t%6.2f\t%12.4e\t%12.4e\t%8.2f\t%8.2f\t%8.4e')
     
@@ -398,6 +401,36 @@ def final_dtopo(dtopo_file,out_file):
     i=where(dtopo[:,0]==tmax)[0]
     out=dtopo[i,1:]
     savetxt(out_file,out,fmt='%10.6f\t%10.6f\t%10.6f')
+
+def insar_xyz(home,project_name,run_name,run_number,GF_list,outfile):
+    '''
+    Make an xyz file for plotting InSAR sub_sampled residuals
+    '''
+    from numpy import genfromtxt,where,zeros,c_,savetxt
+    
+    #Decide what to plot
+    sta=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=0,dtype='S')
+    lon_all=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=[1],dtype='f')
+    lat_all=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=[2],dtype='f')
+    gf=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=[7],dtype='f')
+    datapath=home+project_name+'/data/statics/'
+    synthpath=home+project_name+'/output/inverse_models/statics/'
+    #synthpath=home+project_name+'/output/forward_models/'
+    i=where(gf==1)[0] #Which stations have statics?
+    lon=lon_all[i]
+    lat=lat_all[i]
+    los_data=zeros(len(i))
+    los_synth=zeros(len(i))
+    for k in range(len(i)):
+        neu=genfromtxt(datapath+sta[i[k]]+'.los')
+        #neu=genfromtxt(datapath+sta[i[k]]+'.static.neu')
+        los_data[k]=neu[0]
+        neus=genfromtxt(synthpath+run_name+'.'+run_number+'.'+sta[i[k]]+'.los')
+        #neus=genfromtxt(synthpath+sta[i[k]]+'.static.neu')
+        los_synth[k]=neus[0]
+    #Make plot  
+    out=c_[lon,lat,los_data-los_synth]  
+    savetxt(outfile,out,fmt='%.6f\t%.6f\t%.6f')
 
 
 

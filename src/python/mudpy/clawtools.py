@@ -30,9 +30,14 @@ def make_dtopo():
             u[ksta]=neu[2]
             print neu[2]
 
-def make_grid(lon1,lon2,lat1,lat2,dlon,dlat,outfile):
+def make_grid(lon1,lon2,lat1,lat2,dlon,dlat,prefix,outfile):
     '''
     Make a grid of points where you will request coseismic deformation
+    
+    lon1,lon2,lat1,lat2 are grid limits
+    dlon,dlat are lon and lat spacing
+    prefix is 2 character "station name" to give seafloor points
+    outfile is absolute path to file name
     '''
     
     from numpy import arange
@@ -47,7 +52,7 @@ def make_grid(lon1,lon2,lat1,lat2,dlon,dlat,outfile):
     fid=open(outfile,'w')
     for klat in range(len(lat)):
         for klon in range(len(lon)):
-            outsta=rjust(str(sta[ksta]),4,'0')
+            outsta=prefix+rjust(str(sta[ksta]),4,'0')
             outlon='%.4f' % lon[klon]
             outlat='%.4f' % lat[klat]
             ksta+=1

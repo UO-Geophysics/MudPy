@@ -190,14 +190,30 @@ def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epic
                                                                 gftype,tsunami,tdelay,decimate,bandpass,first_window,SS,DS,Nss,Nds,Zss,Zds)
                         Gtsun=c_[Gtsun,Gtsun_temp]
                 remove(mini_station) #Cleanup 
-        #Strain offsets
+        #InSAR LOS offsets
         kgf=6
-        Gstrain=array([])
+        Ginsar=array([])
         if GF[:,kgf].sum()>0:
-            pass
+            try:
+                remove(mini_station) #Cleanup  
+            except:
+                pass
+            #Make mini station file 
+            i=where(GF[:,kgf]==1)[0]
+            if len(i)>0: #There's actually something to do
+                mini_station_file(mini_station,stations[i],GF[i,0],GF[i,1],GFfiles[i,0])
+                gftype='insar'
+                tdelay=0
+                #Gstatic=makeG(home,project_name,fault_name,model_name,split(mini_station)[1],gftype,tdelay,decimate,lowpass)
+                Ess=[] ; Eds=[] ; Nss=[] ; Nds=[] ; Zss=[] ; Zds=[]
+                first_window=True
+                Ginsar= makeG(home,project_name,fault_name,model_name,split(mini_station)[1],
+                                                                gftype,tsunami,tdelay,decimate,bandpass,first_window,Ess,Eds,Nss,Nds,Zss,Zds)
+                remove(mini_station) #Cleanup     
+            
         #Done, now concatenate them all ccompute transpose product and save
         if num_windows==1: #Only one window
-            G=concatenate([g for g in [Gstatic,Gdisp,Gvel,Gtsun,Gstrain] if g.size > 0])
+            G=concatenate([g for g in [Gstatic,Gdisp,Gvel,Gtsun,Ginsar] if g.size > 0])
         elif num_windows>1: #Multiple windows, this means we need tot ile the statics if they exist
             if size(Gstatic)!=0: #Static is not empty, need to tile it
                 Gstatic_nwin=Gstatic.copy()
@@ -205,7 +221,13 @@ def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epic
                     Gstatic_nwin=c_[Gstatic_nwin,Gstatic]
                 Gstatic=Gstatic_nwin.copy()
                 Gstatic_nwin=None #Release memory
-            G=concatenate([g for g in [Gstatic,Gdisp,Gvel,Gtsun,Gstrain] if g.size > 0])
+            elif size(Ginsar)!=0: #Static is not empty, need to tile it
+                Ginsar_nwin=Ginsar.copy()
+                for nwin in range(num_windows-1):
+                    Ginsar_nwin=c_[Ginsar_nwin,Ginsar]
+                Ginsar=Ginsar_nwin.copy()
+                Ginsar_nwin=None #Release memory
+            G=concatenate([g for g in [Gstatic,Gdisp,Gvel,Gtsun,Ginsar] if g.size > 0])
         print 'Saving GF matrix to '+G_name+' this might take just a second...'
         save(G_name,G)
         #save(K_name,K)
@@ -255,6 +277,8 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tsunami,td
     #Initalize G for faster assignments
     if gftype.lower()=='static': #Initialize output matrix
         G=zeros((Nsta*3,Nfaults*2))
+    elif gftype.lower()=='insar': #Initialize output matrix
+        G=zeros((Nsta,Nfaults*2))
     else:
         pass #For disp or vel waveforms G is initalized below
     if gftype.lower()=='static': #Make matrix of static GFs
@@ -284,12 +308,47 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tsunami,td
                 #Append to G
             #Append to output matrix
             G[ksta*3:ksta*3+3,:]=Gtemp   
-        return G    
+        return G   
+    if gftype.lower()=='insar': #Make matrix of insar LOS GFs
+        for ksta in range(Nsta):
+            print 'Assembling static GFs for station '+staname[ksta]
+            #Initalize output variable
+            Gtemp=zeros([1,Nfaults*2])
+            #Where's the data
+            syn_path=home+project_name+'/GFs/static/'
+            #Data path, need this to find LOS vector
+            los_path=home+project_name+'/data/statics/'
+            #Read los vector for this subfault
+            los=genfromtxt(los_path+staname[ksta]+'.los')
+            los=los[1:]
+            #Loop over subfaults
+            for kfault in range(Nfaults):
+                if kfault%10==0:
+                    print '... working on subfault '+str(kfault)+' of '+str(Nfaults)
+                nfault='subfault'+rjust(str(int(source[kfault,0])),4,'0')
+                coseis_ss=loadtxt(syn_path+staname[ksta]+'.'+nfault+'.SS.static.neu')
+                nss=coseis_ss[0]
+                ess=coseis_ss[1]
+                zss=coseis_ss[2]
+                coseis_ds=loadtxt(syn_path+staname[ksta]+'.'+nfault+'.DS.static.neu')
+                nds=coseis_ds[0]
+                eds=coseis_ds[1]
+                zds=coseis_ds[2]
+                # Dot product of GFs and los vector
+                los_ss=los.dot(array([nss,ess,zss]))
+                los_ds=los.dot(array([nds,eds,zds]))
+                #Place into G matrix
+                Gtemp[0,2*kfault]=los_ss   ; Gtemp[0,2*kfault+1]=los_ds  
+                #Append to G
+            #Append to output matrix
+            G[ksta*1,:]=Gtemp   
+        return G  
     if gftype.lower()=='disp' or gftype.lower()=='vel':  #Full waveforms
         if gftype.lower()=='disp':
             vord='disp'
         else:
             vord='vel'
+            tsunami=False
         if first_window==True: #Read in GFs from file
             ktrace=0
             for ksta in range(Nsta):
@@ -583,11 +642,17 @@ def getdata(home,project_name,GF_list,decimate,bandpass):
         print 'Assembling tsunami waveforms from '+stations[i[ksta]]+' into data vector.'
         tsun=read(GFfiles[i[ksta],kgf])
         dtsun=append(dtsun,tsun)
-    #Strain
+    #InSAR LOS
     kgf=4
-    dstrain=array([])            
+    dlos=array([])  
+    i=where(GF[:,kgf]==1)[0]
+    for ksta in range(len(i)):
+            print 'Assembling InSAR LOS offsets from '+stations[i[ksta]]+' into data vector.'
+            dtemp=genfromtxt(GFfiles[i[ksta],kgf])
+            los=dtemp[0]
+            dlos=append(dlos,los)          
     #Done, concatenate all, convert to column vector and exit
-    d=concatenate([dx for dx in [dstatic,ddisp,dvel,dtsun,dstrain] if dx.size > 0])
+    d=concatenate([dx for dx in [dstatic,ddisp,dvel,dtsun,dlos] if dx.size > 0])
     D=zeros((d.shape[0],1))
     D[:,0]=d
     return D
@@ -765,8 +830,12 @@ def get_data_weights(home,project_name,GF_list,d,decimate):
         wtsun=(1/weights[i[ksta],9])*ones(nsamples)
         w[kinsert:kinsert+nsamples]=wtsun
         kinsert=kinsert+nsamples
-    #Strain
+    #InSAR
     kgf=4
+    i=where(GF[:,kgf]==1)[0]
+    for ksta in range(len(i)):
+        w[kinsert]=1/weights[i[ksta],9] #LOS
+        kinsert+=1
     #Make W and exit
     return w
 
@@ -851,7 +920,7 @@ def write_synthetics(home,project_name,run_name,GF_list,G,sol,ds,num,decimate):
     '''
     
     from obspy import read
-    from numpy import array,savetxt,where,genfromtxt,squeeze
+    from numpy import array,savetxt,where,genfromtxt,squeeze,r_
     from string import rjust
     from mudpy.green import stdecimate
     
@@ -927,6 +996,17 @@ def write_synthetics(home,project_name,run_name,GF_list,G,sol,ds,num,decimate):
             synth[0].data=squeeze(ds[kinsert:kinsert+npts])
             kinsert+=npts
             synth.write(home+project_name+'/output/inverse_models/waveforms/'+run_name+'.'+num+'.'+sta+'.tsun',format='SAC')
+    # InSAR
+    kgf=4
+    i=where(GF[:,kgf]==1)[0]
+    if len(i)>0:
+        for ksta in range(len(i)):
+            sta=stations[i[ksta]]
+            los_vector=genfromtxt(home+project_name+'/data/statics/'+stations[i[ksta]]+'.los')
+            los_vector=los_vector[1:]
+            los=array(r_[ds[kinsert],los_vector])
+            kinsert+=1
+            savetxt(home+project_name+'/output/inverse_models/statics/'+run_name+'.'+num+'.'+sta+'.los',los)
             
         
 def write_log(home,project_name,run_name,k,rupture_speed,num_windows,lambda_spatial,lambda_temporal,
@@ -977,7 +1057,11 @@ def write_log(home,project_name,run_name,k,rupture_speed,num_windows,lambda_spat
     f.write('Mean rupture velocity (km/s) = '+str(rupture_speed)+'\n')
     f.write('Number of rupture windows = '+str(num_windows)+'\n')
     f.write('L2 = '+repr(L2)+'\n')
-    f.write('VR(%) = '+repr(VR)+'\n')
+    f.write('VR static(%) = '+repr(VR[0])+'\n')
+    f.write('VR displacement(%) = '+repr(VR[1])+'\n')
+    f.write('VR velocity(%) = '+repr(VR[2])+'\n')
+    f.write('VR tsunami(%) = '+repr(VR[3])+'\n')
+    f.write('VR InSAR LOS(%) = '+repr(VR[4])+'\n')
     f.write('Lm = '+repr(Lm)+'\n')
     f.write('ABIC = '+repr(ABIC)+'\n')
     f.write('M0(N-m) = '+repr(Mo)+'\n')
@@ -1272,7 +1356,7 @@ def get_stats(WG,sol,wd):
     return L2,Lm
     
     
-def get_VR(G,sol,d):
+def get_VR(home,project_name,GF_list,sol,d,ds,decimate):
     '''
     Compute Variance reduction to the data
     
@@ -1284,11 +1368,93 @@ def get_VR(G,sol,d):
         VR: Variance reduction (%)
     '''
     
-    ds=G.dot(sol)
-    #Variance reduction
-    res=((d-ds)**2)**0.5
-    dnorm=(d**2)**0.5 #Yes i know this is dumb, shush
-    VR=(1-(res.sum()/dnorm.sum()))*100
+    from numpy import genfromtxt,where,r_,nan
+    from obspy import read
+    from mudpy.green import stdecimate
+    
+    print '... calcualting variance reduction...'
+    
+    #Read gf file and decide what needs to get loaded
+    gf_file=home+project_name+'/data/station_info/'+GF_list
+    stations=genfromtxt(gf_file,usecols=[0],skip_header=1,dtype='S')
+    GF=genfromtxt(gf_file,usecols=[3,4,5,6,7],skip_header=1,dtype='f8')
+    GFfiles=genfromtxt(gf_file,usecols=[8,9,10,11,12],skip_header=1,dtype='S')
+    #Separate into its constituent parts (statics,displacaments, velocities, etc...)
+    kstart=0
+    kend=0
+    #Statics
+    kgf=0
+    i=where(GF[:,kgf]==1)[0]
+    VRstatic=nan
+    if len(i)>0:
+        for ksta in range(len(i)):
+            kend+=3
+        #Variance reduction
+        res=((d[kstart:kend]-ds[kstart:kend])**2)**0.5
+        dnorm=(d[kstart:kend]**2)**0.5 #Yes i know this is dumb, shush
+        VRstatic=(1-(res.sum()/dnorm.sum()))*100
+    #Displacement
+    kstart=kend
+    kgf=1
+    i=where(GF[:,kgf]==1)[0]
+    VRdisp=nan
+    if len(i)>0:
+        for ksta in range(len(i)):
+            sta=stations[i[ksta]]
+            n=read(GFfiles[i[ksta],kgf]+'.n')
+            if decimate != None:
+                n[0]=stdecimate(n[0],decimate)
+            npts=n[0].stats.npts
+            kend+=3*npts
+        #Variance reduction
+        res=((d[kstart:kend]-ds[kstart:kend])**2)**0.5
+        dnorm=(d[kstart:kend]**2)**0.5 #Yes i know this is dumb, shush
+        VRdisp=(1-(res.sum()/dnorm.sum()))*100
+    #Velocity
+    kstart=kend
+    kgf=2
+    i=where(GF[:,kgf]==1)[0]
+    VRvel=nan
+    if len(i)>0:
+        for ksta in range(len(i)):
+            sta=stations[i[ksta]]
+            n=read(GFfiles[i[ksta],kgf]+'.n')
+            if decimate != None:
+                n[0]=stdecimate(n[0],decimate)
+            npts=n[0].stats.npts
+            kend+=3*npts
+        #Variance reduction
+        res=((d[kstart:kend]-ds[kstart:kend])**2)**0.5
+        dnorm=(d[kstart:kend]**2)**0.5 #Yes i know this is dumb, shush
+        VRvel=(1-(res.sum()/dnorm.sum()))*100
+    #Tsunami
+    kstart=kend
+    kgf=3
+    i=where(GF[:,kgf]==1)[0]
+    VRtsun=nan
+    if len(i)>0:
+        for ksta in range(len(i)):
+            sta=stations[i[ksta]]
+            tsun=read(GFfiles[i[ksta],kgf])
+            npts=tsun[0].stats.npts
+            kend+=npts
+        #Variance reduction
+        res=((d[kstart:kend]-ds[kstart:kend])**2)**0.5
+        dnorm=(d[kstart:kend]**2)**0.5 #Yes i know this is dumb, shush
+        VRtsun=(1-(res.sum()/dnorm.sum()))*100
+    # InSAR
+    kstart=kend
+    kgf=4
+    i=where(GF[:,kgf]==1)[0]
+    VRinsar=nan
+    if len(i)>0:
+        for ksta in range(len(i)):
+            kend+=1
+        #Variance reduction
+        res=((d[kstart:kend]-ds[kstart:kend])**2)**0.5
+        dnorm=(d[kstart:kend]**2)**0.5 #Yes i know this is dumb, shush
+        VRinsar=(1-(res.sum()/dnorm.sum()))*100     
+    VR=r_[VRstatic,VRdisp,VRvel,VRtsun,VRinsar]
     return VR
     
     

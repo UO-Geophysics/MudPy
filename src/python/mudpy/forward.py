@@ -234,7 +234,7 @@ def waveforms_matrix(home,project_name,fault_name,rupture_name,station_file,GF_l
         G_from_file=False
         G_name='tmpfwd'
         G=getG(home,project_name,fault_name,model_name,tmpgf,G_from_file,G_name,epicenter,
-                rupture_speed,num_windows,decimate=None,bandpass=None,tsunami=True)
+                rupture_speed,num_windows,decimate=None,bandpass=None,tsunami=False)
         # Matrix multiply and separate data streams
         d=G.dot(m)
         n=ndummy.copy()
@@ -388,7 +388,7 @@ def move_seafloor(home,project_name,run_name,topo_dx_file,topo_dy_file,tgf_file,
     Create moving topography input files for geoclaw
     '''
     import datetime
-    from numpy import genfromtxt,zeros,meshgrid,ones,c_,savetxt,delete,where,nan,argmin
+    from numpy import genfromtxt,zeros,meshgrid,ones,c_,savetxt,delete,where,nan,argmin,arange
     from obspy import read
     from string import rjust
     from scipy.io import netcdf_file as netcdf
@@ -417,8 +417,12 @@ def move_seafloor(home,project_name,run_name,topo_dx_file,topo_dy_file,tgf_file,
     bathy_dy=Dataset(topo_dy_file,'r',format='NETCDF4')
     zdy=bathy_dy.variables['z'][:].data
     #Make interpolation quantities
-    loni=bathy_dx.variables['x'][:]
-    lati=bathy_dx.variables['y'][:]
+    try:
+        loni=bathy_dx.variables['x'][:]
+        lati=bathy_dx.variables['y'][:]
+    except:
+        loni=bathy_dx.variables['lon'][:]
+        lati=bathy_dx.variables['lat'][:]
     loni,lati=meshgrid(loni,lati)
     #Read slope file
     kwrite=0
@@ -481,7 +485,7 @@ def move_seafloor(home,project_name,run_name,topo_dx_file,topo_dy_file,tgf_file,
     #Only apply topo effect to some points
     if coast_file!=None:
         #Straight line coordinates
-        coast=genfromtxt(coast_file,skip_header=1)
+        coast=genfromtxt(coast_file)
         #Get mask for applying horizontal effect
         mask=zeros(loni.shape)
         for k1 in range(loni.shape[0]):
@@ -497,9 +501,9 @@ def move_seafloor(home,project_name,run_name,topo_dx_file,topo_dy_file,tgf_file,
     for kt in range(nt_iter):
         if kt%20==0:
             print '... ... working on time slice '+str(kt)+' of '+str(nt_iter)
-        ninterp=griddata((lon,lat),nmat[kt,:],(loni,lati),method='cubic')
-        einterp=griddata((lon,lat),emat[kt,:],(loni,lati),method='cubic')
-        uinterp=griddata((lon,lat),umat[kt,:],(loni,lati),method='cubic')
+        ninterp=griddata((lon,lat),nmat[kt,:],(loni,lati),method='cubic',fill_value=0)
+        einterp=griddata((lon,lat),emat[kt,:],(loni,lati),method='cubic',fill_value=0)
+        uinterp=griddata((lon,lat),umat[kt,:],(loni,lati),method='cubic',fill_value=0)
         #Output vertical
         uout=uinterp.copy()
         #Apply effect of topography advection
@@ -886,8 +890,8 @@ def makefault(strike,dip,nstrike,ndip,rake,dx_dip,dx_strike,epicenter,num_updip,
     from numpy import arange,sin,cos,deg2rad,r_,ones,arctan,rad2deg,zeros,isnan,unique,where,argsort
     import pyproj
     
-    strike=155
-    dip=78
+    strike=295
+    dip=11
     #proj_angle=180-strike #Angle to use fofilesr sin.cos projection (comes from strike)
     proj_angle=180-strike #Angle to use for sin.cos projection (comes from strike)
     y=arange(-nstrike/2+1,nstrike/2+1)*dx_strike
@@ -972,9 +976,9 @@ def makefault(strike,dip,nstrike,ndip,rake,dx_dip,dx_strike,epicenter,num_updip,
     strike=ones(loout.shape)*strike
     dip=ones(loout.shape)*dip
     tw=ones(loout.shape)*0.5
-    rise=ones(loout.shape)*1
-    L=ones(loout.shape)*1000
-    W=ones(loout.shape)*1000
+    rise=ones(loout.shape)*4
+    L=ones(loout.shape)*10000
+    W=ones(loout.shape)*10000
     f=open(fout,'w')
     for k in range(len(x)):   
         out='%i\t%.6f\t%.6f\t%.3f\t%i\t%i\t%.1f\t%.1f\t%.2f\t%.2f\n' % (k+1,loout[k],laout[k],zout[k],strike[k],dip[k],tw[k],rise[k],L[k],W[k])

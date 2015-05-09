@@ -8,27 +8,29 @@ inversion results
 
 import matplotlib
 matplotlib.rcParams['pdf.fonttype'] = 42
-cdict = {'red': ((0., 1, 1),
-                 (0.05, 1, 1),
-                 (0.11, 0, 0),
-                 (0.66, 1, 1),
-                 (0.89, 1, 1),
-                 (1, 0.5, 0.5)),
-         'green': ((0., 1, 1),
-                   (0.05, 1, 1),
-                   (0.11, 0, 0),
-                   (0.375, 1, 1),
-                   (0.64, 1, 1),
-                   (0.91, 0, 0),
-                   (1, 0, 0)),
-         'blue': ((0., 1, 1),
-                  (0.05, 1, 1),
-                  (0.11, 1, 1),
-                  (0.34, 1, 1),
-                  (0.65, 0, 0),
-                  (1, 0, 0))}
+#cdict = {'red': ((0., 1, 1),
+#                 (0.05, 1, 1),
+#                 (0.11, 0, 0),
+#                 (0.66, 1, 1),
+#                 (0.89, 1, 1),
+#                 (1, 0.5, 0.5)),
+#         'green': ((0., 1, 1),
+#                   (0.05, 1, 1),
+#                   (0.11, 0, 0),
+#                   (0.375, 1, 1),
+#                   (0.64, 1, 1),
+#                   (0.91, 0, 0),
+#                   (1, 0, 0)),
+#         'blue': ((0., 1, 1),
+#                  (0.05, 1, 1),
+#                  (0.11, 1, 1),
+#                  (0.34, 1, 1),
+#                  (0.65, 0, 0),
+#                  (1, 0, 0))}
+#whitejet = matplotlib.colors.LinearSegmentedColormap('whitejet',cdict,256)
 
-whitejet = matplotlib.colors.LinearSegmentedColormap('whitejet',cdict,256)
+from mudpy.gmttools import gmtColormap
+whitejet=gmtColormap('/Users/dmelgar/code/python/cpt/color_linear.cpt')
 
 
 def quick_model(rupt):
@@ -121,14 +123,14 @@ def quick_static(gflist,datapath,run_name,run_num,c,scale):
     qscale_en=0.00001
     plt.quiverkey(Q,X=0.1,Y=0.9,U=qscale_en,label=str(qscale_en)+'m')
     
-def tile_slip(rupt,nstrike,ndip,(slip_min,slip_max),geographic=False,epicenter=0,epicenter_line=0):
+def tile_slip(rupt,nstrike,ndip,(slip_min,slip_max),geographic=False,epicenter=0,epicenter_line=0,thresh=0):
     '''
     Quick and dirty plot of a .rupt file
     epicenter is the coordinates, epcienter line is the down dip lien number where 
     the epcienter is
     '''
     
-    from numpy import genfromtxt,unique,where,zeros,arange,pi,tile
+    from numpy import genfromtxt,unique,where,zeros,arange,pi,tile,sqrt
     import matplotlib.pyplot as plt
     from obspy.core.util.geodetics import gps2DistAzimuth
     
@@ -146,6 +148,9 @@ def tile_slip(rupt,nstrike,ndip,(slip_min,slip_max),geographic=False,epicenter=0
         ds[k]=all_ds[i].sum()
     #Sum them
     slip=(ss**2+ds**2)**0.5
+    #Apply threshold
+    ithresh=where(slip<thresh)[0]
+    slip[ithresh]=0
     #Get unit rake vector
     rakess=ss/slip
     rakeds=ds/slip
@@ -200,7 +205,7 @@ def tile_slip(rupt,nstrike,ndip,(slip_min,slip_max),geographic=False,epicenter=0
         plt.xlabel('Along-strike index')
         plt.xlim(istrike.min()-1,istrike.max()+1)
         plt.ylim(idip.min()-1,idip.max()+1)
-        plt.quiver(istrike,idip,rakess,rakeds,color='green',width=0.002)
+        plt.quiver(istrike,idip,rakess,rakeds,color='green',width=0.0001)
         plt.axis('equal')
         plt.grid()    
         plt.title(rupt)
@@ -213,14 +218,14 @@ def tile_slip(rupt,nstrike,ndip,(slip_min,slip_max),geographic=False,epicenter=0
         cb=plt.colorbar()
         plt.ylabel('Depth (km)')
         plt.xlabel('Along-strike distance (km)')
-        plt.xlim(along_strike.min()-1,along_strike.max()+1)
-        plt.ylim(depth.min()-1,depth.max()+1)
+        plt.xlim(along_strike.min()-5,along_strike.max()+5)
+        plt.ylim(depth.min()-5,depth.max()+5)
         plt.scatter(0,-epicenter[2],marker='*',edgecolor='k',facecolor='#00FF00',s=350,linewidth=2)
         #plt.scatter(xcent,zcent,marker='D',edgecolor='black',facecolor='',s=120,linewidth=2)
-        plt.quiver(along_strike,depth,rakess,rakeds,color='green',width=0.0035,scale=20)
+        plt.quiver(along_strike,depth,rakess/sqrt(rakess**2+rakeds**2),rakeds/sqrt(rakess**2+rakeds**2),color='green',width=0.0035,scale=50)
         plt.scatter(xaf,zaf,edgecolor='k',s=5)
     cb.set_label('Slip(m)')
-    plt.subplots_adjust(left=0.1, bottom=0.15, right=0.9, top=0.95, wspace=0, hspace=0)
+    plt.subplots_adjust(left=0.15, bottom=0.15, right=0.92, top=0.95, wspace=0, hspace=0)
     plt.show()
 
 
@@ -765,7 +770,170 @@ def tslice(rupt,out,dt,cumul):
             plt.savefig(out+rjust(str(kslice),4,'0')+'.kin_cumulative.png')
         plt.close("all")
     
+
+def plot_data(home,project_name,gflist,vord,decimate,lowpass,t_lim,sort,scale,k_or_g):
+    '''
+    Plot synthetics vs real data
     
+    gflist: The GF control fiel that decides what to plot/not plot
+    datapath
+    '''
+    from obspy import read
+    from numpy import genfromtxt,where,argsort
+    import matplotlib.pyplot as plt
+    import matplotlib
+    from mudpy.green import stdecimate 
+    from mudpy.forward import lowpass as lfilter
+    
+    matplotlib.rcParams.update({'font.size': 14})
+    #Decide what to plot
+    sta=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=0,dtype='S')
+    lon=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=[1],dtype='f')
+    lat=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=[2],dtype='f')
+    gf=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=[4,5],dtype='f')
+    datapath=home+project_name+'/data/waveforms/'
+    if vord.lower()=='d':
+        kgf=0 #disp
+        if k_or_g.lower()=='kal':
+            datasuffix='kdisp'
+        else:
+            datasuffix='disp'
+    elif vord.lower()=='v':
+        kgf=1 #disp
+        datasuffix='vel'
+    elif vord.lower()=='a':
+        kgf=1 #disp
+        datasuffix='acc'
+    #Decide on sorting
+    i=where(gf[:,kgf]==1)[0]  
+    if sort.lower()=='lon':
+        j=argsort(lon[i])[::-1]
+        i=i[j]
+    elif sort.lower()=='lat':
+        j=argsort(lat[i])[::-1] 
+        i=i[j]
+    nsta=len(i)
+    fig, axarr = plt.subplots(nsta, 3)  
+    for k in range(len(i)):
+        n=read(datapath+sta[i[k]]+'.'+datasuffix+'.n')
+        e=read(datapath+sta[i[k]]+'.'+datasuffix+'.e')
+        u=read(datapath+sta[i[k]]+'.'+datasuffix+'.u')
+        if lowpass!=None:
+            fsample=1./e[0].stats.delta
+            e[0].data=lfilter(e[0].data,lowpass,fsample,2)
+            n[0].data=lfilter(n[0].data,lowpass,fsample,2)
+            u[0].data=lfilter(u[0].data,lowpass,fsample,2)
+        if decimate!=None:
+            n[0]=stdecimate(n[0],decimate)
+            e[0]=stdecimate(e[0],decimate)
+            u[0]=stdecimate(u[0],decimate)
+        if scale!=None:
+            n[0].data=n[0].data/scale
+            e[0].data=e[0].data/scale
+            u[0].data=u[0].data/scale
+        #Make plot
+        if nsta>1:
+            axn=axarr[k,0]
+            axe=axarr[k,1]
+            axu=axarr[k,2]
+        else:
+            axn=axarr[0]
+            axe=axarr[1]
+            axu=axarr[2]
+        axn.plot(n[0].times(),n[0].data,'k')
+        axn.grid(which='both')
+        axe.plot(e[0].times(),e[0].data,'k')
+        axe.grid(which='both')
+        axu.plot(u[0].times(),u[0].data,'k')
+        axu.grid(which='both')
+        axe.yaxis.set_ticklabels([])
+        axu.yaxis.set_ticklabels([])
+        axe.set_xlim(t_lim)
+        axn.set_xlim(t_lim)
+        axu.set_xlim(t_lim)
+        axn.yaxis.set_ticklabels([])
+        axe.yaxis.set_ticklabels([])
+        axu.yaxis.set_ticklabels([])
+        axn.yaxis.grid(False)
+        axe.yaxis.grid(False)
+        axu.yaxis.grid(False)
+        axn.yaxis.set_ticks([])
+        axe.yaxis.set_ticks([])
+        axu.yaxis.set_ticks([])
+        
+        #Annotations
+        trange=t_lim[1]-t_lim[0]
+        sign=1.
+        if abs(min(n[0].data))>max(n[0].data):
+            sign=-1. 
+        nmax='%.3f' % (sign*max(abs(n[0].data)))
+        sign=1.
+        nlims=axn.get_ylim()
+        nrange=nlims[1]-nlims[0]
+        
+        if abs(min(e[0].data))>max(e[0].data):
+            sign=-1.         
+        emax='%.3f' % (sign*max(abs(e[0].data)))
+        sign=1.
+        elims=axe.get_ylim()
+        erange=elims[1]-elims[0]
+        
+        if abs(min(u[0].data))>max(u[0].data):
+            sign=-1. 
+        umax='%.3f' % (sign*max(abs(u[0].data)))
+        sign=1.
+        ulims=axu.get_ylim()
+        urange=ulims[1]-ulims[0]
+        
+        #axn.annotate(nmax,xy=(t_lim[1]-0.3*trange,nlims[0]+0.02*nrange),fontsize=12)
+        #axe.annotate(emax,xy=(t_lim[1]-0.3*trange,elims[0]+0.02*erange),fontsize=12)
+        #axu.annotate(umax,xy=(t_lim[1]-0.3*trange,ulims[0]+0.02*urange),fontsize=12)
+        #axn.annotate(nsmax,xy=(t_lim[1]-0.3*trange,nlims[0]+0.7*nrange),fontsize=12,color='red')
+        #axe.annotate(esmax,xy=(t_lim[1]-0.3*trange,elims[0]+0.7*erange),fontsize=12,color='red')
+        #axu.annotate(usmax,xy=(t_lim[1]-0.3*trange,ulims[0]+0.7*urange),fontsize=12,color='red')
+        axn.annotate(nmax,xy=(t_lim[1]-0.25*trange,nlims[0]+0.02*nrange),fontsize=12)
+        axe.annotate(emax,xy=(t_lim[1]-0.25*trange,elims[0]+0.02*erange),fontsize=12)
+        axu.annotate(umax,xy=(t_lim[1]-0.25*trange,ulims[0]+0.02*urange),fontsize=12)
+        #Station name
+        axn.set_ylabel(sta[i[k]],rotation=90)
+        if k==0:
+            if vord.lower()=='d':
+                axn.set_title('North (m)')
+                axe.set_title('East (m)')
+                axu.set_title('Up (m)')
+            elif vord.lower()=='v':
+                axn.set_title('North (m/s)')
+                axe.set_title('East (m/s)')
+                axu.set_title('Up (m/s)')
+            else:
+                axn.set_title(r'North (m/s$^2$)')
+                axe.set_title('East (m/s$^2$)')
+                axu.set_title('Up (m/s$^2$)')
+        if k!=len(i)-1 or len(i)==1:
+            axn.xaxis.set_ticklabels([])
+            axe.xaxis.set_ticklabels([])
+            axu.xaxis.set_ticklabels([])
+            xtick=axn.xaxis.get_majorticklocs()
+            #ix=[1,3,5]
+            #ix=[2,4,6]
+            ix=[1,3,5,7]
+            ix=0
+            xtick=xtick[ix]
+            #xticklabel=['','50','','150','','250',''] #Tohoku
+            #xticklabel=['0','','20','','40','','60'] #Napa preferred
+            #xticklabel=['','10','','30','','50','','70'] #Napa preferred
+            xticklabel=['','','40','','80','','120','','160',''] #Iquique preferred
+        if k==len(i)-1 and nsta>1: #Last plot
+            axe.set_xlabel('Time (s)')
+            axn.xaxis.set_ticklabels(xticklabel)
+            axe.xaxis.set_ticklabels(xticklabel)
+            axu.xaxis.set_ticklabels(xticklabel)
+            #axn.xaxis.set_ticks(xtick)
+            #axe.xaxis.set_ticks(xtick)
+            #axu.xaxis.set_ticks(xtick)
+    #plt.subplots_adjust(left=0.2, bottom=0.05, right=0.8, top=0.95, wspace=0, hspace=0)
+    plt.subplots_adjust(left=0.2, bottom=0.15, right=0.8, top=0.85, wspace=0, hspace=0)
+      
 def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpass,t_lim,sort,scale,k_or_g):
     '''
     Plot synthetics vs real data
@@ -833,9 +1001,14 @@ def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpas
             u[0].data=u[0].data/scale
             us[0].data=us[0].data/scale
         #Make plot
-        axn=axarr[k,0]
-        axe=axarr[k,1]
-        axu=axarr[k,2]
+        if nsta>1:
+            axn=axarr[k,0]
+            axe=axarr[k,1]
+            axu=axarr[k,2]
+        else:
+            axn=axarr[0]
+            axe=axarr[1]
+            axu=axarr[2]
         axn.plot(n[0].times(),n[0].data,'k',ns[0].times(),ns[0].data,'r')
         axn.grid(which='both')
         axe.plot(e[0].times(),e[0].data,'k',es[0].times(),es[0].data,'r')
@@ -930,7 +1103,7 @@ def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpas
             #xticklabel=['0','','20','','40','','60'] #Napa preferred
             #xticklabel=['','10','','30','','50','','70'] #Napa preferred
             xticklabel=['','','40','','80','','120','','160',''] #Iquique preferred
-        if k==len(i)-1: #Last plot
+        if k==len(i)-1 and nsta>1: #Last plot
             axe.set_xlabel('Time (s)')
             axn.xaxis.set_ticklabels(xticklabel)
             axe.xaxis.set_ticklabels(xticklabel)
@@ -938,7 +1111,8 @@ def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpas
             #axn.xaxis.set_ticks(xtick)
             #axe.xaxis.set_ticks(xtick)
             #axu.xaxis.set_ticks(xtick)
-    plt.subplots_adjust(left=0.2, bottom=0.05, right=0.8, top=0.95, wspace=0, hspace=0)
+    #plt.subplots_adjust(left=0.2, bottom=0.05, right=0.8, top=0.95, wspace=0, hspace=0)
+    plt.subplots_adjust(left=0.2, bottom=0.15, right=0.8, top=0.85, wspace=0, hspace=0)
 
 def static_synthetics(home,project_name,run_name,run_number,gflist,sscale,qscale):
     '''
@@ -996,6 +1170,45 @@ def static_synthetics(home,project_name,run_name,run_number,gflist,sscale,qscale
     plt.title('Verticals')
     #plt.legend('Data','Synth')
     plt.suptitle('Statics for run '+project_name+': '+run_name+'.'+run_number)
+    
+def insar_residual(home,project_name,run_name,run_number,gflist,zlims):
+    '''
+    Plot insar_residual
+    
+    gflist: The GF control file that decides what to plot/not plot
+    datapath
+    '''
+    from numpy import genfromtxt,where,zeros,sqrt
+    import matplotlib.pyplot as plt
+    import matplotlib
+    
+    matplotlib.rcParams.update({'font.size': 14})
+    #Decide what to plot
+    sta=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=0,dtype='S')
+    lon_all=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=[1],dtype='f')
+    lat_all=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=[2],dtype='f')
+    gf=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=[7],dtype='f')
+    datapath=home+project_name+'/data/statics/'
+    synthpath=home+project_name+'/output/inverse_models/statics/'
+    #synthpath=home+project_name+'/output/forward_models/'
+    i=where(gf==1)[0] #Which stations have statics?
+    lon=lon_all[i]
+    lat=lat_all[i]
+    los_data=zeros(len(i))
+    los_synth=zeros(len(i))
+    for k in range(len(i)):
+        neu=genfromtxt(datapath+sta[i[k]]+'.los')
+        #neu=genfromtxt(datapath+sta[i[k]]+'.static.neu')
+        los_data[k]=neu[0]
+        neus=genfromtxt(synthpath+run_name+'.'+run_number+'.'+sta[i[k]]+'.los')
+        #neus=genfromtxt(synthpath+sta[i[k]]+'.static.neu')
+        los_synth[k]=neus[0]
+    #Make plot    
+    plt.figure()
+    plt.scatter(lon,lat,c=los_data-los_synth,cmap=matplotlib.cm.seismic,vmin=zlims[0],vmax=zlims[1],s=50)
+    plt.title('LOS residuals (m)')
+    plt.colorbar()
+    plt.grid()
     
             
 def tsunami_synthetics(home,project_name,run_name,run_number,gflist,t_lim,sort,scale):
