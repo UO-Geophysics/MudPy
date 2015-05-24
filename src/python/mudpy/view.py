@@ -8,29 +8,29 @@ inversion results
 
 import matplotlib
 matplotlib.rcParams['pdf.fonttype'] = 42
-#cdict = {'red': ((0., 1, 1),
-#                 (0.05, 1, 1),
-#                 (0.11, 0, 0),
-#                 (0.66, 1, 1),
-#                 (0.89, 1, 1),
-#                 (1, 0.5, 0.5)),
-#         'green': ((0., 1, 1),
-#                   (0.05, 1, 1),
-#                   (0.11, 0, 0),
-#                   (0.375, 1, 1),
-#                   (0.64, 1, 1),
-#                   (0.91, 0, 0),
-#                   (1, 0, 0)),
-#         'blue': ((0., 1, 1),
-#                  (0.05, 1, 1),
-#                  (0.11, 1, 1),
-#                  (0.34, 1, 1),
-#                  (0.65, 0, 0),
-#                  (1, 0, 0))}
-#whitejet = matplotlib.colors.LinearSegmentedColormap('whitejet',cdict,256)
+cdict = {'red': ((0., 1, 1),
+                 (0.05, 1, 1),
+                 (0.11, 0, 0),
+                 (0.66, 1, 1),
+                 (0.89, 1, 1),
+                 (1, 0.5, 0.5)),
+         'green': ((0., 1, 1),
+                   (0.05, 1, 1),
+                   (0.11, 0, 0),
+                   (0.375, 1, 1),
+                   (0.64, 1, 1),
+                   (0.91, 0, 0),
+                   (1, 0, 0)),
+         'blue': ((0., 1, 1),
+                  (0.05, 1, 1),
+                  (0.11, 1, 1),
+                  (0.34, 1, 1),
+                  (0.65, 0, 0),
+                  (1, 0, 0))}
+whitejet = matplotlib.colors.LinearSegmentedColormap('whitejet',cdict,256)
 
-from mudpy.gmttools import gmtColormap
-whitejet=gmtColormap('/Users/dmelgar/code/python/cpt/color_linear.cpt')
+#from mudpy.gmttools import gmtColormap
+#whitejet=gmtColormap('/Users/dmelgar/code/python/cpt/color_linear.cpt')
 
 
 def quick_model(rupt):
@@ -443,7 +443,7 @@ def tile_moment(rupt,epicenter,nstrike,ndip,covfile,beta,(vfast,vslow)):
     '''
     import matplotlib.pyplot as plt
     from matplotlib import cm
-    from numpy import genfromtxt,unique,zeros,where,meshgrid,linspace,load,arange,expand_dims,squeeze,tile
+    from numpy import genfromtxt,unique,zeros,where,meshgrid,linspace,load,arange,expand_dims,squeeze,tile,r_
     from mudpy.forward import get_source_time_function,add2stf
     from mudpy.inverse import d2epi,ds2rot
     
@@ -497,6 +497,7 @@ def tile_moment(rupt,epicenter,nstrike,ndip,covfile,beta,(vfast,vslow)):
     fig, axarr = plt.subplots(ndip, nstrike)
     #Loop over subfaults
     Mmax=0
+    Mout=[]
     for kfault in range(nfault):
         if kfault%10==0:
             print '... working on subfault '+str(kfault)+' of '+str(nfault)
@@ -528,6 +529,13 @@ def tile_moment(rupt,epicenter,nstrike,ndip,covfile,beta,(vfast,vslow)):
             if covfile !=None:
                 t1plus,M1plus=add2stf(t1plus,M1plus,t2plus,M2plus)
                 t1minus,M1minus=add2stf(t1minus,M1minus,t2minus,M2minus)
+        #Save M1 for output
+        if kfault==0:
+            Mout=expand_dims(M1,1).T
+            tout=expand_dims(t1,1).T
+        else:
+            Mout=r_[Mout,expand_dims(M1,1).T]
+            tout=r_[tout,expand_dims(t1,1).T]
         #Track maximum moment
         Mmax=max(Mmax,M1.max())
         #Done now plot them
@@ -574,6 +582,7 @@ def tile_moment(rupt,epicenter,nstrike,ndip,covfile,beta,(vfast,vslow)):
     cb=fig.colorbar(im2, cax=cbar_ax)
     cb.set_label('Reference rupture velocity (km/s)')
     print 'Maximum moment was '+str(Mmax)+'N-m'
+    return tout,Mout
 
 
 def source_time_function(rupt,epicenter):

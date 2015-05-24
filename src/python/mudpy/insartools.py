@@ -17,11 +17,11 @@ def quadtree2mudpy(home,project_name,quadtree_file,out_file,prefix):
     from matplotlib import cm
     
     insar=genfromtxt(quadtree_file)
-    fn=plt.figure()
-    axn = fn.add_subplot(111)
+    plt.figure()
     #Write to file
     f=open(out_file,'w')
     for k in range(len(insar)):
+        print k
         sta=prefix+rjust(str(k),4,'0')
         out='%s\t%.6f\t%.6f\n' %(sta,insar[k,0],insar[k,1])
         f.write(out)
@@ -32,8 +32,8 @@ def quadtree2mudpy(home,project_name,quadtree_file,out_file,prefix):
         U=insar[k,5]
         los=c_[los_c,N,E,U]
         #Make plot as you go to verify
-        axn.scatter(insar[k,0],insar[k,1],c=los_c,cmap=cm.seismic,s=90,vmin=-1.2,vmax=1.2)
-        axn.legend(['LOS'])
+        plt.scatter(insar[k,0],insar[k,1],c=los_c,cmap=cm.seismic,s=90,vmin=-1.2,vmax=1.2)
+        plt.legend(['LOS'])
         savetxt(home+project_name+'/data/statics/'+sta+'.los',los,header='LOS(m),los unit vector (positive towards satellite) n,e,u')
     plt.colorbar()
     f.close()    

@@ -323,6 +323,7 @@ def make_slip_slice(rupt,nstrike,ndip,epicenter,out,tmax,dt):
              idip[k]=i
              k+=1  
     #Loop over subfaults
+    print nfault
     for kfault in range(nfault):
         if kfault%10==0:
             print '... working on subfault '+str(kfault)+' of '+str(nfault)

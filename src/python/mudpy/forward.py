@@ -816,7 +816,8 @@ def inv2coulomb(rupt,epicenter,fout):
     #Write to file and then manually add the ehaders and footers by copy pasting from some NEIC file (LAZY!)
     f=open(fout,'w')
     for k in range(len(u)):
-        out='1   %10.4f %10.4f %10.4f %10.4f 100 %10.4f %10.4f %10.4f %10.4f %10.4f %i\n' % (xstart[k],ystart[k],xfin[k],yfin[k],rake[k],slip[k],dip[k],ztop[k],zbot[k],k)
+        #out='1   %10.4f %10.4f %10.4f %10.4f 100 %10.4f %10.4f %10.4f %10.4f %10.4f %i\n' % (xstart[k],ystart[k],xfin[k],yfin[k],rake[k],slip[k],dip[k],ztop[k],zbot[k],k)
+        out='1   %10.4f %10.4f %10.4f %10.4f 100 %10.4f %10.4f %10.4f %10.4f %10.4f %i\n' % (xstart[k],ystart[k],xfin[k],yfin[k],ss[k],ds[k],dip[k],ztop[k],zbot[k],k)
         f.write(out)
     f.close()
     
@@ -827,7 +828,7 @@ def coulomb_xy2latlon(f,epicenter,fout):
     from numpy import genfromtxt,zeros,rad2deg,arctan,isnan,savetxt
     import pyproj
     
-    s=genfromtxt('/Users/dmelgarm/bin/coulomb34/output_files/Element_conditions_tohoku_fine.csv')
+    s=genfromtxt(f,delimiter=',')
     x=s[:,1]
     y=s[:,2]
     #Now use pyproj to dead reckon anf get lat/lon coordinates of subfaults
@@ -858,7 +859,7 @@ def coulomb_xy2latlon(f,epicenter,fout):
             lo[k],la[k],ba=g.fwd(epicenter[0],epicenter[1],az[k],d[k])
     s[:,1]=lo
     s[:,2]=la
-    savetxt(fout,s)
+    savetxt(fout,s,fmt='%.6f')
     
     
       
@@ -883,15 +884,13 @@ def ssds2rake(ss,ds):
     rake=rad2deg(rake)
     return rake
     
-def makefault(strike,dip,nstrike,ndip,rake,dx_dip,dx_strike,epicenter,num_updip,num_downdip,fout):
+def makefault(strike,dip,nstrike,dx_dip,dx_strike,epicenter,num_updip,num_downdip,rise_time,fout):
     '''
     Make a planar fault
     '''
     from numpy import arange,sin,cos,deg2rad,r_,ones,arctan,rad2deg,zeros,isnan,unique,where,argsort
     import pyproj
     
-    strike=295
-    dip=11
     #proj_angle=180-strike #Angle to use fofilesr sin.cos projection (comes from strike)
     proj_angle=180-strike #Angle to use for sin.cos projection (comes from strike)
     y=arange(-nstrike/2+1,nstrike/2+1)*dx_strike
@@ -976,9 +975,9 @@ def makefault(strike,dip,nstrike,ndip,rake,dx_dip,dx_strike,epicenter,num_updip,
     strike=ones(loout.shape)*strike
     dip=ones(loout.shape)*dip
     tw=ones(loout.shape)*0.5
-    rise=ones(loout.shape)*4
-    L=ones(loout.shape)*10000
-    W=ones(loout.shape)*10000
+    rise=ones(loout.shape)*rise_time
+    L=ones(loout.shape)*dx_strike*1000
+    W=ones(loout.shape)*dx_dip*1000
     f=open(fout,'w')
     for k in range(len(x)):   
         out='%i\t%.6f\t%.6f\t%.3f\t%i\t%i\t%.1f\t%.1f\t%.2f\t%.2f\n' % (k+1,loout[k],laout[k],zout[k],strike[k],dip[k],tw[k],rise[k],L[k],W[k])

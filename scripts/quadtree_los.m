@@ -2,10 +2,10 @@ format compact
 
 %insar=textread('/Users/dmelgar/Nepal2015/GPS/alos/data.lldtn');
 %insar=textread('/Users/dmelgar/Nepal2015/Insar/alos/t157_lltenuds.dat');
-insar=textread('/Users/dmelgar/Nepal2015/Insar/alos/t48_resamp_lltenuds_eric.dat');
+insar=textread('/Users/dmelgar/Nepal2015/Insar/raw/t157_resamp_blockmedian_lltenuds.dat');
 mindim=32
 maxdim=256
-thresh=0.15 %0.12 for t047 0.225 for t157
+thresh=0.19 %0.12 for t047 0.225 for t157
 % t047
 % lon=insar(:,1);
 % lat=insar(:,2);
@@ -17,7 +17,7 @@ thresh=0.15 %0.12 for t047 0.225 for t157
 % t147
 lon=insar(:,1);
 lat=insar(:,2);
-los=insar(:,7)/1000;
+los=-insar(:,7)/1000;
 lookE=insar(:,4);
 lookN=insar(:,5);
 lookU=insar(:,6);
@@ -25,21 +25,21 @@ lookU=insar(:,6);
 dlon=8.34e-4;
 dlat=8.34e-4;
 %Pre filter (T157)
-% i=find(lat<28.4 & lat>27.3);
-% lat=lat(i);
-% lon=lon(i);
-% los=los(i);
-% lookN=lookN(i);
-% lookE=lookE(i);
-% lookU=lookU(i);
-%Pre filter (T048)
-i=find(lat<28.4 & lat>27.3 & lon<86.3 & lon>84.6);
+i=find(lat<28.4 & lat>27.3);
 lat=lat(i);
 lon=lon(i);
 los=los(i);
 lookN=lookN(i);
 lookE=lookE(i);
 lookU=lookU(i);
+%Pre filter (T048)
+% i=find(lat<28.4 & lat>27.3 & lon<86.3 & lon>84.6);
+% lat=lat(i);
+% lon=lon(i);
+% los=los(i);
+% lookN=lookN(i);
+% lookE=lookE(i);
+% lookU=lookU(i);
 
 
 % lon_i=min(lon):dlon:max(lon);
@@ -88,7 +88,7 @@ for k=1:length(idim)
        %Get values
        new_los=mean(mean(vals(:,:,kgrid)));
        if ~isnan(new_los)  %Add to the list
-           los_out=[los_out,-mean(mean(vals(:,:,kgrid)))];
+           los_out=[los_out,mean(mean(vals(:,:,kgrid)))];
            %get indices of center as upepr left plus half the size of the
            %block
            r1=r(kgrid)+(2^idim(k))/2;
@@ -130,7 +130,7 @@ end
 
 %Write to file
 out=[lon_out' lat_out' los_out' lookE_out' lookN_out' lookU_out'];
-dlmwrite('/Users/dmelgar/Nepal2015/Insar/t048_C02.txt',out,'delimiter','\t','precision',6)
+dlmwrite('/Users/dmelgar/Nepal2015/Insar/t157_qtree.txt',out,'delimiter','\t','precision',6)
 
 %Plot
 figure
