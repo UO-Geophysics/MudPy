@@ -834,7 +834,7 @@ def get_data_weights(home,project_name,GF_list,d,decimate):
     kgf=4
     i=where(GF[:,kgf]==1)[0]
     for ksta in range(len(i)):
-        w[kinsert]=1/weights[i[ksta],9] #LOS
+        w[kinsert]=1/weights[i[ksta],10] #LOS
         kinsert+=1
     #Make W and exit
     return w

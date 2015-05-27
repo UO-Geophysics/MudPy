@@ -122,7 +122,50 @@ def quick_static(gflist,datapath,run_name,run_num,c,scale):
     plt.show()
     qscale_en=0.00001
     plt.quiverkey(Q,X=0.1,Y=0.9,U=qscale_en,label=str(qscale_en)+'m')
+
+
+def slip3D(rupt,epicenter=None,marker_size=60):
+    '''
+    For complex fault geometries make a quick 3D plot of the rupture model
+    '''
+    from mpl_toolkits.mplot3d import Axes3D
+    import matplotlib.pyplot as plt
+    from numpy import genfromtxt,zeros,unique,where
+
+    #Parse rupture or inverse file
+    f=genfromtxt(rupt)
+    num=f[:,0]
+    all_ss=f[:,8]
+    all_ds=f[:,9]
+    #Now parse for multiple rupture speeds
+    unum=unique(num)
+    ss=zeros(len(unum))
+    ds=zeros(len(unum))
+    for k in range(len(unum)):
+        i=where(unum[k]==num)
+        ss[k]=all_ss[i].sum()
+        ds[k]=all_ds[i].sum()
+    #Sum them
+    slip=(ss**2+ds**2)**0.5
+    #Get other parameters
+    lon=f[0:len(unum),1]
+    lat=f[0:len(unum),2]
+    depth=-f[0:len(unum),3]
+
+    #Plot it
+    fig = plt.figure(figsize=(14, 4))
+    ax = fig.add_subplot(111, projection='3d')
+    p=ax.scatter(lon, lat, depth, c=slip,cmap=whitejet, marker='o',s=marker_size)
     
+    ax.set_xlabel('Longitude')
+    ax.set_ylabel('Latitude')
+    ax.set_zlabel('Depth (km)')
+    cb=fig.colorbar(p)
+    cb.set_label('Slip (m)')
+    plt.subplots_adjust(left=0.1, bottom=0.1, right=1.0, top=0.9, wspace=0, hspace=0)
+    plt.show()
+
+
 def tile_slip(rupt,nstrike,ndip,(slip_min,slip_max),geographic=False,epicenter=0,epicenter_line=0,thresh=0):
     '''
     Quick and dirty plot of a .rupt file
