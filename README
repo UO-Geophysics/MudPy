@@ -13,7 +13,7 @@ with multiple geophysical data types:
 	+ Velocity seismograms
 	+ Static field vectors
 	+ Tsunami waveforms 
-	+ Strain offsets (under development)
+	+ InSAR line of sight offsets
 
 ** MudPy can do:
 
