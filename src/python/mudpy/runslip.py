@@ -231,7 +231,7 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
     '''
     This routine will read a .gflist file and compute the required GF type for each station
     '''
-    from numpy import genfromtxt
+    from numpy import genfromtxt,where
     from os import remove
     from gc import collect
     
@@ -239,46 +239,81 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
     gf_file=home+project_name+'/data/station_info/'+GF_list
     stations=genfromtxt(gf_file,usecols=0,skip_header=1,dtype='S6')
     GF=genfromtxt(gf_file,usecols=[1,2,3,4,5,6,7],skip_header=1,dtype='f8')
-    #Now do one station at a time
+    
+    # GFs can be computed all at the same time
     station_file='temp.sta'
     try:
         remove(home+project_name+'/data/station_info/'+station_file) #Cleanup
     except:
         pass
-    for k in range(len(stations)):
-        #Make dummy station file
-        out=stations[k]+'\t'+repr(GF[k,0])+'\t'+repr(GF[k,1])
-        f=open(home+project_name+'/data/station_info/'+station_file,'w')
-        f.write(out)
-        f.close()
-        if green_flag==1:
-            #decide what GF computation is required for this station
-            if GF[k,2]==1: #Static offset
-                static=1
-                tsunami=False
-                make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,static,tsunami,
+    if green_flag==1:
+        #decide what GF computation is required for this station
+        i=where(GF[:,2]==1)[0]
+        if len(i)>0: #Static offset
+            f=open(home+project_name+'/data/station_info/'+station_file,'w')
+            for k in range(len(i)): #Write temp .sta file
+                out=stations[i[k]]+'\t'+repr(GF[i[k],0])+'\t'+repr(GF[i[k],1])+'\n'
+                f.write(out)
+            f.close()
+            static=1
+            tsunami=False
+            make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,static,tsunami,
                             hot_start,dk,pmin,pmax,kmax)
-            if GF[k,3]==1 or GF[k,4]==1: #full waveform
-                static=0
-                if tgf_file==None: # I am computing for stations on land
-                    tsunami=False
-                else: #I am computing seafloor deformation for tsunami GFs, eventaully
-                    tsunami=True
-                make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,static,tsunami,
-                            hot_start,dk,pmin,pmax,kmax)
-            if GF[k,5]==1: #Tsunami
-                static=0
-                tsunami=True
-                station_file=tgf_file
-                make_green(home,project_name,station_file,fault_name,model_name,tsun_dt,tsunNFFT,static,
-                                tsunami,hot_start,dk,pmin,pmax,kmax)
-            if GF[k,6]==1: #InSAR LOS
-                static=1
-                tsunami=False
-                make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,static,tsunami,
-                            hot_start,dk,pmin,pmax,kmax)
+        i=where(GF[:,3]==1)[0]
+        if len(i)>0 : #displ waveform
+            f=open(home+project_name+'/data/station_info/'+station_file,'w')
+            for k in range(len(i)): #Write temp .sta file
+                out=stations[i[k]]+'\t'+repr(GF[i[k],0])+'\t'+repr(GF[i[k],1])+'\n'
+                f.write(out)
+            f.close()
+            static=0
+            tsunami=False
+            make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,static,tsunami,
+                        hot_start,dk,pmin,pmax,kmax)
+        i=where(GF[:,4]==1)[0]
+        if len(i)>0 : #vel waveform
+            f=open(home+project_name+'/data/station_info/'+station_file,'w')
+            for k in range(len(i)): #Write temp .sta file
+                out=stations[i[k]]+'\t'+repr(GF[i[k],0])+'\t'+repr(GF[i[k],1])+'\n'
+                f.write(out)
+            f.close()
+            static=0
+            tsunami=False
+            make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,static,tsunami,
+                        hot_start,dk,pmin,pmax,kmax)
+        if tgf_file!=None: #Tsunami
+            static=0
+            tsunami=True
+            station_file=tgf_file
+            make_green(home,project_name,station_file,fault_name,model_name,tsun_dt,tsunNFFT,static,
+                            tsunami,hot_start,dk,pmin,pmax,kmax)       
+        
+        i=where(GF[:,4]==1)[0]
+        if len(i)>0: #InSAR LOS
+            f=open(home+project_name+'/data/station_info/'+station_file,'w')
+            for k in range(len(i)): #Write temp .sta file
+                out=stations[i[k]]+'\t'+repr(GF[i[k],0])+'\t'+repr(GF[i[k],1])+'\n'
+                f.write(out)
+            f.close()
+            static=1
+            tsunami=False
+            make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,static,tsunami,
+                        hot_start,dk,pmin,pmax,kmax)
             collect()
-        if synth_flag==1:
+    
+    #Synthetics are computed  one station at a time
+    if synth_flag==1:
+        station_file='temp.sta'
+        try:
+            remove(home+project_name+'/data/station_info/'+station_file) #Cleanup
+        except:
+            pass
+        for k in range(len(stations)):
+            #Make dummy station file
+            out=stations[k]+'\t'+repr(GF[k,0])+'\t'+repr(GF[k,1])
+            f=open(home+project_name+'/data/station_info/'+station_file,'w')
+            f.write(out)
+            f.close()
             #Decide which synthetics are required
             if GF[k,2]==1: #Static offset
                 integrate=0

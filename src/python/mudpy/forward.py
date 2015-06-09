@@ -391,7 +391,6 @@ def move_seafloor(home,project_name,run_name,topo_dx_file,topo_dy_file,tgf_file,
     from numpy import genfromtxt,zeros,meshgrid,ones,c_,savetxt,delete,where,nan,argmin,arange
     from obspy import read
     from string import rjust
-    from scipy.io import netcdf_file as netcdf
     from netCDF4 import Dataset
     from scipy.interpolate import griddata
     from mudpy.inverse import interp_and_resample,grd2xyz

@@ -9,6 +9,7 @@ Comment:
 from mudpy import runslip
 import numpy as np
 from obspy.core import UTCDateTime
+
 ########                            GLOBALS                             ########
 home='/Users/dmelgar/Slip_inv/'
 project_name='Nepal_tutorial'
@@ -19,10 +20,10 @@ run_name='GPS_only'
 #####              What-do-you-want-to-do flags, 1=do, 0=leave be          #####close   
 
 init=0 #Initalize project
-make_green=0#Compute GFs
+make_green=1#Compute GFs
 make_synthetics=0 #Compute synthetics for a given model at given stations
 G_from_file=0 # =0 read GFs and create a new G, =1 load G from file
-invert=1  # =1 runs inversion, =0 does nothing
+invert=0  # =1 runs inversion, =0 does nothing
 ###############################################################################
 
 ###############           Green function parameters               #############

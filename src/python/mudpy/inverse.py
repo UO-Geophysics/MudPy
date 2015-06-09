@@ -1806,13 +1806,13 @@ def data_covariance(gf_file,decimate):
     
     
     
-def move_seafloor(home,project_name,run_name,model_name,topo_dx_file,topo_dy_file,
-                tgf_file,fault_name,time_epi,tsun_dt,maxt):
+def make_tgf_dtopo(home,project_name,model_name,topo_dx_file,topo_dy_file,
+                tgf_file,coast_file,fault_name,time_epi,tsun_dt,maxt,instantaneous=True):
     '''
     Create moving topography input files for geoclaw
     '''
     import datetime
-    from numpy import genfromtxt,zeros,arange,meshgrid,ones,c_,savetxt
+    from numpy import genfromtxt,zeros,arange,meshgrid,ones,c_,savetxt,argmin,nan,where
     from obspy import read
     from string import rjust
     from netCDF4 import Dataset
@@ -1838,7 +1838,7 @@ def move_seafloor(home,project_name,run_name,model_name,topo_dx_file,topo_dy_fil
     zdx=bathy_dx.variables['z'][:]
     bathy_dy=Dataset(topo_dy_file,'r')
     zdy=bathy_dy.variables['z'][:]
-    #Make mesh that mathces it for interpolation later
+    #Make mesh that matches it for interpolation later
     try:
         lonb=bathy_dx.variables['lon'][:]
         latb=bathy_dx.variables['lat'][:]
@@ -1901,24 +1901,49 @@ def move_seafloor(home,project_name,run_name,model_name,topo_dx_file,topo_dy_fil
             eSS[:,ksta]=ess[0].data
             nSS[:,ksta]=nss[0].data
             uSS[:,ksta]=uss[0].data
+        #Only apply topo effect to some points
+        if coast_file!=None:
+            #Straight line coordinates
+            coast=genfromtxt(coast_file)
+            #Get mask for applying horizontal effect
+            mask=zeros(loni.shape)
+            for k1 in range(loni.shape[0]):
+                for k2 in range(loni.shape[1]):
+                    #if (lati[k1,k2]-b)/m>loni[k1,k2]: #Point is to the left (or right), do not apply horizontal effect
+                    #Find two closest lat,lon points
+                    ip=argmin(abs(lati[k1,k2]-coast[:,1]))
+                    if loni[k1,k2]>coast[ip,0]:
+                        mask[k1,k2]=nan
+            imask1,imask2=where(mask==0)#Points tot he right DO apply horiz. effect
         #Now go one epoch at a time, and interpolate all fields
         print '... interpolating coseismic offsets to a regular grid'
-        nt_iter=uSS.shape[0]
+        if instantaneous==True:
+            nt_iter=2
+        else:
+            nt_iter=uSS.shape[0]
         for kt in range(nt_iter):
             if kt%20==0:
                 print '... ... working on time slice '+str(kt)+' of '+str(nt_iter)
-            nds=griddata((lon,lat),nDS[kt,:],(loni,lati),method='cubic')
-            eds=griddata((lon,lat),eDS[kt,:],(loni,lati),method='cubic')
-            uds=griddata((lon,lat),uDS[kt,:],(loni,lati),method='cubic')
-            nss=griddata((lon,lat),nSS[kt,:],(loni,lati),method='cubic')
-            ess=griddata((lon,lat),eSS[kt,:],(loni,lati),method='cubic')
-            uss=griddata((lon,lat),uSS[kt,:],(loni,lati),method='cubic')
+            if instantaneous==True and kt==1:
+                nds=griddata((lon,lat),nDS[-1,:],(loni,lati),method='cubic',fill_value=0)
+                eds=griddata((lon,lat),eDS[-1,:],(loni,lati),method='cubic',fill_value=0)
+                uds=griddata((lon,lat),uDS[-1,:],(loni,lati),method='cubic',fill_value=0)
+                nss=griddata((lon,lat),nSS[-1,:],(loni,lati),method='cubic',fill_value=0)
+                ess=griddata((lon,lat),eSS[-1,:],(loni,lati),method='cubic',fill_value=0)
+                uss=griddata((lon,lat),uSS[-1,:],(loni,lati),method='cubic',fill_value=0)
+            else:
+                nds=griddata((lon,lat),nDS[kt,:],(loni,lati),method='cubic',fill_value=0)
+                eds=griddata((lon,lat),eDS[kt,:],(loni,lati),method='cubic',fill_value=0)
+                uds=griddata((lon,lat),uDS[kt,:],(loni,lati),method='cubic',fill_value=0)
+                nss=griddata((lon,lat),nSS[kt,:],(loni,lati),method='cubic',fill_value=0)
+                ess=griddata((lon,lat),eSS[kt,:],(loni,lati),method='cubic',fill_value=0)
+                uss=griddata((lon,lat),uSS[kt,:],(loni,lati),method='cubic',fill_value=0)
             #Output vertical
             uout_ds=uds
             uout_ss=uss
             #Apply effect of topography advection
-            uout_ds=uout_ds+zdx*eds+zdy*nds
-            uout_ss=uout_ss+zdx*ess+zdy*nss
+            uout_ds[imask1,imask2]=uout_ds[imask1,imask2]+zdx[imask1,imask2]*eds[imask1,imask2]+zdy[imask1,imask2]*nds[imask1,imask2]
+            uout_ss[imask1,imask2]=uout_ss[imask1,imask2]+zdx[imask1,imask2]*ess[imask1,imask2]+zdy[imask1,imask2]*nss[imask1,imask2]
             #Convert to column format and append
             xyz_ds=grd2xyz(uout_ds,loni,lati)
             xyz_ss=grd2xyz(uout_ss,loni,lati)
@@ -1931,6 +1956,8 @@ def move_seafloor(home,project_name,run_name,model_name,topo_dx_file,topo_dy_fil
                 dtopo_ds[0:kwrite,1:3]=xyz_ds[:,0:2]
                 dtopo_ss[0:kwrite,1:3]=xyz_ss[:,0:2]
             else:
+                if instantaneous==True:
+                    tvec=ones(len(tvec))
                 dtopo_ds[kwrite:kwrite+numel,:]=c_[tvec,xyz_ds]
                 dtopo_ss[kwrite:kwrite+numel,:]=c_[tvec,xyz_ss]
                 kwrite=kwrite+numel
