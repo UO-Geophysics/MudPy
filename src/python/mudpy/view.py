@@ -266,7 +266,7 @@ def tile_slip(rupt,nstrike,ndip,(slip_min,slip_max),geographic=False,epicenter=0
         plt.scatter(0,-epicenter[2],marker='*',edgecolor='k',facecolor='#00FF00',s=350,linewidth=2)
         #plt.scatter(xcent,zcent,marker='D',edgecolor='black',facecolor='',s=120,linewidth=2)
         plt.quiver(along_strike,depth,rakess/sqrt(rakess**2+rakeds**2),rakeds/sqrt(rakess**2+rakeds**2),color='green',width=0.0035,scale=50)
-        plt.scatter(xaf,zaf,edgecolor='k',s=5)
+        #plt.scatter(xaf,zaf,edgecolor='k',s=5)
     cb.set_label('Slip(m)')
     plt.subplots_adjust(left=0.15, bottom=0.15, right=0.92, top=0.95, wspace=0, hspace=0)
     plt.show()
