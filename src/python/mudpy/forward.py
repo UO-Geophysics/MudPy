@@ -886,6 +886,9 @@ def ssds2rake(ss,ds):
 def makefault(strike,dip,nstrike,dx_dip,dx_strike,epicenter,num_updip,num_downdip,rise_time,fout):
     '''
     Make a planar fault
+    
+    strike - Strike angle (degs)
+    dip - Dip angle (degs)
     '''
     from numpy import arange,sin,cos,deg2rad,r_,ones,arctan,rad2deg,zeros,isnan,unique,where,argsort
     import pyproj
@@ -1126,14 +1129,13 @@ def trim_add_noise(data_path,checker_path,search_pattern):
         ch[0].data=ch[0].data+noise
         ch.write(checker_files[k],format='SAC')
         
-def padGFs():
+def padGFs(pad):
     '''
     Pad GFs with some extra zeros or with last value
     '''
     from glob import glob
     from obspy import read
     from numpy import ones,r_
-    pad=200
     folders=glob('/Users/dmelgar/Slip_inv/maule/GFs/tsunami/*sub*')
     for k in range(len(folders)):
         print str(k)+' / '+str(len(folders))

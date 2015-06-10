@@ -199,23 +199,23 @@ def tile_slip(rupt,nstrike,ndip,(slip_min,slip_max),geographic=False,epicenter=0
     rakeds=ds/slip
     if geographic==True: #Get geographic coordinates to compute along strike and along dip distance
         #Add aftershocks
-        afters=genfromtxt('/Users/dmelgar/Napa2014/hardebeck_afters.txt')
-        lonaf=afters[:,2]
-        lataf=afters[:,1]
-        zaf=-afters[:,3]
-        xaf=zeros(zaf.shape)
-        for k in range(len(lataf)):
-            out=gps2DistAzimuth(epicenter[1],epicenter[0],lataf[k],lonaf[k])
-            xaf[k]=(out[0]/1000)
-            if lataf[k]>epicenter[1]: #If it's tot he left of epcietner it's engative
-                xaf[k]=-xaf[k]
+        #afters=genfromtxt('/Users/dmelgar/Napa2014/hardebeck_afters.txt')
+        #lonaf=afters[:,2]
+        #lataf=afters[:,1]
+        #zaf=-afters[:,3]
+        #xaf=zeros(zaf.shape)
+        #for k in range(len(lataf)):
+        #    out=gps2DistAzimuth(epicenter[1],epicenter[0],lataf[k],lonaf[k])
+        #    xaf[k]=(out[0]/1000)
+        #    if lataf[k]>epicenter[1]: #If it's tot he left of epcietner it's engative
+        #        xaf[k]=-xaf[k]
         #Done with afters
         #Do same thing for centroid position
-        loncent=-122.313
-        latcent=38.26
-        zcent=-4
-        out=gps2DistAzimuth(epicenter[1],epicenter[0],latcent,loncent)
-        xcent=-(out[0]/1000)
+        #loncent=-122.313
+        #latcent=38.26
+        #zcent=-4
+        #out=gps2DistAzimuth(epicenter[1],epicenter[0],latcent,loncent)
+        #xcent=-(out[0]/1000)
         #Done with centroid
         lon=f[(epicenter_line-1)*nstrike:epicenter_line*nstrike,1] #Only compute line at the epicenter depth
         lat=f[(epicenter_line-1)*nstrike:epicenter_line*nstrike,2]    
@@ -1154,7 +1154,8 @@ def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpas
             #xticklabel=['','50','','150','','250',''] #Tohoku
             #xticklabel=['0','','20','','40','','60'] #Napa preferred
             #xticklabel=['','10','','30','','50','','70'] #Napa preferred
-            xticklabel=['','','40','','80','','120','','160',''] #Iquique preferred
+            xticklabel=['','100','','200','','300'] #Maule preferred
+            #xticklabel=['','','40','','80','','120','','160',''] #Iquique preferred
         if k==len(i)-1 and nsta>1: #Last plot
             axe.set_xlabel('Time (s)')
             axn.xaxis.set_ticklabels(xticklabel)
