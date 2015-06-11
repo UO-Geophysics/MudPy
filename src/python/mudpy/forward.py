@@ -1136,6 +1136,7 @@ def padGFs(pad):
     from glob import glob
     from obspy import read
     from numpy import ones,r_
+    pad=200
     folders=glob('/Users/dmelgar/Slip_inv/maule/GFs/tsunami/*sub*')
     for k in range(len(folders)):
         print str(k)+' / '+str(len(folders))

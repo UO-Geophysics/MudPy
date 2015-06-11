@@ -1,6 +1,6 @@
 *.pyc
 .DS_Store
-/src/fk*.o
+/src/fk/*.o
 /src/fk/build/*
 /src/fk/fk
 /src/fk/hk

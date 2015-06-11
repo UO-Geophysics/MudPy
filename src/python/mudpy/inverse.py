@@ -389,7 +389,7 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tsunami,td
                         Eds[ktrace].data=lfilt(Eds[ktrace].data,bandpass,fsample,2)
                         Nds[ktrace].data=lfilt(Nds[ktrace].data,bandpass,fsample,2)
                         Zds[ktrace].data=lfilt(Zds[ktrace].data,bandpass,fsample,2)
-                        bandpass=None # *** HACK
+                        #bandpass=None # *** HACK
                     if decimate!=None: 
                         Ess[ktrace]=stdecimate(Ess[ktrace],decimate)
                         Nss[ktrace]=stdecimate(Nss[ktrace],decimate)
