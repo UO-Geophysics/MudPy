@@ -378,9 +378,10 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tsunami,td
                         Nds+=read(syn_path+staname[ksta]+'.'+nfault+'.DS.'+vord+'.n')
                         Zds+=read(syn_path+staname[ksta]+'.'+nfault+'.DS.'+vord+'.z')
                     #Perform operations that need to only happen once (filtering and decimation)
-                    if bandpass!=None:# or ksta==1: #Apply low pass filter to data (** DIRTY HACK!**)
+                    if bandpass!=None and kfault==0:
                         print 'Bandpassing...'
                         print staname[ksta]
+                    if bandpass!=None:# or ksta==1: #Apply low pass filter to data (** DIRTY HACK!**)
                         #bandpass=0.015
                         fsample=1./Ess[0].stats.delta
                         Ess[ktrace].data=lfilt(Ess[ktrace].data,bandpass,fsample,2)
