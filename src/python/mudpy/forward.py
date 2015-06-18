@@ -218,9 +218,9 @@ def waveforms_matrix(home,project_name,fault_name,rupture_name,station_file,GF_l
         ndummy[0].stats.starttime=time_epi
         edummy=ndummy.copy()
         udummy=ndummy.copy()
-        ndummy.write(home+project_name+'/data/waveforms/'+gfsta[ksta]+'.'+vord+'.n',format='SAC')
-        edummy.write(home+project_name+'/data/waveforms/'+gfsta[ksta]+'.'+vord+'.e',format='SAC')
-        udummy.write(home+project_name+'/data/waveforms/'+gfsta[ksta]+'.'+vord+'.u',format='SAC')
+        ndummy.write(home+project_name+'/data/waveforms/'+sta+'.'+vord+'.n',format='SAC')
+        edummy.write(home+project_name+'/data/waveforms/'+sta+'.'+vord+'.e',format='SAC')
+        udummy.write(home+project_name+'/data/waveforms/'+sta+'.'+vord+'.u',format='SAC')
         #Extract only one station from GF_list file
         ista=int(where(gfsta==staname[ksta])[0])+2
         #Make mini GF_file

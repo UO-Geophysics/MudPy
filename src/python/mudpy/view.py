@@ -630,7 +630,7 @@ def tile_moment(rupt,epicenter,nstrike,ndip,covfile,beta,(vfast,vslow)):
 
 def source_time_function(rupt,epicenter):
     '''
-    Plot source time function of complete ru
+    Plot source time function of complete rupture
     '''
     import matplotlib.pyplot as plt
     from numpy import genfromtxt,unique,log10,where,floor

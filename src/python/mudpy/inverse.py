@@ -1811,6 +1811,9 @@ def make_tgf_dtopo(home,project_name,model_name,topo_dx_file,topo_dy_file,
                 tgf_file,coast_file,fault_name,time_epi,tsun_dt,maxt,instantaneous=True):
     '''
     Create moving topography input files for geoclaw
+    
+    tsun_dt - Sampling itnerval of synthetics ALREADY made
+    
     '''
     import datetime
     from numpy import genfromtxt,zeros,arange,meshgrid,ones,c_,savetxt,argmin,nan,where
@@ -1822,7 +1825,8 @@ def make_tgf_dtopo(home,project_name,model_name,topo_dx_file,topo_dy_file,
     #Get station names
     staname=genfromtxt(home+project_name+'/data/station_info/'+tgf_file,usecols=0,dtype='S')
     sta=genfromtxt(home+project_name+'/data/station_info/'+tgf_file)
-    lon=sta[:,1]
+    lon=360+sta[:,1]
+    print "Correcting longitude"
     lat=sta[:,2]
     #Get fault file
     f=genfromtxt(home+project_name+'/data/model_info/'+fault_name)
@@ -1881,12 +1885,12 @@ def make_tgf_dtopo(home,project_name,model_name,topo_dx_file,topo_dy_file,
             nss.trim(time_epi,tmax,fill_value=nss[0].data[-1],pad=True)
             uss.trim(time_epi,tmax,fill_value=uss[0].data[-1],pad=True)
             #Decimate to original smapling interval
-            eds[0].decimate(4,no_filter=True)
-            nds[0].decimate(4,no_filter=True)
-            uds[0].decimate(4,no_filter=True)
-            ess[0].decimate(4,no_filter=True)
-            nss[0].decimate(4,no_filter=True)
-            uss[0].decimate(4,no_filter=True)
+            eds[0].decimate(2,no_filter=True)
+            nds[0].decimate(2,no_filter=True)
+            uds[0].decimate(2,no_filter=True)
+            ess[0].decimate(2,no_filter=True)
+            nss[0].decimate(2,no_filter=True)
+            uss[0].decimate(2,no_filter=True)
             #Initalize matrices
             if ksta==0:
                 eDS=zeros((nss[0].stats.npts,len(sta)))
