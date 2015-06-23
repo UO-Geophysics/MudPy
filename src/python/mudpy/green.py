@@ -3,6 +3,8 @@ Diego Melgar 01/2014
 Green functions routines for source models
 '''
 
+
+        
 def run_green(source,station_file,model_name,dt,NFFT,static,dk,pmin,pmax,kmax):
     '''
     Compute GFs using Zhu & Rivera code for a given velocity model, source depth
@@ -45,6 +47,10 @@ def run_green(source,station_file,model_name,dt,NFFT,static,dk,pmin,pmax,kmax):
     print err
     log=str(out)+str(err)
     return log
+    
+    
+
+            
     
     
     
@@ -432,6 +438,10 @@ def dreger_stf(rise_time,zeta,dt):
     
     rise_time=float(rise_time)
     t=arange(0,rise_time/2,dt)
+    
+    
+    
+
     
     
     

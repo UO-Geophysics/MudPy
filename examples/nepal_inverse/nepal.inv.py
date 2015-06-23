@@ -12,8 +12,8 @@ from obspy.core import UTCDateTime
 
 ########                            GLOBALS                             ########
 home='/Users/dmelgar/Slip_inv/'
-project_name='Nepal_tutorial'
-run_name='GPS_only'
+project_name='paralell'
+run_name='test'
 ################################################################################
 
 
@@ -27,14 +27,15 @@ invert=0  # =1 runs inversion, =0 does nothing
 ###############################################################################
 
 ###############           Green function parameters               #############
+ncpus=4   #Number of available cores (set to ncpus=1 for serial)
 hot_start=0  #Start at a certain subfault number
 model_name='avouac.mod'   #Velocity model
 fault_name='nepal_10.fault'    #Fault geometry
-GF_list='nepal_simple.gflist'#What GFs are to be computed for each station
+GF_list='nepal.gflist'#What GFs are to be computed for each station
 tgf_file=None#'seafloor.sta'
 G_name='nepal_3' #Either name of GF matrix to load or name to save GF matrix with
 # Displacement and velocity waveform parameters
-NFFT=512; dt=0.2
+NFFT=128; dt=1
 #Tsunami deformation parameters
 tsunNFFT=128 ; tsun_dt=2.0
 #fk-parameters
@@ -69,7 +70,7 @@ if init==1:
 if make_green==1 or make_synthetics==1:
     runslip.inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
         dt,tsun_dt,NFFT,tsunNFFT,make_green,make_synthetics,dk,pmin,
-        pmax,kmax,beta,time_epi,hot_start)   
+        pmax,kmax,beta,time_epi,hot_start,ncpus)   
 
 #Run inversion
 if invert==1:

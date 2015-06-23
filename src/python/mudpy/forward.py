@@ -400,7 +400,9 @@ def move_seafloor(home,project_name,run_name,topo_dx_file,topo_dy_file,tgf_file,
     #Get station names
     sta=genfromtxt(home+project_name+'/data/station_info/'+tgf_file)
     stanames=genfromtxt(home+project_name+'/data/station_info/'+tgf_file,usecols=0,dtype='S')
-    lon=sta[:,1]
+    lon=360+sta[:,1]
+    print 'correcting longitude'
+    print lon[0]
     lat=sta[:,2]
     #Get fault file
     #f=genfromtxt(home+project_name+'/data/model_info/'+fault_name)

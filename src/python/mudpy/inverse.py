@@ -261,6 +261,8 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tsunami,td
     from mudpy.green import stdecimate
     
     #Load fault model
+    tsunami=True
+    print "Switch off tsunami"
     source=loadtxt(home+project_name+'/data/model_info/'+fault_name,ndmin=2)
     Nfaults=source.shape[0] #Number of subfaults
     #Load station info
@@ -378,11 +380,13 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tsunami,td
                         Nds+=read(syn_path+staname[ksta]+'.'+nfault+'.DS.'+vord+'.n')
                         Zds+=read(syn_path+staname[ksta]+'.'+nfault+'.DS.'+vord+'.z')
                     #Perform operations that need to only happen once (filtering and decimation)
-                    if bandpass!=None and kfault==0:
-                        print 'Bandpassing...'
-                        print staname[ksta]
                     if bandpass!=None:# or ksta==1: #Apply low pass filter to data (** DIRTY HACK!**)
-                        #bandpass=0.015
+                        if kfault==0:
+                            print 'Bandpassing...'
+                            print staname[ksta]
+                        print 'Bandpassing hack...'
+                        print staname[ksta]
+                        bandpass=0.015
                         fsample=1./Ess[0].stats.delta
                         Ess[ktrace].data=lfilt(Ess[ktrace].data,bandpass,fsample,2)
                         Nss[ktrace].data=lfilt(Nss[ktrace].data,bandpass,fsample,2)
@@ -390,7 +394,7 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tsunami,td
                         Eds[ktrace].data=lfilt(Eds[ktrace].data,bandpass,fsample,2)
                         Nds[ktrace].data=lfilt(Nds[ktrace].data,bandpass,fsample,2)
                         Zds[ktrace].data=lfilt(Zds[ktrace].data,bandpass,fsample,2)
-                        #bandpass=None # *** HACK
+                        #bandpass=None
                     if decimate!=None: 
                         Ess[ktrace]=stdecimate(Ess[ktrace],decimate)
                         Nss[ktrace]=stdecimate(Nss[ktrace],decimate)
@@ -523,11 +527,9 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tsunami,td
                 ds=tshift(ds,tdelay[kfault])
                 #Now time align stuff                                
                 #ss=resample_synth_tsun(ss[0],Data[ksta])
-                print ss
                 ss=prep_synth(ss[0],Data[ksta])
                 #ds=resample_synth_tsun(ds[0],Data[ksta])
                 ds=prep_synth(ds[0],Data[ksta])
-                print ss
                 #Insert into Gtemp then append to G
                 if kfault==0 and ksta==0: #It's the first subfault and station, initalize G
                     G=gdims_tsun(datafiles,Nfaults,decimate) #Survey all stations to decide size of G
@@ -536,8 +538,7 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tsunami,td
                     npts=Data[ksta].stats.npts
                     print "... ... "+str(npts)+" data points left over"
                     Gtemp=zeros([npts,Nfaults*2])      
-                #Insert synthetics into Gtemp
-                print ss
+                #Insert synthetics into Gtempview
                 Gtemp[0:npts,2*kfault]=ss.data
                 Gtemp[0:npts,2*kfault+1]=ds.data
                 ktrace+=1
@@ -2051,8 +2052,8 @@ def tsunami2sac(home,project_name,model_name,fault_name,tlims,dt,time_epi,hot_st
     #Load fault file
     f=genfromtxt(home+project_name+'/data/model_info/'+fault_name)
     #Load gauge correspondences
-    gaugesGC=genfromtxt(home+project_name+'/data/station_info/gauges.dict',usecols=0)
-    gauges=genfromtxt(home+project_name+'/data/station_info/gauges.dict',usecols=3,dtype='S')
+    gaugesGC=genfromtxt(home+project_name+'/data/station_info/gauges.dict',usecols=3)  #This is what they are called in GeoClaw
+    gauges=genfromtxt(home+project_name+'/data/station_info/gauges.dict',usecols=2,dtype='S')   #their actual name
     #Where is the data
     green_dir=home+project_name+'/GFs/tsunami/'  
     for ksub in range(hot_start,len(f)):
@@ -2068,6 +2069,7 @@ def tsunami2sac(home,project_name,model_name,fault_name,tlims,dt,time_epi,hot_st
         gds=genfromtxt(subdir+'_DS/_output/fort.gauge')
         gss=genfromtxt(subdir+'_SS/_output/fort.gauge')
         for kgauge in range(len(gauges)):
+            print kgauge
             iss=where(gss[:,0]==gaugesGC[kgauge])[0]
             ids=where(gds[:,0]==gaugesGC[kgauge])[0]
             #Get time vector
@@ -2089,7 +2091,7 @@ def tsunami2sac(home,project_name,model_name,fault_name,tlims,dt,time_epi,hot_st
             tiout=arange(0,tlims[1]+dt,dt)
             etass=interp(tiout,r_[0,ti],r_[0,etass])
             etads=interp(tiout,r_[0,ti],r_[0,etads])
-            etass=lowpass(etass,1./dt,fcorner,4)
+            #etass=lowpass(etass,1./dt,fcorner,4)
 
             
             #Initalize stream objects
