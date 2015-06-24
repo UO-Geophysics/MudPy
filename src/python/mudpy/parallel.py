@@ -118,7 +118,6 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
     from obspy import read
     from shlex import split
     from mudpy.green import src2sta,rt2ne,origin_time
-    from progressbar import ProgressBar
     
         #What parameters are we using?
     if rank==0:
@@ -173,8 +172,6 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
         Mw=(2./3)*(log10(Mo)-9.1)
         #Move to output folder
         os.chdir(green_path)
-        #Instantiate progress bar
-        pbar = ProgressBar()
         print 'Processor '+str(rank)+' is working on subfault '+str(int(source[0]))+' and '+str(len(d))+' stations '
         for k in range(len(d)):
             if static==0: #Compute full waveforms

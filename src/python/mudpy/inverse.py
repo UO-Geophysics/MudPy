@@ -261,8 +261,6 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tsunami,td
     from mudpy.green import stdecimate
     
     #Load fault model
-    tsunami=True
-    print "Switch off tsunami"
     source=loadtxt(home+project_name+'/data/model_info/'+fault_name,ndmin=2)
     Nfaults=source.shape[0] #Number of subfaults
     #Load station info
