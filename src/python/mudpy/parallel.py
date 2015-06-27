@@ -88,7 +88,8 @@ def run_parallel_green(home,project_name,station_file,model_name,dt,NFFT,static,
             p.communicate()
             
 
-def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,static,tsunami,time_epi,beta,rank,size):
+def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,static,tsunami,time_epi,
+                beta,custom_stf,rank,size):
     '''
     Use green functions and compute synthetics at stations for a single source
     and multiple stations. This code makes an external system call to syn.c first it
@@ -131,7 +132,8 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
         tsunami = %s
         time_epi = %s
         beta = %d
-        ''' %(home,project_name,station_file,model_name,str(integrate),str(static),str(tsunami),str(time_epi),beta)
+        custom_stf = %s
+        ''' %(home,project_name,station_file,model_name,str(integrate),str(static),str(tsunami),str(time_epi),beta,custom_stf)
         print out
     #Read your corresponding source file
     mpi_source=genfromtxt(home+project_name+'/data/model_info/mpi_source.'+str(rank)+'.fault')
@@ -139,6 +141,11 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
     rakeDS=90+beta #90 is thrust, -90 is normal
     rakeSS=0+beta #0 is left lateral, 180 is right lateral
     tb=50 #Number of samples before first arrival
+    #Figure out custom STF
+    if custom_stf.lower()!='none':
+        custom_stf=home+project_name+'/GFs/STFs/'+custom_stf
+    else:
+        custom_stf=None
     #Load structure
     model_file=home+project_name+'/structure/'+model_name
     structure=loadtxt(model_file,ndmin=2)
@@ -179,22 +186,43 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
                 #Form the strings to be used for the system calls according to suer desired options
                 if integrate==1: #Make displ.
                     #First Stike-Slip GFs
-                    commandSS="syn -I -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeSS)+" -D"+str(duration)+ \
-                        "/"+str(rise)+" -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".SS.disp.x -G"+green_path+diststr+".grn.0"
-                    commandSS=split(commandSS) #Split string into lexical components for system call
-                    #Now dip slip
-                    commandDS="syn -I -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeDS)+" -D"+str(duration)+ \
-                        "/"+str(rise)+" -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".DS.disp.x -G"+green_path+diststr+".grn.0"
-                    commandDS=split(commandDS)
+                    if custom_stf==None:
+                        print 'No custom STF'
+                        commandSS="syn -I -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeSS)+" -D"+str(duration)+ \
+                            "/"+str(rise)+" -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".SS.disp.x -G"+green_path+diststr+".grn.0"
+                        commandSS=split(commandSS) #Split string into lexical components for system call
+                        #Now dip slip
+                        commandDS="syn -I -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeDS)+" -D"+str(duration)+ \
+                            "/"+str(rise)+" -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".DS.disp.x -G"+green_path+diststr+".grn.0"
+                        commandDS=split(commandDS)
+                    else:
+                        #print "Using custom STF "+custom_stf
+                        commandSS="syn -I -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeSS)+" -S"+custom_stf+ \
+                            " -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".SS.disp.x -G"+green_path+diststr+".grn.0"
+                        commandSS=split(commandSS) #Split string into lexical components for system call
+                        #Now dip slip
+                        commandDS="syn -I -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeDS)+" -S"+custom_stf+ \
+                            " -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".DS.disp.x -G"+green_path+diststr+".grn.0"
+                        commandDS=split(commandDS)
                 else: #Make vel.
                     #First Stike-Slip GFs
-                    commandSS="syn -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeSS)+" -D"+str(duration)+ \
-                        "/"+str(rise)+" -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".SS.vel.x -G"+green_path+diststr+".grn.0"
-                    commandSS=split(commandSS)
-                    #Now dip slip
-                    commandDS="syn -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeDS)+" -D"+str(duration)+ \
-                        "/"+str(rise)+" -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".DS.vel.x -G"+green_path+diststr+".grn.0"
-                    commandDS=split(commandDS)
+                    if custom_stf==None:
+                        commandSS="syn -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeSS)+" -D"+str(duration)+ \
+                            "/"+str(rise)+" -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".SS.vel.x -G"+green_path+diststr+".grn.0"
+                        commandSS=split(commandSS)
+                        #Now dip slip
+                        commandDS="syn -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeDS)+" -D"+str(duration)+ \
+                            "/"+str(rise)+" -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".DS.vel.x -G"+green_path+diststr+".grn.0"
+                        commandDS=split(commandDS)
+                    else:
+                        #print "Using custom STF "+custom_stf
+                        commandSS="syn -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeSS)+" -S"+custom_stf+ \
+                            " -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".SS.vel.x -G"+green_path+diststr+".grn.0"
+                        commandSS=split(commandSS)
+                        #Now dip slip
+                        commandDS="syn -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeDS)+" -S"+custom_stf+ \
+                            " -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".DS.vel.x -G"+green_path+diststr+".grn.0"
+                        commandDS=split(commandDS)
                 #Run the strike- and dip-slip commands (make system calls)
                 p=subprocess.Popen(commandSS)
                 p.communicate() 
@@ -287,7 +315,7 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
                         " -A"+str(az[k])+" -P"
                 commandSS=split(commandSS) #Lexical split
                 commandDS=split(commandDS)
-                #Make system calls, one for DS, one for SS, and save log
+                #Make system calls, one for DS, one for SS
                 ps=subprocess.Popen(['printf',inpipe],stdout=subprocess.PIPE)  #This is the statics pipe, pint stdout to syn's stdin
                 p=subprocess.Popen(commandSS,stdin=ps.stdout,stdout=open(staname[k]+'.subfault'+num+'.SS.static.rtz','w'))     
                 p.communicate()  
@@ -350,6 +378,7 @@ if __name__ == '__main__':
         tsunami=sys.argv[8]=='True'
         time_epi=UTCDateTime(sys.argv[9])
         beta=float(sys.argv[10])
-        run_parallel_synthetics(home,project_name,station_file,model_name,integrate,static,tsunami,time_epi,beta,rank,size)
+        custom_stf=sys.argv[11]
+        run_parallel_synthetics(home,project_name,station_file,model_name,integrate,static,tsunami,time_epi,beta,custom_stf,rank,size)
     else:
         print 'ERROR: You''re not allowed to run '+sys.argv[1]+' from the shell or it does not exist'

@@ -548,7 +548,7 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tsunami,td
         pass                                
       
       
-def getdata(home,project_name,GF_list,decimate,bandpass):
+def getdata(home,project_name,GF_list,decimate,bandpass,quiet=False):
     '''
     Assemble the data vector for all data types
     
@@ -578,18 +578,20 @@ def getdata(home,project_name,GF_list,decimate,bandpass):
     dstatic=array([])
     i=where(GF[:,kgf]==1)[0]
     for ksta in range(len(i)):
+        if quiet==False:  
             print 'Assembling static offsets from '+stations[i[ksta]]+' into data vector.'
-            dtemp=genfromtxt(GFfiles[i[ksta],kgf])
-            n=dtemp[0]
-            e=dtemp[1]
-            u=dtemp[2]
-            dstatic=append(dstatic,r_[n,e,u])
+        dtemp=genfromtxt(GFfiles[i[ksta],kgf])
+        n=dtemp[0]
+        e=dtemp[1]
+        u=dtemp[2]
+        dstatic=append(dstatic,r_[n,e,u])
     #Displacements
     kgf=1
     ddisp=array([])
     i=where(GF[:,kgf]==1)[0]
     for ksta in range(len(i)):
-        print 'Assembling displacement waveforms from '+stations[i[ksta]]+' into data vector.'
+        if quiet==False:  
+            print 'Assembling displacement waveforms from '+stations[i[ksta]]+' into data vector.'
         n=read(GFfiles[i[ksta],kgf]+'.n')
         e=read(GFfiles[i[ksta],kgf]+'.e')
         u=read(GFfiles[i[ksta],kgf]+'.u')
@@ -614,7 +616,8 @@ def getdata(home,project_name,GF_list,decimate,bandpass):
     dvel=array([])
     i=where(GF[:,kgf]==1)[0]
     for ksta in range(len(i)):
-        print 'Assembling velocity waveforms from '+stations[i[ksta]]+' into data vector.'
+        if quiet==False:  
+            print 'Assembling velocity waveforms from '+stations[i[ksta]]+' into data vector.'
         n=read(GFfiles[i[ksta],kgf]+'.n')
         e=read(GFfiles[i[ksta],kgf]+'.e')
         u=read(GFfiles[i[ksta],kgf]+'.u')
@@ -639,7 +642,8 @@ def getdata(home,project_name,GF_list,decimate,bandpass):
     dtsun=array([])
     i=where(GF[:,kgf]==1)[0]
     for ksta in range(len(i)):
-        print 'Assembling tsunami waveforms from '+stations[i[ksta]]+' into data vector.'
+        if quiet==False:  
+            print 'Assembling tsunami waveforms from '+stations[i[ksta]]+' into data vector.'
         tsun=read(GFfiles[i[ksta],kgf])
         dtsun=append(dtsun,tsun)
     #InSAR LOS
@@ -647,10 +651,11 @@ def getdata(home,project_name,GF_list,decimate,bandpass):
     dlos=array([])  
     i=where(GF[:,kgf]==1)[0]
     for ksta in range(len(i)):
+        if quiet==False:  
             print 'Assembling InSAR LOS offsets from '+stations[i[ksta]]+' into data vector.'
-            dtemp=genfromtxt(GFfiles[i[ksta],kgf])
-            los=dtemp[0]
-            dlos=append(dlos,los)          
+        dtemp=genfromtxt(GFfiles[i[ksta],kgf])
+        los=dtemp[0]
+        dlos=append(dlos,los)          
     #Done, concatenate all, convert to column vector and exit
     d=concatenate([dx for dx in [dstatic,ddisp,dvel,dtsun,dlos] if dx.size > 0])
     D=zeros((d.shape[0],1))
@@ -2145,4 +2150,47 @@ def interp_and_resample(st,dt,time_epi):
     stout[0].stats.starttime=t1-timedelta(microseconds=mu)
     return stout
     
+    
+def data_norms(home,project_name,GF_list):
+    '''
+    Read each data type and extract it's norm, this is used to inform the
+    weighting scheme
+    '''
+    from mudpy.inverse import getdata
+    from numpy import genfromtxt,where
+    from scipy.linalg import norm
+    
+    #Read the data
+    d=getdata(home,project_name,GF_list,decimate=None,bandpass=None,quiet=True)
+    #Figure out which indices belong to which data type
+    gf_file=home+project_name+'/data/station_info/'+GF_list
+    #Read station flags
+    GF=genfromtxt(gf_file,usecols=[3,4,5,6,7],skip_header=1,dtype='f8')
+    # how many of each type?
+    istatic=where(GF[:,0]==1)[0]
+    idisp=where(GF[:,1]==1)[0]
+    ivel=where(GF[:,2]==1)[0]
+    itsun=where(GF[:,3]==1)[0]
+    iinsar=where(GF[:,4]==1)[0]
+    #compute norms
+    if len(istatic)>0:
+        print "||statics|| = "+str(norm(d[istatic]))
+    else:
+        print "||statics|| = NaN"
+    if len(idisp)>0:
+        print "||disp. waveforms|| = "+str(norm(d[idisp]))
+    else:
+        print "||disp. waveforms|| = NaN"
+    if len(ivel)>0:
+        print "||vel. waveforms|| = "+str(norm(d[ivel]))
+    else:
+        print "||vel. waveforms|| = NaN"
+    if len(itsun)>0:
+        print "||tsunami|| = "+str(norm(d[itsun]))
+    else:
+        print "||tsunami|| = NaN"
+    if len(iinsar)>0:
+        print "||InSAR|| = "+str(norm(d[iinsar]))
+    else:
+        print "||InSAR|| = NaN"
     
