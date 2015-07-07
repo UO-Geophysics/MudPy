@@ -1170,7 +1170,7 @@ def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpas
     #plt.subplots_adjust(left=0.2, bottom=0.05, right=0.8, top=0.95, wspace=0, hspace=0)
     plt.subplots_adjust(left=0.2, bottom=0.15, right=0.8, top=0.85, wspace=0, hspace=0)
 
-def static_synthetics(home,project_name,run_name,run_number,gflist,sscale,qscale):
+def static_synthetics(home,project_name,run_name,run_number,gflist,qscale):
     '''
     Plot synthetics vs real data
     
@@ -1208,10 +1208,6 @@ def static_synthetics(home,project_name,run_name,run_number,gflist,sscale,qscale
         neus=genfromtxt(synthpath+run_name+'.'+run_number+'.'+sta[i[k]]+'.static.neu')
         #neus=genfromtxt(synthpath+sta[i[k]]+'.static.neu')
         ns[k]=neus[0] ; es[k]=neus[1] ; us[k]=neus[2]
-        if sscale!=None:
-            ns=ns/sscale
-            es=es/sscale
-            us=us/sscale
     #Make plot   
     lonadjust=(lon.max()-lon.min())/10
     latadjust=(lat.max()-lat.min())/10
