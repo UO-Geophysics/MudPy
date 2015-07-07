@@ -480,7 +480,7 @@ def tile_slip_movieframes(home,project_name,sliprate_path,nstrike,ndip,(slip_min
         plt.close("all")
         
                        
-def tile_moment(rupt,epicenter,nstrike,ndip,covfile,beta,(vfast,vslow)):
+def tile_moment(rupt,epicenter,nstrike,ndip,covfile,beta=0,(vfast,vslow)=(0,0),shade=False):
     '''
     Tile plot of subfault source-time functions
     '''
@@ -584,20 +584,21 @@ def tile_moment(rupt,epicenter,nstrike,ndip,covfile,beta,(vfast,vslow)):
         #Done now plot them
         #get current axis
         ax=axarr[int(idip[kfault]), int(istrike[kfault])]
-        #Make contourf
-        Mc=linspace(0,0.98*max(M1),100)
-        T,M=meshgrid(t1,Mc)
-        i=where(T==0)[0]
-        T[i]=0.01
-        V=d[kfault]/T
-        im=ax.contourf(T,M,V,100,vmin=vslow,vmax=vfast,cmap=cm.spectral)
-        #Cover upper part
-        ax.fill_between(t1,y1=M1,y2=1.01*M1.max(),color='white')
-        #Plot confidence intervals
-        if covfile !=None:
-            ax.fill_between(t1,M1minus,M1plus,facecolor='grey',alpha=0.4)
-            ax.plot(t1,M1plus,color='black')
-            ax.plot(t1,M1minus,color='white',lw=2)
+        if shade:
+            #Make contourf
+            Mc=linspace(0,0.98*max(M1),100)
+            T,M=meshgrid(t1,Mc)
+            i=where(T==0)[0]
+            T[i]=0.01
+            V=d[kfault]/T
+            im=ax.contourf(T,M,V,100,vmin=vslow,vmax=vfast,cmap=cm.spectral)
+            #Cover upper part
+            ax.fill_between(t1,y1=M1,y2=1.01*M1.max(),color='white')
+            #Plot confidence intervals
+            if covfile !=None:
+                ax.fill_between(t1,M1minus,M1plus,facecolor='grey',alpha=0.4)
+                ax.plot(t1,M1plus,color='black')
+                ax.plot(t1,M1minus,color='white',lw=2)
         #Plot curve
         ax.plot(t1, M1,color='k')
         
@@ -614,16 +615,17 @@ def tile_moment(rupt,epicenter,nstrike,ndip,covfile,beta,(vfast,vslow)):
     #Fix subplot arrangement
     plt.subplots_adjust(left=0.02, bottom=0.02, right=0.9, top=0.98, wspace=0, hspace=0)
     #Add colorbar
-    T2=T.copy()
-    M2=M.copy()
-    M2[:,:]=0
-    vfill=linspace(1.0,3.0,10000)
-    V2=tile(vfill[::-1],(100,1))
-    ax=axarr[0,0]
-    im2=ax.contourf(T2,M2,V2,100,vmin=vslow,vmax=vfast,cmap=cm.spectral)
-    cbar_ax = fig.add_axes([0.91, 0.15, 0.01, 0.7])
-    cb=fig.colorbar(im2, cax=cbar_ax)
-    cb.set_label('Reference rupture velocity (km/s)')
+    if shade:
+        T2=T.copy()
+        M2=M.copy()
+        M2[:,:]=0
+        vfill=linspace(1.0,3.0,10000)
+        V2=tile(vfill[::-1],(100,1))
+        ax=axarr[0,0]
+        im2=ax.contourf(T2,M2,V2,100,vmin=vslow,vmax=vfast,cmap=cm.spectral)
+        cbar_ax = fig.add_axes([0.91, 0.15, 0.01, 0.7])
+        cb=fig.colorbar(im2, cax=cbar_ax)
+        cb.set_label('Reference rupture velocity (km/s)')
     print 'Maximum moment was '+str(Mmax)+'N-m'
     return tout,Mout
 
@@ -1154,8 +1156,9 @@ def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpas
             #xticklabel=['','50','','150','','250',''] #Tohoku
             #xticklabel=['0','','20','','40','','60'] #Napa preferred
             #xticklabel=['','10','','30','','50','','70'] #Napa preferred
-            xticklabel=['','100','','200','','300'] #Maule preferred
+            #xticklabel=['','100','','200','','300'] #Maule preferred
             #xticklabel=['','','40','','80','','120','','160',''] #Iquique preferred
+            xticklabel=['','10','','30','','50',''] #Nepal preferred
         if k==len(i)-1 and nsta>1: #Last plot
             axe.set_xlabel('Time (s)')
             axn.xaxis.set_ticklabels(xticklabel)
@@ -1209,18 +1212,28 @@ def static_synthetics(home,project_name,run_name,run_number,gflist,sscale,qscale
             ns=ns/sscale
             es=es/sscale
             us=us/sscale
-    #Make plot    
+    #Make plot   
+    lonadjust=(lon.max()-lon.min())/10
+    latadjust=(lat.max()-lat.min())/10
     plt.figure()
     plt.subplot(121)
     plt.quiver(lon,lat,e,n,color='k',scale=qscale)
     plt.quiver(lon,lat,es,ns,color='r',scale=qscale)
     plt.grid()
     plt.title('Horizontals')
+    for k in range(len(i)):
+        plt.annotate(sta[i[k]],xy=(lon[k],lat[k]))
+    plt.xlim([lon.min()-lonadjust,lon.max()+lonadjust])
+    plt.ylim([lat.min()-latadjust,lat.max()+latadjust])
     plt.subplot(122)
     plt.quiver(lon,lat,zeros(len(u)),u,color='k',scale=qscale)
     plt.quiver(lon+0.05,lat,zeros(len(us)),us,color='r',scale=qscale)
     plt.grid()
     plt.title('Verticals')
+    for k in range(len(i)):
+        plt.annotate(sta[i[k]],xy=(lon[k],lat[k]))
+    plt.xlim([lon.min()-lonadjust,lon.max()+lonadjust])
+    plt.ylim([lat.min()-latadjust,lat.max()+latadjust])
     #plt.legend('Data','Synth')
     plt.suptitle('Statics for run '+project_name+': '+run_name+'.'+run_number)
     
@@ -1231,7 +1244,7 @@ def insar_residual(home,project_name,run_name,run_number,gflist,zlims):
     gflist: The GF control file that decides what to plot/not plot
     datapath
     '''
-    from numpy import genfromtxt,where,zeros,sqrt
+    from numpy import genfromtxt,where,zeros,sqrt,c_,savetxt
     import matplotlib.pyplot as plt
     import matplotlib
     
@@ -1256,7 +1269,9 @@ def insar_residual(home,project_name,run_name,run_number,gflist,zlims):
         neus=genfromtxt(synthpath+run_name+'.'+run_number+'.'+sta[i[k]]+'.los')
         #neus=genfromtxt(synthpath+sta[i[k]]+'.static.neu')
         los_synth[k]=neus[0]
-    #Make plot    
+    #Make plot
+    out=c_[lon,lat,los_data,los_synth,los_data-los_synth]
+    savetxt(home+project_name+'/analysis/'+run_name+'.'+run_number+'.insar.res',out,fmt='%.6f\t%.6f\t%8.5f\t%8.5f\t%8.5f',header='lon,lat,los_data(m),los_synthetic(m),data-synthetic(m)')
     plt.figure()
     plt.scatter(lon,lat,c=los_data-los_synth,cmap=matplotlib.cm.seismic,vmin=zlims[0],vmax=zlims[1],s=50)
     plt.title('LOS residuals (m)')

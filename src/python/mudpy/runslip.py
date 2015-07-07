@@ -377,7 +377,7 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
                             hot_start,dk,pmin,pmax,kmax,ncpus)
             else:
                 make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,static,tsunami,
-                            hot_start,dk,pmin,pmax,kmax,ncpus)
+                            hot_start,dk,pmin,pmax,kmax)
         i=where(GF[:,3]==1)[0]
         if len(i)>0 : #displ waveform
             print 'Displacememnt GFs requested...'
@@ -457,7 +457,7 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
                     integrate=0
                     static=1
                     tsunami=False
-                    make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,tsunami,beta,hot_start,time_epi,custom_stf)
+                    make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,tsunami,beta,hot_start,time_epi)
                 if GF[k,3]==1: #dispalcement waveform
                     integrate=1
                     static=0
@@ -465,7 +465,7 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
                         tsunami=False
                     else: #I am computing seafloor deformation for tsunami GFs, eventaully
                         tsunami=True
-                    make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,tsunami,beta,hot_start,time_epi,custom_stf)
+                    make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,tsunami,beta,hot_start,time_epi)
                 if GF[k,4]==1: #velocity waveform
                     integrate=0
                     static=0
@@ -473,7 +473,7 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
                         tsunami=False
                     else: #I am computing seafloor deformation for tsunami GFs, eventaully
                         tsunami=True
-                    make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,tsunami,beta,hot_start,time_epi,custom_stf)
+                    make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,tsunami,beta,hot_start,time_epi)
                 if GF[k,5]==1: #tsunami waveform
                     integrate=1
                     static=0
@@ -484,7 +484,7 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
                     integrate=0
                     static=1
                     tsunami=False
-                    make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,tsunami,beta,hot_start,time_epi,custom_stf)
+                    make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,tsunami,beta,hot_start,time_epi)
         else: #Paralell processing
             station_file='temp.sta'
             #Decide which synthetics are required

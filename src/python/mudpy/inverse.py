@@ -68,7 +68,7 @@ def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epic
             GFfiles=expand_dims(GFfiles,0)
             stations=array([stations])
         #static field GFs
-        kgf=2
+        kgf=2 
         Gstatic=array([])
         if GF[:,kgf].sum()>0:
             try:
@@ -221,12 +221,15 @@ def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epic
                     Gstatic_nwin=c_[Gstatic_nwin,Gstatic]
                 Gstatic=Gstatic_nwin.copy()
                 Gstatic_nwin=None #Release memory
-            elif size(Ginsar)!=0: #Static is not empty, need to tile it
+            if size(Ginsar)!=0: #Static is not empty, need to tile it
                 Ginsar_nwin=Ginsar.copy()
                 for nwin in range(num_windows-1):
                     Ginsar_nwin=c_[Ginsar_nwin,Ginsar]
                 Ginsar=Ginsar_nwin.copy()
                 Ginsar_nwin=None #Release memory
+            print Gstatic.shape
+            print Gvel.shape
+            print Ginsar.shape
             G=concatenate([g for g in [Gstatic,Gdisp,Gvel,Gtsun,Ginsar] if g.size > 0])
         print 'Saving GF matrix to '+G_name+' this might take just a second...'
         save(G_name,G)
@@ -382,9 +385,9 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tsunami,td
                         if kfault==0:
                             print 'Bandpassing...'
                             print staname[ksta]
-                        print 'Bandpassing hack...'
-                        print staname[ksta]
-                        bandpass=0.015
+                        #print 'Bandpassing hack...'
+                        #print staname[ksta]
+                        #bandpass=0.015
                         fsample=1./Ess[0].stats.delta
                         Ess[ktrace].data=lfilt(Ess[ktrace].data,bandpass,fsample,2)
                         Nss[ktrace].data=lfilt(Nss[ktrace].data,bandpass,fsample,2)
@@ -2151,17 +2154,18 @@ def interp_and_resample(st,dt,time_epi):
     return stout
     
     
-def data_norms(home,project_name,GF_list):
+def data_norms(home,project_name,GF_list,decimate=None):
     '''
     Read each data type and extract it's norm, this is used to inform the
     weighting scheme
     '''
-    from mudpy.inverse import getdata
     from numpy import genfromtxt,where
     from scipy.linalg import norm
+    from mudpy.inverse import getdata
+    from obspy import read
     
-    #Read the data
-    d=getdata(home,project_name,GF_list,decimate=None,bandpass=None,quiet=True)
+    #Read data vector
+    d=getdata(home,project_name,GF_list,decimate,bandpass=None)
     #Figure out which indices belong to which data type
     gf_file=home+project_name+'/data/station_info/'+GF_list
     #Read station flags
@@ -2172,25 +2176,48 @@ def data_norms(home,project_name,GF_list):
     ivel=where(GF[:,2]==1)[0]
     itsun=where(GF[:,3]==1)[0]
     iinsar=where(GF[:,4]==1)[0]
+    GFfiles=genfromtxt(gf_file,usecols=[8,9,10,11,12],dtype='S') 
+    kstart=0
+    kend=0
     #compute norms
     if len(istatic)>0:
-        print "||statics|| = "+str(norm(d[istatic]))
+        kend+=len(istatic)*3
+        N=norm(d[0:kend])
+        print "||statics|| = "+str(N)
     else:
         print "||statics|| = NaN"
-    if len(idisp)>0:
-        print "||disp. waveforms|| = "+str(norm(d[idisp]))
+    if len(idisp)>0: #read displacememnt waveforms
+        kstart=kend
+        for kfile in range(len(idisp)):
+            n=read(GFfiles[idisp[kfile],1]+'.n')
+            kend+=3*n[0].stats.npts
+        N=norm(d[kstart:kend])
+        print "||disp. waveforms|| = "+str(N)
     else:
         print "||disp. waveforms|| = NaN"
     if len(ivel)>0:
-        print "||vel. waveforms|| = "+str(norm(d[ivel]))
+        kstart=kend
+        for kfile in range(len(ivel)):
+            n=read(GFfiles[ivel[kfile],2]+'.n')
+            kend+=3*n[0].stats.npts
+        N=norm(d[kstart:kend])
+        print "||vel. waveforms|| = "+str(N)
     else:
         print "||vel. waveforms|| = NaN"
     if len(itsun)>0:
-        print "||tsunami|| = "+str(norm(d[itsun]))
+        kstart=kend
+        for kfile in range(len(itsun)):
+            tsun=read(GFfiles[itsun[kfile],3]+'.tsun')
+            kend+=tsun[0].stats.npts
+        N=norm(d[kstart:kend])
+        print "||tsunami|| = "+str(N)
     else:
         print "||tsunami|| = NaN"
     if len(iinsar)>0:
-        print "||InSAR|| = "+str(norm(d[iinsar]))
+        kstart=kend
+        kend+=len(iinsar)
+        N=norm(d[kstart:kend])
+        print "||InSAR|| = "+str(N)
     else:
         print "||InSAR|| = NaN"
     

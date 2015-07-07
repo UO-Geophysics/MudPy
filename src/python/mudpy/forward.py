@@ -174,6 +174,7 @@ def waveforms_matrix(home,project_name,fault_name,rupture_name,station_file,GF_l
     import gc
     from mudpy.inverse import getG
     from linecache import getline
+    from os import remove
     
     print 'Solving for kinematic problem'
     #Output where?
@@ -225,6 +226,10 @@ def waveforms_matrix(home,project_name,fault_name,rupture_name,station_file,GF_l
         ista=int(where(gfsta==staname[ksta])[0])+2
         #Make mini GF_file
         tmpgf='tmpfwd.gflist'
+        try:
+            remove(home+project_name+'/data/station_info/'+tmpgf)
+        except:
+            pass
         gflist=getline(home+project_name+'/data/station_info/'+GF_list,ista)
         f=open(home+project_name+'/data/station_info/'+tmpgf,'w')
         f.write('# Headers\n')
@@ -1235,9 +1240,9 @@ def grid2xyz(home,project_name,sta_file,out_file):
     
     from numpy import genfromtxt
     
-    sta=genfromtxt(sta_file,usecols=0,dtype='S')
-    lon=genfromtxt(sta_file,usecols=1)
-    lat=genfromtxt(sta_file,usecols=2)
+    sta=genfromtxt(home+project_name+'/data/station_info/'+sta_file,usecols=0,dtype='S')
+    lon=genfromtxt(home+project_name+'/data/station_info/'+sta_file,usecols=1)
+    lat=genfromtxt(home+project_name+'/data/station_info/'+sta_file,usecols=2)
     f=open(out_file,'w')
     for k in range(len(sta)):
         neu=genfromtxt(home+project_name+'/output/forward_models/'+sta[k]+'.static.neu')
@@ -1248,4 +1253,21 @@ def grid2xyz(home,project_name,sta_file,out_file):
         f.write(out)
     f.close()
         
+    
+def static2kineamtic(rupt,epicenter,vr,fout):
+    '''
+    Take a static .inv or .rupt file and convert to a kinematic file given
+    a rupture velocity vr
+    '''
+    from numpy import genfromtxt,savetxt
+    from mudpy.inverse import epi2subfault
+    
+    #Read rupture file
+    source=genfromtxt(rupt)
+    #Determien distance from subfaults to epicenter
+    tdelay=epi2subfault(epicenter,source,vr,0)
+    source[:,12]=tdelay
+    fmtout='%6i\t%.4f\t%.4f\t%8.4f\t%.2f\t%.2f\t%.2f\t%.2f\t%12.4e\t%12.4e%10.1f\t%10.1f\t%8.4f\t%.4e'
+    savetxt(fout,source,fmtout,header='No,lon,lat,z(km),strike,dip,rise,dura,ss-slip(m),ds-slip(m),ss_len(m),ds_len(m),rupt_time(s),rigidity(Pa)')
+
     
