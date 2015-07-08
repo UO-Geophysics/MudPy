@@ -102,3 +102,108 @@ def fault_scaling(Mw,mu):
     M0=10**(1.5*(Mw+6.07))
     d=M0/(mu*L*1000*W*1000)
     return d,L,W
+    
+def make_scaling_fault(home,project_name,disp,length,width,strike,dip,hypocenter):
+    '''
+    Make planar fault geometry from information about fault scaling, hypocenter
+    coordinates and assumed strike and dip
+    '''
+    
+    
+    
+    
+def make_planar_geometry(strike,dip,nstrike,dx_dip,dx_strike,epicenter,num_updip,num_downdip,rise_time):
+    '''
+    Make a planar fault
+    
+    strike - Strike angle (degs)
+    dip - Dip angle (degs)
+    '''
+    from numpy import arange,sin,cos,deg2rad,r_,ones,arctan,rad2deg,zeros,isnan,unique,where,argsort,c_
+    import pyproj
+    
+    proj_angle=180-strike #Angle to use for sin.cos projection (comes from strike)
+    y=arange(-nstrike/2+1,nstrike/2+1)*dx_strike
+    x=arange(-nstrike/2+1,nstrike/2+1)*dx_strike
+    z=ones(x.shape)*epicenter[2]
+    y=y*cos(deg2rad(strike))
+    x=x*sin(deg2rad(strike))   
+    #Save teh zero line
+    y0=y.copy()
+    x0=x.copy()
+    z0=z.copy()
+    #Initlaize temp for projection up/down dip
+    xtemp=x0.copy()
+    ytemp=y0.copy()
+    ztemp=z0.copy()
+    #Get delta h and delta z for up/ddx_dip=1own dip projection
+    dh=dx_dip*cos(deg2rad(dip))
+    dz=dx_dip*sin(deg2rad(dip))
+    #Project updip lines
+    for k in range(num_updip):
+        xtemp=xtemp+dh*cos(deg2rad(proj_angle))
+        ytemp=ytemp+dh*sin(deg2rad(proj_angle))
+        ztemp=ztemp-dz
+        x=r_[x,xtemp]
+        y=r_[y,ytemp]
+        z=r_[z,ztemp]
+    #Now downdip lines
+    xtemp=x0.copy()
+    ytemp=y0.copy()
+    ztemp=z0.copy()
+    for k in range(num_downdip):
+        xtemp=xtemp-dh*cos(deg2rad(proj_angle))
+        ytemp=ytemp-dh*sin(deg2rad(proj_angle))
+        ztemp=ztemp+dz
+        x=r_[x,xtemp]
+        y=r_[y,ytemp]
+        z=r_[z,ztemp]
+    #Now use pyproj to dead reckon anf get lat/lon coordinates of subfaults
+    g = pyproj.Geod(ellps='WGS84')
+    #first get azimuths of all points, go by quadrant
+    az=zeros(x.shape)
+    for k in range(len(x)):
+        if x[k]>0 and y[k]>0:
+            az[k]=rad2deg(arctan(x[k]/y[k]))
+        if x[k]<0 and y[k]>0:
+            az[k]=360+rad2deg(arctan(x[k]/y[k]))
+        if x[k]<0 and y[k]<0:
+            az[k]=180+rad2deg(arctan(x[k]/y[k]))
+        if x[k]>0 and y[k]<0:
+            az[k]=180+rad2deg(arctan(x[k]/y[k]))
+    #Quadrant correction
+    #Now horizontal distances
+    d=((x**2+y**2)**0.5)*1000
+    #Now reckon
+    lo=zeros(len(d))
+    la=zeros(len(d))
+    for k in range(len(d)):
+        if isnan(az[k]): #No azimuth because I'm on the epicenter
+            print 'Point on epicenter'
+            lo[k]=epicenter[0]
+            la[k]=epicenter[1]
+        else:
+            lo[k],la[k],ba=g.fwd(epicenter[0],epicenter[1],az[k],d[k]) 
+    #Sort them from top right to left along dip
+    zunique=unique(z)
+    for k in range(len(zunique)):
+        i=where(z==zunique[k])[0] #This finds all faults at a certain depth
+        isort=argsort(la[i]) #This sorths them south to north
+        if k==0: #First loop
+            laout=la[i][isort]
+            loout=lo[i][isort]
+            zout=z[i][isort]
+        else:
+            laout=r_[laout,la[i][isort]]
+            loout=r_[loout,lo[i][isort]]
+            zout=r_[zout,z[i][isort]]
+    #Write to file
+    strike=ones(loout.shape)*strike
+    dip=ones(loout.shape)*dip
+    tw=ones(loout.shape)*0.5
+    rise=ones(loout.shape)*rise_time
+    L=ones(loout.shape)*dx_strike*1000
+    W=ones(loout.shape)*dx_dip*1000
+    # Make output
+    fault=c_[fault_num,loout,laout,zout,strike,dip,tw,rise,L,W]
+    return fault

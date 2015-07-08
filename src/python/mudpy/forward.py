@@ -900,17 +900,12 @@ def makefault(strike,dip,nstrike,dx_dip,dx_strike,epicenter,num_updip,num_downdi
     from numpy import arange,sin,cos,deg2rad,r_,ones,arctan,rad2deg,zeros,isnan,unique,where,argsort
     import pyproj
     
-    #proj_angle=180-strike #Angle to use fofilesr sin.cos projection (comes from strike)
     proj_angle=180-strike #Angle to use for sin.cos projection (comes from strike)
     y=arange(-nstrike/2+1,nstrike/2+1)*dx_strike
     x=arange(-nstrike/2+1,nstrike/2+1)*dx_strike
     z=ones(x.shape)*epicenter[2]
     y=y*cos(deg2rad(strike))
-    x=x*sin(deg2rad(strike))
-    #Move up 7 slots
-    #x=x-x[15]
-    #y=y-y[15]
-    
+    x=x*sin(deg2rad(strike))   
     #Save teh zero line
     y0=y.copy()
     x0=x.copy()

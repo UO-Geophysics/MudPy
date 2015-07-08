@@ -8,6 +8,8 @@ inversion results
 
 import matplotlib
 matplotlib.rcParams['pdf.fonttype'] = 42
+
+#Create default colormap for slip inversions
 cdict = {'red': ((0., 1, 1),
                  (0.05, 1, 1),
                  (0.11, 0, 0),
@@ -29,13 +31,49 @@ cdict = {'red': ((0., 1, 1),
                   (1, 0, 0))}
 whitejet = matplotlib.colors.LinearSegmentedColormap('whitejet',cdict,256)
 
-#from mudpy.gmttools import gmtColormap
-#whitejet=gmtColormap('/Users/dmelgar/code/python/cpt/color_linear.cpt')
+'''
+numpy.interp(x, xp, fp, left=None, right=None)[source]
+One-dimensional linear interpolation.
+
+Returns the one-dimensional piecewise linear interpolant to a function with given values at discrete data-points.
+
+Parameters:	
+    x : array_like
+    The x-coordinates of the interpolated values.
+    
+    xp : 1-D sequence of floats
+    The x-coordinates of the data points, must be increasing.
+    
+    fp : 1-D sequence of floats
+    The y-coordinates of the data points, same length as xp.
+    
+    left : float, optional
+    Value to return for x < xp[0], default is fp[0].
+
+    right : float, optional
+    Value to return for x > xp[-1], default is fp[-1].
+    
+Returns:	
+    y : {float, ndarray}
+    The interpolated values, same shape as x.
+
+Raises:	
+
+    ValueError :
+    If xp and fp have different length
+'''
 
 
 def quick_model(rupt):
     '''
-    Quick and dirty plot of a .rupt file
+    Quick and dirty plot of a .rupt file. Shows map view of slip
+    
+    Parameters:
+            rupt: string
+            The absolute path to a .inv or .rupt file
+            
+    Example:
+        view.quick_model('/foo/bar/output/inverse_models/models/inv_result.inv')
     '''
     
     from numpy import genfromtxt,unique,where,zeros
@@ -73,13 +111,38 @@ def quick_model(rupt):
     plt.title(rupt)
     plt.show()
     
-def quick_static(gflist,datapath,run_name,run_num,c,scale):
+def quick_static(gflist,datapath,scale=1):
     '''
-    Make quick quiver plot of static fields
+    Make quick quiver plot of static field data
     
-    IN:
-        gflist: Tod ecide which stations to plot
-        datapath: Where are the data files
+    Parameters:
+        gflist: string
+        Absolute path to GF_list file
+        
+        datapath: string
+        Absolute path to data files
+        
+        scale: float, optional
+        Scale value for quiver
+        
+        run_name: string, optional
+        Run name of inversion
+        
+        run_number: string, optional
+        Run number of inversion
+        
+    Examples:
+        
+        If plotting input static data
+        >>> gflist=u'/Users/dmelgar/Slip_inv/Nepal/data/station_info/GPS.gflist'
+        >>> datapath='/Users/dmelgar/Slip_inv/Nepal/data/statics/'
+        >>> view.quick_static(gflist,datapath,scale=10)
+        
+    Notes:
+        The value of scale works counterintuitvely. A larger value makes the 
+        arrow lengths smaller and viceversa.
+        
+       This code only works if files are named according to the format sta.neu       
     '''
     import matplotlib.pyplot as plt
     from numpy import genfromtxt,where,zeros,meshgrid,linspace
@@ -97,36 +160,35 @@ def quick_static(gflist,datapath,run_name,run_num,c,scale):
     e=zeros(len(i))
     u=zeros(len(i))
     #Get data
-    if run_name!='' or run_num!='':
-        run_name=run_name+'.'
-        run_num=run_num+'.'
-    for k in range(len(i)):
-        neu=genfromtxt(datapath+run_name+run_num+sta[i[k]]+'.static.neu')
-        n[k]=neu[0]#/((neu[0]**2+neu[1]**2)**0.5)
-        e[k]=neu[1]#/((neu[0]**2+neu[1]**2)**0.5)
-        u[k]=neu[2]#/(2*abs(neu[2]))
-
-            
-    #Plot
     plt.figure()
-    xi = linspace(min(lon), max(lon), 500)
-    yi = linspace(min(lat), max(lat), 500)
-    X, Y = meshgrid(xi, yi)
-    #c=Colormap('bwr')
-    #plt.contourf(X,Y,Z,100)
-    #plt.colorbar()
-    Q=plt.quiver(lon,lat,e,n,width=0.01,color=c)
+    for k in range(len(i)):
+        plt.annotate(sta[k],xy=(lon[k],lat[k]))
+        neu=genfromtxt(datapath+sta[i[k]]+'.neu')
+        n[k]=neu[0]
+        e[k]=neu[1]
+        u[k]=neu[2]          
+    #Plot
+    plt.quiver(lon,lat,e,n,scale=scale)
     plt.scatter(lon,lat,color='b')
     plt.grid()
-    plt.title(datapath+run_name+run_num)
+    plt.title(datapath)
     plt.show()
-    qscale_en=0.00001
-    plt.quiverkey(Q,X=0.1,Y=0.9,U=qscale_en,label=str(qscale_en)+'m')
 
 
-def slip3D(rupt,epicenter=None,marker_size=60):
+def slip3D(rupt,marker_size=60):
     '''
     For complex fault geometries make a quick 3D plot of the rupture model
+    
+    Parameters:
+            rupt: string
+            The absolute path to a .inv or .rupt file
+            
+            marker_size: int, optional
+            The size of the subfault markers, defaults to 60
+            
+    Example:
+        >>> rupt='/Users/dmelgar/Slip_inv/Nepal/output/inverse_models/models/final.0000.inv'
+        >>> view.slip3D(rupt,80)
     '''
     from mpl_toolkits.mplot3d import Axes3D
     import matplotlib.pyplot as plt
@@ -156,24 +218,60 @@ def slip3D(rupt,epicenter=None,marker_size=60):
     fig = plt.figure(figsize=(14, 4))
     ax = fig.add_subplot(111, projection='3d')
     p=ax.scatter(lon, lat, depth, c=slip,cmap=whitejet, marker='o',s=marker_size)
-    
     ax.set_xlabel('Longitude')
     ax.set_ylabel('Latitude')
     ax.set_zlabel('Depth (km)')
     cb=fig.colorbar(p)
     cb.set_label('Slip (m)')
     plt.subplots_adjust(left=0.1, bottom=0.1, right=1.0, top=0.9, wspace=0, hspace=0)
+    plt.title(rupt)
     plt.show()
 
 
-def tile_slip(rupt,nstrike,ndip,(slip_min,slip_max),geographic=False,epicenter=0,epicenter_line=0,thresh=0):
+def tile_slip(rupt,nstrike,ndip,(slip_bounds),geographic=False,epicenter=0,epicenter_line=0,thresh=0):
     '''
-    Quick and dirty plot of a .rupt file
-    epicenter is the coordinates, epcienter line is the down dip lien number where 
-    the epcienter is
+    Detailed plot of a forward model or inversion result file
+    
+    Parameters:
+        rupt: string
+        Absolute path to forward model (.rupt) or inversion result (.inv) file
+        
+        nstrike: int
+        Number of along-strike subfaults in fault model
+        
+        ndip: int
+        Number of down -dip subfaults in fault model
+        
+        slip_bounds: tuple, (slip_min(float),slip_max(float))
+        Limits of slip used for colorscale
+        
+        geographic: boolean, optional
+        Used to decide between plotting in geographic coordinates or subfault index number
+        
+        epicenter: numpy array, optional
+        Epicentral coordinates as [longitude,latitude,depth(km)]
+        
+        epicenter_line: int, optional
+        Only used if geographic=True, down-dip line number (starting from 1) where
+        hypocenter is located
+        
+        thresh, float, optional
+        Do not plot slip values below this value
+        
+    Example:
+        >>> view.tile_slip('/Users/dmelgar/Slip_inv/Nepal/output/inverse_models/models/GPS.000.inv',
+                20,15,(0,6.5),geographic=True,epicenter=epicenter,epicenter_line=8)
+                
+    Notes:
+        If epicenter_line is not properly set and geographic=True then the aspect ratio
+        of the subfaults will look wrong.
+        
+        This routine will plot the rake vectors determined from the input file.
+        
+        If saved as .pdf this makes a publication quality plot.
     '''
     
-    from numpy import genfromtxt,unique,where,zeros,arange,pi,tile,sqrt
+    from numpy import genfromtxt,unique,where,zeros,tile,sqrt
     import matplotlib.pyplot as plt
     from obspy.core.util.geodetics import gps2DistAzimuth
     
@@ -197,26 +295,9 @@ def tile_slip(rupt,nstrike,ndip,(slip_min,slip_max),geographic=False,epicenter=0
     #Get unit rake vector
     rakess=ss/slip
     rakeds=ds/slip
+    slip_min=slip_bounds[0]
+    slip_max=slip_bounds[1]
     if geographic==True: #Get geographic coordinates to compute along strike and along dip distance
-        #Add aftershocks
-        #afters=genfromtxt('/Users/dmelgar/Napa2014/hardebeck_afters.txt')
-        #lonaf=afters[:,2]
-        #lataf=afters[:,1]
-        #zaf=-afters[:,3]
-        #xaf=zeros(zaf.shape)
-        #for k in range(len(lataf)):
-        #    out=gps2DistAzimuth(epicenter[1],epicenter[0],lataf[k],lonaf[k])
-        #    xaf[k]=(out[0]/1000)
-        #    if lataf[k]>epicenter[1]: #If it's tot he left of epcietner it's engative
-        #        xaf[k]=-xaf[k]
-        #Done with afters
-        #Do same thing for centroid position
-        #loncent=-122.313
-        #latcent=38.26
-        #zcent=-4
-        #out=gps2DistAzimuth(epicenter[1],epicenter[0],latcent,loncent)
-        #xcent=-(out[0]/1000)
-        #Done with centroid
         lon=f[(epicenter_line-1)*nstrike:epicenter_line*nstrike,1] #Only compute line at the epicenter depth
         lat=f[(epicenter_line-1)*nstrike:epicenter_line*nstrike,2]    
         depth=-f[:,3]
@@ -253,7 +334,6 @@ def tile_slip(rupt,nstrike,ndip,(slip_min,slip_max),geographic=False,epicenter=0
         plt.grid()    
         plt.title(rupt)
     else:
-        
         rakess=rakess*slip
         rakeds=rakeds*slip
         plt.figure(num=None, figsize=(8, 4), dpi=80)
@@ -264,9 +344,7 @@ def tile_slip(rupt,nstrike,ndip,(slip_min,slip_max),geographic=False,epicenter=0
         plt.xlim(along_strike.min()-5,along_strike.max()+5)
         plt.ylim(depth.min()-5,depth.max()+5)
         plt.scatter(0,-epicenter[2],marker='*',edgecolor='k',facecolor='#00FF00',s=350,linewidth=2)
-        #plt.scatter(xcent,zcent,marker='D',edgecolor='black',facecolor='',s=120,linewidth=2)
         plt.quiver(along_strike,depth,rakess/sqrt(rakess**2+rakeds**2),rakeds/sqrt(rakess**2+rakeds**2),color='green',width=0.0035,scale=50)
-        #plt.scatter(xaf,zaf,edgecolor='k',s=5)
     cb.set_label('Slip(m)')
     plt.subplots_adjust(left=0.15, bottom=0.15, right=0.92, top=0.95, wspace=0, hspace=0)
     plt.show()
@@ -274,7 +352,9 @@ def tile_slip(rupt,nstrike,ndip,(slip_min,slip_max),geographic=False,epicenter=0
 
 def tile_resolution(rupt,resfile,nstrike,ndip,(res_min,res_max),epicenter=0,epicenter_line=0):
     '''
-    Quick and dirty plot of a .rupt file
+    Plot subfault source time functions
+    
+    Parameters:
     epicenter is the coordinates, epcienter line is the down dip lien number where 
     the epcienter is
     '''
@@ -1223,7 +1303,7 @@ def static_synthetics(home,project_name,run_name,run_number,gflist,qscale):
     plt.ylim([lat.min()-latadjust,lat.max()+latadjust])
     plt.subplot(122)
     plt.quiver(lon,lat,zeros(len(u)),u,color='k',scale=qscale)
-    plt.quiver(lon+0.05,lat,zeros(len(us)),us,color='r',scale=qscale)
+    plt.quiver(lon,lat,zeros(len(us)),us,color='r',scale=qscale)
     plt.grid()
     plt.title('Verticals')
     for k in range(len(i)):
