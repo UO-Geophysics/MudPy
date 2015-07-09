@@ -28,6 +28,7 @@ def run_parallel_green(home,project_name,station_file,model_name,dt,NFFT,static,
     from shutil import copy
     from glob import glob
     from mudpy.green import src2sta
+    import os
 
     #What parameters are we using?
     if rank==0:
@@ -84,8 +85,15 @@ def run_parallel_green(home,project_name,station_file,model_name,dt,NFFT,static,
         else: #Compute only statics
             write_file=subfault_folder+model_name+'.static.'+depth+'.sub'+subfault
             command=split("fk.pl -M"+model_name+"/"+depth+"/f -N1 "+diststr)
-            p=subprocess.Popen(command,stdout=open(write_file,'w'),stderr=subprocess.PIPE)
-            p.communicate()
+            file_is_empty=True
+            while file_is_empty:
+                p=subprocess.Popen(command,stdout=open(write_file,'w'),stderr=subprocess.PIPE)
+                p.communicate()
+                if os.stat(write_file).st_size!=0: #File is NOT empty
+                    file_is_empty=False
+                else:
+                    print 'Warning: I just had a mini-seizure and made an empty GF file on first try, re-running'
+            #If file is empty run again
             
 
 def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,static,tsunami,time_epi,
@@ -297,9 +305,13 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
                     e.write(staname[k]+".subfault"+num+'.DS.vel.e',format='SAC')
                     z.write(staname[k]+".subfault"+num+'.DS.vel.z',format='SAC')
             else: #Compute static synthetics
+                temp_pipe=[]
                 diststr='%.1f' % d[k] #Need current distance in string form for external call
                 green_file=model_name+".static."+strdepth+".sub"+subfault #Output dir
                 statics=loadtxt(green_file) #Load GFs
+                if len(statics)<1:
+                    print 'ERROR: Empty GF file'
+                    break
                 #Print static GFs into a pipe and pass into synthetics command
                 try:
                     temp_pipe=statics[k,:]
@@ -338,7 +350,7 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
                 ntemp,etemp=rt2ne(array([r,r]),array([t,t]),az[k])
                 n=ntemp[0]
                 e=etemp[0]
-                savetxt(staname[k]+'.subfault'+num+'.DS.static.neu',(n,e,u,beta))        
+                savetxt(staname[k]+'.subfault'+num+'.DS.static.neu',(n,e,u,beta),header='north(m),east(m),up(m),beta(degs)')        
                       
             
             

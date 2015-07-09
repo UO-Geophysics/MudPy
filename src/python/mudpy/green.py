@@ -81,7 +81,7 @@ def run_syn(home,project_name,source,station_file,green_path,model_name,integrat
     import subprocess
     from mudpy.forward import get_mu
     from string import rjust
-    from numpy import array,genfromtxt,loadtxt,savetxt,log10
+    from numpy import array,genfromtxt,loadtxt,savetxt,log10,argmin
     from obspy import read
     from shlex import split
     
@@ -232,8 +232,9 @@ def run_syn(home,project_name,source,station_file,green_path,model_name,integrat
             log=log+green_file+'\n' #Append to log
             statics=loadtxt(green_file) #Load GFs
             #Print static GFs into a pipe and pass into synthetics command
+            station_index=argmin(abs(statics[:,0]-d[k])) #Look up by distance
             try:
-                temp_pipe=statics[k,:]
+                temp_pipe=statics[station_index,:]
             except:
                 temp_pipe=statics
             inpipe=''

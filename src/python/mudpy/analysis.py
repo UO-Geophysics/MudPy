@@ -92,7 +92,7 @@ def subfault_STFs(rupt,epicenter,nstrike,ndip,beta=None,covfile=None):
     
 def fault_scaling(Mw,mu):
     '''
-    Use scaling relationships of Blaser et al. 2010 to determine fault length,
+    Use scaling relationships of Blaser et al. 2010 (BSSA) to determine fault length,
     width and mean slip
     '''
     from numpy import log10
@@ -103,11 +103,46 @@ def fault_scaling(Mw,mu):
     d=M0/(mu*L*1000*W*1000)
     return d,L,W
     
-def make_scaling_fault(home,project_name,disp,length,width,strike,dip,hypocenter):
+def make_scaling_fault(home,project_name,slip,length,width,strike,dip,hypocenter,faultout,ruptout):
     '''
     Make planar fault geometry from information about fault scaling, hypocenter
     coordinates and assumed strike and dip
     '''
+    from numpy import deg2rad,sin,savetxt,zeros,ones
+    from mudpy.forward import get_mu
+    #decide on subfault size
+    nstrike=30
+    ndip=15
+    dx_dip=width/ndip
+    dx_strike=length/nstrike
+    rise_time=1
+    num_updip=ndip/2
+    num_downdip=ndip-num_updip-1
+    #Get fault
+    fault=make_planar_geometry(strike,dip,nstrike,dx_dip,dx_strike,hypocenter,num_updip,num_downdip,rise_time)
+    # Figure out if fault goes too shallow
+    delta_dip=dx_dip*sin(deg2rad(dip))
+    minz=fault[:,3].min()
+    too_shallow=True
+    while too_shallow:
+        if minz-delta_dip<0: #Fault breaches the surface
+            print 'Fault too shallow by '+str(delta_dip-minz)+'km, adjusting down-dip width...'
+            num_updip-=1
+            num_downdip+=1
+            #Get fault
+            fault=make_planar_geometry(strike,dip,nstrike,dx_dip,dx_strike,hypocenter,num_updip,num_downdip,rise_time)
+            minz=fault[:,3].min()
+        else: #Fault is buried, stop iterating
+            too_shallow=False
+    out=zeros((len(fault),14))
+    out[:,0:8]=fault[:,0:8]
+    out[:,8]=zeros(len(fault))
+    out[:,9]=slip*ones(len(fault))
+    out[:,10:12]=fault[:,8:10]
+    out[:,12]=zeros(len(fault))
+    out[:,13]=30e9*ones(len(fault))
+    savetxt(faultout,fault,fmt='%i\t%.6f\t%.6f\t%.3f\t%i\t%i\t%.1f\t%.1f\t%.2f\t%.2f',header='No,lon,lat,z(km),strike,dip,rise,dura,ss_len(m),ds_len(m)')
+    savetxt(ruptout,out,fmt='%i\t%.6f\t%.6f\t%.3f\t%i\t%i\t%.1f\t%.1f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.4e',header='No,lon,lat,z(km),strike,dip,rise,dura,ss-slip(m),ds-slip(m),ss_len(m),ds_len(m),rupt_time(s),rigidity(Pa)')
     
     
     
@@ -205,5 +240,6 @@ def make_planar_geometry(strike,dip,nstrike,dx_dip,dx_strike,epicenter,num_updip
     L=ones(loout.shape)*dx_strike*1000
     W=ones(loout.shape)*dx_dip*1000
     # Make output
+    fault_num=arange(len(loout))+1
     fault=c_[fault_num,loout,laout,zout,strike,dip,tw,rise,L,W]
     return fault

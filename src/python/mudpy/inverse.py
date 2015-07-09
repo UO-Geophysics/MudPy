@@ -1287,7 +1287,7 @@ def mini_station_file(outfile,sta,lon,lat,gffiles):
 
     
             
-def epi2subfault(epicenter,source,vr,tr):
+def epi2subfault(epicenter,source,vr,tr=0):
     '''
     Compute time delays from epicenter to subfault based on a give rupture speed Coordinates in 
     lat/lon,depth(km), vr in km/s, tr is delay to apply to rupture speed in secs.
