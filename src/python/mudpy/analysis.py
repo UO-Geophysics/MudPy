@@ -103,16 +103,16 @@ def fault_scaling(Mw,mu):
     d=M0/(mu*L*1000*W*1000)
     return d,L,W
     
-def make_scaling_fault(home,project_name,slip,length,width,strike,dip,hypocenter,faultout,ruptout):
+def make_scaling_fault(home,project_name,slip,length,width,strike,dip,rake,hypocenter,faultout,ruptout):
     '''
     Make planar fault geometry from information about fault scaling, hypocenter
     coordinates and assumed strike and dip
     '''
-    from numpy import deg2rad,sin,savetxt,zeros,ones
+    from numpy import deg2rad,sin,savetxt,zeros,ones,sin,cos,deg2rad
     from mudpy.forward import get_mu
     #decide on subfault size
-    nstrike=30
-    ndip=15
+    nstrike=20
+    ndip=10
     dx_dip=width/ndip
     dx_strike=length/nstrike
     rise_time=1
@@ -136,8 +136,8 @@ def make_scaling_fault(home,project_name,slip,length,width,strike,dip,hypocenter
             too_shallow=False
     out=zeros((len(fault),14))
     out[:,0:8]=fault[:,0:8]
-    out[:,8]=zeros(len(fault))
-    out[:,9]=slip*ones(len(fault))
+    out[:,8]=slip*ones(len(fault))*cos(deg2rad(rake))
+    out[:,9]=slip*ones(len(fault))*sin(deg2rad(rake))
     out[:,10:12]=fault[:,8:10]
     out[:,12]=zeros(len(fault))
     out[:,13]=30e9*ones(len(fault))
@@ -243,3 +243,161 @@ def make_planar_geometry(strike,dip,nstrike,dx_dip,dx_strike,epicenter,num_updip
     fault_num=arange(len(loout))+1
     fault=c_[fault_num,loout,laout,zout,strike,dip,tw,rise,L,W]
     return fault
+    
+class MT:
+    """
+    A moment tensor class
+    """
+    def __init__(self, m11,m22,m33,m12,m13,m23,lon,lat,depth):
+        from numpy import array
+        self.tensor = array([[m11,m12,m13],[m12,m22,m23],[m13,m23,m33]])
+        self.lon = lon
+        self.lat = lat
+        self.depth = depth
+        self.mt_style='rtp'
+    def moment(self):
+        from numpy import sqrt
+        from scipy.linalg import norm
+        return norm(self.tensor/sqrt(2))
+    def Mw(self):
+        from numpy import log10
+        Mw=(2./3)*log10(self.moment())-6.07
+        return Mw
+    def flip(self):
+        from numpy import zeros
+        if self.mt_style == 'rtp':
+            M=zeros((3,3))
+            M[0,0]=self.tensor[1,1]
+            M[1,1]=self.tensor[2,2]
+            M[2,2]=self.tensor[0,0]
+            M[0,1]=-self.tensor[1,2]
+            M[0,2]=self.tensor[0,1]
+            M[1,2]=-self.tensor[0,2]
+            M[1,0]=M[0,1]
+            M[2,0]=M[0,2]
+            M[2,1]=M[1,2]
+            self.tensor=M
+            self.mt_style='xyz'
+        else:
+            M=zeros((3,3))
+            M[0,0]=self.tensor[2,2]
+            M[1,1]=self.tensor[0,0]
+            M[2,2]=self.tensor[1,1]
+            M[0,1]=self.tensor[0,2]
+            M[0,2]=-self.tensor[1,2]
+            M[1,2]=-self.tensor[0,1]
+            M[1,0]=M[0,1]
+            M[2,0]=M[0,2]
+            M[2,1]=M[1,2]
+            self.tensor=M
+            self.mt_style='rtp'  
+    def eigen(self):
+        from numpy.linalg import eig
+        self.eig_val,self.eig_vec=eig(self.tensor)
+    def compute_DC(self):
+        #Bst fitting double couple
+        from numpy import zeros,diag
+        if self.mt_style is 'rtp':
+            self.flip()
+        self.eigen()
+        eig1=self.eig_val[0]
+        eig3=self.eig_val[2]
+        self.tensor_DC=zeros((3,3))
+        self.tensor_DC[0,0]=0.5*(eig1-eig3)
+        self.tensor_DC[2,2]=-0.5*(eig1-eig3)
+        #Rotate back to original coordinates
+        #Mdct=V*Mdct*V';
+        #Mdc(:,:,k)=Mdct;
+        self.tensor_DC=self.eig_vec.dot(self.tensor_DC).dot(self.eig_vec.transpose())
+        d=self.eig_val
+        E=sum(self.eig_val)/3
+        d=d-E
+        self.epsilon=min(abs(d))/max(abs(d))
+    def get_nodal_planes(self):
+        from numpy import array,arccos,arctan2,cos,sin,pi,rad2deg,real
+        from numpy.linalg import norm,eig
+        self.compute_DC()
+        M=self.tensor_DC
+        #Get eigen vectors and values
+        eig_val,eig_vec=eig(M)
+        #Define new basis: tension, pressure and null axes
+        if eig_val[0]>0:
+            t=eig_vec[:,0]
+            p=eig_vec[:,2]
+        else:
+            t=eig_vec[:,2]
+            p=eig_vec[:,0]
+        #Make sure rake of T and P axes is positive (stereonet representation)
+        if t[2]<0:
+            t=-t
+        if p[2]<0:
+            p=-p
+        #Get fault normal and rake vectors
+        n=0.5*(p+t)
+        d=0.5*(p-t)
+        #normalize
+        n=n/norm(n)
+        d=d/norm(d)
+        #Define vectors for both fault planes, Normal vector should be pointing
+        #down (positive z)
+        #NP1
+        if n[2]<0:
+            n1=-n
+            d1=-d
+        else:
+            n1=n
+            d1=d
+        #NP2
+        if d[2]<0:
+            n2=-d
+            d2=-n
+        else:
+            n2=d
+            d2=n
+        #Compute angles
+        di1=arccos(n1[2])
+        st1=arctan2(n1[0],-n1[1])
+        phi1=array([cos(st1),sin(st1),0])
+        ra1=arccos(phi1.dot(d1))
+        di2=arccos(n2[2])
+        st2=arctan2(n2[0],-n2[1])
+        phi2=array([cos(st2),sin(st2),0])
+        ra2=arccos(phi2.dot(d2))
+        #Format according to right-pinule strike and dip convention
+        if st1 < 0 and st1 >= -pi:
+            st1=2*pi+st1
+        if st2 < 0 and st2 >= -pi:
+            st2=2*pi+st2
+        if st1 >= 2*pi:
+            st1=st1-2*pi
+        if st2 >= 2*pi:
+            st2=st2-2*pi
+        if ra1 < 0 and ra1 >= -pi:
+            ra1=2*pi+ra1
+        if ra2 < 0 and ra2 >= -pi:
+            ra2=2*pi+ra2
+        #Fix ambiguity in rake angle
+        if d1[2]>0:  #normal faulting component present
+            ra1=2*pi-ra1
+        if d2[2]>0:
+            ra2=2*pi-ra2
+        #More formatting
+        if ra1 >= 2*pi:
+            ra1=ra1-2*pi
+        if ra2 >= 2*pi:
+            ra2=ra2-2*pi
+        #Final output
+        st1=rad2deg(real(st1))
+        di1=rad2deg(real(di1))
+        ra1=rad2deg(real(ra1))
+        st2=rad2deg(real(st2))
+        di2=rad2deg(real(di2))
+        ra2=rad2deg(real(ra2))
+        self.nodal_plane1=array([st1,di1,ra1])
+        self.nodal_plane2=array([st2,di2,ra2])
+    def plot(self):
+        from obspy.imaging.beachball import Beachball
+        Beachball([self.tensor[0,0],self.tensor[1,1],self.tensor[2,2],self.tensor[0,1],self.tensor[0,2],self.tensor[1,2]])
+
+        
+        

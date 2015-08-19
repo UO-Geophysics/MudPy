@@ -258,7 +258,7 @@ def waveforms_matrix(home,project_name,fault_name,rupture_name,station_file,GF_l
 
         
 
-def coseismics(home,project_name,rupture_name,station_file):
+def coseismics(home,project_name,rupture_name,station_file,hot_start=None):
     '''
     This routine will take synthetics and apply a static slip dsitibution. It will 
     linearly superimpose the synthetic coseismic from each subfault. Output will be
@@ -292,7 +292,9 @@ def coseismics(home,project_name,rupture_name,station_file):
     #Get unique sources
     source_id=unique(source[:,0])
     #Loop over stations
-    for ksta in range(len(staname)):
+    if hot_start is None:
+        hot_start=0
+    for ksta in range(hot_start,len(staname)):
         #Initalize output
         n=array([0])
         e=array([0])
@@ -311,11 +313,17 @@ def coseismics(home,project_name,rupture_name,station_file):
             #Where's the data
             syn_path=home+project_name+'/GFs/static/'
             #Get synthetics
-            coseis_ss=loadtxt(syn_path+sta+'.'+nfault+'.SS.static.neu')
+            try:
+                coseis_ss=loadtxt(syn_path+sta+'.'+nfault+'.SS.static.neu')
+            except:
+                coseis_ss=array([0,0,0])
             nss=coseis_ss[0]
             ess=coseis_ss[1]
             zss=coseis_ss[2]
-            coseis_ds=loadtxt(syn_path+sta+'.'+nfault+'.DS.static.neu')
+            try:
+                coseis_ds=loadtxt(syn_path+sta+'.'+nfault+'.DS.static.neu')
+            except:
+                coseis_ds=array([0,0,0])
             nds=coseis_ds[0]
             eds=coseis_ds[1]
             zds=coseis_ds[2]
@@ -405,7 +413,8 @@ def move_seafloor(home,project_name,run_name,topo_dx_file,topo_dy_file,tgf_file,
     #Get station names
     sta=genfromtxt(home+project_name+'/data/station_info/'+tgf_file)
     stanames=genfromtxt(home+project_name+'/data/station_info/'+tgf_file,usecols=0,dtype='S')
-    lon=360+sta[:,1]
+    #lon=360+sta[:,1]
+    lon=sta[:,1]
     print 'correcting longitude'
     print lon[0]
     lat=sta[:,2]
@@ -441,9 +450,12 @@ def move_seafloor(home,project_name,run_name,topo_dx_file,topo_dy_file,tgf_file,
                 #e=read(data_dir+run_name+'.'+rjust(str(int(sta[ksta,0])),4,'0')+'.disp.e')
                 #n=read(data_dir+run_name+'.'+rjust(str(int(sta[ksta,0])),4,'0')+'.disp.n')
                 #u=read(data_dir+run_name+'.'+rjust(str(int(sta[ksta,0])),4,'0')+'.disp.z')
-                e=read(data_dir+run_name+'.'+stanames[ksta]+'.disp.e')
-                n=read(data_dir+run_name+'.'+stanames[ksta]+'.disp.n')
-                u=read(data_dir+run_name+'.'+stanames[ksta]+'.disp.u')
+                #e=read(data_dir+run_name+'.'+stanames[ksta]+'.disp.e')
+                #n=read(data_dir+run_name+'.'+stanames[ksta]+'.disp.n')
+                #u=read(data_dir+run_name+'.'+stanames[ksta]+'.disp.u')
+                e=read(data_dir+stanames[ksta]+'.disp.e')
+                n=read(data_dir+stanames[ksta]+'.disp.n')
+                u=read(data_dir+stanames[ksta]+'.disp.u')
                 e=interp_and_resample(e,1.0,time_epi)
                 n=interp_and_resample(n,1.0,time_epi)
                 u=interp_and_resample(u,1.0,time_epi)
@@ -461,7 +473,7 @@ def move_seafloor(home,project_name,run_name,topo_dx_file,topo_dy_file,tgf_file,
                 nmat[:,kwrite]=n[0].data
                 umat[:,kwrite]=u[0].data
             else:
-                neu=genfromtxt(data_dir+rjust(str(int(sta[ksta,0])),4,'0')+'.static.neu')
+                neu=genfromtxt(data_dir+stanames[ksta]+'.static.neu')
                 n=neu[0]
                 e=neu[1]
                 u=neu[2]
@@ -471,7 +483,7 @@ def move_seafloor(home,project_name,run_name,topo_dx_file,topo_dy_file,tgf_file,
                     emat=zeros((1,len(sta)))
                     nmat=emat.copy()
                     umat=emat.copy()
-                                #Populate matrix
+                #Populate matrix
                 emat[:,kwrite]=e
                 nmat[:,kwrite]=n
                 umat[:,kwrite]=u
@@ -496,10 +508,8 @@ def move_seafloor(home,project_name,run_name,topo_dx_file,topo_dy_file,tgf_file,
         mask=zeros(loni.shape)
         for k1 in range(loni.shape[0]):
             for k2 in range(loni.shape[1]):
-                #if (lati[k1,k2]-b)/m>loni[k1,k2]: #Point is to the left (or right), do not apply horizontal effect
-                #Find two closest lat,lon points
                 ip=argmin(abs(lati[k1,k2]-coast[:,1]))
-                if loni[k1,k2]>coast[ip,0]:
+                if loni[k1,k2]<coast[ip,0]:  #Change this depending on which direction you want effect to be applied
                     mask[k1,k2]=nan
         imask1,imask2=where(mask==0)#Points tot he right DO apply horiz. effect
     print '... interpolating coseismic offsets to a regular grid'
@@ -890,12 +900,12 @@ def ssds2rake(ss,ds):
     rake=rad2deg(rake)
     return rake
     
-def makefault(strike,dip,nstrike,dx_dip,dx_strike,epicenter,num_updip,num_downdip,rise_time,fout):
+def makefault(fout,strike,dip,nstrike,dx_dip,dx_strike,epicenter,num_updip,num_downdip,rise_time):
     '''
     Make a planar fault
     
     strike - Strike angle (degs)
-    dip - Dip angle (degs)
+    dip - Dip angle (degs)200/5
     '''
     from numpy import arange,sin,cos,deg2rad,r_,ones,arctan,rad2deg,zeros,isnan,unique,where,argsort
     import pyproj
@@ -1137,26 +1147,37 @@ def padGFs(pad):
     '''
     from glob import glob
     from obspy import read
-    from numpy import ones,r_
+    from numpy import ones,r_,zeros
     pad=200
-    folders=glob('/Users/dmelgar/Slip_inv/maule/GFs/tsunami/*sub*')
+    folders=glob('/Users/dmelgar/Slip_inv/Nepal_fwd/GFs/dynamic/*sub*')
+    print folders
     for k in range(len(folders)):
         print str(k)+' / '+str(len(folders))
-        esubs=glob(folders[k]+'/*disp.e')
-        nsubs=glob(folders[k]+'/*disp.n')
-        zsubs=glob(folders[k]+'/*disp.z')
+        esubs=glob(folders[k]+'/*vel.e')
+        nsubs=glob(folders[k]+'/*vel.n')
+        zsubs=glob(folders[k]+'/*vel.z')
         for ksub in range(len(esubs)):
             e=read(esubs[ksub])
             n=read(nsubs[ksub])
             z=read(zsubs[ksub])
+            #If displacement
+            #e[0].data=r_[e[0].data,ones(pad)*e[0].data[-1]]
+            #e.write(esubs[ksub],format='SAC')
+            #
+            #n[0].data=r_[n[0].data,ones(pad)*n[0].data[-1]]
+            #n.write(nsubs[ksub],format='SAC')
+            #
+            #z[0].data=r_[z[0].data,ones(pad)*z[0].data[-1]]
+            #z.write(zsubs[ksub],format='SAC')
             
-            e[0].data=r_[e[0].data,ones(pad)*e[0].data[-1]]
+            #If velocity
+            e[0].data=r_[e[0].data,zeros(pad)]
             e.write(esubs[ksub],format='SAC')
             
-            n[0].data=r_[n[0].data,ones(pad)*n[0].data[-1]]
+            n[0].data=r_[n[0].data,zeros(pad)]
             n.write(nsubs[ksub],format='SAC')
             
-            z[0].data=r_[z[0].data,ones(pad)*z[0].data[-1]]
+            z[0].data=r_[z[0].data,zeros(pad)]
             z.write(zsubs[ksub],format='SAC')
             
 def make_grid(lon_min,lon_max,lat_min,lat_max,delta_lon,delta_lat,out_file):

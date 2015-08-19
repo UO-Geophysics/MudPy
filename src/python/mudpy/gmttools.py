@@ -434,6 +434,49 @@ def insar_xyz(home,project_name,run_name,run_number,GF_list,outfile):
     savetxt(outfile,out,fmt='%.6f\t%.6f\t%.6f')
 
 
+def make_shakemap_slice(home,project_name,run_name,time_epi,GF_list,dt,tmax):
+    '''
+    Make xyz files with current ground velocity
+    '''
+    from numpy import genfromtxt,arange,sqrt,zeros,where,c_,savetxt
+    from string import rjust
+    from obspy import read
+    from mudpy.forward import lowpass
+    
+    t=arange(0,tmax,dt)
+    fcorner=0.5
+    sta=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=0,dtype='S')
+    lonlat=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=[1,2])
+    for ksta in range(len(sta)):
+        n=read(home+project_name+'/output/forward_models/'+run_name+'.'+sta[ksta]+'.vel.n')
+        e=read(home+project_name+'/output/forward_models/'+run_name+'.'+sta[ksta]+'.vel.n')
+        n[0].data=lowpass(n[0].data,fcorner,1./n[0].stats.delta,2)
+        e[0].data=lowpass(n[0].data,fcorner,1./e[0].stats.delta,2)
+        if ksta==0:
+            h=n.copy()
+        else:
+            h+=n[0].copy()
+        h[ksta].data=sqrt(n[0].data**2+e[0].data**2)
+        h[ksta].trim(starttime=time_epi)
+        print h[ksta].stats.starttime
+    vout=zeros(len(lonlat))
+    maxv=0
+    for kt in range(len(t)):
+        for ksta in range(len(sta)):
+            i=where(h[ksta].times()==t[kt])[0]
+            vout[ksta]=h[ksta].data[i]
+        if vout.max()>maxv:
+            maxv=vout.max()
+        out=c_[lonlat,vout]
+        num=rjust(str(kt),4,'0')
+        print num
+        savetxt(home+project_name+'/analysis/shake/'+num+'.shake',out,fmt='%10.6f\t%10.6f\t%10.4f')
+    print 'Max velocity was '+str(maxv)+'m/s'
+        
+
+    
+
+
 
 def gmtColormap(fileName):
       '''

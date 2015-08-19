@@ -1237,8 +1237,8 @@ def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpas
             #xticklabel=['0','','20','','40','','60'] #Napa preferred
             #xticklabel=['','10','','30','','50','','70'] #Napa preferred
             #xticklabel=['','100','','200','','300'] #Maule preferred
-            #xticklabel=['','','40','','80','','120','','160',''] #Iquique preferred
-            xticklabel=['','10','','30','','50',''] #Nepal preferred
+            xticklabel=['','','40','','80','','120','','160',''] #Iquique preferred
+            #xticklabel=['','10','','30','','50',''] #Nepal preferred
         if k==len(i)-1 and nsta>1: #Last plot
             axe.set_xlabel('Time (s)')
             axn.xaxis.set_ticklabels(xticklabel)
