@@ -4,7 +4,7 @@
 fout='/Users/dmelgar/Slip_inv/Pisco_insar/data/region_path2.txt'
 
 %read data
-%insar=csvread('/Users/dmelgar/Pisco2007/InSAR/DataFromSAR_latlon.csv');
+insar=csvread('/Users/dmelgar/Pisco2007/InSAR/DataFromSAR_latlon.csv');
 idecimate=1:100:length(insar);
 lon =insar(idecimate,2);
 lat=insar(idecimate,1);
