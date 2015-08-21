@@ -5,7 +5,7 @@ UC Berkeley
 05/2015
 '''
 
-def quadtree2mudpy(home,project_name,quadtree_file,out_file,prefix):
+def quadtree2mudpy(home,project_name,quadtree_file,gflist_file,prefix):
     '''
     Convert quadtree Matlab generated file into a .sta file with station codes 
     and locations. Also generate individaul .neu files for each los displacement
@@ -19,12 +19,11 @@ def quadtree2mudpy(home,project_name,quadtree_file,out_file,prefix):
     insar=genfromtxt(quadtree_file)
     plt.figure()
     #Write to file
-    f=open(out_file,'w')
+    gflist=open(gflist_file,'w')
+    #Write gflist header
+    gflist.write('#station	lat	lon	static	disp	vel	tsun	strain	Static file	 displacement file	 velocity file	tsunami file	strain file	static sigmas(n	e	u)	displacement sigmas(n	e	u)	velocity sigmas(n	e	u)	tsunami sigma	strain sigmas(5 components?)\n')																						
     for k in range(len(insar)):
-        print k
         sta=prefix+rjust(str(k),4,'0')
-        out='%s\t%.6f\t%.6f\n' %(sta,insar[k,0],insar[k,1])
-        f.write(out)
         #Now make .los file
         los_c=insar[k,2]
         N=insar[k,4]
@@ -32,11 +31,14 @@ def quadtree2mudpy(home,project_name,quadtree_file,out_file,prefix):
         U=insar[k,5]
         los=c_[los_c,N,E,U]
         #Make plot as you go to verify
-        plt.scatter(insar[k,0],insar[k,1],c=los_c,cmap=cm.seismic,s=90,vmin=-1.2,vmax=1.2)
+        plt.scatter(insar[k,0],insar[k,1],c=los_c,cmap=cm.seismic,s=90,vmin=-0.6,vmax=0.6)
         plt.legend(['LOS'])
         savetxt(home+project_name+'/data/statics/'+sta+'.los',los,header='LOS(m),los unit vector (positive towards satellite) n,e,u')
+        #Generate gflist file as well
+        gflist.write('%s\t%10.6f\t%10.6f\t0\t0\t0\t0\t1\t/foo/bar\t/foo/bar\t/foo/bar\t/foo/bar\t%s\t1\t1\t1\t1\t1\t1\t1\t1\t1\t1\t1\t1\t1\t1\t1\n'%(sta,insar[k,0],insar[k,1],home+project_name+'/data/statics/'+sta+'.los'))
+    
     plt.colorbar()
-    f.close()    
+    gflist.close() 
     plt.show()  
     
     
