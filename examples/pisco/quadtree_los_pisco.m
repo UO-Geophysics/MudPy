@@ -4,7 +4,7 @@ format compact
 
 %read data
 insar=csvread('/Users/dmelgar/Pisco2007/InSAR/DataFromSAR_latlon.csv');
-idecimate=1:100000:length(insar);
+idecimate=1:1000:length(insar);
 
 lon =insar(idecimate,2);
 lat=insar(idecimate,1);
@@ -13,7 +13,7 @@ los=insar(idecimate,3);
 %QuadTree parameters, these are set by trial and error
 mindim=16
 maxdim=256
-thresh=0.02
+thresh=0.025
 
 lon_i=linspace(min(lon),max(lon),2048);
 lat_i=linspace(min(lat),max(lat),2048);
