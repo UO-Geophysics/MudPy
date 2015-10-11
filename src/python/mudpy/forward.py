@@ -489,6 +489,7 @@ def move_seafloor(home,project_name,run_name,topo_dx_file,topo_dy_file,tgf_file,
                 umat[:,kwrite]=u
             kwrite+=1
         except: #Data was missing, delete from lat,lon
+            pass
             print 'No data for station '+str(ksta)+', deleting from coordinates list'
             idelete.append(ksta)
     #Clean up missing data
@@ -509,7 +510,8 @@ def move_seafloor(home,project_name,run_name,topo_dx_file,topo_dy_file,tgf_file,
         for k1 in range(loni.shape[0]):
             for k2 in range(loni.shape[1]):
                 ip=argmin(abs(lati[k1,k2]-coast[:,1]))
-                if loni[k1,k2]<coast[ip,0]:  #Change this depending on which direction you want effect to be applied
+                if loni[k1,k2]>coast[ip,0]:#Change this depending on which direction you want effect to be applied
+                    print 'Applying coastal mask'
                     mask[k1,k2]=nan
         imask1,imask2=where(mask==0)#Points tot he right DO apply horiz. effect
     print '... interpolating coseismic offsets to a regular grid'
@@ -1148,9 +1150,8 @@ def padGFs(pad):
     from glob import glob
     from obspy import read
     from numpy import ones,r_,zeros
-    pad=200
+    pad=150
     folders=glob('/Users/dmelgar/Slip_inv/Nepal_fwd/GFs/dynamic/*sub*')
-    print folders
     for k in range(len(folders)):
         print str(k)+' / '+str(len(folders))
         esubs=glob(folders[k]+'/*vel.e')
@@ -1194,7 +1195,7 @@ def make_grid(lon_min,lon_max,lat_min,lat_max,delta_lon,delta_lat,out_file):
     f=open(out_file,'w')
     for i in range(len(lon)):
         for j in range(len(lat)):
-            out='%s\t%10.4f\t%10.4f\n' %('NP'+rjust(str(k),4,'0'),lon[i],lat[j])
+            out='%s\t%10.4f\t%10.4f\n' %('SF'+rjust(str(k),4,'0'),lon[i],lat[j])
             f.write(out)
             k+=1
     f.close()

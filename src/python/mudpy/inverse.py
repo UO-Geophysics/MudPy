@@ -782,8 +782,8 @@ def get_data_weights(home,project_name,GF_list,d,decimate):
     w=zeros(len(d))
     kinsert=0
     #Deal with decimation
-    if decimate==None:
-        decimate=1
+    #if decimate==None:
+    #    decimate=1
     #Static weights
     kgf=0
     i=where(GF[:,kgf]==1)[0]
@@ -826,7 +826,11 @@ def get_data_weights(home,project_name,GF_list,d,decimate):
         w[kinsert:kinsert+nsamples]=we
         kinsert=kinsert+nsamples
         wu=(1/weights[i[ksta],8])*ones(nsamples)
-        w[kinsert:kinsert+nsamples]=wu
+        try:
+            w[kinsert:kinsert+nsamples]=wu
+        except:
+            print 'WARNING: mismatch in data weights length'
+            w[kinsert:kinsert+nsamples]=wu[:-1]  #I don't know why this happens, wu is the right length but w is too short by one but only for the last station
         kinsert=kinsert+nsamples
     #Tsunami
     kgf=3
@@ -1832,8 +1836,7 @@ def make_tgf_dtopo(home,project_name,model_name,topo_dx_file,topo_dy_file,
     #Get station names
     staname=genfromtxt(home+project_name+'/data/station_info/'+tgf_file,usecols=0,dtype='S')
     sta=genfromtxt(home+project_name+'/data/station_info/'+tgf_file)
-    lon=360+sta[:,1]
-    print "Correcting longitude"
+    lon=sta[:,1]
     lat=sta[:,2]
     #Get fault file
     f=genfromtxt(home+project_name+'/data/model_info/'+fault_name)
@@ -1857,6 +1860,9 @@ def make_tgf_dtopo(home,project_name,model_name,topo_dx_file,topo_dy_file,
     except:
         lonb=bathy_dx.variables['x'][:]
         latb=bathy_dx.variables['y'][:]
+    print "Correcting longitude"
+    lon=360+lon
+    lonb=360+lonb
     loni,lati=meshgrid(lonb,latb)
     #Now apply motion from every subfault
     for ksub in range(len(f)): #Loops through subfaults
@@ -2051,15 +2057,12 @@ def tsunami2sac(home,project_name,model_name,fault_name,tlims,dt,time_epi,hot_st
     from numpy import genfromtxt,where,intersect1d,arange,interp,r_
     from string import rjust
     from obspy import Stream,Trace
-    from datetime import timedelta
-    from mudpy.forward import lowpass
     
-    fcorner=1./180
     #Load fault file
     f=genfromtxt(home+project_name+'/data/model_info/'+fault_name)
     #Load gauge correspondences
-    gaugesGC=genfromtxt(home+project_name+'/data/station_info/gauges.dict',usecols=3)  #This is what they are called in GeoClaw
-    gauges=genfromtxt(home+project_name+'/data/station_info/gauges.dict',usecols=2,dtype='S')   #their actual name
+    gaugesGC=genfromtxt(home+project_name+'/data/station_info/gauges.dict',usecols=0)  #This is what they are called in GeoClaw
+    gauges=genfromtxt(home+project_name+'/data/station_info/gauges.dict',usecols=3,dtype='S')   #their actual name
     #Where is the data
     green_dir=home+project_name+'/GFs/tsunami/'  
     for ksub in range(hot_start,len(f)):
@@ -2207,7 +2210,7 @@ def data_norms(home,project_name,GF_list,decimate=None):
     if len(itsun)>0:
         kstart=kend
         for kfile in range(len(itsun)):
-            tsun=read(GFfiles[itsun[kfile],3]+'.tsun')
+            tsun=read(GFfiles[itsun[kfile],3])
             kend+=tsun[0].stats.npts
         N=norm(d[kstart:kend])
         print "||tsunami|| = "+str(N)

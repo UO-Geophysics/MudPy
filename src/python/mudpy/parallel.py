@@ -127,7 +127,8 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
     from obspy import read
     from shlex import split
     from mudpy.green import src2sta,rt2ne,origin_time
-    
+    from glob import glob
+    from os import remove
         #What parameters are we using?
     if rank==0:
         out='''Running all processes with:
@@ -195,7 +196,6 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
                 if integrate==1: #Make displ.
                     #First Stike-Slip GFs
                     if custom_stf==None:
-                        print 'No custom STF'
                         commandSS="syn -I -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeSS)+" -D"+str(duration)+ \
                             "/"+str(rise)+" -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".SS.disp.x -G"+green_path+diststr+".grn.0"
                         commandSS=split(commandSS) #Split string into lexical components for system call
@@ -350,7 +350,20 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
                 ntemp,etemp=rt2ne(array([r,r]),array([t,t]),az[k])
                 n=ntemp[0]
                 e=etemp[0]
-                savetxt(staname[k]+'.subfault'+num+'.DS.static.neu',(n,e,u,beta),header='north(m),east(m),up(m),beta(degs)')        
+                savetxt(staname[k]+'.subfault'+num+'.DS.static.neu',(n,e,u,beta),header='north(m),east(m),up(m),beta(degs)')     
+        #Delete files
+        #print 'Deleting files...'
+        #f=glob(green_path+'*.grn.*')
+        #for kdel in range(len(f)):
+        #    remove(f[kdel])
+        #f=glob(green_path+'*.r')
+        #for kdel in range(len(f)):
+        #    remove(f[kdel])
+        #f=glob(green_path+'*.t')
+        #for kdel in range(len(f)):
+        #    remove(f[kdel])
+     
+
                       
             
             
