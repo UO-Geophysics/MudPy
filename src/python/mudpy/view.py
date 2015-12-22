@@ -10,22 +10,41 @@ import matplotlib
 matplotlib.rcParams['pdf.fonttype'] = 42
 
 #Create default colormap for slip inversions
+#cdict = {'red': ((0., 1, 1),
+#                 (0.05, 1, 1),
+#                 (0.11, 0, 0),
+#                 (0.66, 1, 1),
+#                 (0.89, 1, 1),
+#                 (1, 0.5, 0.5)),
+#         'green': ((0., 1, 1),
+#                   (0.05, 1, 1),
+#                   (0.11, 0, 0),
+#                   (0.375, 1, 1),
+#                   (0.64, 1, 1),
+#                   (0.91, 0, 0),
+#                   (1, 0, 0)),
+#         'blue': ((0., 1, 1),
+#                  (0.05 1, 1),
+#                  (0.11, 1, 1),
+#                  (0.34, 1, 1),
+#                  (0.65, 0, 0),
+#                  (1, 0, 0))}
 cdict = {'red': ((0., 1, 1),
-                 (0.05, 1, 1),
-                 (0.11, 0, 0),
+                 (0.10, 1, 1),
+                 (0.20, 0, 0),
                  (0.66, 1, 1),
                  (0.89, 1, 1),
                  (1, 0.5, 0.5)),
          'green': ((0., 1, 1),
-                   (0.05, 1, 1),
-                   (0.11, 0, 0),
+                   (0.10, 1, 1),
+                   (0.20, 0, 0),
                    (0.375, 1, 1),
                    (0.64, 1, 1),
                    (0.91, 0, 0),
                    (1, 0, 0)),
          'blue': ((0., 1, 1),
-                  (0.05, 1, 1),
-                  (0.11, 1, 1),
+                  (0.15, 1, 1),
+                  (0.20, 1, 1),
                   (0.34, 1, 1),
                   (0.65, 0, 0),
                   (1, 0, 0))}
@@ -228,6 +247,47 @@ def slip3D(rupt,marker_size=60):
     plt.show()
 
 
+def plot_insar(home,project_name,GF_list,(los_min,los_max)):
+    '''
+    Plot the InSAR LOS data
+    '''
+    from numpy import genfromtxt,where,zeros
+    from matplotlib import pyplot as plt
+    from matplotlib import cm
+    path=home+project_name+'/data/statics/'
+    stations=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=0,dtype='S')
+    i=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=7)
+    i=where(i==1)[0]
+    lon=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=1)
+    lat=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=2)
+    stations=stations[i]
+    lon=lon[i]
+    lat=lat[i]
+    los=zeros((len(lon),4))
+    for k in range(len(lon)):
+        los[k,:]=genfromtxt(path+stations[k]+'.los')
+    plt.figure()
+    plt.subplot(221)
+    plt.scatter(lon,lat,c=los[:,0],cmap=cm.jet,vmin=los_min,vmax=los_max,lw=0)
+    plt.colorbar()
+    plt.title('LOS(m)')
+    f=genfromtxt('/Users/dmelgar/Slip_inv/Lefkada70/data/model_info/lefkada65.fault')
+    #plt.scatter(f[:,1],f[:,2],marker='x')
+    plt.subplot(222)
+    plt.scatter(lon,lat,c=los[:,1],cmap=cm.jet,lw=0)
+    plt.colorbar()
+    plt.title('North') 
+    plt.subplot(223)
+    plt.scatter(lon,lat,c=los[:,2],cmap=cm.jet,lw=0)
+    plt.colorbar()
+    plt.title('East') 
+    plt.subplot(224)
+    plt.scatter(lon,lat,c=los[:,3],cmap=cm.jet,lw=0)
+    plt.colorbar()
+    plt.title('Up') 
+    plt.show()
+
+
 def tile_slip(rupt,nstrike,ndip,(slip_bounds),geographic=False,epicenter=0,epicenter_line=0,thresh=0):
     '''
     Detailed plot of a forward model or inversion result file
@@ -297,6 +357,10 @@ def tile_slip(rupt,nstrike,ndip,(slip_bounds),geographic=False,epicenter=0,epice
     rakeds=ds/slip
     slip_min=slip_bounds[0]
     slip_max=slip_bounds[1]
+    #Aftershocks
+    lon_afters=genfromtxt('/Users/dmelgar/Lefkada2015/afters/aftershocks_NOA.txt',usecols=5)
+    lat_afters=genfromtxt('/Users/dmelgar/Lefkada2015/afters/aftershocks_NOA.txt',usecols=4)
+    depth_afters=-genfromtxt('/Users/dmelgar/Lefkada2015/afters/aftershocks_NOA.txt',usecols=6)
     if geographic==True: #Get geographic coordinates to compute along strike and along dip distance
         lon=f[(epicenter_line-1)*nstrike:epicenter_line*nstrike,1] #Only compute line at the epicenter depth
         lat=f[(epicenter_line-1)*nstrike:epicenter_line*nstrike,2]    
@@ -306,11 +370,19 @@ def tile_slip(rupt,nstrike,ndip,(slip_bounds),geographic=False,epicenter=0,epice
         for k in range(len(lat)):
             out=gps2DistAzimuth(epicenter[1],epicenter[0],lat[k],lon[k])
             if lat[k]<epicenter[1]: #It's to the south
-                along_strike[k]=out[0]/1000
-            else:
                 along_strike[k]=-out[0]/1000
+            else:
+                along_strike[k]=out[0]/1000
         #Now tile
         along_strike=tile(along_strike,ndip)
+        #Process the aftershocks
+        along_strike_afters=zeros(len(lon_afters))
+        for k in range(len(lat_afters)):
+            out=gps2DistAzimuth(epicenter[1],epicenter[0],lat_afters[k],lon_afters[k])
+            if lat_afters[k]<epicenter[1]: #It's to the south
+                along_strike_afters[k]=-out[0]/1000
+            else:
+                along_strike_afters[k]=out[0]/1000
     #Get indices for plot
     istrike=zeros(nstrike*ndip)
     idip=zeros(nstrike*ndip)
@@ -339,12 +411,18 @@ def tile_slip(rupt,nstrike,ndip,(slip_bounds),geographic=False,epicenter=0,epice
         plt.figure(num=None, figsize=(8, 4), dpi=80)
         plt.scatter(along_strike,depth,marker='s',linewidth=0.5,edgecolor='#CCCCCC',c=slip,s=250,cmap=whitejet,vmin=slip_min,vmax=slip_max)
         cb=plt.colorbar()
+        plt.scatter(along_strike_afters,depth_afters,marker='.',c='#404040',s=35)
         plt.ylabel('Depth (km)')
         plt.xlabel('Along-strike distance (km)')
         plt.xlim(along_strike.min()-5,along_strike.max()+5)
         plt.ylim(depth.min()-5,depth.max()+5)
         plt.scatter(0,-epicenter[2],marker='*',edgecolor='k',facecolor='#00FF00',s=350,linewidth=2)
-        plt.quiver(along_strike,depth,rakess/sqrt(rakess**2+rakeds**2),rakeds/sqrt(rakess**2+rakeds**2),color='green',width=0.0035,scale=50)
+        for k in range(len(along_strike)):
+            scale_slip=slip[k]/slip.max()
+            plt.quiver(along_strike[k],depth[k],rakess[k]/sqrt(rakess[k]**2+rakeds[k]**2),rakeds[k]/sqrt(rakess[k]**2+rakeds[k]**2),color='green',width=0.002,scale=50/scale_slip)
+    plt.annotate('North',xy=(28,2),fontsize=16)
+    plt.annotate('South',xy=(-36,2),fontsize=16)
+    plt.title(r'2015 Lefkada $M_w6.52$, $v_r=2.8$km/s, $\sigma=020$, $\delta=65$',fontsize=16)
     cb.set_label('Slip(m)')
     plt.subplots_adjust(left=0.15, bottom=0.15, right=0.92, top=0.95, wspace=0, hspace=0)
     plt.show()
@@ -766,6 +844,42 @@ def source_time_function(rupt,epicenter):
     plt.subplots_adjust(left=0.3, bottom=0.3, right=0.7, top=0.7, wspace=0, hspace=0)
     return t1,M1
     
+def geographic_STFs(rupt,epicenter,nstrike,ndip,tscale=100,Mscale=1,figsize=(8,10),tout=[],Mout=[]):
+    '''
+    Plot STFs in their geographic locations
+    '''
+    
+    from mudpy import analysis
+    from numpy import genfromtxt
+    from matplotlib import pyplot as plt
+    #Read source file; and determine subfault coordinate
+    fault=genfromtxt(rupt)
+    N=ndip*nstrike
+    fault=fault[0:N,:]
+    lon=fault[:,1]
+    lat=fault[:,2]
+    if tout==[] or Mout==[]:
+        tout,Mout=analysis.subfault_STFs(rupt,epicenter,223,1)
+    #Determine peak moment rate
+    Mmax=Mout.max()
+    Mout=Mout/Mmax
+    #determine plot limits
+    lon_extra=(lon.max()-lon.min())
+    lat_extra=(lat.max()-lat.min())
+    #Start plot
+    plt.figure(figsize=figsize)
+    plt.scatter(lon,lat)
+    plt.scatter(epicenter[0],epicenter[1],marker='*',c='r',s=200)
+    #
+    for k in range(len(lon)):
+        t1=tout[k,0]
+        tplot=((tout[k,:]-t1)/tscale)+lon[k]
+        Mplot=(Mout[k,:]/Mscale)+lat[k]
+        plt.plot(tplot,Mplot,'k')
+    plt.title(rupt.split('/')[-1])
+    plt.show()
+    
+    
 
 
 def Rm(G,lambda_spatial,lambda_temporal,Ls,Lt,bounds,nstrike,ndip,maxR=0.2):
@@ -1068,7 +1182,7 @@ def plot_data(home,project_name,gflist,vord,decimate,lowpass,t_lim,sort,scale,k_
     #plt.subplots_adjust(left=0.2, bottom=0.05, right=0.8, top=0.95, wspace=0, hspace=0)
     plt.subplots_adjust(left=0.2, bottom=0.15, right=0.8, top=0.85, wspace=0, hspace=0)
       
-def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpass,t_lim,sort,scale,k_or_g):
+def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpass,t_lim,sort,scale,k_or_g,uncert=False):
     '''
     Plot synthetics vs real data
     
@@ -1148,6 +1262,10 @@ def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpas
         axe.plot(e[0].times(),e[0].data,'k',es[0].times(),es[0].data,'r')
         axe.grid(which='both')
         axu.plot(u[0].times(),u[0].data,'k',us[0].times(),us[0].data,'r')
+        if uncert==True:
+            axn.fill_between(n[0].times(),n[0].data-0.01,n[0].data+0.01,alpha=0.2,color='k')
+            axe.fill_between(e[0].times(),e[0].data-0.01,e[0].data+0.01,alpha=0.2,color='k')
+            axu.fill_between(u[0].times(),u[0].data-0.03,u[0].data+0.03,alpha=0.2,color='k')
         axu.grid(which='both')
         axe.yaxis.set_ticklabels([])
         axu.yaxis.set_ticklabels([])
@@ -1237,8 +1355,9 @@ def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpas
             #xticklabel=['0','','20','','40','','60'] #Napa preferred
             #xticklabel=['','10','','30','','50','','70'] #Napa preferred
             #xticklabel=['','100','','200','','300'] #Maule preferred
-            xticklabel=['','','40','','80','','120','','160',''] #Iquique preferred
+            #xticklabel=['','','40','','80','','120','','160',''] #Iquique preferred
             #xticklabel=['','10','','30','','50',''] #Nepal preferred
+            xticklabel=['','5','','15','','25','','35',''] #Lefkada preferred
         if k==len(i)-1 and nsta>1: #Last plot
             axe.set_xlabel('Time (s)')
             axn.xaxis.set_ticklabels(xticklabel)
@@ -1350,7 +1469,7 @@ def insar_residual(home,project_name,run_name,run_number,gflist,zlims):
     savetxt(home+project_name+'/analysis/'+run_name+'.'+run_number+'.insar.res',out,fmt='%.6f\t%.6f\t%8.5f\t%8.5f\t%8.5f',header='lon,lat,los_data(m),los_synthetic(m),data-synthetic(m)')
     plt.figure()
     plt.scatter(lon,lat,c=los_data-los_synth,cmap=matplotlib.cm.seismic,vmin=zlims[0],vmax=zlims[1],s=50)
-    plt.title('LOS residuals (m)')
+    plt.title('LOS data - LOS predicted (m)')
     plt.colorbar()
     plt.grid()
     

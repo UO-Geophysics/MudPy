@@ -352,7 +352,7 @@ def make_slip_slice(rupt,nstrike,ndip,epicenter,out,tmax,dt):
     #Now look through time slices
     maxsr=0
     #Now integrate slip
-    t=arange(0,tmax,dt)
+    t=arange(0,tmax+dt*0.1,dt)
     print 'Writing files...'
     for ktime in range(len(t)-1):
         slip=zeros(lon.shape)
@@ -364,7 +364,7 @@ def make_slip_slice(rupt,nstrike,ndip,epicenter,out,tmax,dt):
         maxsr=max(maxsr,slip.max())
         fname=out+rjust(str(ktime),4,'0')+'.slip'
         savetxt(fname, c_[lon,lat,depth,slip],fmt='%.6f\t%.6f\t%.4f\t%.6f')
-    print 'Maximum slip rate was '+str(maxsr)+'m/s'      
+    print 'Maximum slip was '+str(maxsr)+'m'      
 
 
 

@@ -145,6 +145,63 @@ def make_scaling_fault(home,project_name,slip,length,width,strike,dip,rake,hypoc
     savetxt(ruptout,out,fmt='%i\t%.6f\t%.6f\t%.3f\t%i\t%i\t%.1f\t%.1f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.4e',header='No,lon,lat,z(km),strike,dip,rise,dura,ss-slip(m),ds-slip(m),ss_len(m),ds_len(m),rupt_time(s),rigidity(Pa)')
     
     
+def make_glarms_fault(home,project_name,length,width,strike,dip,rake,fault_lon,fault_lat,fault_depth,
+                        fault_slip,faultout,ruptout):
+    '''
+    Make planar fault geometry from information about fault scaling, hypocenter
+    coordinates and assumed strike and dip
+    '''
+    from numpy import deg2rad,sin,savetxt,zeros,ones,sin,cos,deg2rad,array,r_,arange
+    from mudpy.forward import get_mu
+    #decide on subfault size
+    nstrike=10
+    ndip=8
+    dx_dip=width/ndip
+    dx_strike=length/nstrike
+    rise_time=1
+    num_updip=ndip/2
+    num_downdip=ndip-num_updip-1
+    #Get fault
+    for k in range(len(fault_lon)):
+        hypocenter=[fault_lon[k],fault_lat[k],fault_depth[k]]
+        fault=make_planar_geometry(strike,dip,nstrike,dx_dip,dx_strike,hypocenter,num_updip,num_downdip,rise_time)
+        # Figure out if fault goes too shallow
+        delta_dip=dx_dip*sin(deg2rad(dip))
+        minz=fault[:,3].min()
+        too_shallow=True
+        while too_shallow:
+            if minz-delta_dip<0: #Fault breaches the surface
+                print 'Fault too shallow by '+str(delta_dip-minz)+'km, adjusting down-dip width...'
+                num_updip-=1
+                num_downdip+=1
+                #Get fault
+                fault=make_planar_geometry(strike,dip,nstrike,dx_dip,dx_strike,hypocenter,num_updip,num_downdip,rise_time)
+                minz=fault[:,3].min()
+            else: #Fault is buried, stop iterating
+                too_shallow=False
+        #Append to fault file
+        if k==0:
+            final_fault=fault.copy()
+        else:
+            final_fault=r_[final_fault,fault]
+        #Now make rup[ture file
+        out=zeros((len(fault),14))
+        out[:,0:8]=fault[:,0:8]
+        out[:,8]=fault_slip[k]*ones(len(fault))*cos(deg2rad(rake))
+        out[:,9]=fault_slip[k]*ones(len(fault))*sin(deg2rad(rake))
+        out[:,10:12]=fault[:,8:10]
+        out[:,12]=zeros(len(fault))
+        out[:,13]=30e9*ones(len(fault))
+        if k==0:
+            final_out=out.copy()
+        else:
+            final_out=r_[final_out,out]
+    final_fault[:,0]=arange(1,len(final_fault)+1)
+    final_out[:,0]=arange(1,len(final_out)+1)
+    savetxt(faultout,final_fault,fmt='%i\t%.6f\t%.6f\t%.3f\t%i\t%i\t%.1f\t%.1f\t%.2f\t%.2f',header='No,lon,lat,z(km),strike,dip,rise,dura,ss_len(m),ds_len(m)')
+    savetxt(ruptout,final_out,fmt='%i\t%.6f\t%.6f\t%.3f\t%i\t%i\t%.1f\t%.1f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.4e',header='No,lon,lat,z(km),strike,dip,rise,dura,ss-slip(m),ds-slip(m),ss_len(m),ds_len(m),rupt_time(s),rigidity(Pa)')
+    
+    
     
     
 def make_planar_geometry(strike,dip,nstrike,dx_dip,dx_strike,epicenter,num_updip,num_downdip,rise_time):
@@ -248,13 +305,13 @@ class MT:
     """
     A moment tensor class
     """
-    def __init__(self, m11,m22,m33,m12,m13,m23,lon,lat,depth):
+    def __init__(self, m11,m22,m33,m12,m13,m23,lon,lat,depth,mt_style='rtp'):
         from numpy import array
         self.tensor = array([[m11,m12,m13],[m12,m22,m23],[m13,m23,m33]])
         self.lon = lon
         self.lat = lat
         self.depth = depth
-        self.mt_style='rtp'
+        self.mt_style=mt_style
     def moment(self):
         from numpy import sqrt
         from scipy.linalg import norm

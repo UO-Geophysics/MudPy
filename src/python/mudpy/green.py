@@ -159,9 +159,14 @@ def run_syn(home,project_name,source,station_file,green_path,model_name,integrat
             #Result is in RTZ system (+Z is down) rotate to NEZ with +Z up and scale to m or m/s
             if integrate==1: #'tis displacememnt
                 #Strike slip
-                r=read(staname[k]+".subfault"+num+'.SS.disp.r')
-                t=read(staname[k]+".subfault"+num+'.SS.disp.t')
-                z=read(staname[k]+".subfault"+num+'.SS.disp.z')
+                if duration>0: #Is there a source time fucntion? Yes!
+                    r=read(staname[k]+".subfault"+num+'.SS.disp.r')
+                    t=read(staname[k]+".subfault"+num+'.SS.disp.t')
+                    z=read(staname[k]+".subfault"+num+'.SS.disp.z')
+                else: #No! This is the impulse response!
+                    r=read(staname[k]+".subfault"+num+'.SS.disp.ri')
+                    t=read(staname[k]+".subfault"+num+'.SS.disp.ti')
+                    z=read(staname[k]+".subfault"+num+'.SS.disp.zi')
                 ntemp,etemp=rt2ne(r[0].data,t[0].data,az[k])
                 #Scale to m and overwrite with rotated waveforms
                 n=r.copy()
@@ -176,9 +181,14 @@ def run_syn(home,project_name,source,station_file,green_path,model_name,integrat
                 e.write(staname[k]+".subfault"+num+'.SS.disp.e',format='SAC')
                 z.write(staname[k]+".subfault"+num+'.SS.disp.z',format='SAC')
                 #Dip Slip
-                r=read(staname[k]+".subfault"+num+'.DS.disp.r')
-                t=read(staname[k]+".subfault"+num+'.DS.disp.t')
-                z=read(staname[k]+".subfault"+num+'.DS.disp.z')
+                if duration>0:
+                    r=read(staname[k]+".subfault"+num+'.DS.disp.r')
+                    t=read(staname[k]+".subfault"+num+'.DS.disp.t')
+                    z=read(staname[k]+".subfault"+num+'.DS.disp.z')
+                else:
+                    r=read(staname[k]+".subfault"+num+'.DS.disp.ri')
+                    t=read(staname[k]+".subfault"+num+'.DS.disp.ti')
+                    z=read(staname[k]+".subfault"+num+'.DS.disp.zi')
                 ntemp,etemp=rt2ne(r[0].data,t[0].data,az[k])
                 n=r.copy()
                 n[0].data=ntemp/100
@@ -193,9 +203,14 @@ def run_syn(home,project_name,source,station_file,green_path,model_name,integrat
                 z.write(staname[k]+".subfault"+num+'.DS.disp.z',format='SAC')
             else: #Waveforms are velocity, as before, rotate from RT-Z to NE+Z and scale to m/s
                 #Strike slip
-                r=read(staname[k]+".subfault"+num+'.SS.vel.r')
-                t=read(staname[k]+".subfault"+num+'.SS.vel.t')
-                z=read(staname[k]+".subfault"+num+'.SS.vel.z')
+                if duration>0: #Is there a source time fucntion? Yes!
+                    r=read(staname[k]+".subfault"+num+'.SS.disp.r')
+                    t=read(staname[k]+".subfault"+num+'.SS.disp.t')
+                    z=read(staname[k]+".subfault"+num+'.SS.disp.z')
+                else: #No! This is the impulse response!
+                    r=read(staname[k]+".subfault"+num+'.SS.disp.ri')
+                    t=read(staname[k]+".subfault"+num+'.SS.disp.ti')
+                    z=read(staname[k]+".subfault"+num+'.SS.disp.zi')
                 ntemp,etemp=rt2ne(r[0].data,t[0].data,az[k])
                 n=r.copy()
                 n[0].data=ntemp/100
@@ -209,9 +224,14 @@ def run_syn(home,project_name,source,station_file,green_path,model_name,integrat
                 e.write(staname[k]+".subfault"+num+'.SS.vel.e',format='SAC')
                 z.write(staname[k]+".subfault"+num+'.SS.vel.z',format='SAC')
                 #Dip Slip
-                r=read(staname[k]+".subfault"+num+'.DS.vel.r')
-                t=read(staname[k]+".subfault"+num+'.DS.vel.t')
-                z=read(staname[k]+".subfault"+num+'.DS.vel.z')
+                if duration>0:
+                    r=read(staname[k]+".subfault"+num+'.DS.disp.r')
+                    t=read(staname[k]+".subfault"+num+'.DS.disp.t')
+                    z=read(staname[k]+".subfault"+num+'.DS.disp.z')
+                else:
+                    r=read(staname[k]+".subfault"+num+'.DS.disp.ri')
+                    t=read(staname[k]+".subfault"+num+'.DS.disp.ti')
+                    z=read(staname[k]+".subfault"+num+'.DS.disp.zi')
                 ntemp,etemp=rt2ne(r[0].data,t[0].data,az[k])
                 n=r.copy()
                 n[0].data=ntemp/100

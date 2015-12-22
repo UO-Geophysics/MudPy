@@ -396,6 +396,23 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tsunami,td
                         Nds[ktrace].data=lfilt(Nds[ktrace].data,bandpass,fsample,2)
                         Zds[ktrace].data=lfilt(Zds[ktrace].data,bandpass,fsample,2)
                         #bandpass=None
+                    
+                    ### HAAAAAACCCCKKKK!!!!
+                    #if vord=='vel': #Apply low pass filter to data (** DIRTY HACK!**)
+                    #    if kfault==0:
+                    #        print vord
+                    #        print 'Bandpassing hack on velocity...'
+                    #    bandpass=[1./20,1./2]
+                    #    fsample=1./Ess[0].stats.delta
+                    #    Ess[ktrace].data=lfilt(Ess[ktrace].data,bandpass,fsample,2)
+                    #    Nss[ktrace].data=lfilt(Nss[ktrace].data,bandpass,fsample,2)
+                    #    Zss[ktrace].data=lfilt(Zss[ktrace].data,bandpass,fsample,2)
+                    #    Eds[ktrace].data=lfilt(Eds[ktrace].data,bandpass,fsample,2)
+                    #    Nds[ktrace].data=lfilt(Nds[ktrace].data,bandpass,fsample,2)
+                    #    Zds[ktrace].data=lfilt(Zds[ktrace].data,bandpass,fsample,2)
+                    #    #bandpass=None
+                    ### END AWFUL TERRIBLE REALLY VERY BAD HACK
+                        
                     if decimate!=None: 
                         Ess[ktrace]=stdecimate(Ess[ktrace],decimate)
                         Nss[ktrace]=stdecimate(Nss[ktrace],decimate)
