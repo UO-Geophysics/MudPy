@@ -19,7 +19,7 @@ def init(home,project_name):
     from shutil import rmtree,copy
     from os import path,makedirs,environ
     clob='y'
-    proj_dir=home+project_name+'/'
+    proj_dir=path.expanduser(home+project_name+'/')
     if path.exists(proj_dir):  #Path exists, clobber?
         clob=raw_input('Project directory exists, clobber (y/n)?')
         if clob is'y' or clob is 'Y': #Clobber baby
