@@ -358,9 +358,9 @@ def tile_slip(rupt,nstrike,ndip,(slip_bounds),geographic=False,epicenter=0,epice
     slip_min=slip_bounds[0]
     slip_max=slip_bounds[1]
     #Aftershocks
-    lon_afters=genfromtxt('/Users/dmelgar/Lefkada2015/afters/aftershocks_NOA.txt',usecols=5)
-    lat_afters=genfromtxt('/Users/dmelgar/Lefkada2015/afters/aftershocks_NOA.txt',usecols=4)
-    depth_afters=-genfromtxt('/Users/dmelgar/Lefkada2015/afters/aftershocks_NOA.txt',usecols=6)
+    lon_afters=genfromtxt('/Users/dmelgar/Lefkada2015/afters/aftershocks_NOA_reloc.txt',usecols=4)
+    lat_afters=genfromtxt('/Users/dmelgar/Lefkada2015/afters/aftershocks_NOA_reloc.txt',usecols=3)
+    depth_afters=-genfromtxt('/Users/dmelgar/Lefkada2015/afters/aftershocks_NOA_reloc.txt',usecols=5)
     if geographic==True: #Get geographic coordinates to compute along strike and along dip distance
         lon=f[(epicenter_line-1)*nstrike:epicenter_line*nstrike,1] #Only compute line at the epicenter depth
         lat=f[(epicenter_line-1)*nstrike:epicenter_line*nstrike,2]    
@@ -414,17 +414,19 @@ def tile_slip(rupt,nstrike,ndip,(slip_bounds),geographic=False,epicenter=0,epice
         plt.scatter(along_strike_afters,depth_afters,marker='.',c='#404040',s=35)
         plt.ylabel('Depth (km)')
         plt.xlabel('Along-strike distance (km)')
-        plt.xlim(along_strike.min()-5,along_strike.max()+5)
-        plt.ylim(depth.min()-5,depth.max()+5)
+        #plt.xlim(along_strike.min()-5,along_strike.max()+5)
+        #plt.ylim(depth.min()-5,depth.max()+5)
+        plt.xlim((-40,42))
+        plt.ylim(-17,2)       
         plt.scatter(0,-epicenter[2],marker='*',edgecolor='k',facecolor='#00FF00',s=350,linewidth=2)
         for k in range(len(along_strike)):
             scale_slip=slip[k]/slip.max()
             plt.quiver(along_strike[k],depth[k],rakess[k]/sqrt(rakess[k]**2+rakeds[k]**2),rakeds[k]/sqrt(rakess[k]**2+rakeds[k]**2),color='green',width=0.002,scale=50/scale_slip)
-    plt.annotate('North',xy=(28,2),fontsize=16)
-    plt.annotate('South',xy=(-36,2),fontsize=16)
-    plt.title(r'2015 Lefkada $M_w6.52$, $v_r=2.8$km/s, $\sigma=020$, $\delta=65$',fontsize=16)
+    plt.annotate('North',xy=(28,0),fontsize=16)
+    plt.annotate('South',xy=(-36,0),fontsize=16)
+    plt.title(r'2015 Lefkada $M_w6.55$, $v_r=2.6$km/s, $\sigma=020$, $\delta=65$',fontsize=16)
     cb.set_label('Slip(m)')
-    plt.subplots_adjust(left=0.15, bottom=0.15, right=0.92, top=0.95, wspace=0, hspace=0)
+    plt.subplots_adjust(left=0.15, bottom=0.15, right=0.92, top=0.92, wspace=0, hspace=0)
     plt.show()
 
 
