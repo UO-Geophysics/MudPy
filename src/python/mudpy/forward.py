@@ -835,7 +835,7 @@ def inv2coulomb(rupt,epicenter,fout):
     f=open(fout,'w')
     for k in range(len(u)):
         #out='1   %10.4f %10.4f %10.4f %10.4f 100 %10.4f %10.4f %10.4f %10.4f %10.4f %i\n' % (xstart[k],ystart[k],xfin[k],yfin[k],rake[k],slip[k],dip[k],ztop[k],zbot[k],k)
-        out='1   %10.4f %10.4f %10.4f %10.4f 100 %10.4f %10.4f %10.4f %10.4f %10.4f %i\n' % (xstart[k],ystart[k],xfin[k],yfin[k],ss[k],ds[k],dip[k],ztop[k],zbot[k],k)
+        out='1   %10.4f %10.4f %10.4f %10.4f 100 %10.4f %10.4f %10.4f %10.4f %10.4f %i\n' % (xstart[k],ystart[k],xfin[k],yfin[k],-ss[k],ds[k],dip[k],ztop[k],zbot[k],k)
         f.write(out)
     f.close()
     
@@ -879,6 +879,50 @@ def coulomb_xy2latlon(f,epicenter,fout):
     s[:,2]=la
     savetxt(fout,s,fmt='%.6f')
     
+def coulomb_disp_xy2latlon(f,epicenter,fout):
+    '''
+    Change the x-y coordinates of a Coulomb file to lat/lon
+    '''
+    from numpy import genfromtxt,zeros,rad2deg,arctan,isnan,savetxt,where
+    import pyproj
+    
+    s=genfromtxt(f)
+    x=s[:,0]
+    y=s[:,1]
+    #Fix problem with x=0 and y=0 lines
+    i=where(x==0)[0]
+    x[i]=0.001
+    i=where(y==0)[0]
+    y[i]=0.001
+    #Now use pyproj to dead reckon anf get lat/lon coordinates of subfaults
+    g = pyproj.Geod(ellps='WGS84')
+    #first get azimuths of all points, go by quadrant
+    az=zeros(x.shape)
+    for k in range(len(x)):
+        if x[k]>0 and y[k]>0:
+            az[k]=rad2deg(arctan(x[k]/y[k]))
+        if x[k]<0 and y[k]>0:
+            az[k]=360+rad2deg(arctan(x[k]/y[k]))
+        if x[k]<0 and y[k]<0:
+            az[k]=180+rad2deg(arctan(x[k]/y[k]))
+        if x[k]>0 and y[k]<0:
+            az[k]=180+rad2deg(arctan(x[k]/y[k]))
+    #Quadrant correction
+    #Now horizontal distances
+    d=((x**2+y**2)**0.5)*1000
+    #Now reckon
+    lo=zeros(len(d))
+    la=zeros(len(d))
+    for k in range(len(d)):
+        if isnan(az[k]): #No azimuth because I'm on the epicenter
+            print 'Point on epicenter'
+            lo[k]=epicenter[0]
+            la[k]=epicenter[1]
+        else:
+            lo[k],la[k],ba=g.fwd(epicenter[0],epicenter[1],az[k],d[k])
+    s[:,0]=lo
+    s[:,1]=la
+    savetxt(fout,s,fmt='%.6f')
     
       
 def ssds2rake(ss,ds):

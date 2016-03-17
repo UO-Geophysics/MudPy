@@ -7,6 +7,7 @@ inversion results
 '''
 
 import matplotlib
+from matplotlib import cm
 matplotlib.rcParams['pdf.fonttype'] = 42
 
 #Create default colormap for slip inversions
@@ -424,7 +425,7 @@ def tile_slip(rupt,nstrike,ndip,(slip_bounds),geographic=False,epicenter=0,epice
             plt.quiver(along_strike[k],depth[k],rakess[k]/sqrt(rakess[k]**2+rakeds[k]**2),rakeds[k]/sqrt(rakess[k]**2+rakeds[k]**2),color='green',width=0.002,scale=50/scale_slip)
     plt.annotate('North',xy=(28,0),fontsize=16)
     plt.annotate('South',xy=(-36,0),fontsize=16)
-    plt.title(r'2015 Lefkada $M_w6.55$, $v_r=2.6$km/s, $\sigma=020$, $\delta=65$',fontsize=16)
+    #plt.title(r'2015 Lefkada $M_w6.55$, $v_r=2.6$km/s, $\sigma=020$, $\delta=65$',fontsize=16)
     cb.set_label('Slip(m)')
     plt.subplots_adjust(left=0.15, bottom=0.15, right=0.92, top=0.92, wspace=0, hspace=0)
     plt.show()
@@ -516,23 +517,26 @@ def tile_slip_movieframes(home,project_name,sliprate_path,nstrike,ndip,(slip_min
         f=genfromtxt(files[kframe])
         slip=f[:,9]
         #Add aftershocks
-        afters=genfromtxt('/Users/dmelgar/Napa2014/hardebeck_afters.txt')
-        lonaf=afters[:,2]
-        lataf=afters[:,1]
-        zaf=-afters[:,3]
+        #afters=genfromtxt('/Users/dmelgar/Napa2014/hardebeck_afters.txt')
+        lonaf=genfromtxt('/Users/dmelgar/Lefkada2015/afters/aftershocks_NOA_reloc.txt',usecols=4)
+        lataf=genfromtxt('/Users/dmelgar/Lefkada2015/afters/aftershocks_NOA_reloc.txt',usecols=3)
+        zaf=-genfromtxt('/Users/dmelgar/Lefkada2015/afters/aftershocks_NOA_reloc.txt',usecols=5)
+        #lonaf=afters[:,2]
+        #lataf=afters[:,1]
+        #zaf=-afters[:,3]
         xaf=zeros(zaf.shape)
         for k in range(len(lataf)):
             out=gps2DistAzimuth(epicenter[1],epicenter[0],lataf[k],lonaf[k])
             xaf[k]=(out[0]/1000)
-            if lataf[k]>epicenter[1]: #If it's tot he left of epcietner it's engative
+            if lataf[k]<epicenter[1]: #If it's tot he left of epcietner it's engative
                 xaf[k]=-xaf[k]
         #Done with afters
         #Do same thing for centroid position
-        loncent=-122.313
-        latcent=38.26
-        zcent=-4
-        out=gps2DistAzimuth(epicenter[1],epicenter[0],latcent,loncent)
-        xcent=-(out[0]/1000)
+        #loncent=-122.313
+        #latcent=38.26
+        #zcent=-4
+        #out=gps2DistAzimuth(epicenter[1],epicenter[0],latcent,loncent)
+        #xcent=-(out[0]/1000)
         #Done with centroid
         lon=f[(epicenter_line-1)*nstrike:epicenter_line*nstrike,1] #Only compute line at the epicenter depth
         lat=f[(epicenter_line-1)*nstrike:epicenter_line*nstrike,2]    
@@ -541,9 +545,9 @@ def tile_slip_movieframes(home,project_name,sliprate_path,nstrike,ndip,(slip_min
         for k in range(len(lat)):
             out=gps2DistAzimuth(epicenter[1],epicenter[0],lat[k],lon[k])
             if lat[k]<epicenter[1]: #It's to the south
-                along_strike[k]=out[0]/1000
-            else:
                 along_strike[k]=-out[0]/1000
+            else:
+                along_strike[k]=out[0]/1000
         #Now tile
         along_strike=tile(along_strike,ndip)
         #Get indices for plot
@@ -559,6 +563,9 @@ def tile_slip_movieframes(home,project_name,sliprate_path,nstrike,ndip,(slip_min
         theta=linspace(0,2*pi,100)
         t=dt*kframe #Current time
         print "t="+str(t)
+        r15=(1.5*t)*ones(100)
+        x15=r15*cos(theta)
+        y15=r15*sin(theta)-epicenter[2]
         r20=(2.0*t)*ones(100)
         x20=r20*cos(theta)
         y20=r20*sin(theta)-epicenter[2]
@@ -569,7 +576,7 @@ def tile_slip_movieframes(home,project_name,sliprate_path,nstrike,ndip,(slip_min
         x30=r30*cos(theta)
         y30=r30*sin(theta)-epicenter[2]
         #Plot
-        plt.figure(num=None, figsize=(8, 4), dpi=80)
+        plt.figure(num=None, figsize=(14, 3.5), dpi=80)
         #This plots slip as individual markers
         #plt.scatter(along_strike,depth,marker='s',linewidth=0.5,edgecolor='#CCCCCC',c=slip,s=250,cmap=whitejet,vmin=slip_min,vmax=slip_max)
         #cb=plt.colorbar()
@@ -609,7 +616,7 @@ def tile_slip_movieframes(home,project_name,sliprate_path,nstrike,ndip,(slip_min
         x=linspace(along_strike.min()-0.5,along_strike.max()+0.5,100)  #Adjsut for the width of the subfault
         y=linspace(depth.min()-0.49,depth.max()+0.49,100)   #Adjsut for height of subfault
         X, Y = meshgrid(x, y)
-        sliprate=griddata(along_strike,depth,slip,X,Y)
+        sliprate=griddata(along_strike,depth,slip,X,Y,interp='linear')
         plt.scatter(along_strike,depth,marker='s',linewidth=0.0,edgecolor='',c=slip,s=250,cmap=whitejet,vmin=slip_min,vmax=slip_max)
         cb=plt.colorbar()
         plt.contourf(X,Y,sliprate,100,vmin=slip_min,vmax=slip_max,cmap=whitejet)
@@ -620,25 +627,201 @@ def tile_slip_movieframes(home,project_name,sliprate_path,nstrike,ndip,(slip_min
         plt.xlim(xlim)
         plt.ylim(ylim)
         plt.scatter(0,-epicenter[2],marker='*',edgecolor='k',facecolor='#00FF00',s=350,linewidth=2)
-        plt.scatter(xcent,zcent,marker='D',edgecolor='black',facecolor='',s=120,linewidth=2)
+        #plt.scatter(xcent,zcent,marker='D',edgecolor='black',facecolor='',s=120,linewidth=2)
 
         plt.scatter(xaf,zaf,edgecolor='k',s=5)
+        plt.plot(x15,y15,'--',c='grey')
         plt.plot(x20,y20,'--',c='grey')
         plt.plot(x25,y25,'--',c='grey')
-        plt.plot(x30,y30,'--',c='grey')
 
         cb.set_label('Slip rate (m/s)')
-        plt.subplots_adjust(left=0.1, bottom=0.15, right=0.9, top=0.95, wspace=0, hspace=0)
         plot_name=home+project_name+'/plots/sliprate.'+rjust(str(kframe),4,'0')+'.png'
         plt.title('t = '+ljust(str(kframe*dt),4,'0')+'s')
+        plt.subplots_adjust(left=0.1, bottom=0.15, right=0.9, top=0.9, wspace=0, hspace=0)
         plt.savefig(plot_name)     
         ts=kframe*dt
         if ts==1.0 or ts==2.0 or ts==3.0 or ts==4.0 or ts==5.0 or ts==6.0 or ts==7.0 or ts==8.0:
-            plot_name=home+project_name+'/plots/sliprate.'+rjust(str(kframe),4,'0')+'.eps'
+            plot_name=home+project_name+'/plots/sliprate.'+rjust(str(kframe),4,'0')+'.pdf'
             plt.savefig(plot_name) 
-            print 'Saved EPS frame'
+            print 'Saved PDF frame'
         plt.close("all")
+    
         
+            
+def panel_tile_slip(home,project_name,sliprate_path,nstrike,ndip,(slip_min,slip_max),nframes,geographic=False,epicenter=0,epicenter_line=0):
+    '''
+    Quick and dirty plot of a .rupt file
+    epicenter is the coordinates, epcienter line is the down dip lien number where 
+    the epcienter is
+    
+    nframes is [0,1,2,3]
+    '''
+    
+    from numpy import genfromtxt,zeros,tile,linspace,pi,cos,sin,ones,meshgrid,arange,r_,reshape,where
+    import matplotlib.pyplot as plt
+    from obspy.core.util.geodetics import gps2DistAzimuth
+    from glob import glob
+    from string import rjust,ljust
+    from matplotlib.mlab import griddata
+    from matplotlib import colorbar
+    
+    #Get sliprate files
+    files=[]
+    for k in range(len(nframes)):
+        frame=rjust(str(nframes[k]),4,'0')
+        files.append(sliprate_path+frame+'.slip')
+    #Now intialize figure
+    fig, axarr = plt.subplots(5, 2,figsize=(8,4))
+    axarr=axarr.transpose()
+    axarr=reshape(axarr,(10,))
+    #loop through frames
+    for kframe in range(len(files)):
+        ax=axarr[kframe] #current axis
+        print kframe
+        f=genfromtxt(files[kframe])
+        slip=f[:,9]
+        #Add aftershocks
+        #afters=genfromtxt('/Users/dmelgar/Napa2014/hardebeck_afters.txt')
+        lonaf=genfromtxt('/Users/dmelgar/Lefkada2015/afters/aftershocks_NOA_reloc.txt',usecols=4)
+        lataf=genfromtxt('/Users/dmelgar/Lefkada2015/afters/aftershocks_NOA_reloc.txt',usecols=3)
+        zaf=-genfromtxt('/Users/dmelgar/Lefkada2015/afters/aftershocks_NOA_reloc.txt',usecols=5)
+        #lonaf=afters[:,2]
+        #lataf=afters[:,1]
+        #zaf=-afters[:,3]
+        xaf=zeros(zaf.shape)
+        for k in range(len(lataf)):
+            out=gps2DistAzimuth(epicenter[1],epicenter[0],lataf[k],lonaf[k])
+            xaf[k]=(out[0]/1000)
+            if lataf[k]<epicenter[1]: #If it's tot he left of epcietner it's engative
+                xaf[k]=-xaf[k]
+        #Done with afters
+        #Do same thing for centroid position
+        #loncent=-122.313
+        #latcent=38.26
+        #zcent=-4
+        #out=gps2DistAzimuth(epicenter[1],epicenter[0],latcent,loncent)
+        #xcent=-(out[0]/1000)
+        #Done with centroid
+        lon=f[(epicenter_line-1)*nstrike:epicenter_line*nstrike,1] #Only compute line at the epicenter depth
+        lat=f[(epicenter_line-1)*nstrike:epicenter_line*nstrike,2]    
+        depth=-f[:,3]
+        along_strike=zeros(nstrike)
+        for k in range(len(lat)):
+            out=gps2DistAzimuth(epicenter[1],epicenter[0],lat[k],lon[k])
+            if lat[k]<epicenter[1]: #It's to the south
+                along_strike[k]=-out[0]/1000
+            else:
+                along_strike[k]=out[0]/1000
+        #Now tile
+        along_strike=tile(along_strike,ndip)
+        #Get indices for plot
+        istrike=zeros(nstrike*ndip)
+        idip=zeros(nstrike*ndip)
+        k=0
+        for i in range(ndip):
+            for j in range(nstrike):
+                istrike[k]=nstrike-j
+                idip[k]=ndip-i
+                k+=1          
+        #Make rupture velocity contours
+        theta=linspace(0,2*pi,100)
+        t=1.0*(kframe+1) #Current time
+        print "t="+str(t)
+        r15=(1.5*t)*ones(100)
+        x15=r15*cos(theta)
+        y15=r15*sin(theta)-epicenter[2]
+        r20=(2.0*t)*ones(100)
+        x20=r20*cos(theta)
+        y20=r20*sin(theta)-epicenter[2]
+        r25=(2.5*t)*ones(100)
+        x25=r25*cos(theta)
+        y25=r25*sin(theta)-epicenter[2]
+        r30=(3.0*t)*ones(100)
+        x30=r30*cos(theta)
+        y30=r30*sin(theta)-epicenter[2]
+        #Plot
+        
+        #This plots slip as individual markers
+        #plt.scatter(along_strike,depth,marker='s',linewidth=0.5,edgecolor='#CCCCCC',c=slip,s=250,cmap=whitejet,vmin=slip_min,vmax=slip_max)
+        #cb=plt.colorbar()
+        #End single marker
+        #This interpolates and plots the slip as a surface
+        #First get limits of plot
+        xlim=[along_strike.min()-0.5,along_strike.max()+0.5]
+        ylim=[depth.min()-0.5,depth.max()+0.5]
+        #Fix edges
+        x1=along_strike[0:nstrike]
+        y1=(depth[0]+0.5)*ones(x1.shape)
+        z1=slip[0:nstrike]
+        x2=along_strike[-nstrike:]
+        y2=(depth[-1]-0.5)*ones(x2.shape)
+        z2=slip[-nstrike:]
+        x3=along_strike[arange(0,nstrike*ndip,nstrike)]+0.5
+        y3=depth[arange(0,nstrike*ndip,nstrike)]
+        z3=slip[arange(0,nstrike*ndip,nstrike)]
+        x4=along_strike[arange(nstrike-1,nstrike*ndip,nstrike)]-0.5
+        y4=depth[arange(nstrike-1,nstrike*ndip,nstrike)]
+        z4=slip[arange(nstrike-1,nstrike*ndip,nstrike)]
+        x5=along_strike[0]+0.5
+        y5=depth[0]+0.5
+        z5=slip[0]
+        x6=along_strike[nstrike-1]-0.5
+        y6=depth[nstrike-1]+0.5
+        z6=slip[nstrike-1]
+        x7=along_strike[-nstrike]+0.5
+        y7=depth[-nstrike]-0.5
+        z7=slip[nstrike-1]
+        x8=along_strike[-1]-0.5
+        y8=depth[-1]-0.5
+        z8=slip[-1]
+        along_strike=r_[along_strike,x1,x2,x3,x4,x5,x6,x7,x8]
+        depth=r_[depth,y1,y2,y3,y4,y5,y6,y7,y8]
+        slip=r_[slip,z1,z2,z3,z4,z5,z6,z7,z8]
+        x=linspace(along_strike.min()-0.5,along_strike.max()+0.5,100)  #Adjsut for the width of the subfault
+        y=linspace(depth.min()-0.49,depth.max()+0.49,100)   #Adjsut for height of subfault
+        X, Y = meshgrid(x, y)
+        sliprate=griddata(along_strike,depth,slip,X,Y,interp='linear')
+        ax.scatter(along_strike,depth,marker='s',linewidth=0.0,edgecolor='',c=slip,s=250,cmap=whitejet,vmin=slip_min,vmax=slip_max)
+        if kframe==5:
+            i,j=where(sliprate.data>slip_max)
+            sliprate.data[i,j]=slip_max
+            cf=ax.contourf(X,Y,sliprate,100,vmin=slip_min,vmax=slip_max,cmap=whitejet)
+        else:
+            ax.contourf(X,Y,sliprate,100,vmin=slip_min,vmax=slip_max,cmap=whitejet)
+        #ax.grid()
+        #End interpolated 
+        ax.set_xlim([-40.5,40.5])
+        ax.set_ylim(ylim)
+        ax.scatter(0,-epicenter[2],marker='*',edgecolor='k',facecolor='#00FF00',s=200,linewidth=1)
+        #plt.scatter(xcent,zcent,marker='D',edgecolor='black',facecolor='',s=120,linewidth=2)
+
+        ax.scatter(xaf,zaf,edgecolor='k',s=0.2)
+        ax.plot(x15,y15,c='grey')
+        ax.plot(x20,y20,c='grey')
+        ax.plot(x25,y25,c='grey')
+        
+        ax.xaxis.set_ticklabels([])
+        ax.yaxis.set_ticklabels([])
+        
+        anot=str(kframe)+'-'+str(kframe+1)+'s'
+        ax.annotate(anot,xy=(25,-6))
+        
+        if kframe==4 or kframe==9:
+            ax.xaxis.set_ticklabels(['','-40','','-20','','0','','20','','40'])
+            ax.set_xlabel('Along strike distance (km)')
+        if kframe==0 or kframe==1 or kframe==2 or kframe==3 or kframe==4:
+            ax.yaxis.set_ticklabels(['','16','','','','','','','0'])
+        if kframe==2:
+            ax.set_ylabel('Down-dip distance (km)',rotation=90)
+    
+    plt.subplots_adjust(bottom=0.12,hspace=0.1,wspace=0.1,top=0.96)
+    #Make stupid colorbar
+    cax,kw = colorbar.make_axes([ax for ax in axarr.flat])
+    cax.yaxis.set_ticks([0,0.1,0.2,0.3,0.4,0.5,0.6])
+    plt.colorbar(cf, cax=cax,label='Slip(m)',ticks=[0,0.1,0.2,0.3,0.4,0.5,0.6],**kw)
+    plt.show() 
+                    
+                            
                        
 def tile_moment(rupt,epicenter,nstrike,ndip,covfile,beta=0,(vfast,vslow)=(0,0),shade=False):
     '''
@@ -1475,6 +1658,60 @@ def insar_residual(home,project_name,run_name,run_number,gflist,zlims):
     plt.colorbar()
     plt.grid()
     
+    
+def insar_results(home,project_name,run_name,run_number,gflist,zlims):
+    '''
+    Plot insar observed in one panel and insar modeled in the other
+    
+    gflist: The GF control file that decides what to plot/not plot
+    datapath
+    '''
+    from numpy import genfromtxt,where,zeros,sqrt,c_,savetxt
+    import matplotlib.pyplot as plt
+    import matplotlib
+    
+    matplotlib.rcParams.update({'font.size': 14})
+    #Decide what to plot
+    sta=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=0,dtype='S')
+    lon_all=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=[1],dtype='f')
+    lat_all=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=[2],dtype='f')
+    gf=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=[7],dtype='f')
+    datapath=home+project_name+'/data/statics/'
+    synthpath=home+project_name+'/output/inverse_models/statics/'
+    #synthpath=home+project_name+'/output/forward_models/'
+    i=where(gf==1)[0] #Which stations have statics?
+    lon=lon_all[i]
+    lat=lat_all[i]
+    los_data=zeros(len(i))
+    los_synth=zeros(len(i))
+    for k in range(len(i)):
+        neu=genfromtxt(datapath+sta[i[k]]+'.los')
+        #neu=genfromtxt(datapath+sta[i[k]]+'.static.neu')
+        los_data[k]=neu[0]
+        neus=genfromtxt(synthpath+run_name+'.'+run_number+'.'+sta[i[k]]+'.los')
+        #neus=genfromtxt(synthpath+sta[i[k]]+'.static.neu')
+        los_synth[k]=neus[0]
+    #Make plot
+    out=c_[lon,lat,los_data,los_synth,los_data-los_synth]
+    savetxt(home+project_name+'/analysis/'+run_name+'.'+run_number+'.insar.res',out,fmt='%.6f\t%.6f\t%8.5f\t%8.5f\t%8.5f',header='lon,lat,los_data(m),los_synthetic(m),data-synthetic(m)')
+    plt.figure()
+    ax=plt.subplot(211)
+    ax.tick_params(labelbottom='off') 
+    plt.scatter(lon,lat,c=los_data,cmap=cm.jet,vmin=zlims[0],vmax=zlims[1],s=50,lw=0)
+    plt.title('LOS observed (m)')
+    plt.colorbar()
+    plt.grid()
+    plt.ylabel('Latitude')
+    #replt.axis('equal')
+    plt.subplot(212)
+    plt.xticks(rotation=30)
+    plt.scatter(lon,lat,c=los_synth,cmap=cm.jet,vmin=zlims[0],vmax=zlims[1],s=50,lw=0)
+    plt.title('LOS modeled(m)')
+    #plt.axis('equal')
+    plt.colorbar()
+    plt.ylabel('Latitude')
+    plt.xlabel('Longitude')
+    plt.grid()
             
 def tsunami_synthetics(home,project_name,run_name,run_number,gflist,t_lim,sort,scale):
     '''

@@ -353,6 +353,10 @@ def make_slip_slice(rupt,nstrike,ndip,epicenter,out,tmax,dt):
     maxsr=0
     #Now integrate slip
     t=arange(0,tmax+dt*0.1,dt)
+    print t
+    #First retain original rupture information
+    ruptout=f[0:len(unum),:]
+    ruptout[:,8]=0 #Set SS to 0
     print 'Writing files...'
     for ktime in range(len(t)-1):
         slip=zeros(lon.shape)
@@ -361,10 +365,13 @@ def make_slip_slice(rupt,nstrike,ndip,epicenter,out,tmax,dt):
             i2=where(T[:,kfault]<t[ktime+1])[0]
             i=intersect1d(i1,i2)
             slip[kfault]=trapz(M[i,kfault]/(mu[kfault]*area[kfault]),T[i,kfault])
+        ruptout[:,9]=slip #Assign slip to SS component  
         maxsr=max(maxsr,slip.max())
         fname=out+rjust(str(ktime),4,'0')+'.slip'
-        savetxt(fname, c_[lon,lat,depth,slip],fmt='%.6f\t%.6f\t%.4f\t%.6f')
+        fmtout='%6i\t%.4f\t%.4f\t%8.4f\t%.2f\t%.2f\t%.2f\t%.2f\t%12.4e\t%12.4e%10.1f\t%10.1f\t%8.4f\t%.4e'
+        savetxt(fname,ruptout,fmtout,header='No,lon,lat,z(km),strike,dip,rise,dura,ss-slip(m),ds-slip(m),ss_len(m),ds_len(m),rupt_time(s),rigidity(Pa)')
     print 'Maximum slip was '+str(maxsr)+'m'      
+
 
 
 
