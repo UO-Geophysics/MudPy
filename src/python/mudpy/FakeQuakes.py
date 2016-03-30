@@ -243,16 +243,13 @@ def vonKarman_correlation(Dstrike,Ddip,Lstrike,Ldip,hurst):
     G = lambda r,H: (r+delta)**H * Bessel(H,(r+delta))
     vonKarman = lambda r,H: G(r,H)/G(delta,H)
     
-    #Print to keep track of things
-    print "Correlation lengths: Lstrike = %g, Ldip = %g" % (Lstrike,Ldip)
-    print "Hurst exponent = %4.2f" % hurst
     r = sqrt((Dstrike/Lstrike)**2 + (Ddip/Ldip)**2)
     C = vonKarman(r,hurst)
     
     return C
 
 
-def get_lognormal(C,target_Mw,fault_array,vel_mod,alpha=0.8):
+def get_lognormal(C,target_Mw,fault_array,vel_mod,alpha=0.6):
     '''
     Exponentiate to get lognormal correlation
     '''
@@ -299,7 +296,10 @@ def make_KL_slip(fault,num_modes,eigenvals,V,mean_slip):
     from numpy.random import randn
     
     #Generate random numbers
-    z = randn(num_modes) 
+    if len(fault)>num_modes:
+        z = randn(num_modes) 
+    else: #if fewer faults than requested modes then use all modes
+        z = randn(len(fault)) 
     KL_slip = mean_slip.copy()  # start with the mean slip
     # add in the terms in the K-L expansion:
     for k in range(len(z)):
@@ -311,7 +311,7 @@ def make_KL_slip(fault,num_modes,eigenvals,V,mean_slip):
     return KL_slip
     
 
-def plot_KLslip(home,project_name,run_name,run_number,fault,mesh_name,Mw,hypo_fault,fudge=0.3):
+def plot_KLslip(home,project_name,run_name,run_number,fault,mesh_name,target_Mw,Mw,hypo_fault,fudge=0.3):
     '''
     Make simple plot of slip model
     '''
@@ -319,8 +319,7 @@ def plot_KLslip(home,project_name,run_name,run_number,fault,mesh_name,Mw,hypo_fa
     from matplotlib.collections import PatchCollection
     from matplotlib import pyplot as plt
     from matplotlib import cm,colors
-    from numpy import r_,genfromtxt,reshape
-    from numpy.random import randn
+    from numpy import r_,genfromtxt,reshape,zeros,array
     
     #Read mesh
     mesh=genfromtxt(home+project_name+'/data/model_info/'+mesh_name)
@@ -348,9 +347,63 @@ def plot_KLslip(home,project_name,run_name,run_number,fault,mesh_name,Mw,hypo_fa
     whitejet = colors.LinearSegmentedColormap('whitejet',cdict,256)
     
     #Plot
-    fig, ax = plt.subplots(figsize=(3,8))
-    ax.set_xlim([fault[:,1].min()-fudge,fault[:,1].max()+fudge])
-    ax.set_ylim([fault[:,2].min()-fudge,fault[:,2].max()+fudge])
+    fig, axarr = plt.subplots(1,2,figsize=(8,8))
+    
+    ax1=axarr[0]
+    ax1.set_xlim([fault[:,1].min()-fudge,fault[:,1].max()+2])
+    ax1.set_ylim([fault[:,2].min()-fudge,fault[:,2].max()+fudge])
+
+    #Plot coasts (also hard coded to cascadia for now)
+    fcoast=open('/Users/dmelgar/Cascadia/coast/coast.txt','r')
+    line=fcoast.readline()
+    parsing_coast=True
+    while parsing_coast==True:
+        if '>' in line:
+            complete_polygon=False
+            count=0
+            while complete_polygon==False:
+                line=fcoast.readline()
+                if '>' in line or line=='':
+                    complete_polygon=True
+                    ax1.plot(coast_coordinates[:,0],coast_coordinates[:,1],lw=0.5,c='k')
+                else:
+                    new_coordinates=zeros((1,2))
+                    new_coordinates[0,0]=float(line.split()[0])
+                    new_coordinates[0,1]=float(line.split()[1])
+                    if count==0:
+                        coast_coordinates=new_coordinates.copy()
+                        count+=1
+                    else:
+                        coast_coordinates=r_[coast_coordinates,new_coordinates]
+                if line=='':
+                    parsing_coast=False
+    #Done plotting coast
+    #Plot cnational boundaries(also hard coded to cascadia for now)
+    fcoast=open('/Users/dmelgar/Cascadia/coast/boundaries.txt','r')
+    line=fcoast.readline()
+    parsing_coast=True
+    while parsing_coast==True:
+        if '>' in line:
+            complete_polygon=False
+            count=0
+            while complete_polygon==False:
+                line=fcoast.readline()
+                if '>' in line or line=='':
+                    complete_polygon=True
+                    ax1.plot(coast_coordinates[:,0],coast_coordinates[:,1],lw=1,c='k')
+                else:
+                    new_coordinates=zeros((1,2))
+                    new_coordinates[0,0]=float(line.split()[0])
+                    new_coordinates[0,1]=float(line.split()[1])
+                    if count==0:
+                        coast_coordinates=new_coordinates.copy()
+                        count+=1
+                    else:
+                        coast_coordinates=r_[coast_coordinates,new_coordinates]
+                if line=='':
+                    parsing_coast=False
+    #Done plotting coast
+
 
     #Make patches
     patches = []
@@ -359,37 +412,132 @@ def plot_KLslip(home,project_name,run_name,run_number,fault,mesh_name,Mw,hypo_fa
         subfault = Polygon(coordinates, True)
         patches.append(subfault)
         
-    p = PatchCollection(patches,cmap=whitejet,lw=0.2)
+    p1 = PatchCollection(patches,cmap=whitejet,lw=0.1)
     colors = fault[:,9]
-    p.set_array(colors)
-    plt.xticks(rotation=70)
-    ax.add_collection(p)
-    plt.scatter(fault[hypo_fault,1],fault[hypo_fault,2],marker='s',lw=0.5,c='m',s=60)
-    plt.title('Mw = %.2f' % (Mw))
-    cbar_ax = fig.add_axes([0.73, 0.2, 0.05, 0.6])
-    plt.colorbar(p, cax=cbar_ax, label="Slip (m)")
-    plt.subplots_adjust(right=0.75)
+    p1.set_array(colors)
+    ax1.add_collection(p1)
+    labels = ax1.get_xticklabels() 
+    for label in labels: 
+        label.set_rotation(70) 
+    #Plot stations, this is hard coded to Cascadia
+    stations=genfromtxt(u'/Users/dmelgar/Cascadia/stations/cascadia_gps.txt',usecols=[0,1])
+    ax1.scatter(stations[:,0],stations[:,1],marker='o',lw=0.8,c='#FF8C00',s=15)
+    #hypocenter
+    ax1.scatter(fault[hypo_fault,1],fault[hypo_fault,2],marker='s',lw=0.5,c='#FF69B4',s=40)
+    ax1.set_title('Target Mw = %.2f\nActual Mw = %.2f' % (target_Mw,Mw))
+    
+    
+    #### Plot rise times
+    
+    ax2=axarr[1]
+    ax2.set_xlim([fault[:,1].min()-fudge,fault[:,1].max()+2])
+    ax2.set_ylim([fault[:,2].min()-fudge,fault[:,2].max()+fudge])
+
+    #Plot coasts (also hard coded to cascadia for now)
+    fcoast=open('/Users/dmelgar/Cascadia/coast/coast.txt','r')
+    line=fcoast.readline()
+    parsing_coast=True
+    while parsing_coast==True:
+        if '>' in line:
+            complete_polygon=False
+            count=0
+            while complete_polygon==False:
+                line=fcoast.readline()
+                if '>' in line or line=='':
+                    complete_polygon=True
+                    ax2.plot(coast_coordinates[:,0],coast_coordinates[:,1],lw=0.5,c='k')
+                else:
+                    new_coordinates=zeros((1,2))
+                    new_coordinates[0,0]=float(line.split()[0])
+                    new_coordinates[0,1]=float(line.split()[1])
+                    if count==0:
+                        coast_coordinates=new_coordinates.copy()
+                        count+=1
+                    else:
+                        coast_coordinates=r_[coast_coordinates,new_coordinates]
+                if line=='':
+                    parsing_coast=False
+    #Done plotting coast
+    #Plot cnational boundaries(also hard coded to cascadia for now)
+    fcoast=open('/Users/dmelgar/Cascadia/coast/boundaries.txt','r')
+    line=fcoast.readline()
+    parsing_coast=True
+    while parsing_coast==True:
+        if '>' in line:
+            complete_polygon=False
+            count=0
+            while complete_polygon==False:
+                line=fcoast.readline()
+                if '>' in line or line=='':
+                    complete_polygon=True
+                    ax2.plot(coast_coordinates[:,0],coast_coordinates[:,1],lw=1,c='k')
+                else:
+                    new_coordinates=zeros((1,2))
+                    new_coordinates[0,0]=float(line.split()[0])
+                    new_coordinates[0,1]=float(line.split()[1])
+                    if count==0:
+                        coast_coordinates=new_coordinates.copy()
+                        count+=1
+                    else:
+                        coast_coordinates=r_[coast_coordinates,new_coordinates]
+                if line=='':
+                    parsing_coast=False
+    #Done plotting coast
+
+
+    #Make patches
+    patches = []
+    for k in range(len(fault)):
+        coordinates=reshape(r_[mesh[k,4:6],mesh[k,7:9],mesh[k,10:12],mesh[k,4:6]],(4,2))
+        subfault = Polygon(coordinates, True)
+        patches.append(subfault)
+        
+    p2 = PatchCollection(patches,cmap=cm.CMRmap_r,lw=0.1)
+    colors = fault[:,7]
+    p2.set_array(colors)
+    ax2.add_collection(p2)
+    labels = ax2.get_xticklabels() 
+    for label in labels: 
+        label.set_rotation(70) 
+    #Plot stations, this is hard coded to Cascadia
+    stations=genfromtxt(u'/Users/dmelgar/Cascadia/stations/cascadia_gps.txt',usecols=[0,1])
+    ax2.scatter(stations[:,0],stations[:,1],marker='o',lw=0.8,c='#FF8C00',s=15)
+    #hypocenter
+    ax2.scatter(fault[hypo_fault,1],fault[hypo_fault,2],marker='s',lw=0.5,c='#FF69B4',s=40)
+    #plt.title('Target Mw = %.2f\nActual Mw = %.2f' % (target_Mw,Mw))
+    
+    
+    #Colorbars
+    cbar_ax1 = fig.add_axes([0.435, 0.2, 0.02, 0.6])
+    plt.colorbar(p1, cax=cbar_ax1, label="Slip (m)")
+    cbar_ax2 = fig.add_axes([0.887, 0.2, 0.02, 0.6])
+    plt.colorbar(p2, cax=cbar_ax2, label="Rise time (s)")
+    
+    
+    plt.subplots_adjust(wspace=0.4)
     plt.savefig(home+project_name+'/plots/'+run_name+'.'+run_number+'.png')
     plt.close()
 
 
-def select_faults(whole_fault,Dstrike,Ddip,target_Mw,buffer_factor):
+def select_faults(whole_fault,Dstrike,Ddip,target_Mw,buffer_factor,num_modes):
     '''
     Select a random fault to be the hypocenter then based on scaling laws and a 
     target magnitude select only faults within the expected area plus some 
     buffer factor
     '''
     
-    from numpy.random import randint
-    from numpy import array,where
+    from numpy.random import randint,normal
+    from numpy import array,where,diff
     
     done=False
     while not done:
-        #Determine length and width from scaling laws
-        length=10**(-2.37+0.57*target_Mw)
-        length=length+length*buffer_factor
-        width=10**(-1.86+0.46*target_Mw)
-        width=width+width*buffer_factor
+        #Determine length and width from scaling laws (select from lognormal dsitribution)
+        length_mean=-2.37+0.57*target_Mw
+        length_std=0.15#0.18
+        length=10**normal(length_mean,length_std)
+        width_mean=-1.86+0.46*target_Mw
+        width_std=0.14#0.17
+        width=10**normal(width_mean,width_std)
         
         #Select random subfault as hypocenter
         hypo_fault=randint(0,len(whole_fault)-1)
@@ -424,17 +572,74 @@ def select_faults(whole_fault,Dstrike,Ddip,target_Mw,buffer_factor):
         #Now select faults within those distances
         selected_faults=where((Ds>=strike_bounds[0]) & (Ds<=strike_bounds[1]) & (Dd>=dip_bounds[0]) & (Dd<=dip_bounds[1]))[0]
         #From within the selected faults randomly select the hypocenter
-        if len(selected_faults)<2:
-            done=False
-        else:
-            i=randint(0,len(selected_faults)-1)
-            hypo_fault=selected_faults[i]
-            break
-    return selected_faults,hypo_fault
+        #if len(selected_faults)<num_modes:
+        #    done=False
+        #else:
+        #    i=randint(0,len(selected_faults)-1)
+        #    hypo_fault=selected_faults[i]
+        #    break
+        i=randint(0,len(selected_faults)-1)
+        hypo_fault=selected_faults[i]
+        break
+            
+            
+            
+    #From the selected faults determine the actual along strike length (Leff) and down-dip width (Weff)
+    #Check it doesn't exceed physically permissible thresholds
+    if strike_bounds[0]<dstrike_min:
+        strike_bounds[0]=dstrike_min
+    if strike_bounds[1]>dstrike_max:
+        strike_bounds[1]=dstrike_max   
+    Lmax=abs(diff(strike_bounds))[0]
+    if dip_bounds[0]<ddip_min:
+        dip_bounds[0]=ddip_min
+    if dip_bounds[1]>ddip_max:
+        dip_bounds[1]=ddip_max     
+    Wmax=abs(diff(dip_bounds))[0]
+    #Convert to effective length/width
+    Leff=0.85*Lmax
+    Weff=0.77*Wmax
+    return selected_faults,hypo_fault,Lmax,Wmax,Leff,Weff
+
+    
+        
+def get_rise_times(M0,slip,fault_array,rise_time_depths):
+    '''
+    Calculate individual subfault rise times
+    '''     
+    
+    from numpy import diff,ones,where
+    
+    #Moment to dyne-cm (Because old seismologists...)
+    M0=M0*1e7
+    
+    #Determine average rise time based on total moment of the event (Graves,Pitarka, 2010, eq. 8)
+    tau_average=0.82*1.6*1e-9*M0**(1./3)
+    
+    #Determine slope and intercept of k-scaling line
+    slope=1./(rise_time_depths[0]-rise_time_depths[1])
+    intercept=1-slope*rise_time_depths[1]
+    
+    #For each depth determine the value of alpha
+    alpha=ones(len(fault_array))
+    ishallow=where(fault_array[:,3]<=rise_time_depths[0])[0]
+    alpha[ishallow]=2
+    itransition=where((fault_array[:,3]>rise_time_depths[0]) & (fault_array[:,3]<rise_time_depths[1]))[0]
+    alpha[itransition]=slope*fault_array[itransition,3]+intercept
+    
+    #Now determine the scaling constant k
+    k=(len(slip)*tau_average)/(sum(alpha*slip**0.5))
+    
+    #And on to the actual subfault rise times
+    rise_times=alpha*k*slip**0.5
+    
+    return rise_times
+    
+    
     
 def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
     load_distances,distances_name,UTM_zone,target_Mw,model_name,hurst,Ldip,Lstrike,
-    num_modes,Nrealizations,rake,buffer_factor):
+    num_modes,Nrealizations,rake,buffer_factor,rise_time_depths):
     
     '''
     Depending on user selected flags parse the work out to different functions
@@ -442,6 +647,8 @@ def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
     
     from numpy import load,save,genfromtxt,log10,cos,sin,deg2rad,savetxt,zeros,sqrt
     from string import rjust
+    from time import gmtime, strftime
+
     
     #Should I calculate or load the distances?
     if load_distances==1:  
@@ -458,81 +665,101 @@ def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
     
     #Get structure model
     vel_mod=home+project_name+'/structure/'+model_name
-    
-    #Determine correlation lengths
-    if Lstrike=='auto': #Use scaling
-        Ls=10**(-2.43+0.49*target_Mw)
-    else:
-        Ls=Lstrike
-    if Ldip=='auto': #Use scaling
-        Ld=10**(-1.79+0.38*target_Mw)
-    else:
-        Ld=Ldip
 
     #Now loop over the number of realizations
+    realization=0
     print 'Generating rupture scenarios'
-    for kfault in range(Nrealizations):
-        if kfault%10==0:
-            print '... working on rupture '+str(kfault)+' of '+str(Nrealizations)
-        
-        #Prepare output
-        fault_out=zeros((len(whole_fault),14))
-        fault_out[:,0:8]=whole_fault[:,0:8]
-        fault_out[:,10:12]=whole_fault[:,8:]   
-        
-        #Select only a subset of the faults based on magnitude scaling
-        ifaults,hypo_fault=select_faults(whole_fault,Dstrike,Ddip,target_Mw,buffer_factor)
-        fault_array=whole_fault[ifaults,:]
-        Dstrike_selected=Dstrike[ifaults,:][:,ifaults]
-        Ddip_selected=Ddip[ifaults,:][:,ifaults]
-        
-        #Get the mean uniform slip for the target magnitude
-        mean_slip,mu=get_mean_slip(target_Mw,fault_array,vel_mod)
-        
-        #Get correlation matrix
-        C=vonKarman_correlation(Dstrike_selected,Ddip_selected,Ls,Ld,hurst)
-        
-        #Get lognormal valcues
-        C_log,mean_slip_log=get_lognormal(C,target_Mw,fault_array,vel_mod)
-        
-        #Get eigen values and eigenvectors
-        eigenvals,V=get_eigen(C_log)
-        
-        #Generate fake slip pattern
-        slip=make_KL_slip(fault_array,num_modes,eigenvals,V,mean_slip_log)
-        
-        #Place in output variable
-        fault_out[ifaults,8]=slip*cos(deg2rad(rake))
-        fault_out[ifaults,9]=slip*sin(deg2rad(rake))
-        
-        #Rigidities
-        foo,mu=get_mean_slip(target_Mw,whole_fault,vel_mod)
-        fault_out[:,13]=mu
-        
-        #Calculate moment and magnitude of fake slip pattern
-        M0=sum(sqrt(fault_out[:,8]**2+fault_out[:,9]**2)*fault_out[:,10]*fault_out[:,11]*mu)
-        Mw=(2./3)*(log10(M0)-9.1)
-        
-        #Write to file
-        run_number=rjust(str(kfault),4,'0')
-        outfile=home+project_name+'/output/ruptures/'+run_name+'.'+run_number+'.rupt'
-        savetxt(outfile,fault_out,fmt='%d\t%10.6f\t%10.6f\t%7.2f\t%7.2f\t%7.2f\t%4.1f\t%5.2f\t%5.2f\t%5.2f\t%10.2f\t%10.2f\t%5.2f\t%.6e',header='No,lon,lat,z(km),strike,dip,rise,dura,ss-slip(m),ds-slip(m),ss_len(m),ds_len(m),rupt_time(s),rigidity(Pa)')
-        
-        #Make plots
-        plot_KLslip(home,project_name,run_name,run_number,fault_out,mesh_name,Mw,hypo_fault,fudge=0.3)
-        
-        #Write log file
-        logfile=home+project_name+'/output/ruptures/'+run_name+'.'+run_number+'.log'
-        f=open(logfile,'w')
-        f.write('Project name: '+project_name+'\n')
-        f.write('Run name: '+run_name+'\n')
-        f.write('Run number: '+run_number+'\n')
-        f.write('Velocity model: '+model_name+'\n')
-        f.write('No. of KL modes: '+str(num_modes)+'\n')
-        f.write('Hurst exponent: '+str(hurst)+'\n')
-        f.write('Lstrike: '+str(Ls)+'km\n')
-        f.write('Ldip: '+str(Ld)+'km\n')
-        f.write('Target magnitude: Mw '+str(target_Mw)+'\n')
-        f.write('Actual magnitude: Mw '+str(Mw))
-        f.close()
+    for kmag in range(len(target_Mw)):
+        print '... Calculating ruptures for target magnitude Mw = '+str(target_Mw[kmag])
+        for kfault in range(Nrealizations):
+            if kfault%10==0:
+                print '... ... working on rupture '+str(kfault)+' of '+str(Nrealizations)
+            
+            #Prepare output
+            fault_out=zeros((len(whole_fault),14))
+            fault_out[:,0:8]=whole_fault[:,0:8]
+            fault_out[:,10:12]=whole_fault[:,8:]   
+            
+            #Select only a subset of the faults based on magnitude scaling
+            ifaults,hypo_fault,Lmax,Wmax,Leff,Weff=select_faults(whole_fault,Dstrike,Ddip,target_Mw[kmag],buffer_factor,num_modes)
+            fault_array=whole_fault[ifaults,:]
+            Dstrike_selected=Dstrike[ifaults,:][:,ifaults]
+            Ddip_selected=Ddip[ifaults,:][:,ifaults]
+            
+            #Determine correlation lengths from effective length.width Leff and Weff
+            if Lstrike=='auto': #Use scaling
+                #Ls=10**(-2.43+0.49*target_Mw)
+                Ls=2.0+(1./3)*Leff
+                #Ls=2.0+(1./3)*Lmax
+            else:
+                Ls=Lstrike
+            if Ldip=='auto': #Use scaling
+                #Ld=10**(-1.79+0.38*target_Mw)
+                #Ld=1.0+(1./3)*Weff
+                Ld=1.0+(1./3)*Wmax
+            else:
+                Ld=Ldip
+            
+            #Get the mean uniform slip for the target magnitude
+            mean_slip,mu=get_mean_slip(target_Mw[kmag],fault_array,vel_mod)
+            
+            #Get correlation matrix
+            C=vonKarman_correlation(Dstrike_selected,Ddip_selected,Ls,Ld,hurst)
+            
+            #Get lognormal values
+            C_log,mean_slip_log=get_lognormal(C,target_Mw[kmag],fault_array,vel_mod)
+            
+            #Get eigen values and eigenvectors
+            eigenvals,V=get_eigen(C_log)
+            
+            #Generate fake slip pattern
+            slip=make_KL_slip(fault_array,num_modes,eigenvals,V,mean_slip_log)
+            
+            #Rigidities
+            foo,mu=get_mean_slip(target_Mw[kmag],whole_fault,vel_mod)
+            fault_out[:,13]=mu
+            
+            #Place slip values in output variable
+            fault_out[ifaults,8]=slip*cos(deg2rad(rake))
+            fault_out[ifaults,9]=slip*sin(deg2rad(rake))
+            
+            #Calculate moment and magnitude of fake slip pattern
+            M0=sum(sqrt(fault_out[:,8]**2+fault_out[:,9]**2)*fault_out[:,10]*fault_out[:,11]*mu)
+            Mw=(2./3)*(log10(M0)-9.1)
+            
+            #Calculate and scale rise times
+            rise_times=get_rise_times(M0,slip,fault_array,rise_time_depths)
+            
+            #Place rise_times in output variable
+            fault_out[:,7]=0
+            fault_out[ifaults,7]=rise_times
+            
+            #Write to file
+            run_number=rjust(str(realization),6,'0')
+            outfile=home+project_name+'/output/ruptures/'+run_name+'.'+run_number+'.rupt'
+            savetxt(outfile,fault_out,fmt='%d\t%10.6f\t%10.6f\t%7.2f\t%7.2f\t%7.2f\t%4.1f\t%5.2f\t%5.2f\t%5.2f\t%10.2f\t%10.2f\t%5.2f\t%.6e',header='No,lon,lat,z(km),strike,dip,rise,dura,ss-slip(m),ds-slip(m),ss_len(m),ds_len(m),rupt_time(s),rigidity(Pa)')
+            
+            #Make plots
+            plot_KLslip(home,project_name,run_name,run_number,fault_out,mesh_name,target_Mw[kmag],Mw,hypo_fault,fudge=0.3)
+            
+            #Write log file
+            logfile=home+project_name+'/output/ruptures/'+run_name+'.'+run_number+'.log'
+            f=open(logfile,'w')
+            f.write('Scenario calculated at '+strftime("%Y-%m-%d %H:%M:%S", gmtime())+' GMT\n')
+            f.write('Project name: '+project_name+'\n')
+            f.write('Run name: '+run_name+'\n')
+            f.write('Run number: '+run_number+'\n')
+            f.write('Velocity model: '+model_name+'\n')
+            f.write('No. of KL modes: '+str(num_modes)+'\n')
+            f.write('Hurst exponent: '+str(hurst)+'\n')
+            f.write('Corr. length used Lstrike: %.2f km\n' % Ls)
+            f.write('Corr. length used Ldip: %.2f km\n' % Ld)
+            f.write('Maximum length Lmax: %.2f km\n' % Lmax)
+            f.write('Maximum width Wmax: %.2f km\n' % Wmax)
+            f.write('Effective length Leff: %.2f km\n' % Leff)
+            f.write('Effective width Weff: %.2f km\n' % Weff)
+            f.write('Target magnitude: Mw %.2f\n' % target_Mw[kmag])
+            f.write('Actual magnitude: Mw %.2f' % Mw)
+            f.close()
+            realization+=1
         
