@@ -635,6 +635,112 @@ def get_rise_times(M0,slip,fault_array,rise_time_depths):
     
     return rise_times
     
+ 
+def create_tau_p(home,project_name,model_name,rise_time_depths):
+    '''
+    Determine what time rupture reaches a certain subfault. To do this we will
+    build a tau-p tvel file and assign to the p-wave velocity column the 
+    rupture velocity we want as per Graves and Pitarka 2010 eq. 4. We then use
+    tau-p to ray-trace between subfaults and treat the direct P arrival as
+    the indicator of rupture onset. 
+    '''
+    
+    from numpy import genfromtxt,r_,array,savetxt,where
+    from obspy.taup import taup_create
+    from os import environ
+    
+    #Read structure file
+    velocity_structure=genfromtxt(home+project_name+'/structure/'+model_name)
+    
+    #Convert to tvel format and save
+    top=0
+    for k in range(len(velocity_structure)):
+        vp=velocity_structure[k,2]
+        vs=velocity_structure[k,1]
+        rho=velocity_structure[k,3]
+        bottom=top+velocity_structure[k,0]
+        if k==len(velocity_structure)-1: #Last layer
+            bottom=6371
+            layer=array([[top,vp,vs,rho]])
+        else:
+            layer=array([[top,vp,vs,rho],[bottom,vp,vs,rho]])
+        if k==0:
+            tvel=layer.copy()
+        else:
+            tvel=r_[tvel,layer]
+        top=bottom
+    
+    #Apply Graves-Pitarka background rupture model
+    # Shallow faults
+    i=where(tvel[:,0]<=rise_time_depths[0])[0]
+    tvel[i,1]=tvel[i,2]*0.56
+    tvel[i,2]=tvel[i,2]*0.2
+    # Deep faults
+    i=where(tvel[:,0]>=rise_time_depths[1])[0]
+    tvel[i,1]=tvel[i,2]*0.80
+    tvel[i,2]=tvel[i,2]*0.4
+    # Transition faults
+    i=where((tvel[:,0]<rise_time_depths[1]) & (tvel[:,0]>rise_time_depths[0]))[0]
+    slope=(0.8-0.56)/(rise_time_depths[1]-rise_time_depths[0])
+    intercept=0.8-slope*rise_time_depths[1]
+    vr_factor=slope*tvel[i,0]+intercept
+    tvel[i,1]=tvel[i,2]*vr_factor
+    tvel[i,2]=tvel[i,2]*vr_factor/2
+    
+    #Patch to the bottom with Iasp91
+    mudpy_info=environ['MUD']+'/info/'
+    iasp91_tvel=genfromtxt(mudpy_info+'iasp91.tvel')
+    #where does iasp take over?
+    idepth=where(iasp91_tvel[:,0]>tvel[-1,0])[0]
+    #splice
+    ppaste=tvel[-1,1]
+    spaste=tvel[-1,2]
+    rhopaste=tvel[-1,3]
+    iasp91_tvel[idepth,1]=ppaste
+    iasp91_tvel[idepth,2]=spaste
+    iasp91_tvel[idepth,3]=rhopaste
+    tvel=r_[tvel,iasp91_tvel[idepth,:]]
+
+    
+    #save completed tvel
+    tvel_out=home+project_name+'/structure/'+model_name.split('.')[0]+'.tvel'
+    savetxt(tvel_out,tvel,fmt='%10.2f\t%8.2f\t%8.2f\t%8.2f',header='tvel file for tau-p\ndepth,vp,vs,rho')
+    
+    # Initalize tau-p model
+    taup_create.build_taup_model(tvel_out,output_folder=home+project_name+'/structure/')
+    
+    
+def get_rupture_onset(home,project_name,slip,fault_array,model_name,hypocenter):
+    '''
+    Using a custom built tvel file ray trace from hypocenter to determine rupture
+    onset times
+    '''
+        
+    from obspy.taup import TauPyModel
+    from obspy.geodetics import locations2degrees
+    from numpy import zeros,r_,array
+    
+    #Load rupture velocity model
+    rupture_velocity=TauPyModel(model=home+project_name+'/structure/'+model_name.split('.')[0]+'.npz')
+          
+    #initalize
+    t_onset=zeros(len(slip))
+    
+    #Source depth
+    source_depth=hypocenter[2]
+    
+    #Loop over all faults
+    for k in range(len(slip)):
+        print k
+        travel_times=array([])
+        delta=locations2degrees(hypocenter[1],hypocenter[0],fault_array[k,2],fault_array[k,1])
+        Pphases=rupture_velocity.get_travel_times(source_depth_in_km=source_depth,distance_in_degree=delta,
+            receiver_depth_in_km=fault_array[k,3],phase_list=['P'])
+        for kphase in range(len(Pphases)):
+            travel_times=r_[travel_times,Pphases[kphase].time]
+        print travel_times
+        t_onset[k]=travel_times.min()
+        
     
     
 def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
@@ -665,6 +771,9 @@ def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
     
     #Get structure model
     vel_mod=home+project_name+'/structure/'+model_name
+
+    # Create tvel file for tau-p ray-tracing of rupture onset times
+    create_tau_p(home,project_name,model_name,rise_time_depths)
 
     #Now loop over the number of realizations
     realization=0
@@ -733,6 +842,10 @@ def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
             #Place rise_times in output variable
             fault_out[:,7]=0
             fault_out[ifaults,7]=rise_times
+            
+            #Calculate rupture onset times
+            hypocenter=whole_fault[hypo_fault,1:4]
+            t_rupture=get_rupture_onset(home,project_name,slip,fault_array,model_name,hypocenter)
             
             #Write to file
             run_number=rjust(str(realization),6,'0')
