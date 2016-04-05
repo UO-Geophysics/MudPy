@@ -319,7 +319,7 @@ def plot_KLslip(home,project_name,run_name,run_number,fault,mesh_name,target_Mw,
     from matplotlib.collections import PatchCollection
     from matplotlib import pyplot as plt
     from matplotlib import cm,colors
-    from numpy import r_,genfromtxt,reshape,zeros,array
+    from numpy import r_,genfromtxt,reshape,zeros,isnan
     
     #Read mesh
     mesh=genfromtxt(home+project_name+'/data/model_info/'+mesh_name)
@@ -347,7 +347,7 @@ def plot_KLslip(home,project_name,run_name,run_number,fault,mesh_name,target_Mw,
     whitejet = colors.LinearSegmentedColormap('whitejet',cdict,256)
     
     #Plot
-    fig, axarr = plt.subplots(1,2,figsize=(8,8))
+    fig, axarr = plt.subplots(1,3,figsize=(12,8))
     
     ax1=axarr[0]
     ax1.set_xlim([fault[:,1].min()-fudge,fault[:,1].max()+2])
@@ -507,11 +507,93 @@ def plot_KLslip(home,project_name,run_name,run_number,fault,mesh_name,target_Mw,
     #plt.title('Target Mw = %.2f\nActual Mw = %.2f' % (target_Mw,Mw))
     
     
+    #### Plot Rupture onset times
+    
+    ax3=axarr[2]
+    ax3.set_xlim([fault[:,1].min()-fudge,fault[:,1].max()+2])
+    ax3.set_ylim([fault[:,2].min()-fudge,fault[:,2].max()+fudge])
+
+    #Plot coasts (also hard coded to cascadia for now)
+    fcoast=open('/Users/dmelgar/Cascadia/coast/coast.txt','r')
+    line=fcoast.readline()
+    parsing_coast=True
+    while parsing_coast==True:
+        if '>' in line:
+            complete_polygon=False
+            count=0
+            while complete_polygon==False:
+                line=fcoast.readline()
+                if '>' in line or line=='':
+                    complete_polygon=True
+                    ax3.plot(coast_coordinates[:,0],coast_coordinates[:,1],lw=0.5,c='k')
+                else:
+                    new_coordinates=zeros((1,2))
+                    new_coordinates[0,0]=float(line.split()[0])
+                    new_coordinates[0,1]=float(line.split()[1])
+                    if count==0:
+                        coast_coordinates=new_coordinates.copy()
+                        count+=1
+                    else:
+                        coast_coordinates=r_[coast_coordinates,new_coordinates]
+                if line=='':
+                    parsing_coast=False
+    #Done plotting coast
+    #Plot cnational boundaries(also hard coded to cascadia for now)
+    fcoast=open('/Users/dmelgar/Cascadia/coast/boundaries.txt','r')
+    line=fcoast.readline()
+    parsing_coast=True
+    while parsing_coast==True:
+        if '>' in line:
+            complete_polygon=False
+            count=0
+            while complete_polygon==False:
+                line=fcoast.readline()
+                if '>' in line or line=='':
+                    complete_polygon=True
+                    ax3.plot(coast_coordinates[:,0],coast_coordinates[:,1],lw=1,c='k')
+                else:
+                    new_coordinates=zeros((1,2))
+                    new_coordinates[0,0]=float(line.split()[0])
+                    new_coordinates[0,1]=float(line.split()[1])
+                    if count==0:
+                        coast_coordinates=new_coordinates.copy()
+                        count+=1
+                    else:
+                        coast_coordinates=r_[coast_coordinates,new_coordinates]
+                if line=='':
+                    parsing_coast=False
+    #Done plotting coast
+
+
+    #Make patches
+    patches = []
+    for k in range(len(fault)):
+        coordinates=reshape(r_[mesh[k,4:6],mesh[k,7:9],mesh[k,10:12],mesh[k,4:6]],(4,2))
+        subfault = Polygon(coordinates, True)
+        patches.append(subfault)
+        
+    p3 = PatchCollection(patches,cmap=cm.nipy_spectral_r,lw=0.1)
+    colors=fault[:,12]
+    p3.set_array(colors)
+    ax3.add_collection(p3)
+    labels = ax3.get_xticklabels() 
+    for label in labels: 
+        label.set_rotation(70) 
+    #Plot stations, this is hard coded to Cascadia
+    stations=genfromtxt(u'/Users/dmelgar/Cascadia/stations/cascadia_gps.txt',usecols=[0,1])
+    ax3.scatter(stations[:,0],stations[:,1],marker='o',lw=0.8,c='#FF8C00',s=15)
+    #hypocenter
+    ax3.scatter(fault[hypo_fault,1],fault[hypo_fault,2],marker='s',lw=0.5,c='#FF69B4',s=40)
+    #plt.title('Target Mw = %.2f\nActual Mw = %.2f' % (target_Mw,Mw))
+    
+            
     #Colorbars
-    cbar_ax1 = fig.add_axes([0.435, 0.2, 0.02, 0.6])
+    cbar_ax1 = fig.add_axes([0.32, 0.2, 0.015, 0.6])
     plt.colorbar(p1, cax=cbar_ax1, label="Slip (m)")
-    cbar_ax2 = fig.add_axes([0.887, 0.2, 0.02, 0.6])
+    cbar_ax2 = fig.add_axes([0.606, 0.2, 0.015, 0.6])
     plt.colorbar(p2, cax=cbar_ax2, label="Rise time (s)")
+    cbar_ax3 = fig.add_axes([0.893, 0.2, 0.015, 0.6])
+    plt.colorbar(p3, cax=cbar_ax3, label="Rupture onset (s)")
     
     
     plt.subplots_adjust(wspace=0.4)
@@ -636,112 +718,98 @@ def get_rise_times(M0,slip,fault_array,rise_time_depths):
     return rise_times
     
  
-def create_tau_p(home,project_name,model_name,rise_time_depths):
-    '''
-    Determine what time rupture reaches a certain subfault. To do this we will
-    build a tau-p tvel file and assign to the p-wave velocity column the 
-    rupture velocity we want as per Graves and Pitarka 2010 eq. 4. We then use
-    tau-p to ray-trace between subfaults and treat the direct P arrival as
-    the indicator of rupture onset. 
-    '''
-    
-    from numpy import genfromtxt,r_,array,savetxt,where
-    from obspy.taup import taup_create
-    from os import environ
-    
-    #Read structure file
-    velocity_structure=genfromtxt(home+project_name+'/structure/'+model_name)
-    
-    #Convert to tvel format and save
-    top=0
-    for k in range(len(velocity_structure)):
-        vp=velocity_structure[k,2]
-        vs=velocity_structure[k,1]
-        rho=velocity_structure[k,3]
-        bottom=top+velocity_structure[k,0]
-        if k==len(velocity_structure)-1: #Last layer
-            bottom=6371
-            layer=array([[top,vp,vs,rho]])
-        else:
-            layer=array([[top,vp,vs,rho],[bottom,vp,vs,rho]])
-        if k==0:
-            tvel=layer.copy()
-        else:
-            tvel=r_[tvel,layer]
-        top=bottom
-    
-    #Apply Graves-Pitarka background rupture model
-    # Shallow faults
-    i=where(tvel[:,0]<=rise_time_depths[0])[0]
-    tvel[i,1]=tvel[i,2]*0.56
-    tvel[i,2]=tvel[i,2]*0.2
-    # Deep faults
-    i=where(tvel[:,0]>=rise_time_depths[1])[0]
-    tvel[i,1]=tvel[i,2]*0.80
-    tvel[i,2]=tvel[i,2]*0.4
-    # Transition faults
-    i=where((tvel[:,0]<rise_time_depths[1]) & (tvel[:,0]>rise_time_depths[0]))[0]
-    slope=(0.8-0.56)/(rise_time_depths[1]-rise_time_depths[0])
-    intercept=0.8-slope*rise_time_depths[1]
-    vr_factor=slope*tvel[i,0]+intercept
-    tvel[i,1]=tvel[i,2]*vr_factor
-    tvel[i,2]=tvel[i,2]*vr_factor/2
-    
-    #Patch to the bottom with Iasp91
-    mudpy_info=environ['MUD']+'/info/'
-    iasp91_tvel=genfromtxt(mudpy_info+'iasp91.tvel')
-    #where does iasp take over?
-    idepth=where(iasp91_tvel[:,0]>tvel[-1,0])[0]
-    #splice
-    ppaste=tvel[-1,1]
-    spaste=tvel[-1,2]
-    rhopaste=tvel[-1,3]
-    iasp91_tvel[idepth,1]=ppaste
-    iasp91_tvel[idepth,2]=spaste
-    iasp91_tvel[idepth,3]=rhopaste
-    tvel=r_[tvel,iasp91_tvel[idepth,:]]
 
     
-    #save completed tvel
-    tvel_out=home+project_name+'/structure/'+model_name.split('.')[0]+'.tvel'
-    savetxt(tvel_out,tvel,fmt='%10.2f\t%8.2f\t%8.2f\t%8.2f',header='tvel file for tau-p\ndepth,vp,vs,rho')
     
-    # Initalize tau-p model
-    taup_create.build_taup_model(tvel_out,output_folder=home+project_name+'/structure/')
-    
-    
-def get_rupture_onset(home,project_name,slip,fault_array,model_name,hypocenter):
+def get_rupture_onset(home,project_name,slip,fault_array,model_name,hypocenter,rise_time_depths,M0):
     '''
     Using a custom built tvel file ray trace from hypocenter to determine rupture
     onset times
     '''
         
-    from obspy.taup import TauPyModel
-    from obspy.geodetics import locations2degrees
-    from numpy import zeros,r_,array
+    from numpy import genfromtxt,zeros,arctan,sin,r_,where,log10,isnan
+    from obspy.geodetics import gps2dist_azimuth
     
-    #Load rupture velocity model
-    rupture_velocity=TauPyModel(model=home+project_name+'/structure/'+model_name.split('.')[0]+'.npz')
-          
-    #initalize
-    t_onset=zeros(len(slip))
-    
-    #Source depth
-    source_depth=hypocenter[2]
-    
-    #Loop over all faults
-    for k in range(len(slip)):
-        print k
-        travel_times=array([])
-        delta=locations2degrees(hypocenter[1],hypocenter[0],fault_array[k,2],fault_array[k,1])
-        Pphases=rupture_velocity.get_travel_times(source_depth_in_km=source_depth,distance_in_degree=delta,
-            receiver_depth_in_km=fault_array[k,3],phase_list=['P'])
-        for kphase in range(len(Pphases)):
-            travel_times=r_[travel_times,Pphases[kphase].time]
-        print travel_times
-        t_onset[k]=travel_times.min()
+    #Load velocity model
+    vel=genfromtxt(home+project_name+'/structure/'+model_name)
         
+    # Convert from thickness to depth to bottom of layer
+    depth_to_top=r_[0,vel[:,0].cumsum()[0:-1]]
     
+    #Get rupture speed shear-wave multipliers
+    rupture_multiplier=zeros(len(vel))
+    # Shallow 
+    i=where(depth_to_top<=rise_time_depths[0])[0]
+    rupture_multiplier[i]=0.56
+    # Deep 
+    i=where(depth_to_top>=rise_time_depths[1])[0]
+    rupture_multiplier[i]=0.8
+    # Transition 
+    i=where((depth_to_top<rise_time_depths[1]) & (depth_to_top>rise_time_depths[0]))[0]
+    slope=(0.8-0.56)/(rise_time_depths[1]-rise_time_depths[0])
+    intercept=0.8-slope*rise_time_depths[1]
+    rupture_multiplier[i]=slope*depth_to_top[i]+intercept
+        
+    #Loop over all faults
+    t_onset=zeros(len(slip))
+    for kfault in range(len(slip)):
+        D,az,baz=gps2dist_azimuth(hypocenter[1],hypocenter[0],fault_array[kfault,2],fault_array[kfault,1])
+        D=D/1000
+        #Start and stop depths
+        if fault_array[kfault,3]<hypocenter[2]:
+            zshallow=fault_array[kfault,3]
+            zdeep=hypocenter[2]
+        else:
+            zdeep=fault_array[kfault,3]
+            zshallow=hypocenter[2]
+        #Get angle between depths
+        theta=arctan((zdeep-zshallow)/D)
+        # get hypotenuse distance on all layers
+        delta_ray=vel[:,0]/sin(theta)
+        # Calculate distance in each layer
+        depth1=0
+        depth2=vel[0,0]
+        length_ray=zeros(len(vel))
+        for klayer in range(len(vel)):
+            if zshallow>depth1 and zdeep<depth2: #both points in same layer
+                length_ray[klayer]=abs(zshallow-zdeep)/sin(theta)
+            elif zshallow>depth1 and zshallow<depth2: #This is the top
+                length_ray[klayer]=abs(depth2-zshallow)/sin(theta)
+            elif zdeep>depth1 and zdeep<depth2: #This is the bottom
+                length_ray[klayer]=abs(depth1-zdeep)/sin(theta)
+            elif depth1>zshallow and depth2<zdeep: #Use full layer thickness for ray path length
+                length_ray[klayer]=delta_ray[klayer]
+            else: #Some other layer, do nothing
+                pass
+            #Update reference depths
+            if klayer<len(vel)-1: #last layer:
+                depth1=depth2
+                depth2=depth2+vel[klayer+1,0]
+            else:
+                depth1=depth2
+                depth2=1e6
+        
+        #Now multiply ray path length times rupture velocity
+        ray_times=length_ray/(vel[:,1]*rupture_multiplier)
+        t_onset[kfault]=ray_times.sum()   
+        
+    #Now perturb onset times according to Graves-Pitarka eq 5 and 6
+    delta_t=((M0*1e7)**(1./3))*1.8e-9
+    slip_average=slip.mean()
+    i=where(slip>0.05*slip_average)[0]
+    perturbation=(log10(slip)-log10(slip_average))/(log10(slip.max())-log10(slip_average))
+    t_onset_final=t_onset.copy()
+    t_onset_final[i]=t_onset[i]-delta_t*perturbation[i]
+    #Check for negative times
+    i=where(t_onset_final<0)[0]
+    t_onset_final[i]=t_onset[i]
+    #Check for nan times
+    i=where(isnan(t_onset_final)==True)[0]
+    t_onset_final[i]=0
+    
+    return t_onset_final      
+                
+                
     
 def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
     load_distances,distances_name,UTM_zone,target_Mw,model_name,hurst,Ldip,Lstrike,
@@ -771,9 +839,6 @@ def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
     
     #Get structure model
     vel_mod=home+project_name+'/structure/'+model_name
-
-    # Create tvel file for tau-p ray-tracing of rupture onset times
-    create_tau_p(home,project_name,model_name,rise_time_depths)
 
     #Now loop over the number of realizations
     realization=0
@@ -845,7 +910,9 @@ def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
             
             #Calculate rupture onset times
             hypocenter=whole_fault[hypo_fault,1:4]
-            t_rupture=get_rupture_onset(home,project_name,slip,fault_array,model_name,hypocenter)
+            t_onset=get_rupture_onset(home,project_name,slip,fault_array,model_name,hypocenter,rise_time_depths,M0)
+            fault_out[:,12]=0
+            fault_out[ifaults,12]=t_onset
             
             #Write to file
             run_number=rjust(str(realization),6,'0')
