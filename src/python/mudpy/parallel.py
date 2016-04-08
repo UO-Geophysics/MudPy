@@ -97,7 +97,7 @@ def run_parallel_green(home,project_name,station_file,model_name,dt,NFFT,static,
             
 
 def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,static,tsunami,time_epi,
-                beta,custom_stf,rank,size):
+                beta,custom_stf,impulse,rank,size):
     '''
     Use green functions and compute synthetics at stations for a single source
     and multiple stations. This code makes an external system call to syn.c first it
@@ -142,7 +142,8 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
         time_epi = %s
         beta = %d
         custom_stf = %s
-        ''' %(home,project_name,station_file,model_name,str(integrate),str(static),str(tsunami),str(time_epi),beta,custom_stf)
+        impulse = %s
+        ''' %(home,project_name,station_file,model_name,str(integrate),str(static),str(tsunami),str(time_epi),beta,custom_stf,impulse)
         print out
     #Read your corresponding source file
     mpi_source=genfromtxt(home+project_name+'/data/model_info/mpi_source.'+str(rank)+'.fault')
@@ -166,7 +167,10 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
         strike=source[4]
         dip=source[5]
         rise=source[6]
-        duration=source[7]
+        if impulse==True:
+            duration=0
+        else:
+            duration=source[7]
         ss_length=source[8]
         ds_length=source[9]
         strdepth='%.4f' % zs
@@ -175,12 +179,12 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
             green_path=home+project_name+'/GFs/dynamic/'+model_name+"_"+strdepth+".sub"+subfault+"/"
         if static==0 and tsunami==1:  #Where to save dynamic waveforms
             green_path=home+project_name+'/GFs/tsunami/'+model_name+"_"+strdepth+".sub"+subfault+"/"
-        if static==1:  #Where to save dynamic waveforms
+        if static==1:  #Where to save statics
             green_path=home+project_name+'/GFs/static/'
         staname=genfromtxt(station_file,dtype="S6",usecols=0)
         if staname.shape==(): #Single staiton file
             staname=array([staname])
-        #Compute distances and azmuths
+        #Compute distances and azimuths
         d,az=src2sta(station_file,source)
         #Get moment corresponding to 1 meter of slip on subfault
         mu=get_mu(structure,zs)
@@ -192,7 +196,7 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
         for k in range(len(d)):
             if static==0: #Compute full waveforms
                 diststr='%.3f' % d[k] #Need current distance in string form for external call
-                #Form the strings to be used for the system calls according to suer desired options
+                #Form the strings to be used for the system calls according to user desired options
                 if integrate==1: #Make displ.
                     #First Stike-Slip GFs
                     if custom_stf==None:
@@ -204,7 +208,6 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
                             "/"+str(rise)+" -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".DS.disp.x -G"+green_path+diststr+".grn.0"
                         commandDS=split(commandDS)
                     else:
-                        #print "Using custom STF "+custom_stf
                         commandSS="syn -I -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeSS)+" -S"+custom_stf+ \
                             " -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".SS.disp.x -G"+green_path+diststr+".grn.0"
                         commandSS=split(commandSS) #Split string into lexical components for system call
@@ -223,7 +226,6 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
                             "/"+str(rise)+" -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".DS.vel.x -G"+green_path+diststr+".grn.0"
                         commandDS=split(commandDS)
                     else:
-                        #print "Using custom STF "+custom_stf
                         commandSS="syn -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeSS)+" -S"+custom_stf+ \
                             " -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".SS.vel.x -G"+green_path+diststr+".grn.0"
                         commandSS=split(commandSS)
@@ -371,19 +373,8 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
                 n=ntemp[0]
                 e=etemp[0]
                 savetxt(staname[k]+'.subfault'+num+'.DS.static.neu',(n,e,u,beta),header='north(m),east(m),up(m),beta(degs)')     
-        #Delete files
-        #print 'Deleting files...'
-        #f=glob(green_path+'*.grn.*')
-        #for kdel in range(len(f)):
-        #    remove(f[kdel])
-        #f=glob(green_path+'*.r')
-        #for kdel in range(len(f)):
-        #    remove(f[kdel])
-        #f=glob(green_path+'*.t')
-        #for kdel in range(len(f)):
-        #    remove(f[kdel])
-     
 
+     
                       
             
             
@@ -424,6 +415,11 @@ if __name__ == '__main__':
         time_epi=UTCDateTime(sys.argv[9])
         beta=float(sys.argv[10])
         custom_stf=sys.argv[11]
-        run_parallel_synthetics(home,project_name,station_file,model_name,integrate,static,tsunami,time_epi,beta,custom_stf,rank,size)
+        impulse=sys.argv[12]
+        if impulse=='True':
+            impulse=True
+        elif impulse=='False':
+            impulse=False
+        run_parallel_synthetics(home,project_name,station_file,model_name,integrate,static,tsunami,time_epi,beta,custom_stf,impulse,rank,size)
     else:
         print 'ERROR: You''re not allowed to run '+sys.argv[1]+' from the shell or it does not exist'

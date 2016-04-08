@@ -55,7 +55,7 @@ def run_green(source,station_file,model_name,dt,NFFT,static,dk,pmin,pmax,kmax):
     
     
 def run_syn(home,project_name,source,station_file,green_path,model_name,integrate,static,tsunami,
-        subfault,time_epi,beta):
+        subfault,time_epi,beta,impulse=False):
     '''
     Use green functions and compute synthetics at stations for a single source
     and multiple stations. This code makes an external system call to syn.c first it
@@ -100,7 +100,10 @@ def run_syn(home,project_name,source,station_file,green_path,model_name,integrat
     strike=source[4]
     dip=source[5]
     rise=source[6]
-    duration=source[7]
+    if impulse==True:  #Impulse GFs or apply rise time
+        duration=0
+    else:
+        duration=source[7]
     ss_length=source[8]
     ds_length=source[9]
     strdepth='%.4f' % zs
