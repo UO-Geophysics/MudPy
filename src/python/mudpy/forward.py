@@ -1331,4 +1331,48 @@ def static2kineamtic(rupt,epicenter,vr,fout):
     fmtout='%6i\t%.4f\t%.4f\t%8.4f\t%.2f\t%.2f\t%.2f\t%.2f\t%12.4e\t%12.4e%10.1f\t%10.1f\t%8.4f\t%.4e'
     savetxt(fout,source,fmtout,header='No,lon,lat,z(km),strike,dip,rise,dura,ss-slip(m),ds-slip(m),ss_len(m),ds_len(m),rupt_time(s),rigidity(Pa)')
 
+
+def convolution_matrix(h):
+    '''
+    Return the TOeplitz-like convolution matrix for a time series
+    '''
     
+    from numpy import zeros,r_
+    from scipy.linalg import toeplitz
+    
+    
+    padding = zeros(h.shape[0] - 2, h.dtype)
+    first_col = r_[h, padding]
+    first_row = r_[h[0], padding]
+    Htemp = toeplitz(first_col, first_row)
+    Hfinal= Htemp[0:len(h),:]
+    return Hfinal
+    
+    
+def build_source_time_function(rise_time,dt,total_time,stf_type='triangle'):
+    '''
+    Compute source time function for a given rise time, right now it assumes 1m of slip
+    and a triangle STF
+    '''
+    from numpy import zeros,arange,where
+    
+    rise_time=float(rise_time)
+    #Initialize outputs
+    t=arange(0,total_time+dt,dt)
+    Mdot=zeros(t.shape)
+    #Triangle gradient
+    m=1/(rise_time**2)
+    #Upwards intercept
+    b1=0
+    #Downwards intercept
+    b2=m*(rise_time)
+    #Assign moment rate
+    i=where(t<=rise_time/2)[0]
+    Mdot[i]=m*t[i]+b1
+    i=where(t>rise_time/2)[0]
+    Mdot[i]=-m*t[i]+b2 
+    i=where(t>rise_time)[0]
+    Mdot[i]=0
+    #Fudge to be the same as syn.c
+    Mdot=Mdot*2
+    return t,Mdot

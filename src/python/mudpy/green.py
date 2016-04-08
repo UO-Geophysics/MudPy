@@ -112,7 +112,7 @@ def run_syn(home,project_name,source,station_file,green_path,model_name,integrat
     staname=genfromtxt(station_file,dtype="S6",usecols=0)
     if staname.shape==(): #Single staiton file
         staname=array([staname])
-    #Compute distances and azmuths
+    #Compute distances and azimuths
     d,az=src2sta(station_file,source)
     #Get moment corresponding to 1 meter of slip on subfault
     mu=get_mu(structure,zs)
