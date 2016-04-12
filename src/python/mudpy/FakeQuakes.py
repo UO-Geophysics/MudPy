@@ -813,7 +813,7 @@ def get_rupture_onset(home,project_name,slip,fault_array,model_name,hypocenter,r
     
 def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
     load_distances,distances_name,UTM_zone,target_Mw,model_name,hurst,Ldip,Lstrike,
-    num_modes,Nrealizations,rake,buffer_factor,rise_time_depths):
+    num_modes,Nrealizations,rake,buffer_factor,rise_time_depths,time_epi):
     
     '''
     Depending on user selected flags parse the work out to different functions
@@ -841,6 +841,7 @@ def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
     vel_mod=home+project_name+'/structure/'+model_name
 
     #Now loop over the number of realizations
+    ruptures_list=''
     realization=0
     print 'Generating rupture scenarios'
     for kmag in range(len(target_Mw)):
@@ -939,7 +940,17 @@ def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
             f.write('Effective length Leff: %.2f km\n' % Leff)
             f.write('Effective width Weff: %.2f km\n' % Weff)
             f.write('Target magnitude: Mw %.2f\n' % target_Mw[kmag])
-            f.write('Actual magnitude: Mw %.2f' % Mw)
+            f.write('Actual magnitude: Mw %.2f\n' % Mw)
+            f.write('Hypocenter (lon,lat,z[km]): (%.6f,%.6f,%.2f)\n' %(hypocenter[0],hypocenter[1],hypocenter[2]))
+            f.write('Hypocenter time: %s' % time_epi)
             f.close()
+            
+            #Append to list
+            ruptures_list=ruptures_list+run_name+'.'+run_number+'.rupt\n'
+            
             realization+=1
-        
+    #Write ruptures_list file
+    f=open(home+project_name+'/data/ruptures.list','w')
+    f.write(ruptures_list)
+    f.close()
+    

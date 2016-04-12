@@ -183,6 +183,12 @@ def run_syn(home,project_name,source,station_file,green_path,model_name,integrat
                 n.write(staname[k]+".subfault"+num+'.SS.disp.n',format='SAC')
                 e.write(staname[k]+".subfault"+num+'.SS.disp.e',format='SAC')
                 z.write(staname[k]+".subfault"+num+'.SS.disp.z',format='SAC')
+                silentremove(staname[k]+".subfault"+num+'.SS.disp.r')
+                silentremove(staname[k]+".subfault"+num+'.SS.disp.t')
+                if impulse==True:
+                    silentremove(staname[k]+".subfault"+num+'.SS.disp.ri')
+                    silentremove(staname[k]+".subfault"+num+'.SS.disp.ti')
+                    silentremove(staname[k]+".subfault"+num+'.SS.disp.zi')
                 #Dip Slip
                 if duration>0:
                     r=read(staname[k]+".subfault"+num+'.DS.disp.r')
@@ -204,6 +210,12 @@ def run_syn(home,project_name,source,station_file,green_path,model_name,integrat
                 n.write(staname[k]+".subfault"+num+'.DS.disp.n',format='SAC')
                 e.write(staname[k]+".subfault"+num+'.DS.disp.e',format='SAC')
                 z.write(staname[k]+".subfault"+num+'.DS.disp.z',format='SAC')
+                silentremove(staname[k]+".subfault"+num+'.DS.disp.r')
+                silentremove(staname[k]+".subfault"+num+'.DS.disp.t')
+                if impulse==True:
+                    silentremove(staname[k]+".subfault"+num+'.DS.disp.ri')
+                    silentremove(staname[k]+".subfault"+num+'.DS.disp.ti')
+                    silentremove(staname[k]+".subfault"+num+'.DS.disp.zi')
             else: #Waveforms are velocity, as before, rotate from RT-Z to NE+Z and scale to m/s
                 #Strike slip
                 if duration>0: #Is there a source time fucntion? Yes!
@@ -226,6 +238,12 @@ def run_syn(home,project_name,source,station_file,green_path,model_name,integrat
                 n.write(staname[k]+".subfault"+num+'.SS.vel.n',format='SAC')
                 e.write(staname[k]+".subfault"+num+'.SS.vel.e',format='SAC')
                 z.write(staname[k]+".subfault"+num+'.SS.vel.z',format='SAC')
+                silentremove(staname[k]+".subfault"+num+'.SS.vel.r')
+                silentremove(staname[k]+".subfault"+num+'.SS.vel.t')
+                if impulse==True:
+                    silentremove(staname[k]+".subfault"+num+'.SS.vel.ri')
+                    silentremove(staname[k]+".subfault"+num+'.SS.vel.ti')
+                    silentremove(staname[k]+".subfault"+num+'.SS.vel.zi')
                 #Dip Slip
                 if duration>0:
                     r=read(staname[k]+".subfault"+num+'.DS.disp.r')
@@ -247,6 +265,12 @@ def run_syn(home,project_name,source,station_file,green_path,model_name,integrat
                 n.write(staname[k]+".subfault"+num+'.DS.vel.n',format='SAC')
                 e.write(staname[k]+".subfault"+num+'.DS.vel.e',format='SAC')
                 z.write(staname[k]+".subfault"+num+'.DS.vel.z',format='SAC')
+                silentremove(staname[k]+".subfault"+num+'.DS.vel.r')
+                silentremove(staname[k]+".subfault"+num+'.DS.vel.t')
+                if impulse==True:
+                    silentremove(staname[k]+".subfault"+num+'.DS.vel.ri')
+                    silentremove(staname[k]+".subfault"+num+'.DS.vel.ti')
+                    silentremove(staname[k]+".subfault"+num+'.DS.vel.zi')
         else: #Compute static synthetics
             os.chdir(green_path+'static/') #Move to appropriate dir
             diststr='%.1f' % d[k] #Need current distance in string form for external call
@@ -346,7 +370,7 @@ def src2sta(station_file,source):
     '''
     
     from numpy import genfromtxt,zeros,array
-    from obspy.core.util.geodetics import gps2DistAzimuth
+    from obspy.geodetics.base import gps2dist_azimuth
     
     
     #Read station file
@@ -362,7 +386,7 @@ def src2sta(station_file,source):
     xs=source[1]
     ys=source[2]
     for k in range(len(x)):
-        d[k],az[k],baz[k]=gps2DistAzimuth(ys,xs,y[k],x[k])
+        d[k],az[k],baz[k]=gps2dist_azimuth(ys,xs,y[k],x[k])
     d=d/1000
     return d,az
     
@@ -464,7 +488,14 @@ def dreger_stf(rise_time,zeta,dt):
     t=arange(0,rise_time/2,dt)
     
     
-    
+
+def silentremove(filename):
+    import os, errno
+    try:
+        os.remove(filename)
+    except OSError as e: # this would be "except OSError, e:" before Python 2.6
+        if e.errno != errno.ENOENT: # errno.ENOENT = no such file or directory
+            raise # re-raise exception if a different error occured
 
     
     

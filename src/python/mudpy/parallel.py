@@ -128,6 +128,7 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
     from shlex import split
     from mudpy.green import src2sta,rt2ne,origin_time
     from glob import glob
+    from mudpy.green import silentremove
     from os import remove
         #What parameters are we using?
     if rank==0:
@@ -262,6 +263,12 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
                     n.write(staname[k]+".subfault"+num+'.SS.disp.n',format='SAC')
                     e.write(staname[k]+".subfault"+num+'.SS.disp.e',format='SAC')
                     z.write(staname[k]+".subfault"+num+'.SS.disp.z',format='SAC')
+                    silentremove(staname[k]+".subfault"+num+'.SS.disp.r')
+                    silentremove(staname[k]+".subfault"+num+'.SS.disp.t')
+                    if impulse==True:
+                        silentremove(staname[k]+".subfault"+num+'.SS.disp.ri')
+                        silentremove(staname[k]+".subfault"+num+'.SS.disp.ti')
+                        silentremove(staname[k]+".subfault"+num+'.SS.disp.zi')
                     #Dip Slip
                     if duration>0: #Is there a source time fucntion? Yes!
                         r=read(staname[k]+".subfault"+num+'.DS.disp.r')
@@ -283,6 +290,12 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
                     n.write(staname[k]+".subfault"+num+'.DS.disp.n',format='SAC')
                     e.write(staname[k]+".subfault"+num+'.DS.disp.e',format='SAC')
                     z.write(staname[k]+".subfault"+num+'.DS.disp.z',format='SAC')
+                    silentremove(staname[k]+".subfault"+num+'.DS.disp.r')
+                    silentremove(staname[k]+".subfault"+num+'.DS.disp.t')
+                    if impulse==True:
+                        silentremove(staname[k]+".subfault"+num+'.DS.disp.ri')
+                        silentremove(staname[k]+".subfault"+num+'.DS.disp.ti')
+                        silentremove(staname[k]+".subfault"+num+'.DS.disp.zi')
                 else: #Waveforms are velocity, as before, rotate from RT-Z to NE+Z and scale to m/s
                     #Strike slip
                     if duration>0: #Is there a source time fucntion? Yes!
@@ -305,6 +318,12 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
                     n.write(staname[k]+".subfault"+num+'.SS.vel.n',format='SAC')
                     e.write(staname[k]+".subfault"+num+'.SS.vel.e',format='SAC')
                     z.write(staname[k]+".subfault"+num+'.SS.vel.z',format='SAC')
+                    silentremove(staname[k]+".subfault"+num+'.SS.vel.r')
+                    silentremove(staname[k]+".subfault"+num+'.SS.vel.t')
+                    if impulse==True:
+                        silentremove(staname[k]+".subfault"+num+'.SS.vel.ri')
+                        silentremove(staname[k]+".subfault"+num+'.SS.vel.ti')
+                        silentremove(staname[k]+".subfault"+num+'.SS.vel.zi')
                     #Dip Slip
                     if duration>0: #Is there a source time fucntion? Yes!
                         r=read(staname[k]+".subfault"+num+'.DS.vel.r')
@@ -326,6 +345,12 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
                     n.write(staname[k]+".subfault"+num+'.DS.vel.n',format='SAC')
                     e.write(staname[k]+".subfault"+num+'.DS.vel.e',format='SAC')
                     z.write(staname[k]+".subfault"+num+'.DS.vel.z',format='SAC')
+                    silentremove(staname[k]+".subfault"+num+'.DS.vel.r')
+                    silentremove(staname[k]+".subfault"+num+'.DS.vel.t')
+                    if impulse==True:
+                        silentremove(staname[k]+".subfault"+num+'.DS.vel.ri')
+                        silentremove(staname[k]+".subfault"+num+'.DS.vel.ti')
+                        silentremove(staname[k]+".subfault"+num+'.DS.vel.zi')
             else: #Compute static synthetics
                 temp_pipe=[]
                 diststr='%.1f' % d[k] #Need current distance in string form for external call
@@ -423,3 +448,4 @@ if __name__ == '__main__':
         run_parallel_synthetics(home,project_name,station_file,model_name,integrate,static,tsunami,time_epi,beta,custom_stf,impulse,rank,size)
     else:
         print 'ERROR: You''re not allowed to run '+sys.argv[1]+' from the shell or it does not exist'
+        

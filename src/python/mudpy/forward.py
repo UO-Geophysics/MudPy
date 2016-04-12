@@ -255,8 +255,343 @@ def waveforms_matrix(home,project_name,fault_name,rupture_name,station_file,GF_l
         u.write(home+project_name+'/output/forward_models/'+run_name+'.'+gfsta[ksta]+'.'+vord+'.u',format='SAC')
 
         
-
+def waveforms_fakequakes(home,project_name,fault_name,rupture_list,GF_list,
+                model_name,run_name,integrate,dt,NFFT,G_from_file,G_name):
+    '''
+    To supplant waveforms_matrix() it needs to include resmapling and all that jazz...
+    
+    Instead of doing matrix multiplication one stations at a time, do it for all stations
+    
+    This routine will take synthetics and apply a slip dsitribution. It will delay each 
+    subfault by the appropriate rupture time and linearly superimpose all of them. Output
+    will be one sac waveform file per direction of motion (NEU) for each station defined in the
+    station_file. Depending on the specified rake angle at each subfault the code will compute 
+    the contribution to dip and strike slip directions. It will also compute the moment at that
+    subfault and scale it according to the unit amount of momeent (1e15 N-m)
+    
+    IN:
+        home: Home directory
+        project_name: Name of the problem
+        rupture_name: Name of rupture description file
+        station_file: File with coordinates of stations
+        model_Name: Name of Earth structure model file
+        integrate: =0 if you want output to be velocity, =1 if you want output to de displacement
+       
+    OUT:
+        Nothing
+    '''
+    from numpy import genfromtxt,where,zeros,arange
+    from obspy import Stream,Trace
+    import datetime
+    from mudpy.inverse import getG
+    from linecache import getline
+    from os import remove
+    
+    print 'Solving for kinematic problem'
+    #Time for log file
+    now=datetime.datetime.now()
+    now=now.strftime('%b-%d-%H%M')
+    #load source names
+    all_sources=genfromtxt(home+project_name+'/data/'+rupture_list,dtype='S')
+    #Load stations
+    station_file=home+project_name+'/data/station_info/'+GF_list
+    staname=genfromtxt(station_file,dtype="S6",usecols=0)
+    #Now loop over rupture models
+    for ksource in range(len(all_sources)):
+        rupture_name=all_sources[ksource]
+        mss=genfromtxt(home+project_name+'/output/ruptures/'+rupture_name,usecols=8)
+        mds=genfromtxt(home+project_name+'/output/ruptures/'+rupture_name,usecols=9)
+        m=zeros(2*len(mss))
+        i=arange(0,2*len(mss),2)
+        m[i]=mss
+        i=arange(1,2*len(mds),2)
+        m[i]=mds
+        #Load gflist
+        gfsta=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=0,skip_header=1,dtype='S6')
+        #Get epicentral time
+        epicenter,time_epi=read_fakequakes_hypo_time(home,project_name,rupture_name)
+        G=get_fakequakes_G(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epicenter)
         
+        
+        
+        
+        
+        
+        
+        
+        #Loop over stations
+        for ksta in range(len(staname)):
+            print 'Working on station '+staname[ksta]+' ('+str(ksta+1)+'/'+str(len(staname))+')'
+            #Initalize output
+            n=Stream()
+            e=Stream()
+            z=Stream()
+            sta=staname[ksta]
+            #Make dummy data
+            ndummy=Stream(Trace())
+            ndummy[0].data=zeros(int(NFFT))
+            ndummy[0].stats.delta=dt
+            ndummy[0].stats.starttime=time_epi
+            edummy=ndummy.copy()
+            udummy=ndummy.copy()
+            ndummy.write(home+project_name+'/data/waveforms/'+sta+'.'+vord+'.n',format='SAC')
+            edummy.write(home+project_name+'/data/waveforms/'+sta+'.'+vord+'.e',format='SAC')
+            udummy.write(home+project_name+'/data/waveforms/'+sta+'.'+vord+'.u',format='SAC')
+            #Extract only one station from GF_list file
+            ista=int(where(gfsta==staname[ksta])[0])+2
+            #Make mini GF_file
+            tmpgf='tmpfwd.gflist'
+            try:
+                remove(home+project_name+'/data/station_info/'+tmpgf)
+            except:
+                pass
+            gflist=getline(home+project_name+'/data/station_info/'+GF_list,ista)
+            f=open(home+project_name+'/data/station_info/'+tmpgf,'w')
+            f.write('# Headers\n')
+            f.write(gflist)
+            f.close()
+            #Get matrix for one station to all sources
+            G_from_file=False
+            G_name='tmpfwd'
+            G=getG(home,project_name,fault_name,model_name,tmpgf,G_from_file,G_name,epicenter,
+                    rupture_speed,num_windows,decimate=None,bandpass=None,tsunami=False)
+            # Matrix multiply and separate data streams
+            d=G.dot(m)
+            n=ndummy.copy()
+            e=edummy.copy()
+            u=udummy.copy()
+            ncut=len(d)/3
+            n[0].data=d[0:ncut]
+            e[0].data=d[ncut:2*ncut]
+            u[0].data=d[2*ncut:3*ncut]
+            # Write to file
+            n.write(home+project_name+'/output/forward_models/'+run_name+'.'+gfsta[ksta]+'.'+vord+'.n',format='SAC')
+            e.write(home+project_name+'/output/forward_models/'+run_name+'.'+gfsta[ksta]+'.'+vord+'.e',format='SAC')
+            u.write(home+project_name+'/output/forward_models/'+run_name+'.'+gfsta[ksta]+'.'+vord+'.u',format='SAC')
+            
+
+
+def get_fakequakes_G(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epicenter):
+    '''
+    Assemble Green functions matrix. If requested will parse all available synthetics on file and build the matrix.
+    Otherwise, if it exists, it will be loaded from file 
+    
+    IN:
+        home: Home directory location
+        project_name: Name of the problem
+        fault_name: Name of fault description file
+        model_name: Name of velocity structure file
+        GF_list: Name of GF control file
+        G_from_file: if =0 build G from synthetics on file. If =1 then load from file
+        G_name: If building G fromsynthetics then this is the name G will be saved with
+            in binary .npy format. If loading from file this is the name to be looked for. 
+            It is not necessary to supply the .npy extension
+        epicenter: Epicenter coordinates
+        rupture_speed: Fastest rupture speed allowed in the problem
+        num_windows: Number of temporal rupture windows allowed
+        decimate: Constant decimationf actor applied to GFs, set =0 for no decimation
+        
+    OUT:
+        G: Fully assembled GF matrix
+    '''
+    
+    from numpy import arange,genfromtxt,where,loadtxt,array,c_,concatenate,save,load,size,tile,expand_dims
+    from os import remove
+    from os.path import split
+    from mudpy.inverse import mini_station_file,makeG,epi2subfault
+    
+    G_name=home+project_name+'/GFs/matrices/'+G_name
+    K_name=G_name+'.K'
+    if G_from_file==True: #load from file
+        if G_name[-3:]!='npy':
+            K_name=K_name+'.npy'
+            G_name=G_name+'.npy'
+        print 'Loading G from file '+G_name
+        G=load(G_name)
+        #K=load(K_name)
+    else: #assemble G one data type at a time
+        print 'Assembling G from synthetic computations...'
+        #Read in GFlist and decide what to compute
+        gf_file=home+project_name+'/data/station_info/'+GF_list
+        mini_station=home+project_name+'/data/station_info/tempG.sta'
+        stations=genfromtxt(gf_file,usecols=0,skip_header=1,dtype='S6')
+        GF=genfromtxt(gf_file,usecols=[1,2,3,4,5,6,7],skip_header=1,dtype='f8')
+        GFfiles=genfromtxt(gf_file,usecols=[8,9,10,11,12],dtype='S')
+        #Check for single station sized arrays
+        if GF.ndim==1: #One station
+            GF=expand_dims(GF,0)
+            GFfiles=expand_dims(GFfiles,0)
+            stations=array([stations])
+        #static field GFs
+        kgf=2 
+        Gstatic=array([])
+        if GF[:,kgf].sum()>0:
+            try:
+                remove(mini_station) #Cleanup  
+            except:
+                pass
+            #Make mini station file 
+            i=where(GF[:,kgf]==1)[0]
+            if len(i)>0: #There's actually something to do
+                mini_station_file(mini_station,stations[i],GF[i,0],GF[i,1],GFfiles[i,0])
+                gftype='static'
+                tdelay=0
+                #Gstatic=makeG(home,project_name,fault_name,model_name,split(mini_station)[1],gftype,tdelay,decimate,lowpass)
+                Ess=[] ; Eds=[] ; Nss=[] ; Nds=[] ; Zss=[] ; Zds=[]
+                first_window=True
+                Gstatic= makeG(home,project_name,fault_name,model_name,split(mini_station)[1],
+                                                                gftype,tsunami,tdelay,decimate,bandpass,first_window,Ess,Eds,Nss,Nds,Zss,Zds)
+                remove(mini_station) #Cleanup  
+        #Dispalcement waveform GFs
+        kgf=3
+        Gdisp=array([])
+        if GF[:,kgf].sum()>0:
+            #Load fault file
+            source=loadtxt(home+project_name+'/data/model_info/'+fault_name,ndmin=2)
+            trise=source[:,7]
+            try:
+                remove(mini_station) #Cleanup  
+            except:
+                pass
+            #Make mini station file 
+            i=where(GF[:,kgf]==1)[0]
+            if len(i)>0 or len(array(i))>0: #There's actually something to do
+                mini_station_file(mini_station,stations[i],GF[i,0],GF[i,1],GFfiles[i,1])
+                gftype='disp'
+                #Decide on delays for each time window (50% overlap)
+                delay_multiplier=tile(arange(0,num_windows),(len(trise),1)).T
+                trupt=tile(trise/2,(num_windows,1))
+                trupt=trupt*delay_multiplier
+                for krup in range(num_windows):
+                    print 'Working on window '+str(krup+1)
+                    tdelay=epi2subfault(epicenter,source,rupture_speed,trupt[krup,:])
+                    if krup==0: #First rupture speed
+                        first_window=True
+                        Ess=[] ; Eds=[] ; Nss=[] ; Nds=[] ; Zss=[] ; Zds=[]
+                        Gdisp_temp,Ess,Eds,Nss,Nds,Zss,Zds = makeG(home,project_name,fault_name,model_name,split(mini_station)[1],
+                                                                gftype,tsunami,tdelay,decimate,bandpass,first_window,Ess,Eds,Nss,Nds,Zss,Zds)
+                        Gdisp=Gdisp_temp
+                    else:
+                        first_window=False
+                        Gdisp_temp,Ess,Eds,Nss,Nds,Zss,Zds = makeG(home,project_name,fault_name,model_name,split(mini_station)[1],
+                                                                gftype,tsunami,tdelay,decimate,bandpass,first_window,Ess,Eds,Nss,Nds,Zss,Zds)
+                        Gdisp=c_[Gdisp,Gdisp_temp]
+                remove(mini_station) #Cleanup 
+        #Velocity waveforms
+        kgf=4
+        Gvel=array([])
+        if GF[:,kgf].sum()>0:
+            #Load fault file
+            source=loadtxt(home+project_name+'/data/model_info/'+fault_name,ndmin=2)
+            trise=source[:,7]
+            try:
+                remove(mini_station) #Cleanup  
+            except:
+                pass
+            #Make mini station file 
+            i=where(GF[:,kgf]==1)[0]
+            if len(i)>0 or len(array(i))>0: #There's actually something to do
+                mini_station_file(mini_station,stations[i],GF[i,0],GF[i,1],GFfiles[i,2])
+                gftype='vel'
+                #Decide on delays for each time window (50% overlap)
+                delay_multiplier=tile(arange(0,num_windows),(len(trise),1)).T
+                trupt=tile(trise/2,(num_windows,1))
+                trupt=trupt*delay_multiplier
+                for krup in range(num_windows):
+                    print 'Working on window '+str(krup+1)
+                    tdelay=epi2subfault(epicenter,source,rupture_speed,trupt[krup,:])
+                    if krup==0: #First rupture speed
+                        first_window=True
+                        Ess=[] ; Eds=[] ; Nss=[] ; Nds=[] ; Zss=[] ; Zds=[]
+                        Gvel_temp,Ess,Eds,Nss,Nds,Zss,Zds = makeG(home,project_name,fault_name,model_name,mini_station.split('/')[-1],
+                                                                gftype,tsunami,tdelay,decimate,bandpass,first_window,Ess,Eds,Nss,Nds,Zss,Zds)
+                        Gvel=Gvel_temp
+                    else:
+                        first_window=False
+                        Gvel_temp,Ess,Eds,Nss,Nds,Zss,Zds = makeG(home,project_name,fault_name,model_name,mini_station.split('/')[-1],
+                                                                gftype,tsunami,tdelay,decimate,bandpass,first_window,Ess,Eds,Nss,Nds,Zss,Zds)
+                        Gvel=c_[Gvel,Gvel_temp]
+                remove(mini_station) #Cleanup 
+        #Tsunami waveforms
+        kgf=5
+        Gtsun=array([])
+        if GF[:,kgf].sum()>0:
+            #Load fault file
+            source=loadtxt(home+project_name+'/data/model_info/'+fault_name,ndmin=2)
+            trise=source[0,7]
+            try:
+                remove(mini_station) #Cleanup  
+            except:
+                pass
+            #Make mini station file 
+            i=where(GF[:,kgf]==1)[0]
+            if len(i)>0 or len(array(i))>0: #There's actually something to do
+                mini_station_file(mini_station,stations[i],GF[i,0],GF[i,1],GFfiles[i,3])
+                gftype='tsun'
+                #Decide on delays for each time window (50% overlap)
+                trupt=arange(0,num_windows)*trise/2
+                for krup in range(num_windows):
+                    print 'Working on window '+str(krup+1)
+                    tdelay=epi2subfault(epicenter,source,rupture_speed,trupt[krup])
+                    if krup==0: #First rupture speed
+                        first_window=True
+                        Ess=[] ; Eds=[] ; Nss=[] ; Nds=[] ; Zss=[] ; Zds=[]
+                        Gtsun_temp,SS,DS = makeG(home,project_name,fault_name,model_name,mini_station.split('/')[-1],
+                                                                gftype,tsunami,tdelay,decimate,bandpass,first_window,Ess,Eds,Nss,Nds,Zss,Zds)
+                        Gtsun=Gtsun_temp
+                    else:
+                        first_window=False
+                        Gtsun_temp,SS,DS = makeG(home,project_name,fault_name,model_name,split(mini_station)[1],
+                                                                gftype,tsunami,tdelay,decimate,bandpass,first_window,SS,DS,Nss,Nds,Zss,Zds)
+                        Gtsun=c_[Gtsun,Gtsun_temp]
+                remove(mini_station) #Cleanup 
+        #InSAR LOS offsets
+        kgf=6
+        Ginsar=array([])
+        if GF[:,kgf].sum()>0:
+            try:
+                remove(mini_station) #Cleanup  
+            except:
+                pass
+            #Make mini station file 
+            i=where(GF[:,kgf]==1)[0]
+            if len(i)>0: #There's actually something to do
+                mini_station_file(mini_station,stations[i],GF[i,0],GF[i,1],GFfiles[i,0])
+                gftype='insar'
+                tdelay=0
+                #Gstatic=makeG(home,project_name,fault_name,model_name,split(mini_station)[1],gftype,tdelay,decimate,lowpass)
+                Ess=[] ; Eds=[] ; Nss=[] ; Nds=[] ; Zss=[] ; Zds=[]
+                first_window=True
+                Ginsar= makeG(home,project_name,fault_name,model_name,split(mini_station)[1],
+                                                                gftype,tsunami,tdelay,decimate,bandpass,first_window,Ess,Eds,Nss,Nds,Zss,Zds)
+                remove(mini_station) #Cleanup     
+            
+        #Done, now concatenate them all ccompute transpose product and save
+        if num_windows==1: #Only one window
+            G=concatenate([g for g in [Gstatic,Gdisp,Gvel,Gtsun,Ginsar] if g.size > 0])
+        elif num_windows>1: #Multiple windows, this means we need tot ile the statics if they exist
+            if size(Gstatic)!=0: #Static is not empty, need to tile it
+                Gstatic_nwin=Gstatic.copy()
+                for nwin in range(num_windows-1):
+                    Gstatic_nwin=c_[Gstatic_nwin,Gstatic]
+                Gstatic=Gstatic_nwin.copy()
+                Gstatic_nwin=None #Release memory
+            if size(Ginsar)!=0: #Static is not empty, need to tile it
+                Ginsar_nwin=Ginsar.copy()
+                for nwin in range(num_windows-1):
+                    Ginsar_nwin=c_[Ginsar_nwin,Ginsar]
+                Ginsar=Ginsar_nwin.copy()
+                Ginsar_nwin=None #Release memory
+            print Gstatic.shape
+            print Gvel.shape
+            print Ginsar.shape
+            G=concatenate([g for g in [Gstatic,Gdisp,Gvel,Gtsun,Ginsar] if g.size > 0])
+        print 'Saving GF matrix to '+G_name+' this might take just a second...'
+        save(G_name,G)
+        #save(K_name,K)
+    return G   
+
+
 
 def coseismics(home,project_name,rupture_name,station_file,hot_start=None):
     '''
@@ -343,6 +678,8 @@ def coseismics(home,project_name,rupture_name,station_file,hot_start=None):
         #Save results
         savetxt(outpath+sta+'.static.neu',(n,e,z))
 
+
+
 def tsunami_waveforms(home,project_name,fault_name,rupture_name,station_file,model_name,run_name,GF_list,G_from_file,G_name,epicenter,
                 rupture_speed,num_windows,coord_type,decimate,lowpass,resample,beta):            
     '''
@@ -392,7 +729,11 @@ def tsunami_waveforms(home,project_name,fault_name,rupture_name,station_file,mod
             synth[0].data=dtsun[kinsert:kinsert+npts]
             kinsert+=npts
             synth.write(home+project_name+'/output/forward_models/'+run_name+'.'+sta+'.tsun',format='SAC')
+
             
+                        
+                                 
+                                                            
                         
                                                 
 def move_seafloor(home,project_name,run_name,topo_dx_file,topo_dy_file,tgf_file,
@@ -1376,3 +1717,34 @@ def build_source_time_function(rise_time,dt,total_time,stf_type='triangle'):
     #Fudge to be the same as syn.c
     Mdot=Mdot*2
     return t,Mdot
+    
+    
+def read_fakequakes_hypo_time(home,project_name,rupture_name):
+    '''
+    Read a fakequkaes log file and extrat hypocentral time
+    '''
+    
+    from obspy.core import UTCDateTime
+    from string import replace
+    from numpy import array
+    
+    rupture=rupture_name.split('.')[0]+'.'+rupture_name.split('.')[1]
+    log_file=home+project_name+'/output/ruptures/'+rupture+'.log'
+    f=open(log_file,'r')
+    while True:
+        line=f.readline()
+        if 'Hypocenter (lon,lat,z[km])' in line:
+            s=replace(line.split(':')[-1],'(','')
+            s=replace(s,')','')
+            epicenter=array(s.split(',')).astype('float')
+        if 'Hypocenter time' in line:
+            time_epi=line.split(' ')[-1]
+            time_epi=UTCDateTime(time_epi)
+            break
+        if line=='':
+            print 'ERROR: No hypocetral time in log file'
+            time_epi=''
+            break
+    return epicenter,time_epi
+    
+    

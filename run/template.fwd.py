@@ -1,9 +1,9 @@
 '''
-Diego Melgar, 04/2015
+Diego Melgar, 04/2016
 
 Parameter file
-Project: Nepal
-Comment: Fooling around
+Project: Cascadia tsunami scenarios
+Comment: First attempt
 '''
 
 from mudpy import runslip,forward
@@ -12,17 +12,17 @@ from numpy import array
 
 ########                            GLOBALS                             ########
 
-home='/Users/dmelgar/Slip_inv/'
-project_name='2015_Nepal'
+home='/Users/dmelgar/FakeQuakes/Forward_runs/'
+project_name='Cascadia'
 run_name='static'
 ################################################################################
 
 
 #####              What-do-you-want-to-do flags, 1=do, 0=leave be          #####
 
-init=1 #Initalize project
-make_green=0 #Compute GFs
-make_synthetics=0 #Compute synthetics for a given model at given stations
+init=0 #Initalize project
+make_green=1 #Compute GFs
+make_synthetics=1 #Compute synthetics for a given model at given stations
 solve=0  # =1 solves forward problem or runs inverse calculation, =0 does nothing
 ###############################################################################
 
@@ -30,10 +30,10 @@ solve=0  # =1 solves forward problem or runs inverse calculation, =0 does nothin
 hot_start=0  #Start at a certain subfault number
 static=1  #=1 computes static GFs only, =0 computes the complete waveform
 tsunami=False
-model_name='nepal.mod'   #Velocity model
+model_name='cascadia30.mod'   #Velocity model
 rupture_name='usgs.rupt'   #Rupture model, not needed for inversion
-fault_name='nepal.fault'    #Fault geometry
-station_file='nepal.sta'   #Station distribution
+fault_name='cascadia30.fault'    #Fault geometry
+station_file='seafloor.sta'   #Station distribution
 GF_list='nepal.gflist'#What GFs are to be computed for each station
 NFFT=256 ; dt=1.0  #Time parameters
 dk=0.2 ; pmin=0 ; pmax=1 ; kmax=10   #fk integration parameters
