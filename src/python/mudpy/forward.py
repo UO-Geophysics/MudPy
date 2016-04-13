@@ -679,6 +679,115 @@ def coseismics(home,project_name,rupture_name,station_file,hot_start=None):
         savetxt(outpath+sta+'.static.neu',(n,e,z))
 
 
+def coseismics_matrix(home,project_name,rupture_name,station_file,G_from_file,G_name):
+    '''
+    This routine will take synthetics and apply a static slip dsitibution. It will 
+    linearly superimpose the synthetic coseismic from each subfault. Output will be
+    a single ascii file witht he 3 coseismic offsets (NEU) for each station defined 
+    in the station_file. Depending on the specified rake angle at each subfault the 
+    code will compute the contribution to dip and strike slip directions. It will 
+    also compute the moment at that subfault and scale it according to the unit 
+    amount of momeent (1e15 N-m)
+    
+    IN:
+        home: Home directory
+        project_name: Name of the problem
+        rupture_name: Name of rupture description file
+        station_file: File with coordinates of stations
+        model_Name: Name of Earth structure model file
+       
+    OUT:
+        Nothing
+    '''
+    from numpy import loadtxt,genfromtxt,array,savetxt,unique,where,zeros,load,save
+    from string import rjust
+    
+    print 'Solving for static problem'
+    #Output where?
+    outpath=home+project_name+'/output/forward_models/'
+    #load source
+    source=loadtxt(home+project_name+'/forward_models/'+rupture_name,ndmin=2)
+    #Load stations
+    station_file=home+project_name+'/data/station_info/'+station_file
+    staname=genfromtxt(station_file,dtype="S6",usecols=0)
+    #Get unique sources
+    source_id=unique(source[:,0])
+    m=zeros((2*len(source_id),1))
+    #Assemble source parameters vector
+    for ksta in range(len(staname)):
+        for ksource in range(len(source_id)):
+            #Get subfault parameters
+            nfault='subfault'+rjust(str(int(source_id[ksource])),4,'0')
+            ifault=where(source[:,0]==source_id[ksource])[0]
+            #Combine into model vector
+            ss_slip=source[ifault,8].sum()
+            ds_slip=source[ifault,9].sum()
+            m[2*ksource]=ss_slip
+            m[2*ksource+1]=ds_slip
+    
+    
+    #Do I need to make G or can I load it from file??
+    G_name=home+project_name+'/GFs/matrices/'+G_name
+    if G_from_file==True: #load from file
+        if G_name[-3:]!='npy':
+            G_name=G_name+'.npy'
+        print 'Loading G from file '+G_name
+        G=load(G_name)
+    else:
+    #initalize matrices
+        G=zeros((3*len(staname),2*len(source_id)))
+        m=zeros((2*len(source_id),1))
+        print '... Assembling GFs matrix'
+        #Loop over stations
+        for ksta in range(len(staname)):
+            if ksta % 10 == 0:
+                print '... ... Loading station %i of %i' %(ksta,len(staname))
+            sta=staname[ksta]
+            #Loop over sources
+            for ksource in range(len(source_id)):
+                #Get subfault parameters
+                nfault='subfault'+rjust(str(int(source_id[ksource])),4,'0')
+                #Where's the synthetic data
+                syn_path=home+project_name+'/GFs/static/'
+                #Get synthetics
+                try:
+                    coseis_ss=loadtxt(syn_path+sta+'.'+nfault+'.SS.static.neu')
+                except:
+                    coseis_ss=array([0,0,0])
+                nss=coseis_ss[0]
+                ess=coseis_ss[1]
+                zss=coseis_ss[2]
+                try:
+                    coseis_ds=loadtxt(syn_path+sta+'.'+nfault+'.DS.static.neu')
+                except:
+                    coseis_ds=array([0,0,0])
+                nds=coseis_ds[0]
+                eds=coseis_ds[1]
+                zds=coseis_ds[2]
+                #Put in matrix
+                #North
+                G[3*ksta,2*ksource]=nss  ;  G[3*ksta,2*ksource+1]=nds
+                #East
+                G[3*ksta+1,2*ksource]=ess  ;  G[3*ksta+1,2*ksource+1]=eds
+                #East
+                G[3*ksta+2,2*ksource]=zss  ;  G[3*ksta+2,2*ksource+1]=zds
+        #Save G matrix
+        print 'Saving GF matrix to '+G_name+' this might take just a second...'
+        save(G_name,G)
+    #Now go on to matrix multiply and save solutions
+    print 'Matrix multiplying and saving output...DONE'
+    d=G.dot(m)
+    for ksta in range(len(staname)):
+        sta=staname[ksta]
+        n=d[3*ksta]
+        e=d[3*ksta+1]
+        z=d[3*ksta+2]
+        savetxt(outpath+sta+'.static.neu',(n,e,z))
+    
+
+
+
+
 
 def tsunami_waveforms(home,project_name,fault_name,rupture_name,station_file,model_name,run_name,GF_list,G_from_file,G_name,epicenter,
                 rupture_speed,num_windows,coord_type,decimate,lowpass,resample,beta):            
