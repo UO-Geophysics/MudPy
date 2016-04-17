@@ -151,7 +151,7 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
     #Constant parameters
     rakeDS=90+beta #90 is thrust, -90 is normal
     rakeSS=0+beta #0 is left lateral, 180 is right lateral
-    tb=50 #Number of samples before first arrival
+    tb=50 #Number of samples before first arrival (should be 50, NEVER CHANGE, if you do then adjust in fk.pl)
     #Figure out custom STF
     if custom_stf.lower()!='none':
         custom_stf=home+project_name+'/GFs/STFs/'+custom_stf

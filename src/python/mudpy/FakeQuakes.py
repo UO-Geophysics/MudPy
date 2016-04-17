@@ -288,26 +288,28 @@ def get_eigen(C):
     return eigenvals,V
     
     
-def make_KL_slip(fault,num_modes,eigenvals,V,mean_slip):
+def make_KL_slip(fault,num_modes,eigenvals,V,mean_slip,max_slip):
     '''
     Make slip map using num_modes
     '''
     from numpy import sqrt,exp
     from numpy.random import randn
     
-    #Generate random numbers
-    if len(fault)>num_modes:
-        z = randn(num_modes) 
-    else: #if fewer faults than requested modes then use all modes
-        z = randn(len(fault)) 
-    KL_slip = mean_slip.copy()  # start with the mean slip
-    # add in the terms in the K-L expansion:
-    for k in range(len(z)):
-        KL_slip += z[k] * sqrt(eigenvals[k]) * V[:,k]
-    # exponentiate for lognormal:
-    KL_slip = exp(KL_slip)
-    #close("all");scatter(fault_x,fault_y,c=KL_slip,lw=0);axis('equal');colorbar()
-
+    while True:
+        #Generate random numbers
+        if len(fault)>num_modes:
+            z = randn(num_modes) 
+        else: #if fewer faults than requested modes then use all modes
+            z = randn(len(fault)) 
+        KL_slip = mean_slip.copy()  # start with the mean slip
+        # add in the terms in the K-L expansion:
+        for k in range(len(z)):
+            KL_slip += z[k] * sqrt(eigenvals[k]) * V[:,k]
+        # exponentiate for lognormal:
+        KL_slip = exp(KL_slip)
+        #Check if max_slip condition is met, if so then you're done
+        if KL_slip.max()<=max_slip:
+            break
     return KL_slip
     
 
@@ -420,7 +422,7 @@ def plot_KLslip(home,project_name,run_name,run_number,fault,mesh_name,target_Mw,
     for label in labels: 
         label.set_rotation(70) 
     #Plot stations, this is hard coded to Cascadia
-    stations=genfromtxt(u'/Users/dmelgar/Cascadia/stations/cascadia_gps.txt',usecols=[0,1])
+    stations=genfromtxt(u'/Users/dmelgar/Cascadia/stations/cascadia_gps_small.txt',usecols=[1,2])
     ax1.scatter(stations[:,0],stations[:,1],marker='o',lw=0.8,c='#FF8C00',s=15)
     #hypocenter
     ax1.scatter(fault[hypo_fault,1],fault[hypo_fault,2],marker='s',lw=0.5,c='#FF69B4',s=40)
@@ -500,7 +502,7 @@ def plot_KLslip(home,project_name,run_name,run_number,fault,mesh_name,target_Mw,
     for label in labels: 
         label.set_rotation(70) 
     #Plot stations, this is hard coded to Cascadia
-    stations=genfromtxt(u'/Users/dmelgar/Cascadia/stations/cascadia_gps.txt',usecols=[0,1])
+    stations=genfromtxt(u'/Users/dmelgar/Cascadia/stations/cascadia_gps_small.txt',usecols=[1,2])
     ax2.scatter(stations[:,0],stations[:,1],marker='o',lw=0.8,c='#FF8C00',s=15)
     #hypocenter
     ax2.scatter(fault[hypo_fault,1],fault[hypo_fault,2],marker='s',lw=0.5,c='#FF69B4',s=40)
@@ -580,7 +582,7 @@ def plot_KLslip(home,project_name,run_name,run_number,fault,mesh_name,target_Mw,
     for label in labels: 
         label.set_rotation(70) 
     #Plot stations, this is hard coded to Cascadia
-    stations=genfromtxt(u'/Users/dmelgar/Cascadia/stations/cascadia_gps.txt',usecols=[0,1])
+    stations=genfromtxt(u'/Users/dmelgar/Cascadia/stations/cascadia_gps_small.txt',usecols=[1,2])
     ax3.scatter(stations[:,0],stations[:,1],marker='o',lw=0.8,c='#FF8C00',s=15)
     #hypocenter
     ax3.scatter(fault[hypo_fault,1],fault[hypo_fault,2],marker='s',lw=0.5,c='#FF69B4',s=40)
@@ -813,7 +815,7 @@ def get_rupture_onset(home,project_name,slip,fault_array,model_name,hypocenter,r
     
 def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
     load_distances,distances_name,UTM_zone,target_Mw,model_name,hurst,Ldip,Lstrike,
-    num_modes,Nrealizations,rake,buffer_factor,rise_time_depths,time_epi):
+    num_modes,Nrealizations,rake,buffer_factor,rise_time_depths,time_epi,max_slip):
     
     '''
     Depending on user selected flags parse the work out to different functions
@@ -888,7 +890,7 @@ def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
             eigenvals,V=get_eigen(C_log)
             
             #Generate fake slip pattern
-            slip=make_KL_slip(fault_array,num_modes,eigenvals,V,mean_slip_log)
+            slip=make_KL_slip(fault_array,num_modes,eigenvals,V,mean_slip_log,max_slip)
             
             #Rigidities
             foo,mu=get_mean_slip(target_Mw[kmag],whole_fault,vel_mod)
@@ -918,7 +920,7 @@ def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
             #Write to file
             run_number=rjust(str(realization),6,'0')
             outfile=home+project_name+'/output/ruptures/'+run_name+'.'+run_number+'.rupt'
-            savetxt(outfile,fault_out,fmt='%d\t%10.6f\t%10.6f\t%7.2f\t%7.2f\t%7.2f\t%4.1f\t%5.2f\t%5.2f\t%5.2f\t%10.2f\t%10.2f\t%5.2f\t%.6e',header='No,lon,lat,z(km),strike,dip,rise,dura,ss-slip(m),ds-slip(m),ss_len(m),ds_len(m),rupt_time(s),rigidity(Pa)')
+            savetxt(outfile,fault_out,fmt='%d\t%10.6f\t%10.6f\t%8.4f\t%7.2f\t%7.2f\t%4.1f\t%5.2f\t%5.2f\t%5.2f\t%10.2f\t%10.2f\t%5.2f\t%.6e',header='No,lon,lat,z(km),strike,dip,rise,dura,ss-slip(m),ds-slip(m),ss_len(m),ds_len(m),rupt_time(s),rigidity(Pa)')
             
             #Make plots
             plot_KLslip(home,project_name,run_name,run_number,fault_out,mesh_name,target_Mw[kmag],Mw,hypo_fault,fudge=0.3)

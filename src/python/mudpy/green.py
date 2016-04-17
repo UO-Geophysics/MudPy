@@ -415,6 +415,15 @@ def origin_time(st,time_epi,tb):
     #Shift to oring time
     t1=time_epi+timedelta(minutes=t1.minute,seconds=t1.second,microseconds=t1.microsecond)-td
     st[0].stats.starttime=t1
+    #Set default sac headers to avoid invalid SAC write
+    st[0].stats.sac['nzyear'] = t1.year
+    st[0].stats.sac['nzjday'] = t1.julday
+    st[0].stats.sac['nzhour'] = t1.hour
+    st[0].stats.sac['nzmin'] = t1.minute
+    st[0].stats.sac['nzsec'] = t1.second
+    st[0].stats.sac['nzmsec'] = t1.microsecond/1000
+    st[0].stats.sac.stla = 0.
+    st[0].stats.sac.stlo = 0.
     return st
 
 def rt2ne(r,t,azimuth):

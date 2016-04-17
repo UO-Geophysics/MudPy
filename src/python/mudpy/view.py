@@ -8,7 +8,6 @@ inversion results
 
 import matplotlib
 from matplotlib import cm
-matplotlib.rcParams['pdf.fonttype'] = 42
 
 #Create default colormap for slip inversions
 #cdict = {'red': ((0., 1, 1),
