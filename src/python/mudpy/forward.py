@@ -280,12 +280,8 @@ def waveforms_fakequakes(home,project_name,fault_name,rupture_list,GF_list,
     OUT:
         Nothing
     '''
-    from numpy import genfromtxt,where,zeros,arange
-    from obspy import Stream,Trace
+    from numpy import genfromtxt
     import datetime
-    from mudpy.inverse import getG
-    from linecache import getline
-    from os import remove
     
     print 'Solving for kinematic problem(s)'
     #Time for log file
@@ -293,8 +289,6 @@ def waveforms_fakequakes(home,project_name,fault_name,rupture_list,GF_list,
     now=now.strftime('%b-%d-%H%M')
     #load source names
     all_sources=genfromtxt(home+project_name+'/data/'+rupture_list,dtype='S')
-    #Load stations
-    station_file=home+project_name+'/data/station_info/'+GF_list
     #Load all synthetics
     print '... loading all synthetics into memory'
     Nss,Ess,Zss,Nds,Eds,Zds=load_fakequakes_synthetics(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name)
@@ -306,7 +300,7 @@ def waveforms_fakequakes(home,project_name,fault_name,rupture_list,GF_list,
         #Get epicentral time
         epicenter,time_epi=read_fakequakes_hypo_time(home,project_name,rupture_name)
         # Put in matrix
-        m,G=get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_name,time_epi,GF_list,epicenter,NFFT)
+        m,G=get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_name,time_epi,GF_list,G_name,epicenter,NFFT)
         # Solve
         waveforms=G.dot(m)
         #Write output
@@ -326,12 +320,12 @@ def load_fakequakes_synthetics(home,project_name,fault_name,model_name,GF_list,G
 
     vord='disp'
     if G_from_file==True: #load from file
-        Eds=read('/Users/dmelgar/FakeQuakes/Cascadia/GFs/matrices/'+G_name+'.Eds.'+vord+'.mseed')
-        Nds=read('/Users/dmelgar/FakeQuakes/Cascadia/GFs/matrices/'+G_name+'.Nds.'+vord+'.mseed')
-        Zds=read('/Users/dmelgar/FakeQuakes/Cascadia/GFs/matrices/'+G_name+'.Zds.'+vord+'.mseed')
-        Ess=read('/Users/dmelgar/FakeQuakes/Cascadia/GFs/matrices/'+G_name+'.Ess.'+vord+'.mseed')
-        Nss=read('/Users/dmelgar/FakeQuakes/Cascadia/GFs/matrices/'+G_name+'.Nss.'+vord+'.mseed')
-        Zss=read('/Users/dmelgar/FakeQuakes/Cascadia/GFs/matrices/'+G_name+'.Zss.'+vord+'.mseed')
+        Eds=read(home+project_name+'/GFs/matrices/'+G_name+'.Eds.'+vord+'.mseed')
+        Nds=read(home+project_name+'/GFs/matrices/'+G_name+'.Nds.'+vord+'.mseed')
+        Zds=read(home+project_name+'/GFs/matrices/'+G_name+'.Zds.'+vord+'.mseed')
+        Ess=read(home+project_name+'/GFs/matrices/'+G_name+'.Ess.'+vord+'.mseed')
+        Nss=read(home+project_name+'/GFs/matrices/'+G_name+'.Nss.'+vord+'.mseed')
+        Zss=read(home+project_name+'/GFs/matrices/'+G_name+'.Zss.'+vord+'.mseed')
     else: #assemble G one data type at a time, just displacememnt right now
         #Load station info
         station_file=home+project_name+'/data/station_info/'+GF_list
@@ -340,6 +334,7 @@ def load_fakequakes_synthetics(home,project_name,fault_name,model_name,GF_list,G
         #Load fault model
         source=loadtxt(home+project_name+'/data/model_info/'+fault_name,ndmin=2)
         Nfaults=source.shape[0] #Number of subfaults
+        kindex=0
         for ksta in range(Nsta):
             print 'Reading green functions for station #'+str(ksta+1)+' of '+str(Nsta)
             for kfault in range(Nfaults):
@@ -363,18 +358,19 @@ def load_fakequakes_synthetics(home,project_name,fault_name,model_name,GF_list,G
                     Eds+=read(syn_path+staname[ksta]+'.'+nfault+'.DS.'+vord+'.e')
                     Nds+=read(syn_path+staname[ksta]+'.'+nfault+'.DS.'+vord+'.n')
                     Zds+=read(syn_path+staname[ksta]+'.'+nfault+'.DS.'+vord+'.z')
+                kindex+=1
         print 'Writting synthetics to miniSEED, hang on this might take a minute or two.'
-        Ess.write('/Users/dmelgar/FakeQuakes/Cascadia/GFs/matrices/'+G_name+'.Ess.'+vord+'.mseed',format='MSEED')
-        Nss.write('/Users/dmelgar/FakeQuakes/Cascadia/GFs/matrices/'+G_name+'.Nss.'+vord+'.mseed',format='MSEED')
-        Zss.write('/Users/dmelgar/FakeQuakes/Cascadia/GFs/matrices/'+G_name+'.Zss.'+vord+'.mseed',format='MSEED')
-        Eds.write('/Users/dmelgar/FakeQuakes/Cascadia/GFs/matrices/'+G_name+'.Eds.'+vord+'.mseed',format='MSEED')
-        Nds.write('/Users/dmelgar/FakeQuakes/Cascadia/GFs/matrices/'+G_name+'.Nds.'+vord+'.mseed',format='MSEED')
-        Zds.write('/Users/dmelgar/FakeQuakes/Cascadia/GFs/matrices/'+G_name+'.Zds.'+vord+'.mseed',format='MSEED')
+        Ess.write(home+project_name+'/GFs/matrices/'+G_name+'.Ess.'+vord+'.mseed',format='MSEED')
+        Nss.write(home+project_name+'/GFs/matrices/'+G_name+'.Nss.'+vord+'.mseed',format='MSEED')
+        Zss.write(home+project_name+'/GFs/matrices/'+G_name+'.Zss.'+vord+'.mseed',format='MSEED')
+        Eds.write(home+project_name+'/GFs/matrices/'+G_name+'.Eds.'+vord+'.mseed',format='MSEED')
+        Nds.write(home+project_name+'/GFs/matrices/'+G_name+'.Nds.'+vord+'.mseed',format='MSEED')
+        Zds.write(home+project_name+'/GFs/matrices/'+G_name+'.Zds.'+vord+'.mseed',format='MSEED')
     return Nss,Ess,Zss,Nds,Eds,Zds
 
 
 
-def get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_name,time_epi,GF_list,epicenter,NFFT):
+def get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_name,time_epi,GF_list,G_name,epicenter,NFFT):
     '''
     Assemble Green functions matrix. If requested will parse all available synthetics on file and build the matrix.
     Otherwise, if it exists, it will be loaded from file 
@@ -398,12 +394,14 @@ def get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_nam
         G: Fully assembled GF matrix
     '''
     
-    from numpy import genfromtxt,loadtxt,convolve,where,zeros,arange
-    
-    #All the synthetics are in memory now, next convolve with STF, delay and put in matrix
+    from numpy import genfromtxt,loadtxt,convolve,where,zeros,arange,unique
+
     source=loadtxt(home+project_name+'/output/ruptures/'+rupture_name,ndmin=2)
     rise_times=source[:,7]
     rupture_onset=source[:,12]
+    
+    #How many unique faults?
+    Nfaults=len(unique(source[:,0]))
     
     #How many subfaults are non-zero?
     i_non_zero=where(rise_times>0)[0]
@@ -434,7 +432,12 @@ def get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_nam
             nss,ess,zss,nds,eds,zds=tshift_trace(nss,ess,zss,nds,eds,zds,tdelay,time_epi,NFFT)
             #Convolve with source time function
             rise=rise_times[i_non_zero[ksource]]
-            t_stf,stf=build_source_time_function(rise,nss.stats.delta,NFFT,stf_type='triangle')
+            #Make sure rise time is a multiple of dt
+            dt=nss.stats.delta
+            rise=round(rise/dt)*nss.stats.delta
+            if rise<(2*dt): #Otherwise get nan's in STF
+                rise=2*dt
+            t_stf,stf=build_source_time_function(rise,dt,NFFT,stf_type='triangle')
             nss.data=convolve(nss.data,stf)[0:NFFT]
             ess.data=convolve(ess.data,stf)[0:NFFT]
             zss.data=convolve(zss.data,stf)[0:NFFT]
@@ -449,13 +452,13 @@ def get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_nam
             G[matrix_pos+2*NFFT:matrix_pos+3*NFFT,2*ksource]=zss.data
             G[matrix_pos+2*NFFT:matrix_pos+3*NFFT,2*ksource+1]=zds.data
         matrix_pos+=3*NFFT
-        read_start+=Nsta
+        read_start+=Nfaults
         #Get slip model vector
-        m=zeros((N_non_zero*2,1))
-        iss=arange(0,len(m),2)
-        ids=arange(1,len(m),2)
-        m[iss,0]=source[i_non_zero,8]
-        m[ids,0]=source[i_non_zero,9]
+    m=zeros((N_non_zero*2,1))
+    iss=arange(0,len(m),2)
+    ids=arange(1,len(m),2)
+    m[iss,0]=source[i_non_zero,8]
+    m[ids,0]=source[i_non_zero,9]
 
     return m,G
 
@@ -1787,6 +1790,7 @@ def build_source_time_function(rise_time,dt,total_time,stf_type='triangle'):
     and a triangle STF
     '''
     from numpy import zeros,arange,where
+    from scipy.integrate import trapz
     
     rise_time=float(rise_time)
     #Initialize outputs
@@ -1805,8 +1809,9 @@ def build_source_time_function(rise_time,dt,total_time,stf_type='triangle'):
     Mdot[i]=-m*t[i]+b2 
     i=where(t>rise_time)[0]
     Mdot[i]=0
-    #Fudge to be the same as syn.c
-    Mdot=Mdot*2
+    #Area of traingle must be equal to dt
+    area=trapz(Mdot,t)
+    Mdot=Mdot*(dt/area)
     return t,Mdot
     
     
