@@ -617,10 +617,10 @@ def select_faults(whole_fault,Dstrike,Ddip,target_Mw,buffer_factor,num_modes):
     while not done:
         #Determine length and width from scaling laws (select from lognormal dsitribution)
         length_mean=-2.37+0.57*target_Mw
-        length_std=0.15#0.18
+        length_std=0.12#0.18
         length=10**normal(length_mean,length_std)
         width_mean=-1.86+0.46*target_Mw
-        width_std=0.14#0.17
+        width_std=0.11#0.17
         width=10**normal(width_mean,width_std)
         
         #Select random subfault as hypocenter

@@ -300,7 +300,7 @@ def waveforms_fakequakes(home,project_name,fault_name,rupture_list,GF_list,
         #Get epicentral time
         epicenter,time_epi=read_fakequakes_hypo_time(home,project_name,rupture_name)
         # Put in matrix
-        m,G=get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_name,time_epi,GF_list,G_name,epicenter,NFFT)
+        m,G=get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_name,time_epi,GF_list,epicenter,NFFT)
         # Solve
         waveforms=G.dot(m)
         #Write output
@@ -370,7 +370,7 @@ def load_fakequakes_synthetics(home,project_name,fault_name,model_name,GF_list,G
 
 
 
-def get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_name,time_epi,GF_list,G_name,epicenter,NFFT):
+def get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_name,time_epi,GF_list,epicenter,NFFT):
     '''
     Assemble Green functions matrix. If requested will parse all available synthetics on file and build the matrix.
     Otherwise, if it exists, it will be loaded from file 
@@ -469,7 +469,7 @@ def write_fakequakes_waveforms(home,project_name,rupture_name,waveforms,GF_list,
     '''
     
     from os import path,makedirs
-    from numpy import genfromtxt,squeeze
+    from numpy import genfromtxt,squeeze,sqrt
     from obspy import Stream,Trace
     
     #Where am I writting to?
@@ -484,7 +484,7 @@ def write_fakequakes_waveforms(home,project_name,rupture_name,waveforms,GF_list,
     sta=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=0,dtype='S') 
     lon=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=1)  
     lat=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=2)  
-    
+    line_out='# Station, lon, lat, N[m], E[m], Up[m], PGD[m]\n'
     #Parse waveforms vector
     read_pos=0
     for ksta in range(len(sta)):
@@ -499,12 +499,23 @@ def write_fakequakes_waveforms(home,project_name,rupture_name,waveforms,GF_list,
         n[0].data=squeeze(waveforms[read_pos:read_pos+NFFT])
         e[0].data=squeeze(waveforms[read_pos+NFFT:read_pos+2*NFFT])
         z[0].data=squeeze(waveforms[read_pos+2*NFFT:read_pos+3*NFFT])
+        # Extract coseismic offsets
+        n_offset=n[0].data[-10:].mean()
+        e_offset=e[0].data[-10:].mean()
+        z_offset=z[0].data[-10:].mean()
+        # Get PGD
+        pgd=sqrt(n[0].data**2+e[0].data**2+z[0].data**2).max()
+        # Summary file
+        line_out+='%s\t%10.4f\t%10.4f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\n' % (sta[ksta],lon[ksta],lat[ksta],n_offset,e_offset,z_offset,pgd)
         # write to file
         n.write(directory+sta[ksta]+'.LYN.sac',format='SAC')
         e.write(directory+sta[ksta]+'.LYE.sac',format='SAC')
         z.write(directory+sta[ksta]+'.LYZ.sac',format='SAC')
         # update counter
         read_pos+=3*NFFT
+    f=open(directory+'_summary.'+rupture+'.txt','w')
+    f.write(line_out)
+    f.close()
         
         
        
