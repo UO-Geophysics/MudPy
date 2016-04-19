@@ -41,7 +41,7 @@ def waveforms(home,project_name,rupture_name,station_file,model_name,run_name,in
     #load source
     source=loadtxt(home+project_name+'/forward_models/'+rupture_name,ndmin=2)
     #Load stations
-    station_file=home+project_name+'/data/station_info/'+station_file
+    stagps_file=home+project_name+'/data/station_info/'+station_file
     staname=genfromtxt(station_file,dtype="S6",usecols=0)
     #What am I processing v or d ?
     if integrate==1:
@@ -421,12 +421,12 @@ def get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_nam
     for ksta in range(Nsta):
         for ksource in range(len(i_non_zero)):
             #Get synthetics
-            nss=Nss[read_start+i_non_zero[ksource]]
-            ess=Ess[read_start+i_non_zero[ksource]]
-            zss=Zss[read_start+i_non_zero[ksource]]
-            nds=Nds[read_start+i_non_zero[ksource]]
-            eds=Eds[read_start+i_non_zero[ksource]]
-            zds=Zds[read_start+i_non_zero[ksource]]
+            nss=Nss[read_start+i_non_zero[ksource]].copy()
+            ess=Ess[read_start+i_non_zero[ksource]].copy()
+            zss=Zss[read_start+i_non_zero[ksource]].copy()
+            nds=Nds[read_start+i_non_zero[ksource]].copy()
+            eds=Eds[read_start+i_non_zero[ksource]].copy()
+            zds=Zds[read_start+i_non_zero[ksource]].copy()
             #Delay synthetics by rupture onset
             tdelay=rupture_onset[i_non_zero[ksource]]
             nss,ess,zss,nds,eds,zds=tshift_trace(nss,ess,zss,nds,eds,zds,tdelay,time_epi,NFFT)
