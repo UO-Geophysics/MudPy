@@ -249,24 +249,35 @@ def vonKarman_correlation(Dstrike,Ddip,Lstrike,Ldip,hurst):
     return C
 
 
-def get_lognormal(C,target_Mw,fault_array,vel_mod,alpha=0.6):
+def get_lognormal(mean_slip,C,target_Mw,fault_array,vel_mod,alpha=0.6):
     '''
     Exponentiate to get lognormal correlation
     '''
     
     from numpy import log,diag
-    
-    #First get correct mean slip
-    mean_slip,mu=get_mean_slip(target_Mw,fault_array,vel_mod)
+
     #Get sigma as a fraction of mean slip
     sigma_slip=alpha*mean_slip
     #Now generate desired correlation
-    Cov = sigma_slip * (C*sigma_slip).T
     Cov_g = log((sigma_slip/mean_slip) * (C*(sigma_slip/mean_slip)).T + 1.)
     mean_slip_g = log(mean_slip) - diag(Cov_g)/2.
     
     return Cov_g,mean_slip_g
-       
+
+     
+def get_covariance(mean_slip,C,target_Mw,fault_array,vel_mod,alpha=0.6):
+    '''
+    Exponentiate to get lognormal correlation
+    '''
+    
+    #Get sigma as a fraction of mean slip
+    sigma_slip=alpha*mean_slip
+    #Now generate desired covariance
+    Cov = sigma_slip * (C*sigma_slip).T
+    
+    return Cov
+           
+                             
 def get_eigen(C):
     '''
     Get eigen vectors/values from correlation matrix and return sorted results
@@ -288,7 +299,7 @@ def get_eigen(C):
     return eigenvals,V
     
     
-def make_KL_slip(fault,num_modes,eigenvals,V,mean_slip,max_slip):
+def make_KL_slip(fault,num_modes,eigenvals,V,mean_slip,max_slip,lognormal=True):
     '''
     Make slip map using num_modes
     '''
@@ -306,11 +317,32 @@ def make_KL_slip(fault,num_modes,eigenvals,V,mean_slip,max_slip):
         for k in range(len(z)):
             KL_slip += z[k] * sqrt(eigenvals[k]) * V[:,k]
         # exponentiate for lognormal:
-        KL_slip = exp(KL_slip)
+        if lognormal==True:
+            KL_slip = exp(KL_slip)
         #Check if max_slip condition is met, if so then you're done
         if KL_slip.max()<=max_slip:
             break
     return KL_slip
+
+
+def rectify_slip(slip_unrectified,percent_reject=10):
+    '''
+    Deal with negative slip values
+    '''
+    
+    from numpy import where
+    
+    slip=slip_unrectified.copy()
+    #Find the negatives
+    i=where(slip_unrectified<0)[0]
+    percent_negative=(float(len(i))/len(slip_unrectified))*100
+    if percent_negative>percent_reject: #Too many negatives
+        rejected=True
+    else:
+        slip[i]=0
+        rejected=False
+    
+    return slip,rejected,percent_negative
     
 
 def plot_KLslip(home,project_name,run_name,run_number,fault,mesh_name,target_Mw,Mw,hypo_fault,fudge=0.3):
@@ -832,7 +864,7 @@ def get_centroid(fault):
 def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
     load_distances,distances_name,UTM_zone,target_Mw,model_name,hurst,Ldip,Lstrike,
     num_modes,Nrealizations,rake,buffer_factor,rise_time_depths,time_epi,max_slip,
-    source_time_function):
+    source_time_function,lognormal):
     
     '''
     Depending on user selected flags parse the work out to different functions
@@ -900,14 +932,27 @@ def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
             #Get correlation matrix
             C=vonKarman_correlation(Dstrike_selected,Ddip_selected,Ls,Ld,hurst)
             
-            #Get lognormal values
-            C_log,mean_slip_log=get_lognormal(C,target_Mw[kmag],fault_array,vel_mod)
-            
-            #Get eigen values and eigenvectors
-            eigenvals,V=get_eigen(C_log)
-            
-            #Generate fake slip pattern
-            slip=make_KL_slip(fault_array,num_modes,eigenvals,V,mean_slip_log,max_slip)
+            # Lognormal or not?
+            if lognormal==False:
+                #Get covariance matrix
+                C_nonlog=get_covariance(mean_slip,C,target_Mw[kmag],fault_array,vel_mod,alpha=0.6) 
+                #Get eigen values and eigenvectors
+                eigenvals,V=get_eigen(C_nonlog)
+                #Generate fake slip pattern
+                rejected=True
+                while rejected==True:
+                    slip_unrectified=make_KL_slip(fault_array,num_modes,eigenvals,V,mean_slip,max_slip,lognormal=False)
+                    slip,rejected,percent_negative=rectify_slip(slip_unrectified,percent_reject=10)
+                    if rejected==True:
+                        print '... ... ... negative slip threshold exceeeded with %d%% negative slip. Recomputing...' % (percent_negative)
+            else:
+                #Get lognormal values
+                C_log,mean_slip_log=get_lognormal(mean_slip,C,target_Mw[kmag],fault_array,vel_mod)               
+                #Get eigen values and eigenvectors
+                eigenvals,V=get_eigen(C_log)
+                #Generate fake slip pattern
+                slip=make_KL_slip(fault_array,num_modes,eigenvals,V,mean_slip_log,max_slip,lognormal=True)
+
             
             #Rigidities
             foo,mu=get_mean_slip(target_Mw[kmag],whole_fault,vel_mod)
