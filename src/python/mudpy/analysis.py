@@ -457,4 +457,99 @@ class MT:
         Beachball([self.tensor[0,0],self.tensor[1,1],self.tensor[2,2],self.tensor[0,1],self.tensor[0,2],self.tensor[1,2]])
 
         
+
+def pgd_regression(home,project_name,run_name,run_number,norm=2):
+    '''
+    Regress for PGD scaling law
+    '''
+    
+    from numpy import genfromtxt,array,zeros,log10,expand_dims,ones,diag,c_
+    from string import replace
+    from obspy.geodetics.base import gps2dist_azimuth
+    from l1 import l1
+    from cvxopt import matrix 
+    from scipy.linalg import norm as vecnorm
+    from numpy.linalg import lstsq
+     
+    # Read summary file
+    summary_file=home+project_name+'/output/waveforms/'+run_name+'.'+run_number+'/_summary.'+run_name+'.'+run_number+'.txt'
+    lonlat=genfromtxt(summary_file,usecols=[1,2])
+    pgd=genfromtxt(summary_file,usecols=[6])*100
+    # Get hypocenter or centroid
+    event_log=home+project_name+'/output/ruptures/'+run_name+'.'+run_number+'.log'
+    f=open(event_log,'r')
+    loop_go=True
+    while loop_go:
+        line=f.readline()
+        if 'Centroid (lon,lat,z[km])' in line:                
+            s=replace(line.split(':')[-1],'(','')
+            s=replace(s,')','')
+            hypo=array(s.split(',')).astype('float')
+            loop_go=False       
+        if 'Actual magnitude' in line:
+            Mw=float(line.split(':')[-1].split(' ')[-1])
+    #compute station to hypo distances
+    d=zeros(len(lonlat))
+    for k in range(len(lonlat)):
+        d[k],az,baz=gps2dist_azimuth(lonlat[k,1],lonlat[k,0],hypo[1],hypo[0])
+        d[k]=d[k]/1000
         
+    #Run regression
+    #W=ones(len(d))/vecnorm(log10(d))
+    W=ones(len(d))
+    #Define regression quantities
+    dist=log10(d)
+    data=log10(pgd)
+    #make matrix of event weights
+    W=diag(W)
+    #Make matrix of data weights
+    iall=ones((len(d),1))
+    Mw_all=Mw*ones(len(d))
+    G=c_[iall,expand_dims(Mw_all,1)*iall,expand_dims(Mw_all*dist,1)]
+    #Run regression
+    # log(PGD)=A+B*Mw+C*Mw*log(R)
+    if norm==2:
+        coefficients=lstsq(G,data)[0]
+        A=coefficients[0] ; B=coefficients[1] ; C=coefficients[2]
+    elif norm==1:
+        P=matrix(W.dot(G))
+        q=matrix(W.dot(data))
+        coefficients=array(l1(P,q))
+    
+    return A,B,C
+    
+    
+def pgd_slope_difference(home,project_name,rupture_list):
+    '''
+    Get the difference in slopes between theory and onservations
+    '''
+    
+    from numpy import genfromtxt,array,zeros,ones,r_ 
+    
+    #get list of ruptures
+    ruptures=genfromtxt(home+project_name+'/data/'+rupture_list,dtype='S')
+    #Init
+    Mw=array([])
+    slope_observed=array([])
+    slope_theory=array([])
+    for krupt in range(len(ruptures)):
+        print 'Reading data from rupture '+ruptures[krupt]
+        run_name=ruptures[krupt].split('.')[0]
+        run_number=ruptures[krupt].split('.')[1]
+        A,B,C=pgd_regression(home,project_name,run_name,run_number,norm=2)
+        # Get magnitude
+        event_log=home+project_name+'/output/ruptures/'+ruptures[krupt].split('.')[0]+'.'+ruptures[krupt].split('.')[1]+'.log'
+        f=open(event_log,'r')
+        loop_go=True
+        while loop_go:
+            line=f.readline()   
+            if 'Actual magnitude' in line:
+                Mw=r_[Mw,float(line.split(':')[-1].split(' ')[-1])]
+                loop_go=False
+        #Get the slope
+        slope_observed=r_[slope_observed,C*Mw[krupt]]
+        slope_theory=r_[slope_theory,-0.138*Mw[krupt]]
+        
+    return Mw,slope_theory,slope_observed
+        
+    

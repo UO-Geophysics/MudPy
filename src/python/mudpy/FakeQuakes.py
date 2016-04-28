@@ -811,11 +811,28 @@ def get_rupture_onset(home,project_name,slip,fault_array,model_name,hypocenter,r
     
     return t_onset_final      
                 
-                
+
+def get_centroid(fault):
+    '''
+    Get moment based centroid
+    '''
+    
+    #Get slip at subfaults
+    slip=(fault[:,8]**2+fault[:,9]**2)**0.5
+    #Get moment at subfaults
+    moment=slip*fault[:,10]*fault[:,11]*fault[:,13]
+    #centroid coordinates
+    centroid_lon=sum(fault[:,1]*moment)/moment.sum()
+    centroid_lat=sum(fault[:,2]*moment)/moment.sum()
+    centroid_z=sum(fault[:,3]*moment)/moment.sum()
+
+    return centroid_lon,centroid_lat,centroid_z             
+                                                
     
 def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
     load_distances,distances_name,UTM_zone,target_Mw,model_name,hurst,Ldip,Lstrike,
-    num_modes,Nrealizations,rake,buffer_factor,rise_time_depths,time_epi,max_slip):
+    num_modes,Nrealizations,rake,buffer_factor,rise_time_depths,time_epi,max_slip,
+    source_time_function):
     
     '''
     Depending on user selected flags parse the work out to different functions
@@ -917,6 +934,9 @@ def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
             fault_out[:,12]=0
             fault_out[ifaults,12]=t_onset
             
+            #Calculate location of moment centroid
+            centroid_lon,centroid_lat,centroid_z=get_centroid(fault_out)
+            
             #Write to file
             run_number=rjust(str(realization),6,'0')
             outfile=home+project_name+'/output/ruptures/'+run_name+'.'+run_number+'.rupt'
@@ -944,7 +964,9 @@ def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
             f.write('Target magnitude: Mw %.2f\n' % target_Mw[kmag])
             f.write('Actual magnitude: Mw %.2f\n' % Mw)
             f.write('Hypocenter (lon,lat,z[km]): (%.6f,%.6f,%.2f)\n' %(hypocenter[0],hypocenter[1],hypocenter[2]))
-            f.write('Hypocenter time: %s' % time_epi)
+            f.write('Hypocenter time: %s\n' % time_epi)
+            f.write('Centroid (lon,lat,z[km]): (%.6f,%.6f,%.2f)\n' %(centroid_lon,centroid_lat,centroid_z))
+            f.write('Source time function type: %s' % source_time_function)
             f.close()
             
             #Append to list

@@ -2293,11 +2293,121 @@ def plot_grd(grdfile,zlims,cmap,flip_lon=False):
 
 
 
-
+def plot_velmod(vel_mod_file1,vel_mod_file2=None,zmax=60,label1='Cascadia',label2='GIL7'):
+    '''
+    Plot a velocity model
+    '''
+    
+    from numpy import genfromtxt,zeros,arange
+    from matplotlib import pyplot as plt
+    
+    v1=genfromtxt(vel_mod_file1)
+    #Init
+    pvel1=zeros(len(v1)*2)
+    svel1=zeros(len(v1)*2)
+    rho1=zeros(len(v1)*2)
+    Qp1=zeros(len(v1)*2)
+    Qs1=zeros(len(v1)*2)
+    z1=zeros(len(v1)*2)
+    #interleave
+    i1=arange(0,len(z1),2)
+    i2=arange(1,len(z1),2)
+    pvel1[i1]=v1[:,2] ; pvel1[i2]=v1[:,2]
+    svel1[i1]=v1[:,1] ; svel1[i2]=v1[:,1]
+    rho1[i1]=v1[:,3] ; rho1[i2]=v1[:,3]
+    Qp1[i1]=v1[:,5] ; Qp1[i2]=v1[:,5]
+    Qs1[i1]=v1[:,4] ; Qs1[i2]=v1[:,4]
+    z1[0]=0
+    z1[1]=v1[0,0]
+    for k in range(1,len(v1)-1):
+        z1[2*k]=z1[2*k-1]
+        z1[2*k+1]=z1[2*k]+v1[k,0]
+    z1[-2]=z1[-3]
+    z1[-1]=zmax
+    mu1=rho1*1000*(svel1*1000)**2
+    
+    if vel_mod_file2!=None:
+        v2=genfromtxt(vel_mod_file2)
+        #Init
+        pvel2=zeros(len(v2)*2)
+        svel2=zeros(len(v2)*2)
+        rho2=zeros(len(v2)*2)
+        Qp2=zeros(len(v2)*2)
+        Qs2=zeros(len(v2)*2)
+        z2=zeros(len(v2)*2)
+        #interleave
+        i1=arange(0,len(z2),2)
+        i2=arange(1,len(z2),2)
+        pvel2[i1]=v2[:,2] ; pvel2[i2]=v2[:,2]
+        svel2[i1]=v2[:,1] ; svel2[i2]=v2[:,1]
+        rho2[i1]=v2[:,3] ; rho2[i2]=v2[:,3]
+        Qp2[i1]=v2[:,5] ; Qp2[i2]=v2[:,5]
+        Qs2[i1]=v2[:,4] ; Qs2[i2]=v2[:,4]
+        z2[0]=0
+        z2[1]=v2[0,0]
+        for k in range(1,len(v2)-1):
+            z2[2*k]=z2[2*k-1]
+            z2[2*k+1]=z2[2*k]+v2[k,0]
+        z2[-2]=z2[-3]
+        z2[-1]=zmax
+        mu2=rho2*1000*(svel2*1000)**2
         
+    #plotaroo
+    plt.figure(figsize=(20,5))
+    
+    
+    plt.subplot(161)
+    plt.plot(pvel1,-z1,'k',lw=2)
+    if vel_mod_file2!=None:
+        plt.plot(pvel2,-z2,'r',lw=2)
+        plt.legend([label1,label2],loc=3)
+    plt.xticks(rotation=-45)
+    plt.xlabel('Vp (km/s)')
+    plt.ylabel('Depth (km)')
+    plt.show()
         
-        
- 
+    plt.subplot(162)
+    plt.plot(svel1,-z1,'k',lw=2)
+    if vel_mod_file2!=None:
+        plt.plot(svel2,-z2,'r',lw=2)
+    plt.xticks(rotation=-45)
+    plt.tick_params(axis='y', labelleft='off')
+    plt.xlabel('Vs (km/s)')
+    
+    plt.subplot(163)
+    plt.plot(rho1,-z1,'k',lw=2)
+    if vel_mod_file2!=None:
+        plt.plot(rho2,-z2,'r',lw=2)
+    plt.xticks(rotation=-45)
+    plt.tick_params(axis='y', labelleft='off')
+    plt.xlabel('Density (g/cm^3)')
+    
+    plt.subplot(164)
+    plt.plot(Qp1,-z1,'k',lw=2)
+    if vel_mod_file2!=None:
+        plt.plot(Qp2,-z2,'r',lw=2)
+    plt.xticks(rotation=-45)
+    plt.tick_params(axis='y', labelleft='off')
+    plt.xlabel('Qp')
+    
+    plt.subplot(165)
+    plt.plot(Qs1,-z1,'k',lw=2)
+    if vel_mod_file2!=None:
+        plt.plot(Qs2,-z2,'r',lw=2)
+    plt.xticks(rotation=-45)
+    plt.tick_params(axis='y', labelleft='off')
+    plt.xlabel('Qs') 
+    
+    plt.subplot(166)
+    plt.plot(mu1/1e9,-z1,'k',lw=2)
+    if vel_mod_file2!=None:
+        plt.plot(mu2/1e9,-z2,'r',lw=2)
+    plt.xticks(rotation=-45)
+    plt.tick_params(axis='y', labelleft='off')
+    plt.xlabel('Rigidity (GPa)')    
+    
+    plt.subplots_adjust(top=0.95,bottom=0.2,right=0.95)
+    plt.show()
 
     
 

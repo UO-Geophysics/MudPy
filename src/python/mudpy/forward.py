@@ -256,7 +256,7 @@ def waveforms_matrix(home,project_name,fault_name,rupture_name,station_file,GF_l
 
         
 def waveforms_fakequakes(home,project_name,fault_name,rupture_list,GF_list,
-                model_name,run_name,dt,NFFT,G_from_file,G_name):
+                model_name,run_name,dt,NFFT,G_from_file,G_name,source_time_function):
     '''
     To supplant waveforms_matrix() it needs to include resmapling and all that jazz...
     
@@ -300,7 +300,7 @@ def waveforms_fakequakes(home,project_name,fault_name,rupture_list,GF_list,
         #Get epicentral time
         epicenter,time_epi=read_fakequakes_hypo_time(home,project_name,rupture_name)
         # Put in matrix
-        m,G=get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_name,time_epi,GF_list,epicenter,NFFT)
+        m,G=get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_name,time_epi,GF_list,epicenter,NFFT,source_time_function)
         # Solve
         waveforms=G.dot(m)
         #Write output
@@ -370,7 +370,7 @@ def load_fakequakes_synthetics(home,project_name,fault_name,model_name,GF_list,G
 
 
 
-def get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_name,time_epi,GF_list,epicenter,NFFT):
+def get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_name,time_epi,GF_list,epicenter,NFFT,source_time_function):
     '''
     Assemble Green functions matrix. If requested will parse all available synthetics on file and build the matrix.
     Otherwise, if it exists, it will be loaded from file 
@@ -437,7 +437,7 @@ def get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_nam
             rise=round(rise/dt)*nss.stats.delta
             if rise<(2*dt): #Otherwise get nan's in STF
                 rise=2*dt
-            t_stf,stf=build_source_time_function(rise,dt,NFFT,stf_type='triangle')
+            t_stf,stf=build_source_time_function(rise,dt,NFFT,stf_type=source_time_function)
             nss.data=convolve(nss.data,stf)[0:NFFT]
             ess.data=convolve(ess.data,stf)[0:NFFT]
             zss.data=convolve(zss.data,stf)[0:NFFT]
@@ -1800,29 +1800,48 @@ def build_source_time_function(rise_time,dt,total_time,stf_type='triangle'):
     Compute source time function for a given rise time, right now it assumes 1m of slip
     and a triangle STF
     '''
-    from numpy import zeros,arange,where
+    from numpy import zeros,arange,where,pi,cos,sin,isnan
     from scipy.integrate import trapz
     
     rise_time=float(rise_time)
     #Initialize outputs
     t=arange(0,total_time+dt,dt)
     Mdot=zeros(t.shape)
-    #Triangle gradient
-    m=1/(rise_time**2)
-    #Upwards intercept
-    b1=0
-    #Downwards intercept
-    b2=m*(rise_time)
-    #Assign moment rate
-    i=where(t<=rise_time/2)[0]
-    Mdot[i]=m*t[i]+b1
-    i=where(t>rise_time/2)[0]
-    Mdot[i]=-m*t[i]+b2 
-    i=where(t>rise_time)[0]
-    Mdot[i]=0
-    #Area of traingle must be equal to dt
+    if stf_type=='triangle':
+        #Triangle gradient
+        m=1/(rise_time**2)
+        #Upwards intercept
+        b1=0
+        #Downwards intercept
+        b2=m*(rise_time)
+        #Assign moment rate
+        i=where(t<=rise_time/2)[0]
+        Mdot[i]=m*t[i]+b1
+        i=where(t>rise_time/2)[0]
+        Mdot[i]=-m*t[i]+b2 
+        i=where(t>rise_time)[0]
+        Mdot[i]=0
+    elif stf_type=='cosine':   #From Liu et al. (2006) BSSA, eq 7a,7b
+        tau1=0.13*rise_time
+        tau2=rise_time-tau1
+        Cn=pi/(1.4*pi*tau1+1.2*tau1+0.3*pi*tau2)
+        #Build in pieces
+        i1=where(t<tau1)[0]
+        i2=where((t>=tau1) & (t<2*tau1))[0]
+        i3=where((t>=2*tau1) & (t<rise_time))[0]
+        Mdot[i1]=Cn*(0.7-0.7*cos(t[i1]*pi/tau1)+0.6*sin(0.5*pi*t[i1]/tau1))
+        Mdot[i2]=Cn*(1.0-0.7*cos(t[i2]*pi/tau1)+0.3*cos(pi*(t[i2]-tau1)/tau2))
+        Mdot[i3]=Cn*(0.3+0.3*cos(pi*(t[i3]-tau1)/tau2))
+    else:
+        print 'ERROR: unrecognized STF type '+stf_type
+        return
+    #Area of STF must be equal to dt
     area=trapz(Mdot,t)
     Mdot=Mdot*(dt/area)
+    #Check for errors
+    if isnan(Mdot[0])==True:
+        print 'ERROR: woops, STF has nan values!'
+        return
     return t,Mdot
     
     
