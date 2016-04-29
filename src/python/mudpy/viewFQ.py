@@ -71,8 +71,8 @@ def one_event_pgd_scaling(home,project_name,run_name,run_number,reference='centr
     from mudpy.analysis import pgd_regression
     
     # Read summary file
-    #summary_file=summary_file=home+project_name+'/output/waveforms/'+run_name+'.'+run_number+'/_summary.'+run_name+'.'+run_number+'.txt'
-    summary_file=summary_file=home+project_name+'/output/cosine/'+run_name+'.'+run_number+'/_summary.'+run_name+'.'+run_number+'.txt'
+    summary_file=summary_file=home+project_name+'/output/waveforms/'+run_name+'.'+run_number+'/_summary.'+run_name+'.'+run_number+'.txt'
+    #summary_file=summary_file=home+project_name+'/output/cosine/'+run_name+'.'+run_number+'/_summary.'+run_name+'.'+run_number+'.txt'
 
     lonlat=genfromtxt(summary_file,usecols=[1,2])
     pgd=genfromtxt(summary_file,usecols=[6])*100
@@ -133,8 +133,8 @@ def one_event_pgd_scaling(home,project_name,run_name,run_number,reference='centr
         pgdref_minus=10**(-4.434+1.047*Mw_minus-0.138*Mw_minus*log10(dref))
         plt.plot(dref,pgdref_minus,'#A0A0A0',lw=1.5,label=None)
     #Actual observations
-    ax.scatter(d,pgd,s=60, facecolors='none', edgecolors='m',marker='d',label='cascadia.mod')
-    ax.scatter(d,pgd2,s=60, facecolors='none', edgecolors='k',marker='d',label='gil7.mod')
+    ax.scatter(d,pgd,s=60, facecolors='none', edgecolors='m',marker='d',label='Simulation')
+    #ax.scatter(d,pgd2,s=60, facecolors='none', edgecolors='k',marker='d',label='gil7.mod')
     plt.legend(loc=3)
     plt.xlabel('Station to event distance (km)')
     plt.ylabel('PGD (cm)')
@@ -231,7 +231,7 @@ def pgd_distance_misfit(home,project_name,hist='True',rupture_list='ruptures.lis
         run_name=ruptures[k].split('.')[0]
         run_number=ruptures[k].split('.')[1]
         # Read summary file
-        summary_file=summary_file=home+project_name+'/output/cosine/'+run_name+'.'+run_number+'/_summary.'+run_name+'.'+run_number+'.txt'
+        summary_file=summary_file=home+project_name+'/output/triangle/'+run_name+'.'+run_number+'/_summary.'+run_name+'.'+run_number+'.txt'
         lonlat=genfromtxt(summary_file,usecols=[1,2])
         pgd=genfromtxt(summary_file,usecols=[6])*100
         
@@ -274,7 +274,8 @@ def pgd_distance_misfit(home,project_name,hist='True',rupture_list='ruptures.lis
         run_number=ruptures[k].split('.')[1]
         # Read summary file
         #summary_file=summary_file=home+project_name+'/output/triangle/'+run_name+'.'+run_number+'/_summary.'+run_name+'.'+run_number+'.txt'
-        summary_file='/Users/dmelgar/FakeQuakes/Cascadia_gil7/output/cascadia.mod_scenarios/'+run_name+'.'+run_number+'/_summary.'+run_name+'.'+run_number+'.txt'
+        #summary_file='/Users/dmelgar/FakeQuakes/Cascadia_gil7/output/cascadia.mod_scenarios/'+run_name+'.'+run_number+'/_summary.'+run_name+'.'+run_number+'.txt'
+        summary_file='/Users/dmelgar/FakeQuakes/Cascadia_nolognormal/output/waveforms/'+run_name+'.'+run_number+'/_summary.'+run_name+'.'+run_number+'.txt'
         lonlat=genfromtxt(summary_file,usecols=[1,2])
         pgd=genfromtxt(summary_file,usecols=[6])*100
         
@@ -339,8 +340,8 @@ def pgd_distance_misfit(home,project_name,hist='True',rupture_list='ruptures.lis
         
         fig = plt.figure()
         ax = plt.gca()
-        ax.plot(bin_centers,misfit_bin,c='k',lw=2,label='cascadia.mod')
-        ax.plot(bin_centers,misfit_bin2,c='r',lw=2,label='gil7.mod')
+        ax.plot(bin_centers,misfit_bin,c='k',lw=2,label='log-normal')
+        ax.plot(bin_centers,misfit_bin2,c='r',lw=2,label='normal')
         plt.legend()
         ax.scatter(bin_centers,misfit_bin,c='k',lw=0.5,s=70)
         ax.scatter(bin_centers,misfit_bin2,c='r',lw=0.5,s=70)
@@ -389,7 +390,7 @@ def pgd_magnitude_misfit(home,project_name,hist='True',rupture_list='ruptures.li
         run_name=ruptures[k].split('.')[0]
         run_number=ruptures[k].split('.')[1]
         # Read summary file
-        summary_file=summary_file=home+project_name+'/output/cosine/'+run_name+'.'+run_number+'/_summary.'+run_name+'.'+run_number+'.txt'
+        summary_file=summary_file=home+project_name+'/output/triangle/'+run_name+'.'+run_number+'/_summary.'+run_name+'.'+run_number+'.txt'
         lonlat=genfromtxt(summary_file,usecols=[1,2])
         pgd=genfromtxt(summary_file,usecols=[6])*100
         
@@ -432,7 +433,8 @@ def pgd_magnitude_misfit(home,project_name,hist='True',rupture_list='ruptures.li
         run_number=ruptures[k].split('.')[1]
         # Read summary file
         #summary_file=summary_file=home+project_name+'/output/triangle/'+run_name+'.'+run_number+'/_summary.'+run_name+'.'+run_number+'.txt'
-        summary_file='/Users/dmelgar/FakeQuakes/Cascadia_gil7/output/cascadia.mod_scenarios/'+run_name+'.'+run_number+'/_summary.'+run_name+'.'+run_number+'.txt'
+        #summary_file='/Users/dmelgar/FakeQuakes/Cascadia_gil7/output/cascadia.mod_scenarios/'+run_name+'.'+run_number+'/_summary.'+run_name+'.'+run_number+'.txt'
+        summary_file='/Users/dmelgar/FakeQuakes/Cascadia_nolognormal/output/waveforms/'+run_name+'.'+run_number+'/_summary.'+run_name+'.'+run_number+'.txt'
         lonlat=genfromtxt(summary_file,usecols=[1,2])
         pgd=genfromtxt(summary_file,usecols=[6])*100
         
@@ -497,8 +499,8 @@ def pgd_magnitude_misfit(home,project_name,hist='True',rupture_list='ruptures.li
         
         fig = plt.figure()
         ax = plt.gca()
-        ax.plot(bin_centers,misfit_bin,c='k',lw=2,label='cascadia.mod')
-        ax.plot(bin_centers,misfit_bin2,c='r',lw=2,label='gil7.mod')
+        ax.plot(bin_centers,misfit_bin,c='k',lw=2,label='log-normal')
+        ax.plot(bin_centers,misfit_bin2,c='r',lw=2,label='normal')
         plt.legend()
         ax.scatter(bin_centers,misfit_bin,c='k',lw=0.5,s=70)
         ax.scatter(bin_centers,misfit_bin2,c='r',lw=0.5,s=70)

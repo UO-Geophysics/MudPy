@@ -1832,6 +1832,8 @@ def build_source_time_function(rise_time,dt,total_time,stf_type='triangle'):
         Mdot[i1]=Cn*(0.7-0.7*cos(t[i1]*pi/tau1)+0.6*sin(0.5*pi*t[i1]/tau1))
         Mdot[i2]=Cn*(1.0-0.7*cos(t[i2]*pi/tau1)+0.3*cos(pi*(t[i2]-tau1)/tau2))
         Mdot[i3]=Cn*(0.3+0.3*cos(pi*(t[i3]-tau1)/tau2))
+    elif stf_type=='dreger':
+        pass
     else:
         print 'ERROR: unrecognized STF type '+stf_type
         return

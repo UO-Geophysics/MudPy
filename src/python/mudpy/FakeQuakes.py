@@ -1,9 +1,9 @@
 '''
 D.Melgar 03/2016
 
-Generate syntehtic slip distributions using the K-L expansion method.
-This is modified from RJ Leveque's KL2d_vonKarman notebook to work in 
-a similar way to the MudPy ivnersions
+Generate synthetic slip distributions using the K-L expansion method.
+This grew (a lot) from RJ Leveque's KL2d_vonKarman notebook. I modified
+it to work in a similar way to the MudPy ivnersions
 '''
 
 
@@ -635,7 +635,7 @@ def plot_KLslip(home,project_name,run_name,run_number,fault,mesh_name,target_Mw,
     plt.close()
 
 
-def select_faults(whole_fault,Dstrike,Ddip,target_Mw,buffer_factor,num_modes):
+def select_faults(whole_fault,Dstrike,Ddip,target_Mw,buffer_factor,num_modes,no_shallow_epi=True,hypo_depth=10):
     '''
     Select a random fault to be the hypocenter then based on scaling laws and a 
     target magnitude select only faults within the expected area plus some 
@@ -694,8 +694,18 @@ def select_faults(whole_fault,Dstrike,Ddip,target_Mw,buffer_factor,num_modes):
         #    i=randint(0,len(selected_faults)-1)
         #    hypo_fault=selected_faults[i]
         #    break
+        hypo_found=False
         i=randint(0,len(selected_faults)-1)
         hypo_fault=selected_faults[i]
+        if no_shallow_epi==True:
+            while hypo_found==False:
+                if whole_fault[hypo_fault,3]<hypo_depth:
+                    print '... ... ... hypocenter is km too shallow at %dkm, recalculating...' %(whole_fault[hypo_fault,3])
+                    i=randint(0,len(selected_faults)-1)
+                    hypo_fault=selected_faults[i]
+                else:
+                    hypo_found=True
+                
         break
             
             
@@ -907,7 +917,7 @@ def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
             fault_out[:,10:12]=whole_fault[:,8:]   
             
             #Select only a subset of the faults based on magnitude scaling
-            ifaults,hypo_fault,Lmax,Wmax,Leff,Weff=select_faults(whole_fault,Dstrike,Ddip,target_Mw[kmag],buffer_factor,num_modes)
+            ifaults,hypo_fault,Lmax,Wmax,Leff,Weff=select_faults(whole_fault,Dstrike,Ddip,target_Mw[kmag],buffer_factor,num_modes,no_shallow_epi=True)
             fault_array=whole_fault[ifaults,:]
             Dstrike_selected=Dstrike[ifaults,:][:,ifaults]
             Ddip_selected=Ddip[ifaults,:][:,ifaults]
@@ -935,19 +945,19 @@ def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
             # Lognormal or not?
             if lognormal==False:
                 #Get covariance matrix
-                C_nonlog=get_covariance(mean_slip,C,target_Mw[kmag],fault_array,vel_mod,alpha=0.6) 
+                C_nonlog=get_covariance(mean_slip,C,target_Mw[kmag],fault_array,vel_mod,alpha=0.85) 
                 #Get eigen values and eigenvectors
                 eigenvals,V=get_eigen(C_nonlog)
                 #Generate fake slip pattern
                 rejected=True
                 while rejected==True:
                     slip_unrectified=make_KL_slip(fault_array,num_modes,eigenvals,V,mean_slip,max_slip,lognormal=False)
-                    slip,rejected,percent_negative=rectify_slip(slip_unrectified,percent_reject=10)
+                    slip,rejected,percent_negative=rectify_slip(slip_unrectified,percent_reject=13)
                     if rejected==True:
                         print '... ... ... negative slip threshold exceeeded with %d%% negative slip. Recomputing...' % (percent_negative)
             else:
                 #Get lognormal values
-                C_log,mean_slip_log=get_lognormal(mean_slip,C,target_Mw[kmag],fault_array,vel_mod)               
+                C_log,mean_slip_log=get_lognormal(mean_slip,C,target_Mw[kmag],fault_array,vel_mod,alpha=0.9)               
                 #Get eigen values and eigenvectors
                 eigenvals,V=get_eigen(C_log)
                 #Generate fake slip pattern
