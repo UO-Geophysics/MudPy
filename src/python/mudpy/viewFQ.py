@@ -11,25 +11,51 @@ rc('font', **font)
 from obspy.imaging.cm import pqlx
 
 #Colormap
-cdict = {'red': ((0., 1, 1),
-                (0.10, 1, 1),
-                (0.20, 0, 0),
-                (0.66, 1, 1),
-                (0.89, 1, 1),
-                (1, 0.5, 0.5)),
-        'green': ((0., 1, 1),
-                (0.10, 1, 1),
-                (0.20, 0, 0),
-                (0.375, 1, 1),
-                (0.64, 1, 1),
-                (0.91, 0, 0),
-                (1, 0, 0)),
-        'blue': ((0., 1, 1),
-                (0.15, 1, 1),
-                (0.20, 1, 1),
-                (0.34, 1, 1),
-                (0.65, 0, 0),
-                (1, 0, 0))}
+whitejet_dict = {'red': ((0., 1, 1),
+                 (0.02, 1, 1),
+                 (0.11, 0, 0),
+                 (0.66, 1, 1),
+                 (0.89, 1, 1),
+                 (1, 0.5, 0.5)),
+                'green': ((0., 1, 1),
+                   (0.02, 1, 1),
+                   (0.11, 0, 0),
+                   (0.375, 1, 1),
+                   (0.64, 1, 1),
+                   (0.91, 0, 0),
+                   (1, 0, 0)),
+                'blue': ((0., 1, 1),
+                  (0.02, 1, 1),
+                  (0.11, 1, 1),
+                  (0.34, 1, 1),
+                  (0.65, 0, 0),
+                  (1, 0, 0))}
+
+pqlx_dict={'blue': (( 0.  ,  1.  ,  1.  ),
+            ( 0.1,  1.  ,  1.  ),
+            ( 0.22,  1.  ,  1.  ),
+            ( 0.35 ,  1.  ,  1.  ),
+            ( 0.6 ,  1.  ,  1.  ),
+            ( 0.7 ,  0.  ,  0.  ),
+            ( 0.89 ,  0.  ,  0.  ),
+            ( 1.  ,  0.  ,  0.  )), 
+            'green': (( 0.  ,  1.  ,  1.  ),
+            ( 0.1,  1.  ,  1.  ),
+            ( 0.22,  0.  ,  0.  ),
+            ( 0.35 ,  0.  ,  0. ),
+            ( 0.6 ,  1.  ,  1.  ),
+            ( 0.7 ,  1.  ,  1.  ),
+            ( 0.89 ,  1.  ,  1.  ),
+            ( 1.  ,  0.  ,  0. )), 
+            'red': (( 0.  ,  1.  ,  1.  ),
+            ( 0.1,  1.  ,  1.  ),
+            ( 0.22,  1.  ,  1.  ),
+            ( 0.35 ,  0.  ,  0.  ),
+            ( 0.6 ,  0.  ,  0.  ),
+            ( 0.7 ,  0.  ,  0.  ),
+            ( 0.89 ,  1.  ,  1.  ),
+            ( 1.  ,  1.  ,  1.  ))}
+
 
 def plot_KLslip(home,project_name,run_name,mesh_name,fudge=0.3):
     '''
@@ -52,8 +78,8 @@ def plot_KLslip(home,project_name,run_name,mesh_name,fudge=0.3):
 
     rc('font', **font)
     
-    whitejet = colors.LinearSegmentedColormap('whitejet',cdict,256)
-
+    whitejet = colors.LinearSegmentedColormap('whitejet',whitejet_dict,256)
+    pqlx_colormap = colors.LinearSegmentedColormap('pqlx',pqlx_dict,256)
     
     #Get faults I need to work on
     faults=glob(home+project_name+'/output/ruptures/*.rupt')
@@ -144,7 +170,7 @@ def plot_KLslip(home,project_name,run_name,mesh_name,fudge=0.3):
             subfault = Polygon(coordinates, True)
             patches.append(subfault)
             
-        p1 = PatchCollection(patches,cmap=whitejet,lw=0.1)
+        p1 = PatchCollection(patches,cmap=pqlx_colormap,lw=0.1)
         colors = fault[:,9]
         p1.set_array(colors)
         ax1.add_collection(p1)
@@ -155,7 +181,7 @@ def plot_KLslip(home,project_name,run_name,mesh_name,fudge=0.3):
         stations=genfromtxt(u'/Users/dmelgar/Cascadia/stations/cascadia_gps_small.txt',usecols=[1,2])
         ax1.scatter(stations[:,0],stations[:,1],marker='o',lw=0.8,c='#FF8C00',s=15)
         #hypocenter
-        ax1.scatter(hypo_fault[1],hypo_fault[2],marker='s',lw=0.5,c='#FF69B4',s=40)
+        ax1.scatter(hypo_fault[0],hypo_fault[1],marker='*',lw=0.9,c='#9ACD32',s=300)
         ax1.set_title('Target Mw = %.2f\nActual Mw = %.2f' % (target_Mw,Mw))
         
         
@@ -235,7 +261,7 @@ def plot_KLslip(home,project_name,run_name,mesh_name,fudge=0.3):
         stations=genfromtxt(u'/Users/dmelgar/Cascadia/stations/cascadia_gps_small.txt',usecols=[1,2])
         ax2.scatter(stations[:,0],stations[:,1],marker='o',lw=0.8,c='#FF8C00',s=15)
         #hypocenter
-        ax2.scatter(hypo_fault[1],hypo_fault[2],marker='s',lw=0.5,c='#FF69B4',s=40)
+        ax2.scatter(hypo_fault[0],hypo_fault[1],marker='*',lw=0.9,c='#9ACD32',s=300)
         #plt.title('Target Mw = %.2f\nActual Mw = %.2f' % (target_Mw,Mw))
         
         
@@ -304,7 +330,7 @@ def plot_KLslip(home,project_name,run_name,mesh_name,fudge=0.3):
             subfault = Polygon(coordinates, True)
             patches.append(subfault)
             
-        p3 = PatchCollection(patches,cmap=pqlx,lw=0.1)
+        p3 = PatchCollection(patches,cmap=whitejet,lw=0.1)
         colors=fault[:,12]
         p3.set_array(colors)
         ax3.add_collection(p3)
@@ -315,7 +341,7 @@ def plot_KLslip(home,project_name,run_name,mesh_name,fudge=0.3):
         stations=genfromtxt(u'/Users/dmelgar/Cascadia/stations/cascadia_gps_small.txt',usecols=[1,2])
         ax3.scatter(stations[:,0],stations[:,1],marker='o',lw=0.8,c='#FF8C00',s=15)
         #hypocenter
-        ax3.scatter(hypo_fault[1],hypo_fault[2],marker='s',lw=0.5,c='#FF69B4',s=40)
+        ax3.scatter(hypo_fault[0],hypo_fault[1],marker='*',lw=0.9,c='#9ACD32',s=300)
         #plt.title('Target Mw = %.2f\nActual Mw = %.2f' % (target_Mw,Mw))
         
                 

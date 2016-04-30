@@ -458,7 +458,8 @@ def get_rise_times(M0,slip,fault_array,rise_time_depths):
     M0=M0*1e7
     
     #Determine average rise time based on total moment of the event (Graves,Pitarka, 2010, eq. 8)
-    tau_average=0.82*1.6*1e-9*M0**(1./3)
+    #tau_average=0.82*1.6*1e-9*M0**(1./3) #This is what Graves and Pitarka use
+    tau_average=2.0*1e-9*M0**(1./3)  #This is the original from Sommerville 1999 SRL, page 74
     
     #Determine slope and intercept of k-scaling line
     slope=1./(rise_time_depths[0]-rise_time_depths[1])
