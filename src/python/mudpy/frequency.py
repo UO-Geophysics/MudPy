@@ -68,6 +68,43 @@ def allpsd(home,project_name,run_name,run_number,GF_list,d_or_s,v_or_d,decimate,
         #Write to file
         savez(outpath+outname,fn=fn,fe=fe,fu=fu,npsd=npsd,epsd=epsd,upsd=upsd)
 
+
+
+def fakequakes_allpsd(home,project_name,run_name):
+    '''
+    Compute PSDs for either all the synthetics fo a aprticular run or all the data
+    '''
+    
+    from numpy import savez
+    from obspy import read
+    import nitime.algorithms as tsa
+    from glob import glob
+    from os import path,makedirs
+    
+    #Decide what I'm going to work on
+    paths=glob(home+run_name+'/output/waveforms/'+run_name+'.*')
+    for k in range(len(paths)):
+        waveforms=glob(paths[k]+'/*.sac')
+        print 'Working on '+paths[k]
+        outpath=home+project_name+'/analysis/frequency/'+paths[k].split('/')[-1]
+        if not path.exists(outpath):
+            makedirs(outpath)
+        for ksta in range(len(waveforms)):
+            sta=waveforms[ksta].split('/')[-1].split('.')[0]
+            n=read(paths[k]+'/'+sta+'.LYN.sac')
+            e=read(paths[k]+'/'+sta+'.LYE.sac')
+            u=read(paths[k]+'/'+sta+'.LYZ.sac')
+            outname=sta+'.psd'
+            #Compute spectra
+            fn, npsd, nu = tsa.multi_taper_psd(n[0].data,Fs=1./n[0].stats.delta,adaptive=True,jackknife=False,low_bias=True,NFFT=512)
+            fe, epsd, nu = tsa.multi_taper_psd(e[0].data,Fs=1./e[0].stats.delta,adaptive=True,jackknife=False,low_bias=True,NFFT=512)
+            fu, upsd, nu = tsa.multi_taper_psd(u[0].data,Fs=1./u[0].stats.delta,adaptive=True,jackknife=False,low_bias=True,NFFT=512)
+            #Write to file
+            
+            savez(outpath+'/'+outname,fn=fn,fe=fe,fu=fu,npsd=npsd,epsd=epsd,upsd=upsd)
+
+
+
             
 def allcoherence(home,project_name,run_name,run_number,GF_list,v_or_d,decimate,lowpass):
     '''

@@ -299,13 +299,15 @@ def get_eigen(C):
     return eigenvals,V
     
     
-def make_KL_slip(fault,num_modes,eigenvals,V,mean_slip,max_slip,lognormal=True):
+def make_KL_slip(fault,num_modes,eigenvals,V,mean_slip,max_slip,lognormal=True,maxiter=5):
     '''
     Make slip map using num_modes
     '''
     from numpy import sqrt,exp
     from numpy.random import randn
     
+    iterations=0
+    success=False
     while True:
         #Generate random numbers
         if len(fault)>num_modes:
@@ -321,8 +323,13 @@ def make_KL_slip(fault,num_modes,eigenvals,V,mean_slip,max_slip,lognormal=True):
             KL_slip = exp(KL_slip)
         #Check if max_slip condition is met, if so then you're done
         if KL_slip.max()<=max_slip:
+            success=True
             break
-    return KL_slip
+        iterations+=1
+        if iterations>maxiter:
+            print'... ... ... improper eigenvalues, recalculating...'
+            break
+    return KL_slip,success
 
 
 def rectify_slip(slip_unrectified,percent_reject=10):
@@ -916,54 +923,57 @@ def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
             fault_out[:,0:8]=whole_fault[:,0:8]
             fault_out[:,10:12]=whole_fault[:,8:]   
             
-            #Select only a subset of the faults based on magnitude scaling
-            ifaults,hypo_fault,Lmax,Wmax,Leff,Weff=select_faults(whole_fault,Dstrike,Ddip,target_Mw[kmag],buffer_factor,num_modes,no_shallow_epi=True)
-            fault_array=whole_fault[ifaults,:]
-            Dstrike_selected=Dstrike[ifaults,:][:,ifaults]
-            Ddip_selected=Ddip[ifaults,:][:,ifaults]
+            #Sucess criterion
+            success=False
+            while success==False:
+                #Select only a subset of the faults based on magnitude scaling
+                ifaults,hypo_fault,Lmax,Wmax,Leff,Weff=select_faults(whole_fault,Dstrike,Ddip,target_Mw[kmag],buffer_factor,num_modes,no_shallow_epi=True)
+                fault_array=whole_fault[ifaults,:]
+                Dstrike_selected=Dstrike[ifaults,:][:,ifaults]
+                Ddip_selected=Ddip[ifaults,:][:,ifaults]
+                
+                #Determine correlation lengths from effective length.width Leff and Weff
+                if Lstrike=='auto': #Use scaling
+                    #Ls=10**(-2.43+0.49*target_Mw)
+                    Ls=2.0+(1./3)*Leff
+                    #Ls=2.0+(1./3)*Lmax
+                else:
+                    Ls=Lstrike
+                if Ldip=='auto': #Use scaling
+                    #Ld=10**(-1.79+0.38*target_Mw)
+                    #Ld=1.0+(1./3)*Weff
+                    Ld=1.0+(1./3)*Wmax
+                else:
+                    Ld=Ldip
+                
+                #Get the mean uniform slip for the target magnitude
+                mean_slip,mu=get_mean_slip(target_Mw[kmag],fault_array,vel_mod)
+                
+                #Get correlation matrix
+                C=vonKarman_correlation(Dstrike_selected,Ddip_selected,Ls,Ld,hurst)
+                
+                # Lognormal or not?
+                if lognormal==False:
+                    #Get covariance matrix
+                    C_nonlog=get_covariance(mean_slip,C,target_Mw[kmag],fault_array,vel_mod,alpha=0.85) 
+                    #Get eigen values and eigenvectors
+                    eigenvals,V=get_eigen(C_nonlog)
+                    #Generate fake slip pattern
+                    rejected=True
+                    while rejected==True:
+                        slip_unrectified,success=make_KL_slip(fault_array,num_modes,eigenvals,V,mean_slip,max_slip,lognormal=False)
+                        slip,rejected,percent_negative=rectify_slip(slip_unrectified,percent_reject=13)
+                        if rejected==True:
+                            print '... ... ... negative slip threshold exceeeded with %d%% negative slip. Recomputing...' % (percent_negative)
+                else:
+                    #Get lognormal values
+                    C_log,mean_slip_log=get_lognormal(mean_slip,C,target_Mw[kmag],fault_array,vel_mod,alpha=0.9)               
+                    #Get eigen values and eigenvectors
+                    eigenvals,V=get_eigen(C_log)
+                    #Generate fake slip pattern
+                    slip,success=make_KL_slip(fault_array,num_modes,eigenvals,V,mean_slip_log,max_slip,lognormal=True)
             
-            #Determine correlation lengths from effective length.width Leff and Weff
-            if Lstrike=='auto': #Use scaling
-                #Ls=10**(-2.43+0.49*target_Mw)
-                Ls=2.0+(1./3)*Leff
-                #Ls=2.0+(1./3)*Lmax
-            else:
-                Ls=Lstrike
-            if Ldip=='auto': #Use scaling
-                #Ld=10**(-1.79+0.38*target_Mw)
-                #Ld=1.0+(1./3)*Weff
-                Ld=1.0+(1./3)*Wmax
-            else:
-                Ld=Ldip
-            
-            #Get the mean uniform slip for the target magnitude
-            mean_slip,mu=get_mean_slip(target_Mw[kmag],fault_array,vel_mod)
-            
-            #Get correlation matrix
-            C=vonKarman_correlation(Dstrike_selected,Ddip_selected,Ls,Ld,hurst)
-            
-            # Lognormal or not?
-            if lognormal==False:
-                #Get covariance matrix
-                C_nonlog=get_covariance(mean_slip,C,target_Mw[kmag],fault_array,vel_mod,alpha=0.85) 
-                #Get eigen values and eigenvectors
-                eigenvals,V=get_eigen(C_nonlog)
-                #Generate fake slip pattern
-                rejected=True
-                while rejected==True:
-                    slip_unrectified=make_KL_slip(fault_array,num_modes,eigenvals,V,mean_slip,max_slip,lognormal=False)
-                    slip,rejected,percent_negative=rectify_slip(slip_unrectified,percent_reject=13)
-                    if rejected==True:
-                        print '... ... ... negative slip threshold exceeeded with %d%% negative slip. Recomputing...' % (percent_negative)
-            else:
-                #Get lognormal values
-                C_log,mean_slip_log=get_lognormal(mean_slip,C,target_Mw[kmag],fault_array,vel_mod,alpha=0.9)               
-                #Get eigen values and eigenvectors
-                eigenvals,V=get_eigen(C_log)
-                #Generate fake slip pattern
-                slip=make_KL_slip(fault_array,num_modes,eigenvals,V,mean_slip_log,max_slip,lognormal=True)
-
-            
+            #Slip pattern sucessfully made, moving on.
             #Rigidities
             foo,mu=get_mean_slip(target_Mw[kmag],whole_fault,vel_mod)
             fault_out[:,13]=mu
@@ -1016,8 +1026,8 @@ def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
             f.write('Maximum width Wmax: %.2f km\n' % Wmax)
             f.write('Effective length Leff: %.2f km\n' % Leff)
             f.write('Effective width Weff: %.2f km\n' % Weff)
-            f.write('Target magnitude: Mw %.2f\n' % target_Mw[kmag])
-            f.write('Actual magnitude: Mw %.2f\n' % Mw)
+            f.write('Target magnitude: Mw %.4f\n' % target_Mw[kmag])
+            f.write('Actual magnitude: Mw %.4f\n' % Mw)
             f.write('Hypocenter (lon,lat,z[km]): (%.6f,%.6f,%.2f)\n' %(hypocenter[0],hypocenter[1],hypocenter[2]))
             f.write('Hypocenter time: %s\n' % time_epi)
             f.write('Centroid (lon,lat,z[km]): (%.6f,%.6f,%.2f)\n' %(centroid_lon,centroid_lat,centroid_z))

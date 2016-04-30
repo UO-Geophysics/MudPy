@@ -57,7 +57,94 @@ def plot_LW_scaling(home,project_name,run_name):
     plt.show()
     
     plt.subplots_adjust(bottom=0.17)
+ 
     
+def analyze_sources(home,project_name,run_name):
+    '''
+    Basic parameters of the sources
+    '''
+    
+    from glob import glob
+    from numpy import zeros,arange,log10,genfromtxt,sqrt
+    from matplotlib import pyplot as plt
+    
+    logs=glob(home+project_name+'/output/ruptures/'+run_name+'*.log')
+    ruptures=glob(home+project_name+'/output/ruptures/'+run_name+'*.rupt')
+    L=zeros(len(logs))
+    W=zeros(len(logs))
+    Mw_target=zeros(len(logs))
+    Mw_actual=zeros(len(logs))
+    slip_mean=zeros(len(logs))
+    slip_max=zeros(len(logs))
+    slip_stdev=zeros(len(logs))
+    for k in range(len(logs)):
+        f=open(logs[k],'r')
+        while True:
+            line=f.readline()
+            if 'Lmax' in line:
+                L[k]=float(line.split(':')[-1].split()[0])
+            if 'Wmax' in line:
+                W[k]=float(line.split(':')[-1].split()[0])
+            if 'Target magnitude' in line:
+                Mw_target[k]=float(line.split()[-1])
+            if 'Actual magnitude' in line:
+                Mw_actual[k]=float(line.split()[-1])
+                break
+        #now go look in rupture files for slip aprameters
+        source=genfromtxt(ruptures[k])
+        slip=sqrt(source[:,8]**2+source[:,9]**2)
+        slip_mean[k]=slip.mean()
+        slip_max[k]=slip.max()
+        slip_stdev[k]=slip.std()
+    #Make plot
+    plt.figure(figsize=(15,7))
+    
+    plt.subplot(231)
+    Mw_synth=arange(7.8,9.3,0.1)
+    plt.plot(Mw_synth,-2.37+0.57*Mw_synth,c='k',lw=2)
+    plt.scatter(Mw_actual,log10(L),marker='+')
+    plt.xlim([7.75,9.35])
+    plt.xlabel('Actual Mw')
+    plt.ylabel('log (L) [km]')
+    plt.annotate(r'$\log (L)=-2.37+0.57M_w$',xy=(7.9,3.0))
+    
+    plt.subplot(232)
+    plt.plot(Mw_synth,-1.86+0.46*Mw_synth,c='k',lw=2)
+    plt.scatter(Mw_actual,log10(W),marker='+')
+    plt.xlim([7.75,9.35])
+    plt.xlabel('Actual Mw')
+    plt.ylabel('log (W) [km]')
+    plt.annotate(r'$\log (W)=-1.86+0.46M_w$',xy=(7.9,2.4))
+    
+    plt.subplot(233)
+    plt.scatter(Mw_actual,Mw_target,marker='+')
+    plt.xlim([7.75,9.35])
+    plt.xlabel('Actual Mw')
+    plt.ylabel('Target Mw')
+    
+    plt.subplot(234)
+    plt.scatter(Mw_actual,slip_mean,marker='+')
+    plt.xlim([7.75,9.35])
+    plt.xlabel('Actual Mw')
+    plt.ylabel('Mean slip (m)')
+    
+    plt.subplot(235)
+    plt.scatter(Mw_actual,slip_max,marker='+')
+    plt.xlim([7.75,9.35])
+    plt.xlabel('Actual Mw')
+    plt.ylabel('Peak slip (m)')
+    
+    plt.subplot(236)
+    plt.scatter(Mw_actual,slip_stdev,marker='+')
+    plt.xlim([7.75,9.35])
+    plt.xlabel('Actual Mw')
+    plt.ylabel('Slip Std.Dev. (m)')
+    
+    plt.show()
+    
+    plt.subplots_adjust(bottom=0.1,left=0.06,right=0.97,top=0.97)
+    
+                        
 
 def one_event_pgd_scaling(home,project_name,run_name,run_number,reference='centroid',dist_lims=[1,1000],plus_minus=[0.1,0.2,0.3]):
     '''
@@ -231,7 +318,7 @@ def pgd_distance_misfit(home,project_name,hist='True',rupture_list='ruptures.lis
         run_name=ruptures[k].split('.')[0]
         run_number=ruptures[k].split('.')[1]
         # Read summary file
-        summary_file=summary_file=home+project_name+'/output/triangle/'+run_name+'.'+run_number+'/_summary.'+run_name+'.'+run_number+'.txt'
+        summary_file=summary_file=home+project_name+'/output/waveforms/'+run_name+'.'+run_number+'/_summary.'+run_name+'.'+run_number+'.txt'
         lonlat=genfromtxt(summary_file,usecols=[1,2])
         pgd=genfromtxt(summary_file,usecols=[6])*100
         
@@ -332,19 +419,24 @@ def pgd_distance_misfit(home,project_name,hist='True',rupture_list='ruptures.lis
         bin_centers=zeros(len(bin_edges)-1)
         misfit_bin=zeros(len(bin_edges)-1)
         misfit_bin2=zeros(len(bin_edges)-1)
+        misfit_stdev=zeros(len(bin_edges)-1)
         for k in range(len(bin_edges)-1):
             i=where((d_all>=bin_edges[k]) & (d_all<bin_edges[k+1]))[0]
             misfit_bin[k]=misfit[i].mean()
             misfit_bin2[k]=misfit2[i].mean()
+            misfit_stdev[k]=misfit[i].std()
             bin_centers[k]=10**(log10(bin_edges[k+1])-(log10(bin_edges[k+1])-log10(bin_edges[k]))/2)
         
-        fig = plt.figure()
+        fig = plt.figure(figsize=(9,5))
         ax = plt.gca()
         ax.plot(bin_centers,misfit_bin,c='k',lw=2,label='log-normal')
-        ax.plot(bin_centers,misfit_bin2,c='r',lw=2,label='normal')
-        plt.legend()
+        #ax.plot(bin_centers,misfit_bin2,c='r',lw=2,label='normal')
+        plt.legend(loc=2)
+        ax.scatter(d_all,misfit,c='#909090',s=5,lw=0)
         ax.scatter(bin_centers,misfit_bin,c='k',lw=0.5,s=70)
-        ax.scatter(bin_centers,misfit_bin2,c='r',lw=0.5,s=70)
+        ax.plot(bin_centers,misfit_bin+1.64*misfit_stdev,c='k',lw=1)
+        ax.plot(bin_centers,misfit_bin-1.64*misfit_stdev,c='k',lw=1)
+        #ax.scatter(bin_centers,misfit_bin2,c='r',lw=0.5,s=70)
         ax.set_xscale('log')
         ax = plt.gca()
         ax.xaxis.set_major_locator(xmajorLocator)
@@ -364,7 +456,7 @@ def pgd_distance_misfit(home,project_name,hist='True',rupture_list='ruptures.lis
                                                         
  
  
-def pgd_magnitude_misfit(home,project_name,hist='True',rupture_list='ruptures.list',Mw_lims=[7.8,9.5],A=-4.434,B=1.047,C=-0.138,misfit_lims=[-3,3],nbins=10):
+def pgd_magnitude_misfit(home,project_name,hist=True,rupture_list='ruptures.list',Mw_lims=[7.8,9.5],A=-4.434,B=1.047,C=-0.138,misfit_lims=[-3,3],nbins=10):
     '''
     Make PGD scaling plot
     '''
@@ -390,7 +482,7 @@ def pgd_magnitude_misfit(home,project_name,hist='True',rupture_list='ruptures.li
         run_name=ruptures[k].split('.')[0]
         run_number=ruptures[k].split('.')[1]
         # Read summary file
-        summary_file=summary_file=home+project_name+'/output/triangle/'+run_name+'.'+run_number+'/_summary.'+run_name+'.'+run_number+'.txt'
+        summary_file=summary_file=home+project_name+'/output/waveforms/'+run_name+'.'+run_number+'/_summary.'+run_name+'.'+run_number+'.txt'
         lonlat=genfromtxt(summary_file,usecols=[1,2])
         pgd=genfromtxt(summary_file,usecols=[6])*100
         
@@ -426,7 +518,7 @@ def pgd_magnitude_misfit(home,project_name,hist='True',rupture_list='ruptures.li
     #Second set of pgd's
     pgd_all2=array([])
     d_all=array([])
-    Mw_all=array([])
+    Mw_all2=array([])
     pgd_predicted_all=array([])
     for k in range(len(ruptures)):
         run_name=ruptures[k].split('.')[0]
@@ -463,7 +555,7 @@ def pgd_magnitude_misfit(home,project_name,hist='True',rupture_list='ruptures.li
         #Concatente to output variables
         pgd_all2=r_[pgd_all2,pgd]
         d_all=r_[d_all,d]
-        Mw_all=r_[Mw_all,Mw*ones(len(d))]                   
+        Mw_all2=r_[Mw_all2,Mw*ones(len(d))]                   
         pgd_predicted_all=r_[pgd_predicted_all,pgd_predicted]    
     
     
@@ -490,20 +582,31 @@ def pgd_magnitude_misfit(home,project_name,hist='True',rupture_list='ruptures.li
         bin_edges=linspace(Mw_all.min(),Mw_all.max(),nbins)
         bin_centers=zeros(len(bin_edges)-1)
         misfit_bin=zeros(len(bin_edges)-1)
+        misfit_stdev=zeros(len(bin_edges)-1)
         misfit_bin2=zeros(len(bin_edges)-1)
         for k in range(len(bin_edges)-1):
             i=where((Mw_all>=bin_edges[k]) & (Mw_all<bin_edges[k+1]))[0]
             misfit_bin[k]=misfit[i].mean()
+            misfit_stdev[k]=misfit[i].std()
             misfit_bin2[k]=misfit2[i].mean()
             bin_centers[k]=bin_edges[k+1]-((bin_edges[k+1]-bin_edges[k])/2)
         
-        fig = plt.figure()
+        fig = plt.figure(figsize=(9,5))
         ax = plt.gca()
+        #Plot lines for legend
         ax.plot(bin_centers,misfit_bin,c='k',lw=2,label='log-normal')
-        ax.plot(bin_centers,misfit_bin2,c='r',lw=2,label='normal')
-        plt.legend()
+        #ax.plot(bin_centers,misfit_bin2,c='r',lw=2,label='normal')
+        plt.legend(loc=2)
+        #Plot all events in background
+        ax.scatter(Mw_all,misfit,c='#909090',s=5,lw=0)
         ax.scatter(bin_centers,misfit_bin,c='k',lw=0.5,s=70)
-        ax.scatter(bin_centers,misfit_bin2,c='r',lw=0.5,s=70)
+        ax.plot(bin_centers,misfit_bin+1.64*misfit_stdev,c='k',lw=1)
+        ax.plot(bin_centers,misfit_bin-1.64*misfit_stdev,c='k',lw=1)
+        #Plot again over the event ones
+        ax.plot(bin_centers,misfit_bin,c='k',lw=2)
+        #ax.plot(bin_centers,misfit_bin2,c='r',lw=2)
+        ax.scatter(bin_centers,misfit_bin,c='k',lw=0.5,s=70)
+        #ax.scatter(bin_centers,misfit_bin2,c='r',lw=0.5,s=70)
         # Plot reference line
         plt.xlabel('Event magnitude (Mw)')
         plt.ylabel('Ln(Simulation / GMPE)')
@@ -519,9 +622,155 @@ def pgd_magnitude_misfit(home,project_name,hist='True',rupture_list='ruptures.li
         ax.tick_params(which='minor',length=4,width=1)
         plt.grid()
     plt.show()        
-      
-          
+   
+         
+def pgd_2D_misfit(home,project_name,rupture_list='ruptures.list',Mw_lims=[7.8,9.5],dist_lims=[10,1000],A=-4.434,B=1.047,C=-0.138,misfit_lims=[-3,3],n_mag_bins=10,n_dist_bins=10):
+    '''
+    Plot misfit as a function of both distance and magnitude
+    '''
+    from obspy.geodetics.base import gps2dist_azimuth
+    from numpy import genfromtxt,array,zeros,logspace,linspace,r_,log,genfromtxt,log10,ones,where,arange,median,mean
+    from matplotlib import pyplot as plt
+    from matplotlib import cm
+    from string import replace
+    from matplotlib.ticker import MultipleLocator,LogLocator,MaxNLocator
+    
+    xmajorLocator = LogLocator(base=10.0, subs=[1])
+    xminorLocator = MultipleLocator(1)
+    ymajorLocator = MultipleLocator(1)
+    yminorLocator = MultipleLocator(0.2)
+    
+    ruptures=genfromtxt(home+project_name+'/data/'+rupture_list,dtype='S')
+    pgd_all=array([])
+    d_all=array([])
+    Mw_all=array([])
+    pgd_predicted_all=array([])
+    for k in range(len(ruptures)):
+        run_name=ruptures[k].split('.')[0]
+        run_number=ruptures[k].split('.')[1]
+        # Read summary file
+        summary_file=summary_file=home+project_name+'/output/waveforms/'+run_name+'.'+run_number+'/_summary.'+run_name+'.'+run_number+'.txt'
+        lonlat=genfromtxt(summary_file,usecols=[1,2])
+        pgd=genfromtxt(summary_file,usecols=[6])*100
+        
+        # Get hypocenter or centroid
+        event_log=home+project_name+'/output/ruptures/'+run_name+'.'+run_number+'.log'
+        f=open(event_log,'r')
+        loop_go=True
+        while loop_go:
+            line=f.readline()
+            if 'Centroid (lon,lat,z[km])' in line:                
+                s=replace(line.split(':')[-1],'(','')
+                s=replace(s,')','')
+                hypo=array(s.split(',')).astype('float')
+                loop_go=False       
+            if 'Actual magnitude' in line:
+                Mw=float(line.split(':')[-1].split(' ')[-1])
+    
+        #compute station to hypo distances
+        d=zeros(len(lonlat))
+        for k in range(len(lonlat)):
+            d[k],az,baz=gps2dist_azimuth(lonlat[k,1],lonlat[k,0],hypo[1],hypo[0])
+            d[k]=d[k]/1000   
+           
+        #Get predicted
+        pgd_predicted=10**(A+B*Mw+C*Mw*log10(d))
+        #Concatente to output variables
+        pgd_all=r_[pgd_all,pgd]
+        d_all=r_[d_all,d]
+        Mw_all=r_[Mw_all,Mw*ones(len(d))]                   
+        pgd_predicted_all=r_[pgd_predicted_all,pgd_predicted]               
+    #Get misfits             
+    misfit=log(pgd_all/pgd_predicted_all)                    
+   
+    #plotting
+    bin_edges_x=linspace(Mw_all.min(),Mw_all.max(),n_mag_bins)
+    bin_centers_x=zeros(len(bin_edges_x)-1)
+    bin_edges_y=logspace(log10(dist_lims[0]),log10(dist_lims[1]),n_dist_bins)
+    bin_centers_y=zeros(len(bin_edges_y)-1)
+    misfit_bin=zeros((len(bin_edges_x)-1,len(bin_edges_y)-1))
+    stdev_bin=zeros((len(bin_edges_x)-1,len(bin_edges_y)-1))
+    frequency_bin=zeros((len(bin_edges_x)-1,len(bin_edges_y)-1))
+        
+    for kx in range(len(bin_centers_x)):
+        for ky in range(len(bin_centers_y)):
+            i=where((Mw_all>=bin_edges_x[kx]) & (Mw_all<bin_edges_x[kx+1]) & (d_all>=bin_edges_y[ky]) & (d_all<bin_edges_y[ky+1]))[0]
+            misfit_bin[kx,ky]=0.5*(abs(mean(misfit[i])))+0.5*mean(abs(misfit))
+            #misfit_bin[kx,ky]=median(misfit[i])
+            stdev_bin[kx,ky]=misfit[i].std()
+            frequency_bin[kx,ky]=len(misfit[i])
+            bin_centers_x[kx]=bin_edges_x[kx+1]-((bin_edges_x[kx+1]-bin_edges_x[kx])/2)        
+            bin_centers_y[ky]=bin_edges_y[ky+1]-((bin_edges_y[ky+1]-bin_edges_y[ky])/2) 
+            
+    fig=plt.figure(figsize=(15,5)) 
+    
+    plt.subplot(131)                           
+    PM=plt.pcolormesh(bin_edges_x,bin_edges_y,misfit_bin.T,vmin=-1.5,vmax=1.5,cmap=cm.RdBu_r)
+    CS = plt.contour(bin_centers_x,bin_centers_y,misfit_bin.T,colors='#505050',levels=arange(-3,3.1,0.5))
+    plt.clabel(CS, inline=1, fontsize=14,fmt='%1.1f')
+    ax = plt.gca()    
+    ax.set_yscale('log')
+    plt.xlim([bin_edges_x.min(),bin_edges_x.max()])
+    plt.ylim([bin_edges_y.min(),bin_edges_y.max()])
+    ax.xaxis.tick_top()
+    ax.xaxis.set_label_position("top") 
+    plt.xlabel('Magnitude')
+    plt.ylabel('Distance (km)')
+    cb = plt.colorbar(PM, orientation='horizontal',pad = 0.02) 
+    cb.set_label('Ln(Simulation / GMPE)')
+    levs=cb.ax.get_xticks()
+    cb.ax.set_xticklabels(levs,rotation=-55)
+    tick_locator = MaxNLocator(nbins=6)
+    cb.locator = tick_locator
+    cb.update_ticks()
+    
+    plt.subplot(132)
+    PM=plt.pcolormesh(bin_edges_x,bin_edges_y,stdev_bin.T,vmin=0,vmax=1.5,cmap=cm.gist_heat_r)
+    CS = plt.contour(bin_centers_x,bin_centers_y,misfit_bin.T,colors='#505050',levels=arange(-3,3.1,0.5))
+    plt.clabel(CS, inline=1, fontsize=14,fmt='%1.1f')
+    #plt.clabel(CS, inline=1, fontsize=14,fmt='%1.1f')
+    ax = plt.gca()    
+    ax.set_yscale('log')
+    plt.xlim([bin_edges_x.min(),bin_edges_x.max()])
+    plt.ylim([bin_edges_y.min(),bin_edges_y.max()])
+    ax.xaxis.tick_top()
+    ax.xaxis.set_label_position("top") 
+    plt.xlabel('Magnitude')
+    plt.tick_params(axis='y',labelleft='off')
+    cb = plt.colorbar(PM, orientation='horizontal',pad = 0.02) 
+    cb.set_label('Misfit Std. Dev.')
+    levs=cb.ax.get_xticks()
+    cb.ax.set_xticklabels(levs,rotation=-55)
+    tick_locator = MaxNLocator(nbins=5)
+    cb.locator = tick_locator
+    cb.update_ticks()
+    
+    plt.subplot(133)
+    PM=plt.pcolormesh(bin_edges_x,bin_edges_y,frequency_bin.T,cmap=cm.magma_r)
+    CS = plt.contour(bin_centers_x,bin_centers_y,misfit_bin.T,colors='#505050',levels=arange(-3,3.1,0.5))
+    plt.clabel(CS, inline=1, fontsize=14,fmt='%1.1f')
+    #plt.clabel(CS, inline=1, fontsize=14,fmt='%1.1f')
+    ax = plt.gca()    
+    ax.set_yscale('log')
+    plt.xlim([bin_edges_x.min(),bin_edges_x.max()])
+    plt.ylim([bin_edges_y.min(),bin_edges_y.max()])
+    ax.xaxis.tick_top()
+    ax.xaxis.set_label_position("top") 
+    plt.xlabel('Magnitude')
+    plt.tick_params(axis='y',labelleft='off')
+    cb = plt.colorbar(PM, orientation='horizontal',pad = 0.02) 
+    cb.set_label('# of waveforms')
+    levs=cb.ax.get_xticks()
+    cb.ax.set_xticklabels(levs,rotation=-55)
+    tick_locator = MaxNLocator(nbins=6)
+    cb.locator = tick_locator
+    cb.update_ticks()
+    
+    plt.subplots_adjust(left=0.08,top=0.88,right=0.97,bottom=0.1,wspace=0.07)
+                                                                   
+           
                 
+                          
 def record_section(home,project_name,GF_list,rupture,factor=10):
     '''
     Plot record section
@@ -867,3 +1116,57 @@ def plot_pgd_decay(home,project_name,rupture_list='ruptures.list'):
     plt.ylabel('log(PGD) distance decay')
     plt.show()
     
+
+def amplitude_all(home,project_name,nbins_ampl=20,nbins_freq=20,ampl_lims=[1e-10,1e0],freq_lims=[1e5,0.5]):
+    '''
+    Plot all PSD's
+    '''
+    
+    from glob import glob
+    from numpy import load,logspace,log10,zeros,histogram2d
+    from matplotlib import cm
+    from matplotlib import pyplot as plt
+    from obspy.imaging.cm import pqlx
+
+    
+    paths=glob(home+project_name+'/analysis/frequency/*')
+    #Define bins
+    bin_edges_x=logspace(log10(freq_lims[0]),log10(freq_lims[1]),nbins_freq)
+    bin_edges_y=logspace(log10(ampl_lims[0]),log10(ampl_lims[1]),nbins_ampl)
+    bin_centers_x=zeros(len(bin_edges_x)-1)
+    bin_centers_y=zeros(len(bin_edges_y)-1)
+    hit_count=zeros((len(bin_centers_x),len(bin_centers_y)))   
+    for krupt in range(len(paths)):
+        print paths[krupt]
+        PSDs=glob(paths[krupt]+'/*.npz')
+        for kpsd in range(len(PSDs)):
+            psd=load(PSDs[kpsd])
+            nspec=psd['npsd']**0.5
+            espec=psd['epsd']**0.5
+            uspec=psd['upsd']**0.5
+            #Normalize
+            nspec=nspec/nspec.max()
+            espec=espec/espec.max()
+            uspec=uspec/uspec.max()
+            #Frequencies
+            fn=psd['fn']
+            fe=psd['fe']
+            fu=psd['fu']
+            #Get hit count
+            H,xb,yb=histogram2d(fn,nspec, bins=(bin_edges_x,bin_edges_y))
+            hit_count=hit_count+H
+            
+    plt.figure()
+    PM=plt.pcolormesh(bin_edges_x,bin_edges_y,hit_count/hit_count.sum(),cmap=pqlx)
+    ax = plt.gca()    
+    ax.set_yscale('log')
+    ax.set_xscale('log')
+    plt.xlim([bin_edges_x.min(),bin_edges_x.max()])
+    plt.ylim([bin_edges_y.min(),bin_edges_y.max()])
+    plt.xlabel('Frequency (Hz)')
+    plt.ylabel('Amplitude (m/Hz)^0.5')
+    cb = plt.colorbar(PM) 
+    cb.set_label('Probability')
+            
+            
+        
