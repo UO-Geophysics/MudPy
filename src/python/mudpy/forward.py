@@ -1795,12 +1795,12 @@ def convolution_matrix(h):
     return Hfinal
     
     
-def build_source_time_function(rise_time,dt,total_time,stf_type='triangle'):
+def build_source_time_function(rise_time,dt,total_time,stf_type='triangle',zeta=0.2):
     '''
     Compute source time function for a given rise time, right now it assumes 1m of slip
     and a triangle STF
     '''
-    from numpy import zeros,arange,where,pi,cos,sin,isnan
+    from numpy import zeros,arange,where,pi,cos,sin,isnan,exp
     from scipy.integrate import trapz
     
     rise_time=float(rise_time)
@@ -1833,7 +1833,8 @@ def build_source_time_function(rise_time,dt,total_time,stf_type='triangle'):
         Mdot[i2]=Cn*(1.0-0.7*cos(t[i2]*pi/tau1)+0.3*cos(pi*(t[i2]-tau1)/tau2))
         Mdot[i3]=Cn*(0.3+0.3*cos(pi*(t[i3]-tau1)/tau2))
     elif stf_type=='dreger':
-        pass
+        tau=rise_time/7.4183
+        Mdot=(t**zeta)*exp(-t/tau)
     else:
         print 'ERROR: unrecognized STF type '+stf_type
         return

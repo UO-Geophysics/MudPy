@@ -8,6 +8,331 @@ font = {'family' : 'normal',
 
 rc('font', **font)
 
+from obspy.imaging.cm import pqlx
+
+#Colormap
+cdict = {'red': ((0., 1, 1),
+                (0.10, 1, 1),
+                (0.20, 0, 0),
+                (0.66, 1, 1),
+                (0.89, 1, 1),
+                (1, 0.5, 0.5)),
+        'green': ((0., 1, 1),
+                (0.10, 1, 1),
+                (0.20, 0, 0),
+                (0.375, 1, 1),
+                (0.64, 1, 1),
+                (0.91, 0, 0),
+                (1, 0, 0)),
+        'blue': ((0., 1, 1),
+                (0.15, 1, 1),
+                (0.20, 1, 1),
+                (0.34, 1, 1),
+                (0.65, 0, 0),
+                (1, 0, 0))}
+
+def plot_KLslip(home,project_name,run_name,mesh_name,fudge=0.3):
+    '''
+    Make simple plot of slip model
+    '''
+    from matplotlib.patches import Polygon
+    from matplotlib.collections import PatchCollection
+    from matplotlib import pyplot as plt
+    from matplotlib import cm,colors
+    from numpy import r_,genfromtxt,reshape,zeros,array
+    from glob import glob
+    from string import replace
+
+    #Read mesh
+    mesh=genfromtxt(home+project_name+'/data/model_info/'+mesh_name)
+    
+    font = {'family' : 'normal',
+        'weight' : 'normal',
+        'size'   : 12}
+
+    rc('font', **font)
+    
+    whitejet = colors.LinearSegmentedColormap('whitejet',cdict,256)
+
+    
+    #Get faults I need to work on
+    faults=glob(home+project_name+'/output/ruptures/*.rupt')
+    logs=glob(home+project_name+'/output/ruptures/*.log')
+    for kfault in range(len(faults)):
+        print faults[kfault]
+        #Read slip info
+        fault=genfromtxt(faults[kfault])
+        
+        #Get info about fault
+        f=open(logs[kfault],'r')
+        loop_go=True
+        while loop_go:
+            line=f.readline()
+            if 'Hypocenter (lon,lat,z[km])' in line:                
+                s=replace(line.split(':')[-1],'(','')
+                s=replace(s,')','')
+                hypo_fault=array(s.split(',')).astype('float')
+                loop_go=False       
+            if 'Actual magnitude' in line:
+                Mw=float(line.split(':')[-1].split(' ')[-1])   
+            if 'Target magnitude' in line:
+                target_Mw=float(line.split(':')[-1].split(' ')[-1])        
+        
+        #Plot
+        fig, axarr = plt.subplots(1,3,figsize=(12,8))
+        
+        ax1=axarr[0]
+        ax1.set_xlim([fault[:,1].min()-fudge,fault[:,1].max()+2])
+        ax1.set_ylim([fault[:,2].min()-fudge,fault[:,2].max()+fudge])
+    
+        #Plot coasts (also hard coded to cascadia for now)
+        fcoast=open('/Users/dmelgar/Cascadia/coast/coast.txt','r')
+        line=fcoast.readline()
+        parsing_coast=True
+        while parsing_coast==True:
+            if '>' in line:
+                complete_polygon=False
+                count=0
+                while complete_polygon==False:
+                    line=fcoast.readline()
+                    if '>' in line or line=='':
+                        complete_polygon=True
+                        ax1.plot(coast_coordinates[:,0],coast_coordinates[:,1],lw=0.5,c='k')
+                    else:
+                        new_coordinates=zeros((1,2))
+                        new_coordinates[0,0]=float(line.split()[0])
+                        new_coordinates[0,1]=float(line.split()[1])
+                        if count==0:
+                            coast_coordinates=new_coordinates.copy()
+                            count+=1
+                        else:
+                            coast_coordinates=r_[coast_coordinates,new_coordinates]
+                    if line=='':
+                        parsing_coast=False
+        #Done plotting coast
+        #Plot cnational boundaries(also hard coded to cascadia for now)
+        fcoast=open('/Users/dmelgar/Cascadia/coast/boundaries.txt','r')
+        line=fcoast.readline()
+        parsing_coast=True
+        while parsing_coast==True:
+            if '>' in line:
+                complete_polygon=False
+                count=0
+                while complete_polygon==False:
+                    line=fcoast.readline()
+                    if '>' in line or line=='':
+                        complete_polygon=True
+                        ax1.plot(coast_coordinates[:,0],coast_coordinates[:,1],lw=1,c='k')
+                    else:
+                        new_coordinates=zeros((1,2))
+                        new_coordinates[0,0]=float(line.split()[0])
+                        new_coordinates[0,1]=float(line.split()[1])
+                        if count==0:
+                            coast_coordinates=new_coordinates.copy()
+                            count+=1
+                        else:
+                            coast_coordinates=r_[coast_coordinates,new_coordinates]
+                    if line=='':
+                        parsing_coast=False
+        #Done plotting coast
+    
+    
+        #Make patches
+        patches = []
+        for k in range(len(fault)):
+            coordinates=reshape(r_[mesh[k,4:6],mesh[k,7:9],mesh[k,10:12],mesh[k,4:6]],(4,2))
+            subfault = Polygon(coordinates, True)
+            patches.append(subfault)
+            
+        p1 = PatchCollection(patches,cmap=whitejet,lw=0.1)
+        colors = fault[:,9]
+        p1.set_array(colors)
+        ax1.add_collection(p1)
+        labels = ax1.get_xticklabels() 
+        for label in labels: 
+            label.set_rotation(70) 
+        #Plot stations, this is hard coded to Cascadia
+        stations=genfromtxt(u'/Users/dmelgar/Cascadia/stations/cascadia_gps_small.txt',usecols=[1,2])
+        ax1.scatter(stations[:,0],stations[:,1],marker='o',lw=0.8,c='#FF8C00',s=15)
+        #hypocenter
+        ax1.scatter(hypo_fault[1],hypo_fault[2],marker='s',lw=0.5,c='#FF69B4',s=40)
+        ax1.set_title('Target Mw = %.2f\nActual Mw = %.2f' % (target_Mw,Mw))
+        
+        
+        #### Plot rise times
+        
+        ax2=axarr[1]
+        ax2.set_xlim([fault[:,1].min()-fudge,fault[:,1].max()+2])
+        ax2.set_ylim([fault[:,2].min()-fudge,fault[:,2].max()+fudge])
+    
+        #Plot coasts (also hard coded to cascadia for now)
+        fcoast=open('/Users/dmelgar/Cascadia/coast/coast.txt','r')
+        line=fcoast.readline()
+        parsing_coast=True
+        while parsing_coast==True:
+            if '>' in line:
+                complete_polygon=False
+                count=0
+                while complete_polygon==False:
+                    line=fcoast.readline()
+                    if '>' in line or line=='':
+                        complete_polygon=True
+                        ax2.plot(coast_coordinates[:,0],coast_coordinates[:,1],lw=0.5,c='k')
+                    else:
+                        new_coordinates=zeros((1,2))
+                        new_coordinates[0,0]=float(line.split()[0])
+                        new_coordinates[0,1]=float(line.split()[1])
+                        if count==0:
+                            coast_coordinates=new_coordinates.copy()
+                            count+=1
+                        else:
+                            coast_coordinates=r_[coast_coordinates,new_coordinates]
+                    if line=='':
+                        parsing_coast=False
+        #Done plotting coast
+        #Plot cnational boundaries(also hard coded to cascadia for now)
+        fcoast=open('/Users/dmelgar/Cascadia/coast/boundaries.txt','r')
+        line=fcoast.readline()
+        parsing_coast=True
+        while parsing_coast==True:
+            if '>' in line:
+                complete_polygon=False
+                count=0
+                while complete_polygon==False:
+                    line=fcoast.readline()
+                    if '>' in line or line=='':
+                        complete_polygon=True
+                        ax2.plot(coast_coordinates[:,0],coast_coordinates[:,1],lw=1,c='k')
+                    else:
+                        new_coordinates=zeros((1,2))
+                        new_coordinates[0,0]=float(line.split()[0])
+                        new_coordinates[0,1]=float(line.split()[1])
+                        if count==0:
+                            coast_coordinates=new_coordinates.copy()
+                            count+=1
+                        else:
+                            coast_coordinates=r_[coast_coordinates,new_coordinates]
+                    if line=='':
+                        parsing_coast=False
+        #Done plotting coast
+    
+    
+        #Make patches
+        patches = []
+        for k in range(len(fault)):
+            coordinates=reshape(r_[mesh[k,4:6],mesh[k,7:9],mesh[k,10:12],mesh[k,4:6]],(4,2))
+            subfault = Polygon(coordinates, True)
+            patches.append(subfault)
+            
+        p2 = PatchCollection(patches,cmap=cm.CMRmap_r,lw=0.1)
+        colors = fault[:,7]
+        p2.set_array(colors)
+        ax2.add_collection(p2)
+        labels = ax2.get_xticklabels() 
+        for label in labels: 
+            label.set_rotation(70) 
+        #Plot stations, this is hard coded to Cascadia
+        stations=genfromtxt(u'/Users/dmelgar/Cascadia/stations/cascadia_gps_small.txt',usecols=[1,2])
+        ax2.scatter(stations[:,0],stations[:,1],marker='o',lw=0.8,c='#FF8C00',s=15)
+        #hypocenter
+        ax2.scatter(hypo_fault[1],hypo_fault[2],marker='s',lw=0.5,c='#FF69B4',s=40)
+        #plt.title('Target Mw = %.2f\nActual Mw = %.2f' % (target_Mw,Mw))
+        
+        
+        #### Plot Rupture onset times
+        
+        ax3=axarr[2]
+        ax3.set_xlim([fault[:,1].min()-fudge,fault[:,1].max()+2])
+        ax3.set_ylim([fault[:,2].min()-fudge,fault[:,2].max()+fudge])
+    
+        #Plot coasts (also hard coded to cascadia for now)
+        fcoast=open('/Users/dmelgar/Cascadia/coast/coast.txt','r')
+        line=fcoast.readline()
+        parsing_coast=True
+        while parsing_coast==True:
+            if '>' in line:
+                complete_polygon=False
+                count=0
+                while complete_polygon==False:
+                    line=fcoast.readline()
+                    if '>' in line or line=='':
+                        complete_polygon=True
+                        ax3.plot(coast_coordinates[:,0],coast_coordinates[:,1],lw=0.5,c='k')
+                    else:
+                        new_coordinates=zeros((1,2))
+                        new_coordinates[0,0]=float(line.split()[0])
+                        new_coordinates[0,1]=float(line.split()[1])
+                        if count==0:
+                            coast_coordinates=new_coordinates.copy()
+                            count+=1
+                        else:
+                            coast_coordinates=r_[coast_coordinates,new_coordinates]
+                    if line=='':
+                        parsing_coast=False
+        #Done plotting coast
+        #Plot cnational boundaries(also hard coded to cascadia for now)
+        fcoast=open('/Users/dmelgar/Cascadia/coast/boundaries.txt','r')
+        line=fcoast.readline()
+        parsing_coast=True
+        while parsing_coast==True:
+            if '>' in line:
+                complete_polygon=False
+                count=0
+                while complete_polygon==False:
+                    line=fcoast.readline()
+                    if '>' in line or line=='':
+                        complete_polygon=True
+                        ax3.plot(coast_coordinates[:,0],coast_coordinates[:,1],lw=1,c='k')
+                    else:
+                        new_coordinates=zeros((1,2))
+                        new_coordinates[0,0]=float(line.split()[0])
+                        new_coordinates[0,1]=float(line.split()[1])
+                        if count==0:
+                            coast_coordinates=new_coordinates.copy()
+                            count+=1
+                        else:
+                            coast_coordinates=r_[coast_coordinates,new_coordinates]
+                    if line=='':
+                        parsing_coast=False
+        #Done plotting coast
+    
+    
+        #Make patches
+        patches = []
+        for k in range(len(fault)):
+            coordinates=reshape(r_[mesh[k,4:6],mesh[k,7:9],mesh[k,10:12],mesh[k,4:6]],(4,2))
+            subfault = Polygon(coordinates, True)
+            patches.append(subfault)
+            
+        p3 = PatchCollection(patches,cmap=pqlx,lw=0.1)
+        colors=fault[:,12]
+        p3.set_array(colors)
+        ax3.add_collection(p3)
+        labels = ax3.get_xticklabels() 
+        for label in labels: 
+            label.set_rotation(70) 
+        #Plot stations, this is hard coded to Cascadia
+        stations=genfromtxt(u'/Users/dmelgar/Cascadia/stations/cascadia_gps_small.txt',usecols=[1,2])
+        ax3.scatter(stations[:,0],stations[:,1],marker='o',lw=0.8,c='#FF8C00',s=15)
+        #hypocenter
+        ax3.scatter(hypo_fault[1],hypo_fault[2],marker='s',lw=0.5,c='#FF69B4',s=40)
+        #plt.title('Target Mw = %.2f\nActual Mw = %.2f' % (target_Mw,Mw))
+        
+                
+        #Colorbars
+        cbar_ax1 = fig.add_axes([0.32, 0.2, 0.015, 0.6])
+        plt.colorbar(p1, cax=cbar_ax1, label="Slip (m)")
+        cbar_ax2 = fig.add_axes([0.606, 0.2, 0.015, 0.6])
+        plt.colorbar(p2, cax=cbar_ax2, label="Rise time (s)")
+        cbar_ax3 = fig.add_axes([0.893, 0.2, 0.015, 0.6])
+        plt.colorbar(p3, cax=cbar_ax3, label="Rupture onset (s)")
+        
+        plt.subplots_adjust(wspace=0.4)
+        
+        name_out=home+project_name+'/plots/'+faults[kfault].split('/')[-1].split('.')[0]+'.'+faults[kfault].split('/')[-1].split('.')[1]+'.png'
+        plt.savefig(name_out)
+        plt.close()
+
 
 def plot_LW_scaling(home,project_name,run_name):
     '''
