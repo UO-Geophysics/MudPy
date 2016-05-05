@@ -57,6 +57,39 @@ pqlx_dict={'blue': (( 0.  ,  1.  ,  1.  ),
             ( 1.  ,  1.  ,  1.  ))}
 
 
+rise_times_dict={u'blue': [(0.0, 1.0, 1.0),
+                        (0.06, 1.0, 1.0),
+                        (0.125, 0.5, 0.5),
+                        (0.25, 0.1, 0.1),
+                        (0.375, 0.0, 0.0),
+                        (0.5, 0.15, 0.15),
+                        (0.625, 0.5, 0.5),
+                        (0.75, 0.75, 0.75),
+                        (0.875, 0.5, 0.5),
+                        (1.0, 0.0, 0.0)],
+                        u'green': [(0.0, 1.0, 1.0),
+                        (0.06, 1.0, 1.0),
+                        (0.125, 0.9, 0.9),
+                        (0.25, 0.75, 0.75),
+                        (0.375, 0.5, 0.5),
+                        (0.5, 0.25, 0.25),
+                        (0.625, 0.2, 0.2),
+                        (0.75, 0.15, 0.15),
+                        (0.875, 0.15, 0.15),
+                        (1.0, 0.0, 0.0)],
+                        u'red': [(0.0, 1.0, 1.0),
+                        (0.06, 1.0, 1.0),
+                        (0.125, 0.9, 0.9),
+                        (0.25, 0.9, 0.9),
+                        (0.375, 0.9, 0.9),
+                        (0.5, 1.0, 1.0),
+                        (0.625, 0.6, 0.6),
+                        (0.75, 0.3, 0.3),
+                        (0.875, 0.15, 0.15),
+                        (1.0, 0.0, 0.0)]}
+
+
+
 def plot_KLslip(home,project_name,run_name,mesh_name,fudge=0.3):
     '''
     Make simple plot of slip model
@@ -80,7 +113,7 @@ def plot_KLslip(home,project_name,run_name,mesh_name,fudge=0.3):
     
     whitejet = colors.LinearSegmentedColormap('whitejet',whitejet_dict,256)
     pqlx_colormap = colors.LinearSegmentedColormap('pqlx',pqlx_dict,256)
-    
+    rise_times_colormap = colors.LinearSegmentedColormap('rtimes',rise_times_dict,256)
     #Get faults I need to work on
     faults=glob(home+project_name+'/output/ruptures/*.rupt')
     logs=glob(home+project_name+'/output/ruptures/*.log')
@@ -250,7 +283,7 @@ def plot_KLslip(home,project_name,run_name,mesh_name,fudge=0.3):
             subfault = Polygon(coordinates, True)
             patches.append(subfault)
             
-        p2 = PatchCollection(patches,cmap=cm.CMRmap_r,lw=0.1)
+        p2 = PatchCollection(patches,cmap=rise_times_colormap,lw=0.1)
         colors = fault[:,7]
         p2.set_array(colors)
         ax2.add_collection(p2)
@@ -410,7 +443,7 @@ def plot_LW_scaling(home,project_name,run_name):
     plt.subplots_adjust(bottom=0.17)
  
     
-def analyze_sources(home,project_name,run_name):
+def analyze_sources(home,project_name,run_name,Mw_lims=[7.75,9.35]):
     '''
     Basic parameters of the sources
     '''
@@ -428,6 +461,9 @@ def analyze_sources(home,project_name,run_name):
     slip_mean=zeros(len(logs))
     slip_max=zeros(len(logs))
     slip_stdev=zeros(len(logs))
+    trise_mean=zeros(len(logs))
+    trise_max=zeros(len(logs))
+    trise_stdev=zeros(len(logs))
     for k in range(len(logs)):
         f=open(logs[k],'r')
         while True:
@@ -444,52 +480,74 @@ def analyze_sources(home,project_name,run_name):
         #now go look in rupture files for slip aprameters
         source=genfromtxt(ruptures[k])
         slip=sqrt(source[:,8]**2+source[:,9]**2)
+        trise=source[:,7]
         slip_mean[k]=slip.mean()
         slip_max[k]=slip.max()
         slip_stdev[k]=slip.std()
+        trise_mean[k]=trise.mean()
+        trise_max[k]=trise.max()
+        trise_stdev[k]=trise.std()
     #Make plot
-    plt.figure(figsize=(15,7))
+    plt.figure(figsize=(15,10.5))
     
-    plt.subplot(231)
+    plt.subplot(331)
     Mw_synth=arange(7.8,9.3,0.1)
     plt.plot(Mw_synth,-2.37+0.57*Mw_synth,c='k',lw=2)
     plt.scatter(Mw_actual,log10(L),marker='+')
-    plt.xlim([7.75,9.35])
+    plt.xlim(Mw_lims)
     plt.xlabel('Actual Mw')
     plt.ylabel('log (L) [km]')
     plt.annotate(r'$\log (L)=-2.37+0.57M_w$',xy=(7.9,3.0))
     
-    plt.subplot(232)
+    plt.subplot(332)
     plt.plot(Mw_synth,-1.86+0.46*Mw_synth,c='k',lw=2)
     plt.scatter(Mw_actual,log10(W),marker='+')
-    plt.xlim([7.75,9.35])
+    plt.xlim(Mw_lims)
     plt.xlabel('Actual Mw')
     plt.ylabel('log (W) [km]')
     plt.annotate(r'$\log (W)=-1.86+0.46M_w$',xy=(7.9,2.4))
     
-    plt.subplot(233)
+    plt.subplot(333)
     plt.scatter(Mw_actual,Mw_target,marker='+')
-    plt.xlim([7.75,9.35])
+    plt.xlim(Mw_lims)
     plt.xlabel('Actual Mw')
     plt.ylabel('Target Mw')
     
-    plt.subplot(234)
+    plt.subplot(334)
     plt.scatter(Mw_actual,slip_mean,marker='+')
-    plt.xlim([7.75,9.35])
+    plt.xlim(Mw_lims)
     plt.xlabel('Actual Mw')
     plt.ylabel('Mean slip (m)')
     
-    plt.subplot(235)
+    plt.subplot(335)
     plt.scatter(Mw_actual,slip_max,marker='+')
-    plt.xlim([7.75,9.35])
+    plt.xlim(Mw_lims)
     plt.xlabel('Actual Mw')
     plt.ylabel('Peak slip (m)')
     
-    plt.subplot(236)
+    plt.subplot(336)
     plt.scatter(Mw_actual,slip_stdev,marker='+')
     plt.xlim([7.75,9.35])
     plt.xlabel('Actual Mw')
     plt.ylabel('Slip Std.Dev. (m)')
+    
+    plt.subplot(337)
+    plt.scatter(Mw_actual,trise_mean,marker='+')
+    plt.xlim(Mw_lims)
+    plt.xlabel('Actual Mw')
+    plt.ylabel('Mean rise time (s)')
+    
+    plt.subplot(338)
+    plt.scatter(Mw_actual,trise_max,marker='+')
+    plt.xlim(Mw_lims)
+    plt.xlabel('Actual Mw')
+    plt.ylabel('Peak rise time (s)')
+    
+    plt.subplot(339)
+    plt.scatter(Mw_actual,trise_stdev,marker='+')
+    plt.xlim(Mw_lims)
+    plt.xlabel('Actual Mw')
+    plt.ylabel('Rise time Std.Dev. (s)')
     
     plt.show()
     
@@ -850,6 +908,7 @@ def pgd_magnitude_misfit(home,project_name,hist=True,rupture_list='ruptures.list
                 loop_go=False       
             if 'Actual magnitude' in line:
                 Mw=float(line.split(':')[-1].split(' ')[-1])
+                print Mw
     
         #compute station to hypo distances
         d=zeros(len(lonlat))
@@ -1001,6 +1060,7 @@ def pgd_2D_misfit(home,project_name,rupture_list='ruptures.list',Mw_lims=[7.8,9.
         run_number=ruptures[k].split('.')[1]
         # Read summary file
         summary_file=summary_file=home+project_name+'/output/waveforms/'+run_name+'.'+run_number+'/_summary.'+run_name+'.'+run_number+'.txt'
+        # summary_file=summary_file=home+project_name+'/output/dreger_4tau/'+run_name+'.'+run_number+'/_summary.'+run_name+'.'+run_number+'.txt'
         lonlat=genfromtxt(summary_file,usecols=[1,2])
         pgd=genfromtxt(summary_file,usecols=[6])*100
         
@@ -1046,7 +1106,8 @@ def pgd_2D_misfit(home,project_name,rupture_list='ruptures.list',Mw_lims=[7.8,9.
     for kx in range(len(bin_centers_x)):
         for ky in range(len(bin_centers_y)):
             i=where((Mw_all>=bin_edges_x[kx]) & (Mw_all<bin_edges_x[kx+1]) & (d_all>=bin_edges_y[ky]) & (d_all<bin_edges_y[ky+1]))[0]
-            misfit_bin[kx,ky]=0.5*(abs(mean(misfit[i])))+0.5*mean(abs(misfit))
+            #misfit_bin[kx,ky]=0.5*(abs(mean(misfit[i])))+0.5*mean(abs(misfit))
+            misfit_bin[kx,ky]=mean(misfit[i])
             #misfit_bin[kx,ky]=median(misfit[i])
             stdev_bin[kx,ky]=misfit[i].std()
             frequency_bin[kx,ky]=len(misfit[i])
@@ -1119,7 +1180,130 @@ def pgd_2D_misfit(home,project_name,rupture_list='ruptures.list',Mw_lims=[7.8,9.
     
     plt.subplots_adjust(left=0.08,top=0.88,right=0.97,bottom=0.1,wspace=0.07)
                                                                    
+
+def pgd_2D_GOF(home,project_name,rupture_list='ruptures.list',Mw_lims=[7.8,9.5],dist_lims=[10,1000],A=-4.434,B=1.047,C=-0.138,GOF_lims=[0,2],n_mag_bins=10,n_dist_bins=10):
+    '''
+    Plot misfit as a function of both distance and magnitude
+    '''
+    from obspy.geodetics.base import gps2dist_azimuth
+    from numpy import genfromtxt,array,zeros,logspace,linspace,r_,log,genfromtxt,log10,ones,where,arange,median,mean
+    from matplotlib import pyplot as plt
+    from matplotlib import cm
+    from string import replace
+    from matplotlib.ticker import MultipleLocator,LogLocator,MaxNLocator
+    
+    xmajorLocator = LogLocator(base=10.0, subs=[1])
+    xminorLocator = MultipleLocator(1)
+    ymajorLocator = MultipleLocator(1)
+    yminorLocator = MultipleLocator(0.2)
+    
+    ruptures=genfromtxt(home+project_name+'/data/'+rupture_list,dtype='S')
+    pgd_all=array([])
+    d_all=array([])
+    Mw_all=array([])
+    pgd_predicted_all=array([])
+    for k in range(len(ruptures)):
+        run_name=ruptures[k].split('.')[0]
+        run_number=ruptures[k].split('.')[1]
+        # Read summary file
+        summary_file=summary_file=home+project_name+'/output/waveforms/'+run_name+'.'+run_number+'/_summary.'+run_name+'.'+run_number+'.txt'
+        # summary_file=summary_file=home+project_name+'/output/dreger_4tau/'+run_name+'.'+run_number+'/_summary.'+run_name+'.'+run_number+'.txt'
+        lonlat=genfromtxt(summary_file,usecols=[1,2])
+        pgd=genfromtxt(summary_file,usecols=[6])*100
+        
+        # Get hypocenter or centroid
+        event_log=home+project_name+'/output/ruptures/'+run_name+'.'+run_number+'.log'
+        f=open(event_log,'r')
+        loop_go=True
+        while loop_go:
+            line=f.readline()
+            if 'Centroid (lon,lat,z[km])' in line:                
+                s=replace(line.split(':')[-1],'(','')
+                s=replace(s,')','')
+                hypo=array(s.split(',')).astype('float')
+                loop_go=False       
+            if 'Actual magnitude' in line:
+                Mw=float(line.split(':')[-1].split(' ')[-1])
+    
+        #compute station to hypo distances
+        d=zeros(len(lonlat))
+        for k in range(len(lonlat)):
+            d[k],az,baz=gps2dist_azimuth(lonlat[k,1],lonlat[k,0],hypo[1],hypo[0])
+            d[k]=d[k]/1000   
            
+        #Get predicted
+        pgd_predicted=10**(A+B*Mw+C*Mw*log10(d))
+        #Concatente to output variables
+        pgd_all=r_[pgd_all,pgd]
+        d_all=r_[d_all,d]
+        Mw_all=r_[Mw_all,Mw*ones(len(d))]                   
+        pgd_predicted_all=r_[pgd_predicted_all,pgd_predicted]               
+    #Get misfits             
+    misfit=log(pgd_all/pgd_predicted_all)                    
+   
+    #plotting
+    bin_edges_x=linspace(Mw_all.min(),Mw_all.max(),n_mag_bins)
+    bin_centers_x=zeros(len(bin_edges_x)-1)
+    bin_edges_y=logspace(log10(dist_lims[0]),log10(dist_lims[1]),n_dist_bins)
+    bin_centers_y=zeros(len(bin_edges_y)-1)
+    misfit_bin=zeros((len(bin_edges_x)-1,len(bin_edges_y)-1))
+    stdev_bin=zeros((len(bin_edges_x)-1,len(bin_edges_y)-1))
+    frequency_bin=zeros((len(bin_edges_x)-1,len(bin_edges_y)-1))
+        
+    for kx in range(len(bin_centers_x)):
+        for ky in range(len(bin_centers_y)):
+            i=where((Mw_all>=bin_edges_x[kx]) & (Mw_all<bin_edges_x[kx+1]) & (d_all>=bin_edges_y[ky]) & (d_all<bin_edges_y[ky+1]))[0]
+            misfit_bin[kx,ky]=0.5*(abs(mean(misfit[i])))+0.5*mean(abs(misfit))
+            stdev_bin[kx,ky]=misfit[i].std()
+            frequency_bin[kx,ky]=len(misfit[i])
+            bin_centers_x[kx]=bin_edges_x[kx+1]-((bin_edges_x[kx+1]-bin_edges_x[kx])/2)        
+            bin_centers_y[ky]=bin_edges_y[ky+1]-((bin_edges_y[ky+1]-bin_edges_y[ky])/2) 
+            
+    fig=plt.figure(figsize=(10,5)) 
+    
+    plt.subplot(121)                           
+    PM=plt.pcolormesh(bin_edges_x,bin_edges_y,misfit_bin.T,vmin=GOF_lims[0],vmax=GOF_lims[1],cmap=cm.afmhot_r)
+    CS = plt.contour(bin_centers_x,bin_centers_y,misfit_bin.T,colors='#808080',levels=arange(-0,3.1,0.5))
+    plt.clabel(CS, inline=1, fontsize=14,fmt='%1.1f')
+    ax = plt.gca()    
+    ax.set_yscale('log')
+    plt.xlim([bin_edges_x.min(),bin_edges_x.max()])
+    plt.ylim([bin_edges_y.min(),bin_edges_y.max()])
+    ax.xaxis.tick_top()
+    ax.xaxis.set_label_position("top") 
+    plt.xlabel('Magnitude')
+    plt.ylabel('Distance (km)')
+    cb = plt.colorbar(PM, orientation='horizontal',pad = 0.02) 
+    cb.set_label('CGOF')
+    levs=cb.ax.get_xticks()
+    cb.ax.set_xticklabels(levs,rotation=-55)
+    tick_locator = MaxNLocator(nbins=6)
+    cb.locator = tick_locator
+    cb.update_ticks()
+    
+    plt.subplot(122)
+    PM=plt.pcolormesh(bin_edges_x,bin_edges_y,frequency_bin.T,cmap=cm.magma_r)
+    CS = plt.contour(bin_centers_x,bin_centers_y,misfit_bin.T,colors='#808080',levels=arange(0,3.1,0.5))
+    plt.clabel(CS, inline=1, fontsize=14,fmt='%1.1f')
+    #plt.clabel(CS, inline=1, fontsize=14,fmt='%1.1f')
+    ax = plt.gca()    
+    ax.set_yscale('log')
+    plt.xlim([bin_edges_x.min(),bin_edges_x.max()])
+    plt.ylim([bin_edges_y.min(),bin_edges_y.max()])
+    ax.xaxis.tick_top()
+    ax.xaxis.set_label_position("top") 
+    plt.xlabel('Magnitude')
+    plt.tick_params(axis='y',labelleft='off')
+    cb = plt.colorbar(PM, orientation='horizontal',pad = 0.02) 
+    cb.set_label('# of waveforms')
+    levs=cb.ax.get_xticks()
+    cb.ax.set_xticklabels(levs,rotation=-55)
+    tick_locator = MaxNLocator(nbins=6)
+    cb.locator = tick_locator
+    cb.update_ticks()
+    
+    plt.subplots_adjust(left=0.08,top=0.88,right=0.97,bottom=0.1,wspace=0.07)           
+                                 
                 
                           
 def record_section(home,project_name,GF_list,rupture,factor=10):

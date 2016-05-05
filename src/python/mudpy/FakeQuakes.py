@@ -367,10 +367,10 @@ def select_faults(whole_fault,Dstrike,Ddip,target_Mw,buffer_factor,num_modes,no_
     while not done:
         #Determine length and width from scaling laws (select from lognormal dsitribution)
         length_mean=-2.37+0.57*target_Mw
-        length_std=0.12#0.18
+        length_std=0.10#0.12#0.18
         length=10**normal(length_mean,length_std)
         width_mean=-1.86+0.46*target_Mw
-        width_std=0.11#0.17
+        width_std=0.09#0.11#0.17
         width=10**normal(width_mean,width_std)
         
         #Select random subfault as hypocenter
@@ -593,7 +593,7 @@ def get_centroid(fault):
 def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
     load_distances,distances_name,UTM_zone,target_Mw,model_name,hurst,Ldip,Lstrike,
     num_modes,Nrealizations,rake,buffer_factor,rise_time_depths,time_epi,max_slip,
-    source_time_function,lognormal):
+    source_time_function,lognormal,slip_standard_deviation):
     
     '''
     Depending on user selected flags parse the work out to different functions
@@ -667,7 +667,7 @@ def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
                 # Lognormal or not?
                 if lognormal==False:
                     #Get covariance matrix
-                    C_nonlog=get_covariance(mean_slip,C,target_Mw[kmag],fault_array,vel_mod,alpha=0.85) 
+                    C_nonlog=get_covariance(mean_slip,C,target_Mw[kmag],fault_array,vel_mod,slip_standard_deviation) 
                     #Get eigen values and eigenvectors
                     eigenvals,V=get_eigen(C_nonlog)
                     #Generate fake slip pattern
@@ -679,7 +679,7 @@ def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
                             print '... ... ... negative slip threshold exceeeded with %d%% negative slip. Recomputing...' % (percent_negative)
                 else:
                     #Get lognormal values
-                    C_log,mean_slip_log=get_lognormal(mean_slip,C,target_Mw[kmag],fault_array,vel_mod,alpha=0.9)               
+                    C_log,mean_slip_log=get_lognormal(mean_slip,C,target_Mw[kmag],fault_array,vel_mod,slip_standard_deviation)               
                     #Get eigen values and eigenvectors
                     eigenvals,V=get_eigen(C_log)
                     #Generate fake slip pattern
@@ -731,6 +731,7 @@ def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
             f.write('Hurst exponent: '+str(hurst)+'\n')
             f.write('Corr. length used Lstrike: %.2f km\n' % Ls)
             f.write('Corr. length used Ldip: %.2f km\n' % Ld)
+            f.write('Slip std. dev.: %.3f km\n' % slip_standard_deviation)
             f.write('Maximum length Lmax: %.2f km\n' % Lmax)
             f.write('Maximum width Wmax: %.2f km\n' % Wmax)
             f.write('Effective length Leff: %.2f km\n' % Leff)
