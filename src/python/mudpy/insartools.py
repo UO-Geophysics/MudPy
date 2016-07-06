@@ -31,7 +31,7 @@ def quadtree2mudpy(home,project_name,quadtree_file,gflist_file,prefix):
         U=insar[k,5]
         los=c_[los_c,N,E,U]
         #Make plot as you go to verify
-        plt.scatter(insar[k,0],insar[k,1],c=los_c,cmap=cm.jet,s=90,vmin=0,vmax=0.3)
+        plt.scatter(insar[k,0],insar[k,1],c=los_c,cmap=cm.magma,s=80,lw=0,vmin=-0.6,vmax=0.1)
         plt.legend(['LOS'])
         savetxt(home+project_name+'/data/statics/'+sta+'.los',los,header='LOS(m),los unit vector (positive towards satellite) n,e,u')
         #Generate gflist file as well

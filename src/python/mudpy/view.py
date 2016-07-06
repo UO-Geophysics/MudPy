@@ -194,7 +194,7 @@ def quick_static(gflist,datapath,scale=1):
     plt.show()
 
 
-def slip3D(rupt,marker_size=60):
+def slip3D(rupt,marker_size=60,clims=None):
     '''
     For complex fault geometries make a quick 3D plot of the rupture model
     
@@ -236,7 +236,10 @@ def slip3D(rupt,marker_size=60):
     #Plot it
     fig = plt.figure(figsize=(14, 4))
     ax = fig.add_subplot(111, projection='3d')
-    p=ax.scatter(lon, lat, depth, c=slip,cmap=whitejet, marker='o',s=marker_size)
+    if clims==None:
+        p=ax.scatter(lon, lat, depth, c=slip,cmap=whitejet, marker='o',s=marker_size)
+    else:
+        p=ax.scatter(lon, lat, depth, c=slip,cmap=whitejet, marker='o',s=marker_size,vmin=clims[0],vmax=clims[1])
     ax.set_xlabel('Longitude')
     ax.set_ylabel('Latitude')
     ax.set_zlabel('Depth (km)')
@@ -408,16 +411,17 @@ def tile_slip(rupt,nstrike,ndip,(slip_bounds),geographic=False,epicenter=0,epice
     else:
         rakess=rakess*slip
         rakeds=rakeds*slip
-        plt.figure(num=None, figsize=(8, 4), dpi=80)
-        plt.scatter(along_strike,depth,marker='s',linewidth=0.5,edgecolor='#CCCCCC',c=slip,s=250,cmap=whitejet,vmin=slip_min,vmax=slip_max)
+        plt.figure(num=None, figsize=(13, 3.5), dpi=80)
+        #plt.scatter(along_strike,depth,marker='s',linewidth=0.5,edgecolor='#CCCCCC',c=slip,s=250,cmap=whitejet,vmin=slip_min,vmax=slip_max)
+        plt.scatter(along_strike,depth,marker='s',linewidth=0.5,edgecolor='#CCCCCC',c=slip,s=250,cmap=plt.cm.magma_r,vmin=slip_min,vmax=slip_max)
         cb=plt.colorbar()
-        plt.scatter(along_strike_afters,depth_afters,marker='.',c='#404040',s=35)
+        #plt.scatter(along_strike_afters,depth_afters,marker='.',c='#404040',s=35)
         plt.ylabel('Depth (km)')
         plt.xlabel('Along-strike distance (km)')
         #plt.xlim(along_strike.min()-5,along_strike.max()+5)
-        #plt.ylim(depth.min()-5,depth.max()+5)
-        plt.xlim((-40,42))
-        plt.ylim(-17,2)       
+        #plt.ylim(depth.min()-5,depth.max()+5)   
+        plt.xlim(-39,41)
+        plt.ylim(-17,1.5)       
         plt.scatter(0,-epicenter[2],marker='*',edgecolor='k',facecolor='#00FF00',s=350,linewidth=2)
         for k in range(len(along_strike)):
             scale_slip=slip[k]/slip.max()

@@ -466,8 +466,8 @@ def pgd_regression(home,project_name,run_name,run_number,norm=2):
     from numpy import genfromtxt,array,zeros,log10,expand_dims,ones,diag,c_
     from string import replace
     from obspy.geodetics.base import gps2dist_azimuth
-    from l1 import l1
-    from cvxopt import matrix 
+    #from l1 import l1
+    #from cvxopt import matrix 
     from scipy.linalg import norm as vecnorm
     from numpy.linalg import lstsq
      
