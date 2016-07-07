@@ -90,113 +90,162 @@ def subfault_distances_3D(home,project_name,fault_name,slab_name,projection_zone
     from matplotlib import pyplot as plt
     from gmsh_tools import llz2utm
     from scipy.spatial.distance import cdist
+    from pyproj import Geod
     
-    #Load things
-    fault=genfromtxt(home+project_name+'/data/model_info/'+fault_name)
-    slab_model=genfromtxt(home+project_name+'/data/model_info/'+slab_name)    
-
-    #Initalize distance output arrays
-    nsubfaults = len(fault)
-    Dstrike = zeros((nsubfaults,nsubfaults))
-    Ddip = zeros((nsubfaults,nsubfaults))
-    
-    #Get average dip
-    avg_dip=fault[:,5].mean()
-    
-    #get down-dip azimuths
-    down_dip=fault[:,4]+90
-    i=where(down_dip>360)[0]
-    down_dip[i]=down_dip[i]-360
-    
-    #Convert slab1.0 to local UTM coordinates
-    slab_x,slab_y=llz2utm(slab_model[:,0],slab_model[:,1],projection_zone)
-    slab_x,slab_y = slab_x/1000,slab_y/1000
-    slab_z=-slab_model[:,2]
-    
-    #Convert faul centroid coordinates to local UTM
-    fault_x,fault_y=llz2utm(fault[:,1],fault[:,2],projection_zone)
-    fault_x,fault_y = fault_x/1000,fault_y/1000
-    fault_z=fault[:,3]    
-    
-    # grid Slab1.0 for making depth contours to be then used for along-strike distance calculation
-    ngrid_pts=500
-    X=linspace(slab_x.min(),slab_x.max(),ngrid_pts)
-    Y=linspace(slab_y.min(),slab_y.max(),ngrid_pts)
-    X,Y = meshgrid(X,Y)
-    Z = griddata(slab_x, slab_y, slab_z, X, Y,interp='linear')
-    
-    # X, Y and Z are matrices with the grid info, now create one contour at each subfault centroid depth
-    contour_levels=fault[:,3]
-    all_contours=plt.contour(X,Y,Z,levels=contour_levels)
-    
-    # x-coordinates for down_dip line
-    x_range=slab_x.max()-slab_x.min()
-    x_down_dip=linspace(-x_range/2,x_range/2,200)
-    
-    #Loop over number of subfaults, we want the distance from i-th fault to all other (j) subfaults
-    print 'Getting inter-fault distances'
-    for i in range(len(fault)):
-        if i%10==0:
-            print '... working on subfault '+str(i)+' of '+str(len(fault))
-        #Current fault
-        xi = fault_x[i]
-        yi = fault_y[i]
-        zi = fault_z[i]
+    #if you want the simplified distances
+    if slab_name==None:
+        #Read fault geometry data
+        fault=genfromtxt(home+project_name+'/data/model_info/'+fault_name)
         
-        #Get contour at depth of current subfault
-        contour=all_contours.collections[i].get_paths()[0].vertices
+        #Initalize distance output arrays
+        nsubfaults = len(fault)
+        Dstrike = zeros((nsubfaults,nsubfaults))
+        Ddip = zeros((nsubfaults,nsubfaults))  
         
-        # Now find coordinates of point on this contour closest to subfault centroid
-        dist=sqrt((xi-contour[:,0])**2+(yi-contour[:,1])**2)
-        imin=dist.argmin()
+        #What's the average dip of the fault model?? 
+        dip=fault[:,5].mean()
         
-        # These are coordinates on the contour
-        xmin_i=contour[imin,0]
-        ymin_i=contour[imin,1]
+        #Instantiate projection object
+        g = Geod(ellps='WGS84') 
         
-        #For each subfault loop over every other subfault
-        for j in range(len(fault)):
-            xj = fault_x[j]
-            yj = fault_y[j]
-            zj = fault_z[j]
+        #Loop over faults an compute distances
+        print 'Getting inter-fault distances'
+        for i in range(len(fault)):
             
-            #Get down_dip y coordinates
-            y_down_dip=x_down_dip*cos(deg2rad(down_dip[j]))
+            if i%10==0:
+                print '... working on subfault '+str(i)+' of '+str(len(fault))
             
-            #Move line origin to subfault being tested
-            x_down_dip_subfault=x_down_dip+xj
-            y_down_dip_subfault=y_down_dip+yj
-            
-            #Get coordinates of intersection point between contour and down-dip line by finding minimum distance
-            dist=cdist(contour,c_[x_down_dip_subfault,y_down_dip_subfault])
-            r,c=unravel_index(dist.argmin(),dist.shape)
-            xmin_j=contour[r,0]
-            ymin_j=contour[r,1]           
-            
-            #Keep only points on the contour array that correspond to starting and stopping points along the path
-            keep=sort([r,imin])
-            contour_integral=contour[keep[0]:keep[1]+1]
-            
-            #Along strike distance is the path integral along contour between (xmin_i,ymin_i) and (xmin_j,ymin_j)
-            dx=diff(contour_integral[:,0])
-            dy=diff(contour_integral[:,1])
-            delta_strike=sqrt(dx**2+dy**2).sum() #Phew, that was hard
-            #Give negative sign if subfault is down_strike
-            strike_sign=sign(ymin_j-ymin_i)
-            delta_strike=strike_sign*delta_strike
-            
-
-            
-            #get down dip distance from depth and average dip
-            delta_dip=(zi-zj)/sin(deg2rad(avg_dip))
+            #For each subfault loop over every other subfault
+            for j in range(len(fault)):
+                
+                #Subfault distance with itslef is zero
+                if i==j:
+                    Ddip[i,j] = 0
+                    Dstrike[i,j] = 0
+                else:
+                    lon_origin=fault[i,1]
+                    lat_origin=fault[i,2]
+                    lon_target=fault[j,1]
+                    lat_target=fault[j,2]
+                    az,baz,dist=g.inv(lon_origin,lat_origin,lon_target,lat_target)
+                    delta_strike=dist/1000
+                    #Down dip is jsut depth difference / avg dip of model
+                    z_origin=fault[i,3]
+                    z_target=fault[j,3]
+                    delta_dip=abs(z_origin-z_target)/sin(deg2rad(dip))
+                    Ddip[i,j] = delta_dip
+                    Dstrike[i,j] = delta_strike
+           
+                    
+    #If there's a slab_model file and you want the onfault complicated to get distances
+    else:
         
-            #Now the outputs
-            if i==j:
-                Ddip[i,j] = 0
-                Dstrike[i,j] = 0
-            else:
-                Ddip[i,j] = delta_dip
-                Dstrike[i,j] = delta_strike
+        #Load things
+        fault=genfromtxt(home+project_name+'/data/model_info/'+fault_name)
+        slab_model=genfromtxt(home+project_name+'/data/model_info/'+slab_name)    
+    
+        #Initalize distance output arrays
+        nsubfaults = len(fault)
+        Dstrike = zeros((nsubfaults,nsubfaults))
+        Ddip = zeros((nsubfaults,nsubfaults))
+        
+        #Get average dip
+        avg_dip=fault[:,5].mean()
+        
+        #get down-dip azimuths
+        down_dip=fault[:,4]+90
+        i=where(down_dip>360)[0]
+        down_dip[i]=down_dip[i]-360
+        
+        #Convert slab1.0 to local UTM coordinates
+        slab_x,slab_y=llz2utm(slab_model[:,0],slab_model[:,1],projection_zone)
+        slab_x,slab_y = slab_x/1000,slab_y/1000
+        slab_z=-slab_model[:,2]
+        
+        #Convert faul centroid coordinates to local UTM
+        fault_x,fault_y=llz2utm(fault[:,1],fault[:,2],projection_zone)
+        fault_x,fault_y = fault_x/1000,fault_y/1000
+        fault_z=fault[:,3]    
+        
+        # grid Slab1.0 for making depth contours to be then used for along-strike distance calculation
+        ngrid_pts=500
+        X=linspace(slab_x.min(),slab_x.max(),ngrid_pts)
+        Y=linspace(slab_y.min(),slab_y.max(),ngrid_pts)
+        X,Y = meshgrid(X,Y)
+        Z = griddata(slab_x, slab_y, slab_z, X, Y,interp='linear')
+        
+        # X, Y and Z are matrices with the grid info, now create one contour at each subfault centroid depth
+        contour_levels=fault[:,3]
+        all_contours=plt.contour(X,Y,Z,levels=contour_levels)
+        
+        # x-coordinates for down_dip line
+        x_range=slab_x.max()-slab_x.min()
+        x_down_dip=linspace(-x_range/2,x_range/2,200)
+        
+        #Loop over number of subfaults, we want the distance from i-th fault to all other (j) subfaults
+        print 'Getting inter-fault distances'
+        for i in range(len(fault)):
+            if i%10==0:
+                print '... working on subfault '+str(i)+' of '+str(len(fault))
+            #Current fault
+            xi = fault_x[i]
+            yi = fault_y[i]
+            zi = fault_z[i]
+            
+            #Get contour at depth of current subfault
+            contour=all_contours.collections[i].get_paths()[0].vertices
+            
+            # Now find coordinates of point on this contour closest to subfault centroid
+            dist=sqrt((xi-contour[:,0])**2+(yi-contour[:,1])**2)
+            imin=dist.argmin()
+            
+            # These are coordinates on the contour
+            xmin_i=contour[imin,0]
+            ymin_i=contour[imin,1]
+            
+            #For each subfault loop over every other subfault
+            for j in range(len(fault)):
+                xj = fault_x[j]
+                yj = fault_y[j]
+                zj = fault_z[j]
+                
+                #Get down_dip y coordinates
+                y_down_dip=x_down_dip*cos(deg2rad(down_dip[j]))
+                
+                #Move line origin to subfault being tested
+                x_down_dip_subfault=x_down_dip+xj
+                y_down_dip_subfault=y_down_dip+yj
+                
+                #Get coordinates of intersection point between contour and down-dip line by finding minimum distance
+                dist=cdist(contour,c_[x_down_dip_subfault,y_down_dip_subfault])
+                r,c=unravel_index(dist.argmin(),dist.shape)
+                xmin_j=contour[r,0]
+                ymin_j=contour[r,1]           
+                
+                #Keep only points on the contour array that correspond to starting and stopping points along the path
+                keep=sort([r,imin])
+                contour_integral=contour[keep[0]:keep[1]+1]
+                
+                #Along strike distance is the path integral along contour between (xmin_i,ymin_i) and (xmin_j,ymin_j)
+                dx=diff(contour_integral[:,0])
+                dy=diff(contour_integral[:,1])
+                delta_strike=sqrt(dx**2+dy**2).sum() #Phew, that was hard
+                #Give negative sign if subfault is down_strike
+                strike_sign=sign(ymin_j-ymin_i)
+                delta_strike=strike_sign*delta_strike
+                
+    
+                
+                #get down dip distance from depth and average dip
+                delta_dip=(zi-zj)/sin(deg2rad(avg_dip))
+            
+                #Now the outputs
+                if i==j:
+                    Ddip[i,j] = 0
+                    Dstrike[i,j] = 0
+                else:
+                    Ddip[i,j] = delta_dip
+                    Dstrike[i,j] = delta_strike
                 
     return Dstrike,Ddip
 
@@ -639,7 +688,7 @@ def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
             success=False
             while success==False:
                 #Select only a subset of the faults based on magnitude scaling
-                ifaults,hypo_fault,Lmax,Wmax,Leff,Weff=select_faults(whole_fault,Dstrike,Ddip,target_Mw[kmag],buffer_factor,num_modes,no_shallow_epi=True)
+                ifaults,hypo_fault,Lmax,Wmax,Leff,Weff=select_faults(whole_fault,Dstrike,Ddip,target_Mw[kmag],buffer_factor,num_modes,no_shallow_epi=False)
                 fault_array=whole_fault[ifaults,:]
                 Dstrike_selected=Dstrike[ifaults,:][:,ifaults]
                 Ddip_selected=Ddip[ifaults,:][:,ifaults]
