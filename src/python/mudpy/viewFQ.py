@@ -2462,3 +2462,321 @@ def slip_rate_and_spectrum(rupt,epicenter,dt=0.005,t_total=50,ref1offset=-10,ref
     
     plt.show()
 
+
+def fence_slip(home,project_name,run_name,run_number,UTM_zone='10S',elev=20,azimuth=None,fudge=10,fake_hypo=(3,3)):
+    '''
+    Make fence diagram of rupture file
+    '''
+    
+    from numpy import genfromtxt,array,zeros
+    from matplotlib import pyplot as plt
+    from matplotlib import colors
+    from pyproj import Proj
+    from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+    from string import replace
+    from matplotlib import ticker
+    from matplotlib.ticker import MultipleLocator
+
+
+    #Get rupture data
+    fault=genfromtxt(home+project_name+'/output/ruptures/%s.%s.rupt' % (run_name,run_number))
+    
+    #Parse log file for hypocenter
+    log_file=home+project_name+'/output/ruptures/%s.%s.log' % (run_name,run_number)
+    f=open(log_file,'r')
+    loop_go=True
+    while loop_go:
+        line=f.readline()
+        if 'Hypocenter (lon,lat,z[km])' in line:                
+            s=replace(line.split(':')[-1],'(','')
+            s=replace(s,')','')
+            hypocenter=array(s.split(',')).astype('float')
+            loop_go=False  
+    f.close() 
+    
+    #get subfault corners
+    corners=get_subfault_corners(fault)
+    
+    #Convert ot UTM (in km)
+    corners=corners2utm(corners,UTM_zone=UTM_zone)
+    
+    #Get UTM coords of hypocenter
+    P=Proj(proj='utm',ellps='WGS84',zone=UTM_zone)
+    hypocenter[0],hypocenter[1]=P(hypocenter[0],hypocenter[1])
+    hypocenter[0]/=1000
+    hypocenter[1]/=1000
+    
+    #Make hypocenter the origin
+    corners[:,0]-=hypocenter[0]
+    corners[:,3]-=hypocenter[0]
+    corners[:,6]-=hypocenter[0]
+    corners[:,9]-=hypocenter[0]
+    corners[:,1]-=hypocenter[1]
+    corners[:,4]-=hypocenter[1]
+    corners[:,7]-=hypocenter[1]
+    corners[:,10]-=hypocenter[1]
+    
+    #Get mean strike for inital viewing angle
+    strike=fault[:,4].mean()
+    
+    #Normalized slip
+    slip=(fault[:,8]**2+fault[:,9]**2)**0.5
+    norm_slip=slip/slip.max()
+    
+    #Get colormaps
+    pqlx = colors.LinearSegmentedColormap('pqlx',pqlx_dict,256)
+    
+    #Azimuth viewing angle
+    if azimuth==None:
+        azimuth=strike+90
+    
+    #Plot init, axes positions etc
+    fig=plt.figure(figsize=(21,7))
+    ax1 = fig.add_subplot(311, projection='3d')
+    ax1.set_xlim([corners[:,0].min()-fudge,corners[:,0].max()+fudge])
+    ax1.set_ylim([corners[:,1].min()-fudge,corners[:,1].max()+fudge])
+    ax1.set_zlim([corners[:,2].min()-fudge/4,corners[:,2].max()+fudge/4])
+    #Fenagle the axis ticks
+    xmajorLocator = MultipleLocator(10)
+    ymajorLocator = MultipleLocator(20)
+    zmajorLocator = MultipleLocator(5)
+    ax1.xaxis.set_major_locator(xmajorLocator)
+    ax1.yaxis.set_major_locator(ymajorLocator)
+    ax1.zaxis.set_major_locator(zmajorLocator)
+    ax1.invert_zaxis()
+    ax1.view_init(elev=elev, azim=azimuth)
+
+    #Make one patch per subfault
+    for ksub in range(len(corners)):
+        vertices=[[tuple(corners[ksub,0:3]),tuple(corners[ksub,3:6]),tuple(corners[ksub,6:9]),tuple(corners[ksub,9:12])]]
+        subfault=Poly3DCollection(vertices, linewidths=0.5)
+        subfault.set_color(pqlx(norm_slip[ksub]))
+        subfault.set_linewidth(0.5)
+        subfault.set_edgecolor('#505050')
+        ax1.add_collection3d(subfault)
+    
+    #Hypocenter
+    ax1.scatter(fake_hypo[0],fake_hypo[1],hypocenter[2],s=220,marker='*',c='#7CFC00')
+    
+    #Dummy mapable for colorbar
+    s=plt.scatter(zeros(len(fault)),zeros(len(fault)),c=slip,cmap=pqlx,s=0.00001,lw=0)
+    
+    #Mke colorbar
+    cb=plt.colorbar(s,shrink=0.9,pad=-0.07)
+    tick_locator = ticker.MaxNLocator(nbins=5)
+    cb.locator=tick_locator
+    cb.update_ticks()
+    cb.set_label('Slip (m)')
+    
+    #Labels n' stuff
+    ax1.set_ylabel('\n\nEast (km)')
+    ax1.set_xlabel('\n\nNorth (km)')
+    ax1.set_zlabel('Depth (km)',rotation=90)
+    plt.title(home+project_name+'/output/ruptures/%s.%s.rupt' % (run_name,run_number))
+    
+
+    
+
+
+
+
+    # Ok now let's do the rise times
+    
+    rise=fault[:,7]
+    norm_rise=rise/rise.max()
+    
+    #Get colormaps
+    risemap = colors.LinearSegmentedColormap('risetimes',rise_times_dict,256)
+    
+    #Azimuth viewing angle
+    if azimuth==None:
+        azimuth=strike+90
+    
+    #Plot init, axes positions etc
+    ax2 = fig.add_subplot(312, projection='3d')
+    ax2.set_xlim([corners[:,0].min()-fudge,corners[:,0].max()+fudge])
+    ax2.set_ylim([corners[:,1].min()-fudge,corners[:,1].max()+fudge])
+    ax2.set_zlim([corners[:,2].min()-fudge/4,corners[:,2].max()+fudge/4])
+    #Fenagle the axis ticks
+    xmajorLocator = MultipleLocator(10)
+    ymajorLocator = MultipleLocator(20)
+    zmajorLocator = MultipleLocator(5)
+    ax2.xaxis.set_major_locator(xmajorLocator)
+    ax2.yaxis.set_major_locator(ymajorLocator)
+    ax2.zaxis.set_major_locator(zmajorLocator)
+    ax2.invert_zaxis()
+    ax2.view_init(elev=elev, azim=azimuth)
+
+    #Make one patch per subfault
+    for ksub in range(len(corners)):
+        vertices=[[tuple(corners[ksub,0:3]),tuple(corners[ksub,3:6]),tuple(corners[ksub,6:9]),tuple(corners[ksub,9:12])]]
+        subfault=Poly3DCollection(vertices, linewidths=0.5)
+        subfault.set_color(risemap(norm_slip[ksub]))
+        subfault.set_linewidth(0.5)
+        subfault.set_edgecolor('#505050')
+        ax2.add_collection3d(subfault)
+
+    #Hypocenter
+    ax2.scatter(fake_hypo[0],fake_hypo[1],hypocenter[2],s=220,marker='*',c='#7CFC00')    
+            
+    #Dummy mapable for colorbar
+    s=plt.scatter(zeros(len(fault)),zeros(len(fault)),c=rise,cmap=risemap,s=0.00001,lw=0)
+    
+    #Mke colorbar
+    cb=plt.colorbar(s,shrink=0.9,pad=-0.07)
+    tick_locator = ticker.MaxNLocator(nbins=5)
+    cb.locator=tick_locator
+    cb.update_ticks()
+    cb.set_label('Rise time (s)')
+    
+    #Labels n' stuff
+    ax2.set_ylabel('\n\nEast (km)')
+    ax2.set_xlabel('\n\nNorth (km)')
+    ax2.set_zlabel('Depth (km)',rotation=90)  
+
+
+
+
+    # Finally the onset times
+    
+    onset=fault[:,12]
+    norm_onset=onset/onset.max()
+    
+    #Get colormaps
+    onsetmap = colors.LinearSegmentedColormap('whitejet',whitejet_dict,256)
+    
+    #Azimuth viewing angle
+    if azimuth==None:
+        azimuth=strike+90
+    
+    #Plot init, axes positions etc
+    ax3 = fig.add_subplot(313, projection='3d')
+    ax3.set_xlim([corners[:,0].min()-fudge,corners[:,0].max()+fudge])
+    ax3.set_ylim([corners[:,1].min()-fudge,corners[:,1].max()+fudge])
+    ax3.set_zlim([corners[:,2].min()-fudge/4,corners[:,2].max()+fudge/4])
+    #Fenagle the axis ticks
+    xmajorLocator = MultipleLocator(10)
+    ymajorLocator = MultipleLocator(20)
+    zmajorLocator = MultipleLocator(5)
+    ax3.xaxis.set_major_locator(xmajorLocator)
+    ax3.yaxis.set_major_locator(ymajorLocator)
+    ax3.zaxis.set_major_locator(zmajorLocator)
+    ax3.invert_zaxis()
+    ax3.view_init(elev=elev, azim=azimuth)
+
+    #Make one patch per subfault
+    for ksub in range(len(corners)):
+        vertices=[[tuple(corners[ksub,0:3]),tuple(corners[ksub,3:6]),tuple(corners[ksub,6:9]),tuple(corners[ksub,9:12])]]
+        subfault=Poly3DCollection(vertices, linewidths=0.5)
+        subfault.set_color(onsetmap(norm_onset[ksub]))
+        subfault.set_linewidth(0.5)
+        subfault.set_edgecolor('#505050')
+        ax3.add_collection3d(subfault)
+
+    #Hypocenter
+    ax3.scatter(fake_hypo[0],fake_hypo[1],hypocenter[2],s=220,marker='*',c='#7CFC00')  
+         
+    #Dummy mapable for colorbar
+    s=plt.scatter(zeros(len(fault)),zeros(len(fault)),c=onset,cmap=onsetmap,s=0.00001,lw=0)
+    
+    #Mke colorbar
+    cb=plt.colorbar(s,shrink=0.9,pad=-0.07)
+    tick_locator = ticker.MaxNLocator(nbins=5)
+    cb.locator=tick_locator
+    cb.update_ticks()
+    cb.set_label('Onset time (s)')
+    
+    #Labels n' stuff
+    ax3.set_ylabel('\n\nEast (km)')
+    ax3.set_xlabel('\n\nNorth (km)')
+    ax3.set_zlabel('Depth (km)',rotation=90)          
+      
+    
+                  
+    #Fix the spacing in between subplots
+    plt.subplots_adjust(left=0.01,right=0.99,bottom=0.03,top=0.98,hspace=0.05)               
+                                                         
+    plt.show()
+
+    
+    
+
+    
+
+def get_subfault_corners(fault):
+    '''
+    Calculate the coordiantes of the 4 corners making up every subfault
+    '''
+    
+    from pyproj import Geod
+    from numpy import cos,deg2rad,sin,zeros
+    
+    #Projection object
+    g=Geod(ellps='WGS84')
+    
+    #Output variable
+    corners=zeros((len(fault),12))
+    
+    for kfault in range(len(fault)):
+        lon=fault[kfault,1]
+        lat=fault[kfault,2]
+        z=fault[kfault,3]
+        W=fault[kfault,11]
+        L=fault[kfault,10]
+        strike=fault[kfault,4]
+        dip=fault[kfault,5]
+        
+        #Get top center and bottom center
+        delta_h=W*cos(deg2rad(dip))/2
+        lon_top_center,lat_top_center,foo=g.fwd(lon,lat,strike-90,delta_h)
+        lon_bot_center,lat_bot_center,foo=g.fwd(lon,lat,strike+90,delta_h)
+        z_top=z-(W*sin(deg2rad(dip))/2)/1000
+        z_bot=z+(W*sin(deg2rad(dip))/2)/1000
+        
+        #Get coordinates of corners
+        
+        #Corner1
+        lon_corner,lat_corner,foo=g.fwd(lon_top_center,lat_top_center,strike,L/2)
+        corners[kfault,0:3]=lon_corner,lat_corner,z_top
+        
+        #Corner2
+        lon_corner,lat_corner,foo=g.fwd(lon_top_center,lat_top_center,strike+180,L/2)
+        corners[kfault,3:6]=lon_corner,lat_corner,z_top
+        
+        #Corner3
+        lon_corner,lat_corner,foo=g.fwd(lon_bot_center,lat_bot_center,strike+180,L/2)
+        corners[kfault,6:9]=lon_corner,lat_corner,z_bot
+        
+        #Corner4
+        lon_corner,lat_corner,foo=g.fwd(lon_bot_center,lat_bot_center,strike,L/2)
+        corners[kfault,9:12]=lon_corner,lat_corner,z_bot
+        
+    return corners
+    
+def corners2utm(corners,UTM_zone='10S'):
+    '''
+    Convert coordiantes of the corners to UTM
+    '''
+    
+    from pyproj import Proj
+
+    P=Proj(ellps='WGS84',proj='utm',zone=UTM_zone)
+    corners_out=corners.copy()
+    
+    corners_out[:,0],corners_out[:,1]=P(corners[:,0],corners[:,1])
+    corners_out[:,3],corners_out[:,4]=P(corners[:,3],corners[:,4])
+    corners_out[:,6],corners_out[:,7]=P(corners[:,6],corners[:,7])
+    corners_out[:,9],corners_out[:,10]=P(corners[:,9],corners[:,10])
+    
+    corners_out[:,0]/=1000
+    corners_out[:,1]/=1000
+    corners_out[:,3]/=1000
+    corners_out[:,4]/=1000
+    corners_out[:,6]/=1000
+    corners_out[:,7]/=1000
+    corners_out[:,9]/=1000
+    corners_out[:,10]/=1000
+    
+    return corners_out
+    
+    
