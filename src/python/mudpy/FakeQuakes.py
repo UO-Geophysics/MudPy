@@ -402,7 +402,7 @@ def rectify_slip(slip_unrectified,percent_reject=10):
 
 
 
-def select_faults(whole_fault,Dstrike,Ddip,target_Mw,buffer_factor,num_modes,no_shallow_epi=True,hypo_depth=10):
+def select_faults(whole_fault,Dstrike,Ddip,target_Mw,buffer_factor,num_modes,scaling_law,no_shallow_epi=True,hypo_depth=10):
     '''
     Select a random fault to be the hypocenter then based on scaling laws and a 
     target magnitude select only faults within the expected area plus some 
@@ -415,12 +415,20 @@ def select_faults(whole_fault,Dstrike,Ddip,target_Mw,buffer_factor,num_modes,no_
     done=False
     while not done:
         #Determine length and width from scaling laws (select from lognormal dsitribution)
-        length_mean=-2.37+0.57*target_Mw
-        length_std=0.10#0.12#0.18
-        length=10**normal(length_mean,length_std)
-        width_mean=-1.86+0.46*target_Mw
-        width_std=0.09#0.11#0.17
-        width=10**normal(width_mean,width_std)
+        if scaling_law.upper()=='T':
+            length_mean=-2.37+0.57*target_Mw
+            length_std=0.10#0.12#0.18
+            length=10**normal(length_mean,length_std)
+            width_mean=-1.86+0.46*target_Mw
+            width_std=0.09#0.11#0.17
+            width=10**normal(width_mean,width_std)
+        elif scaling_law.upper()=='S':
+            length_mean=-2.69+0.64*target_Mw
+            length_std=0.10#0.18
+            length=10**normal(length_mean,length_std)
+            width_mean=-1.12+0.3*target_Mw
+            width_std=0.08#0.15
+            width=10**normal(width_mean,width_std)            
         
         #Select random subfault as hypocenter
         hypo_fault=randint(0,len(whole_fault)-1)
@@ -539,7 +547,8 @@ def get_rupture_onset(home,project_name,slip,fault_array,model_name,hypocenter,r
     onset times
     '''
         
-    from numpy import genfromtxt,zeros,arctan,sin,r_,where,log10,isnan
+    from numpy import genfromtxt,zeros,arctan,sin,r_,where,log10,isnan,argmin,setxor1d
+    from numpy .random import rand
     from obspy.geodetics import gps2dist_azimuth
     
     #Load velocity model
@@ -561,14 +570,29 @@ def get_rupture_onset(home,project_name,slip,fault_array,model_name,hypocenter,r
     slope=(0.8-0.56)/(rise_time_depths[1]-rise_time_depths[0])
     intercept=0.8-slope*rise_time_depths[1]
     rupture_multiplier[i]=slope*depth_to_top[i]+intercept
-        
+    
+    #Perturb depths of the hypocenter so that faults at the same depth are not zero onset
+    delta=0.002
+    i_same_as_hypo=where(fault_array[:,3]==hypocenter[2])[0]
+    dist=((fault_array[:,1]-hypocenter[0])**2+(fault_array[:,2]-hypocenter[1])**2)**0.5
+    i_hypo=argmin(dist)
+    #Get faults at same depth that are NOT the hypo
+    i_same_as_hypo=setxor1d(i_same_as_hypo,i_hypo)
+    #perturb
+    R=rand(1)
+    fault_array[i_hypo,3]=fault_array[i_hypo,3]-delta*R
+    hypocenter[2]=hypocenter[2]-delta*R
+    R=rand(len(i_same_as_hypo))
+    fault_array[i_same_as_hypo,3]=fault_array[i_same_as_hypo,3]+delta*R
+    
+         
     #Loop over all faults
     t_onset=zeros(len(slip))
     for kfault in range(len(slip)):
         D,az,baz=gps2dist_azimuth(hypocenter[1],hypocenter[0],fault_array[kfault,2],fault_array[kfault,1])
         D=D/1000
         #Start and stop depths
-        if fault_array[kfault,3]<hypocenter[2]:
+        if fault_array[kfault,3]<=hypocenter[2]:
             zshallow=fault_array[kfault,3]
             zdeep=hypocenter[2]
         else:
@@ -642,7 +666,7 @@ def get_centroid(fault):
 def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
     load_distances,distances_name,UTM_zone,target_Mw,model_name,hurst,Ldip,Lstrike,
     num_modes,Nrealizations,rake,buffer_factor,rise_time_depths,time_epi,max_slip,
-    source_time_function,lognormal,slip_standard_deviation):
+    source_time_function,lognormal,slip_standard_deviation,scaling_law):
     
     '''
     Depending on user selected flags parse the work out to different functions
@@ -688,7 +712,7 @@ def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
             success=False
             while success==False:
                 #Select only a subset of the faults based on magnitude scaling
-                ifaults,hypo_fault,Lmax,Wmax,Leff,Weff=select_faults(whole_fault,Dstrike,Ddip,target_Mw[kmag],buffer_factor,num_modes,no_shallow_epi=False)
+                ifaults,hypo_fault,Lmax,Wmax,Leff,Weff=select_faults(whole_fault,Dstrike,Ddip,target_Mw[kmag],buffer_factor,num_modes,scaling_law,no_shallow_epi=False)
                 fault_array=whole_fault[ifaults,:]
                 Dstrike_selected=Dstrike[ifaults,:][:,ifaults]
                 Ddip_selected=Ddip[ifaults,:][:,ifaults]

@@ -2669,6 +2669,7 @@ def fence_slip(home,project_name,run_name,run_number,UTM_zone='10S',elev=20,azim
         vertices=[[tuple(corners[ksub,0:3]),tuple(corners[ksub,3:6]),tuple(corners[ksub,6:9]),tuple(corners[ksub,9:12])]]
         subfault=Poly3DCollection(vertices, linewidths=0.5)
         subfault.set_color(onsetmap(norm_onset[ksub]))
+        #subfault.set_color(plt.cm.jet(norm_onset[ksub]))
         subfault.set_linewidth(0.5)
         subfault.set_edgecolor('#505050')
         ax3.add_collection3d(subfault)
@@ -2678,6 +2679,7 @@ def fence_slip(home,project_name,run_name,run_number,UTM_zone='10S',elev=20,azim
          
     #Dummy mapable for colorbar
     s=plt.scatter(zeros(len(fault)),zeros(len(fault)),c=onset,cmap=onsetmap,s=0.00001,lw=0)
+    #s=plt.scatter(zeros(len(fault)),zeros(len(fault)),c=onset,cmap=plt.cm.jet,s=0.00001,lw=0)
     
     #Mke colorbar
     cb=plt.colorbar(s,shrink=0.9,pad=-0.07)
