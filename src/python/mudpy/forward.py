@@ -1217,6 +1217,18 @@ def lowpass(data,fcorner,fsample,order):
     data_filt=filtfilt(b,a,data)
     return data_filt
     
+def highpass(data,fcorner,fsample,order):
+    '''
+    Make a highpass zero phase filter
+    '''
+    from scipy.signal import butter,filtfilt
+    from numpy import size,array
+    
+    fnyquist=fsample/2
+    b, a = butter(order, array(fcorner)/(fnyquist),'highpass')
+    data_filt=filtfilt(b,a,data)
+    return data_filt
+    
 
     
 def inv2coulomb(rupt,epicenter,fout):
