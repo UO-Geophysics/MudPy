@@ -1581,7 +1581,7 @@ def pgd_2D_misfit_and_GOF(home,project_name,rupture_list='ruptures.list',Mw_lims
                            
  
 
-def plot_2_waveforsm_2_spectra(home,project_name,run_name,run_number,sta1,sta2,component='N',fmin=0.03,ref1offset=[-1.65,-1.65],ref2offset=[-3,-3]):
+def plot_2_waveforms_2_spectra(home,project_name,run_name,run_number,sta1,sta2,component='N',fmin=0.03,ref1offset=[-1.65,-1.65],ref2offset=[-3,-3]):
     '''
     Comapre spectral decay of several STFs
     
@@ -1760,7 +1760,7 @@ def record_section(home,project_name,GF_list,rupture,factor=10):
     event_log=home+project_name+'/output/ruptures/'+rupture+'.log'
     
     #Load velocity model for ray tracing
-    velmod = velmod = TauPyModel(model="/Users/dmelgar/FakeQuakes/Cascadia/structure/cascadia")
+    velmod = TauPyModel(model="/Users/dmelgar/FakeQuakes/Cascadia/structure/cascadia")
     
     # Get hypocenter
     f=open(event_log,'r')
@@ -1957,7 +1957,7 @@ def statics_map(summary_file,scale,xl,yl,vertscale=400):
     
     iup=where(sta[:,5]>0)
     idown=where(sta[:,5]<0)
-    plt.scatter(sta[iup,1],sta[iup,2],c='r',s=sta[iup,5]*vertscale,lw=0.1)
+    plt.scatter(sta[iup,1],sta[iup,2],c='r',s=sta[iup,5]*verti,lw=0.1)
     plt.scatter(sta[idown,1],sta[idown,2],c='#4169E1',s=-sta[idown,5]*vertscale,lw=0.1)
     plt.quiver(sta[:,1],sta[:,2],sta[:,4],sta[:,3],scale=scale,width=0.007)
     
@@ -2094,7 +2094,7 @@ def plot_3stations(home,project_name,run_name,run_number,GF_list,stations=['chzz
     lonlat=lonlat[i]
     
     #Load velocity model for ray tracing
-    velmod = velmod = TauPyModel(model="/Users/dmelgar/FakeQuakes/Cascadia/structure/cascadia")
+    velmod = TauPyModel(model="/Users/dmelgar/FakeQuakes/Cascadia/structure/cascadia")
     
     # Get hypocenter
     f=open(event_log,'r')

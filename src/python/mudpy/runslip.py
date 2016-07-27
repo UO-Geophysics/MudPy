@@ -223,7 +223,7 @@ def make_parallel_green(home,project_name,station_file,fault_name,model_name,dt,
                 makedirs(subfault_folder)
     #Create individual source files
     for k in range(ncpus):
-        i=arange(k,len(source),ncpus)
+        i=arange(k+hot_start,len(source),ncpus)
         mpi_source=source[i,:]
         fmt='%d\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f'
         savetxt(home+project_name+'/data/model_info/mpi_source.'+str(k)+'.fault',mpi_source,fmt=fmt)
