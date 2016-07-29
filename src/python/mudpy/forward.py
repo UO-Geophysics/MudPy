@@ -1498,7 +1498,7 @@ def makefault(fout,strike,dip,nstrike,dx_dip,dx_strike,epicenter,num_updip,num_d
     W=ones(loout.shape)*dx_dip*1000
     f=open(fout,'w')
     for k in range(len(x)):   
-        out='%i\t%.6f\t%.6f\t%.3f\t%i\t%i\t%.1f\t%.1f\t%.2f\t%.2f\n' % (k+1,loout[k],laout[k],zout[k],strike[k],dip[k],tw[k],rise[k],L[k],W[k])
+        out='%i\t%.6f\t%.6f\t%.3f\t%.2f\t%.2f\t%.1f\t%.1f\t%.2f\t%.2f\n' % (k+1,loout[k],laout[k],zout[k],strike[k],dip[k],tw[k],rise[k],L[k],W[k])
         f.write(out)
     f.close()
     
