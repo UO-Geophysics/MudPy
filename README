@@ -3,7 +3,7 @@ MULTI-DATA SOURCE MODELING AND INVERSION TOOLKIT
 MudPy v.1.0
 Diego Melgar
 Seismological Laboratory
-University of California Berkeley
+U.C. Berkeley
 
 A code to run forward models of dislocation sources as well as invert for them 
 with multiple geophysical data types:
