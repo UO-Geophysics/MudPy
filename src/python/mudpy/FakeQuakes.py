@@ -62,6 +62,35 @@ def init(home,project_name):
         #copy(mudpy+'template.mod',proj_dir+'structure/')
 
 
+def llz2utm(lon,lat,projection_zone='None'):
+    '''
+    Convert lat,lon to UTM
+    '''
+    from numpy import zeros,where,chararray
+    import utm
+    from pyproj import Proj
+    from scipy.stats import mode
+    
+    x=zeros(lon.shape)
+    y=zeros(lon.shape)
+    zone=zeros(lon.shape)
+    b=chararray(lon.shape)
+    if projection_zone==None:
+        #Determine most suitable UTM zone
+        for k in range(len(lon)):
+            #x,y,zone[k],b[k]=utm.from_latlon(lat[k],lon[k]-360)
+            x,y,zone[k],b[k]=utm.from_latlon(lat[k],lon[k])
+        zone_mode=mode(zone)
+        i=where(zone==zone_mode)[0]
+        letter=b[i[0]]
+        z=str(int(zone[0]))+letter
+    else:
+        z=projection_zone
+    print z
+    p = Proj(proj='utm',zone=z,ellps='WGS84')
+    x,y=p(lon,lat)
+    return x,y
+
 
 
 def subfault_distances_3D(home,project_name,fault_name,slab_name,projection_zone):
@@ -88,7 +117,6 @@ def subfault_distances_3D(home,project_name,fault_name,slab_name,projection_zone
     from numpy import sqrt,sin,cos,deg2rad,zeros,meshgrid,linspace,where,c_,unravel_index,sort,diff,genfromtxt,sign
     from matplotlib.mlab import griddata
     from matplotlib import pyplot as plt
-    from gmsh_tools import llz2utm
     from scipy.spatial.distance import cdist
     from pyproj import Geod
     
