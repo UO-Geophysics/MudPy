@@ -406,6 +406,9 @@ def make_KL_slip(fault,num_modes,eigenvals,V,mean_slip,max_slip,lognormal=True,m
         if iterations>maxiter:
             print'... ... ... improper eigenvalues, recalculating...'
             break
+    
+
+    
     return KL_slip,success
 
 
@@ -694,7 +697,7 @@ def get_centroid(fault):
 def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
     load_distances,distances_name,UTM_zone,target_Mw,model_name,hurst,Ldip,Lstrike,
     num_modes,Nrealizations,rake,buffer_factor,rise_time_depths,time_epi,max_slip,
-    source_time_function,lognormal,slip_standard_deviation,scaling_law):
+    source_time_function,lognormal,slip_standard_deviation,scaling_law,force_magnitude):
     
     '''
     Depending on user selected flags parse the work out to different functions
@@ -791,13 +794,23 @@ def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
             foo,mu=get_mean_slip(target_Mw[kmag],whole_fault,vel_mod)
             fault_out[:,13]=mu
             
+            #Calculate moment and magnitude of fake slip pattern
+            M0=sum(slip*fault_out[ifaults,10]*fault_out[ifaults,11]*mu[ifaults])
+            Mw=(2./3)*(log10(M0)-9.1)
+            
+            #Force to target magnitude
+            if force_magnitude==True:
+                M0_target=10**(1.5*target_Mw[kmag]+9.1)
+                M0_ratio=M0_target/M0
+                #Multiply slip by ratio
+                slip=slip*M0_ratio
+                #Recalculate
+                M0=sum(slip*fault_out[ifaults,10]*fault_out[ifaults,11]*mu[ifaults])
+                Mw=(2./3)*(log10(M0)-9.1)
+            
             #Place slip values in output variable
             fault_out[ifaults,8]=slip*cos(deg2rad(rake))
             fault_out[ifaults,9]=slip*sin(deg2rad(rake))
-            
-            #Calculate moment and magnitude of fake slip pattern
-            M0=sum(sqrt(fault_out[:,8]**2+fault_out[:,9]**2)*fault_out[:,10]*fault_out[:,11]*mu)
-            Mw=(2./3)*(log10(M0)-9.1)
             
             #Calculate and scale rise times
             rise_times=get_rise_times(M0,slip,fault_array,rise_time_depths)
