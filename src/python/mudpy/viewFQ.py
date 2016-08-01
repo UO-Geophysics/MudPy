@@ -2463,7 +2463,7 @@ def slip_rate_and_spectrum(rupt,epicenter,dt=0.005,t_total=50,ref1offset=-10,ref
     plt.show()
 
 
-def fence_slip(home,project_name,run_name,run_number,UTM_zone='10S',elev=20,azimuth=None,fudge=10,fake_hypo=(3,3)):
+def fence_slip(home,project_name,run_name,run_number,UTM_zone='10S',elev=20,azimuth=None,fudge=10,fake_hypo=[0.1,0.1],borderwidth=0.5):
     '''
     Make fence diagram of rupture file
     '''
@@ -2476,7 +2476,6 @@ def fence_slip(home,project_name,run_name,run_number,UTM_zone='10S',elev=20,azim
     from string import replace
     from matplotlib import ticker
     from matplotlib.ticker import MultipleLocator
-
 
     #Get rupture data
     fault=genfromtxt(home+project_name+'/output/ruptures/%s.%s.rupt' % (run_name,run_number))
@@ -2549,9 +2548,9 @@ def fence_slip(home,project_name,run_name,run_number,UTM_zone='10S',elev=20,azim
     #Make one patch per subfault
     for ksub in range(len(corners)):
         vertices=[[tuple(corners[ksub,0:3]),tuple(corners[ksub,3:6]),tuple(corners[ksub,6:9]),tuple(corners[ksub,9:12])]]
-        subfault=Poly3DCollection(vertices, linewidths=0.5)
+        subfault=Poly3DCollection(vertices, linewidths=borderwidth)
         subfault.set_color(pqlx(norm_slip[ksub]))
-        subfault.set_linewidth(0.5)
+        subfault.set_linewidth(borderwidth)
         subfault.set_edgecolor('#505050')
         ax1.add_collection3d(subfault)
     
@@ -2610,9 +2609,9 @@ def fence_slip(home,project_name,run_name,run_number,UTM_zone='10S',elev=20,azim
     #Make one patch per subfault
     for ksub in range(len(corners)):
         vertices=[[tuple(corners[ksub,0:3]),tuple(corners[ksub,3:6]),tuple(corners[ksub,6:9]),tuple(corners[ksub,9:12])]]
-        subfault=Poly3DCollection(vertices, linewidths=0.5)
+        subfault=Poly3DCollection(vertices, linewidths=borderwidth)
         subfault.set_color(risemap(norm_slip[ksub]))
-        subfault.set_linewidth(0.5)
+        subfault.set_linewidth(borderwidth)
         subfault.set_edgecolor('#505050')
         ax2.add_collection3d(subfault)
 
@@ -2667,10 +2666,10 @@ def fence_slip(home,project_name,run_name,run_number,UTM_zone='10S',elev=20,azim
     #Make one patch per subfault
     for ksub in range(len(corners)):
         vertices=[[tuple(corners[ksub,0:3]),tuple(corners[ksub,3:6]),tuple(corners[ksub,6:9]),tuple(corners[ksub,9:12])]]
-        subfault=Poly3DCollection(vertices, linewidths=0.5)
+        subfault=Poly3DCollection(vertices, linewidths=borderwidth)
         subfault.set_color(onsetmap(norm_onset[ksub]))
         #subfault.set_color(plt.cm.jet(norm_onset[ksub]))
-        subfault.set_linewidth(0.5)
+        subfault.set_linewidth(borderwidth)
         subfault.set_edgecolor('#505050')
         ax3.add_collection3d(subfault)
 

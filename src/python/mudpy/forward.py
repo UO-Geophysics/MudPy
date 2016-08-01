@@ -435,9 +435,10 @@ def get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_nam
             #Make sure rise time is a multiple of dt
             dt=nss.stats.delta
             rise=round(rise/dt)*nss.stats.delta
-            if rise<(2*dt): #Otherwise get nan's in STF
-                rise=2*dt
-            t_stf,stf=build_source_time_function(rise,dt,NFFT,stf_type=source_time_function,rise_scale=4.0)
+            if rise<(2.*dt): #Otherwise get nan's in STF
+                rise=2.*dt
+            total_time=NFFT*dt
+            t_stf,stf=build_source_time_function(rise,dt,total_time,stf_type=source_time_function,rise_scale=4.0)
             nss.data=convolve(nss.data,stf)[0:NFFT]
             ess.data=convolve(ess.data,stf)[0:NFFT]
             zss.data=convolve(zss.data,stf)[0:NFFT]
@@ -1807,7 +1808,7 @@ def convolution_matrix(h):
     return Hfinal
     
     
-def build_source_time_function(rise_time,dt,total_time,stf_type='triangle',zeta=0.2,rise_scale=4,scale=True):
+def build_source_time_function(rise_time,dt,total_time,stf_type='triangle',zeta=0.2,dreger_falloff_rate=4,scale=True):
     '''
     Compute source time function for a given rise time, right now it assumes 1m of slip
     and a triangle STF
@@ -1845,7 +1846,7 @@ def build_source_time_function(rise_time,dt,total_time,stf_type='triangle',zeta=
         Mdot[i2]=Cn*(1.0-0.7*cos(t[i2]*pi/tau1)+0.3*cos(pi*(t[i2]-tau1)/tau2))
         Mdot[i3]=Cn*(0.3+0.3*cos(pi*(t[i3]-tau1)/tau2))
     elif stf_type=='dreger':
-        tau=rise_time/rise_scale
+        tau=rise_time/dreger_falloff_rate
         Mdot=(t**zeta)*exp(-t/tau)
     else:
         print 'ERROR: unrecognized STF type '+stf_type

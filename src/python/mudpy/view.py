@@ -237,9 +237,9 @@ def slip3D(rupt,marker_size=60,clims=None):
     fig = plt.figure(figsize=(14, 4))
     ax = fig.add_subplot(111, projection='3d')
     if clims==None:
-        p=ax.scatter(lon, lat, depth, c=slip,cmap=whitejet, marker='o',s=marker_size)
+        p=ax.scatter(lon, lat, depth, c=slip,cmap=whitejet, marker='o',s=marker_size,lw=0)
     else:
-        p=ax.scatter(lon, lat, depth, c=slip,cmap=whitejet, marker='o',s=marker_size,vmin=clims[0],vmax=clims[1])
+        p=ax.scatter(lon, lat, depth, c=slip,cmap=whitejet, marker='o',s=marker_size,vmin=clims[0],vmax=clims[1],lw=0)
     ax.set_xlabel('Longitude')
     ax.set_ylabel('Latitude')
     ax.set_zlabel('Depth (km)')
