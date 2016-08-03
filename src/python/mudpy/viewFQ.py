@@ -668,7 +668,8 @@ def analyze_sources(home,project_name,run_name,Mw_lims=[7.75,9.35]):
     
                         
 
-def one_event_pgd_scaling(home,project_name,run_name,run_number,reference='centroid',dist_lims=[1,1000],plus_minus=[0.1,0.2,0.3],title_mag=None):
+def one_event_pgd_scaling(home,project_name,run_name,run_number,reference='centroid',dist_lims=[1,1000],
+                coeffs=[-4.434,1.047,-0.138],plus_minus=[0.1,0.2,0.3],title_mag=None):
     '''
     Make PGD scaling plot
     '''
@@ -723,23 +724,26 @@ def one_event_pgd_scaling(home,project_name,run_name,run_number,reference='centr
         
         
     fig = plt.figure(figsize=(4.5,4.5))
-    plt.title('Mw = '+str(title_mag))
+    plt.title('Mw = '+str(Mw))
     ax = plt.gca()
     ax.set_yscale('log')
     ax.set_xscale('log')
     # Plot reference line
     dref=logspace(0,3,50)
-    pgdref=10**(-4.434+1.047*Mw-0.138*Mw*log10(dref))
+    A=coeffs[0]
+    B=coeffs[1]
+    C=coeffs[2]
+    pgdref=10**(A+B*Mw+C*Mw*log10(dref))
     plt.plot(dref,pgdref,'k',lw=2,label='PGD GMPE')
     pgdref=10**(A+B*Mw+C*Mw*log10(dref))
     #plt.plot(dref,pgdref,'r',lw=2,label='Event best fit')
     #Plot plus_minus lines
     for k in range(len(plus_minus)):
         Mw_plus=Mw+plus_minus[k]
-        pgdref_plus=10**(-4.434+1.047*Mw_plus-0.138*Mw_plus*log10(dref))
+        pgdref_plus=10**(A+B*Mw_plus+C*Mw_plus*log10(dref))
         plt.plot(dref,pgdref_plus,'#A0A0A0',lw=1.0,label=None)
         Mw_minus=Mw-plus_minus[k]
-        pgdref_minus=10**(-4.434+1.047*Mw_minus-0.138*Mw_minus*log10(dref))
+        pgdref_minus=10**(A+B*Mw_minus+C*Mw_minus*log10(dref))
         plt.plot(dref,pgdref_minus,'#A0A0A0',lw=1.5,label=None)
     #Actual observations
     ax.scatter(d,pgd,s=60, facecolors='none', edgecolors='#1E90FF',marker='d',label='Simulation')

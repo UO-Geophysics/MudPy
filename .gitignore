@@ -1,4 +1,5 @@
 *.pyc
+*.swp
 .DS_Store
 /src/fk/*.o
 /src/fk/build/*

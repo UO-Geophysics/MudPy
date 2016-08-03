@@ -256,7 +256,8 @@ def waveforms_matrix(home,project_name,fault_name,rupture_name,station_file,GF_l
 
         
 def waveforms_fakequakes(home,project_name,fault_name,rupture_list,GF_list,
-                model_name,run_name,dt,NFFT,G_from_file,G_name,source_time_function):
+                model_name,run_name,dt,NFFT,G_from_file,G_name,source_time_function,
+                stf_falloff_rate):
     '''
     To supplant waveforms_matrix() it needs to include resmapling and all that jazz...
     
@@ -300,7 +301,7 @@ def waveforms_fakequakes(home,project_name,fault_name,rupture_list,GF_list,
         #Get epicentral time
         epicenter,time_epi=read_fakequakes_hypo_time(home,project_name,rupture_name)
         # Put in matrix
-        m,G=get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_name,time_epi,GF_list,epicenter,NFFT,source_time_function)
+        m,G=get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_name,time_epi,GF_list,epicenter,NFFT,source_time_function,stf_falloff_rate)
         # Solve
         waveforms=G.dot(m)
         #Write output
@@ -370,7 +371,7 @@ def load_fakequakes_synthetics(home,project_name,fault_name,model_name,GF_list,G
 
 
 
-def get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_name,time_epi,GF_list,epicenter,NFFT,source_time_function):
+def get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_name,time_epi,GF_list,epicenter,NFFT,source_time_function,stf_falloff_rate):
     '''
     Assemble Green functions matrix. If requested will parse all available synthetics on file and build the matrix.
     Otherwise, if it exists, it will be loaded from file 
@@ -438,7 +439,7 @@ def get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_nam
             if rise<(2.*dt): #Otherwise get nan's in STF
                 rise=2.*dt
             total_time=NFFT*dt
-            t_stf,stf=build_source_time_function(rise,dt,total_time,stf_type=source_time_function,rise_scale=4.0)
+            t_stf,stf=build_source_time_function(rise,dt,total_time,stf_type=source_time_function,dreger_falloff_rate=stf_falloff_rate)
             nss.data=convolve(nss.data,stf)[0:NFFT]
             ess.data=convolve(ess.data,stf)[0:NFFT]
             zss.data=convolve(zss.data,stf)[0:NFFT]
@@ -1789,6 +1790,179 @@ def static2kineamtic(rupt,epicenter,vr,fout):
     source[:,12]=tdelay
     fmtout='%6i\t%.4f\t%.4f\t%8.4f\t%.2f\t%.2f\t%.2f\t%.2f\t%12.4e\t%12.4e%10.1f\t%10.1f\t%8.4f\t%.4e'
     savetxt(fout,source,fmtout,header='No,lon,lat,z(km),strike,dip,rise,dura,ss-slip(m),ds-slip(m),ss_len(m),ds_len(m),rupt_time(s),rigidity(Pa)')
+
+
+
+def mudpy2srf(rupt,log_file,stf_dt=0.1,stf_type='dreger'):
+    '''
+    Convert a mudpy .rupt or .inv file to SRF version 2 format
+    
+    See for SRF format description here:
+        https://scec.usc.edu/scecpedia/Standard_Rupture_Format
+    '''
+    
+    from numpy import genfromtxt,where,sin,deg2rad,array,argmin,sqrt,sign,arctan2,rad2deg,arange,ones
+    from pyproj import Geod
+    from string import replace
+    from os import path
+    
+    #Define paths to output files
+    folder=path.dirname(rupt)
+    basename=path.basename(rupt)
+    basename=replace(basename,'rupt','srf')
+    srf_file=folder+'/'+basename
+    basename=replace(basename,'srf','src')
+    src_file=folder+'/'+basename
+    
+    #Read mudpy file
+    f=genfromtxt(rupt)
+    
+    
+    #Calculate stuff for the header
+    
+    #Get coordiantes of shallowest row
+    min_row=where(f[:,3]==f[:,3].min())[0]
+    fmin=f[min_row,:]
+    
+    #Top center longitude
+    elon=fmin[:,1].mean()
+    
+    #Top center latitude
+    elat=fmin[:,2].mean()
+    
+    #Number of faults along strike
+    Nstrike=len(fmin)
+    
+    #Number of faults along dip
+    Ndip=len(f)/Nstrike
+    
+    #Subfault dimensions (in km)
+    dx_strike=f[0,10]/1000.0
+    dx_dip=f[0,11]/1000.0
+    
+    #Segment length and width
+    length=Nstrike*dx_strike
+    width=Ndip*dx_dip
+    
+    #Segment strike and dip
+    strike=f[0,4]
+    dip=f[0,5]
+    
+    #Depth to top of fault
+    depth_top=fmin[0,3]-sin(deg2rad(dip))*(dx_dip/2)
+    
+    #Location of hypocenter from log file and magnitude
+    flog=open(log_file,'r')
+    while True:
+        line=flog.readline()
+        if 'Hypocenter (lon,lat,z[km])' in line:                
+            s=replace(line.split(':')[-1],'(','')
+            s=replace(s,')','')
+            hypocenter=array(s.split(',')).astype('float')
+        if 'Actual magnitude' in line:
+            Mw=float(line.split()[-1])
+        elif line=='':
+            break 
+    flog.close()
+    
+    #Down dip location with regards to top of fault
+    dip_hypo_position=(hypocenter[2]-depth_top)*sin(deg2rad(dip))
+    
+    #Get hypocenter row of subfaults and find coordinates of middle
+    hypo_row=where(f[:,3]==hypocenter[2])[0]
+    hypo_center_lon=f[hypo_row,1].mean()
+    hypo_center_lat=f[hypo_row,2].mean()
+    #Distance from edge
+    g=Geod(ellps='WGS84')
+    az,baz,dist_from_center=g.inv(hypocenter[0],hypocenter[1],hypo_center_lon,hypo_center_lat)
+    
+    #Now decide if distance is positive or negative
+    if strike>180:
+        strike_rectified=strike-360
+    if sign(az)==sign(strike_rectified):
+        strike_hypo_position=-dist_from_center/1000
+    else:
+        strike_hypo_position=dist_from_center/1000
+        
+    #open SRF file and write header data
+    fout=open(srf_file,'w')
+    fout.write('2.0\n') #SRF version
+    fout.write('PLANE 1\n')
+    fout.write('%.6f\t%.6f\t%d\t%d\t%.4f\t%.4f\n' % (elon,elat,Nstrike,Ndip,length,width))
+    fout.write('%.4f\t%.4f\t%.4f\t%.4f\t%.4f\n' % (strike,dip,depth_top,strike_hypo_position,dip_hypo_position))
+    fout.write('POINTS %d\n' % (Nstrike*Ndip))
+    
+    #While we're here let's write the SRC file too
+    fsrc=open(src_file,'w')
+    fsrc.write('MAGNITUDE = %.4f\n' % Mw)
+    fsrc.write('FAULT_LENGTH = %.4f\n' % length)
+    fsrc.write('DLEN = %.4f\n' % dx_strike)
+    fsrc.write('FAULT_WIDTH = %.4f\n' % width)
+    fsrc.write('DWID = %.4f\n' % dx_dip)
+    fsrc.write('DEPTH_TO_TOP = %.4f\n' % depth_top)
+    fsrc.write('STRIKE = %.4f\n' % strike)
+    fsrc.write('RAKE = 9999\n')
+    fsrc.write('DIP = %.4f\n' % dip)
+    fsrc.write('LAT_TOP_CENTER = %.4f\n' % elat)
+    fsrc.write('LON_TOP_CENTER = %.4f\n' % elon)
+    fsrc.write('HYPO_ALONG_STK = %.4f\n' % strike_hypo_position)
+    fsrc.write('HYPO_DOWN_DIP = %.4f\n' % dip_hypo_position)
+    fsrc.write('DT = 0.01\n')
+    fsrc.write('SEED = 1')
+    fsrc.close()
+    
+    #And that was jsut the headers, now let's move on to getting the subfault source time functions
+    # Note mudpy works in mks SRF is cgs so must convert accordingly
+    for kfault in range(len(f)):
+        #Get values for "Headers" for this subfault
+        lon=f[kfault,1]
+        lat=f[kfault,2]
+        depth=f[kfault,3]
+        strike=f[kfault,4]
+        dip=f[kfault,5]
+        area=f[kfault,10]*f[kfault,11]*100**2
+        tinit=f[kfault,12]
+        vs=-1 #Default value for not known
+        density=-1 #default value for not known
+        rake=rad2deg(arctan2(f[kfault,9],f[kfault,8]))
+        slip=sqrt(f[kfault,8]**2+f[kfault,9]**2)*100
+        
+        #Now get source time function
+        rise_time=f[kfault,7]
+        total_time=rise_time*1.5
+        #If subfault has zero rise time make it have tiny sli rate
+        if rise_time==0:
+            tstf=arange(3)*stf_dt
+            stf=1e-6*ones(3)
+        else:
+            tstf,stf=build_source_time_function(rise_time,stf_dt,total_time,stf_type=stf_type,zeta=0.2,scale=True)
+            #Scale stf so integral matches total slip
+            stf_adjust_factor=slip/stf_dt
+            stf=stf*stf_adjust_factor #now tf is in cm/sec       
+        
+        #How mant STF points?
+        NTstf=len(stf)
+        
+        #Write the subfault headers
+        fout.write('%.6f\t%.6f\t%.5e\t%.2f\t%.2f\t%.5e\t%.4e\t%.4e\t%.4e\t%.4e\n' % (lon,lat,depth,strike,dip,area,tinit,stf_dt,vs,density))
+        fout.write('%.2f\t%.4f\t%d\t0\t0\t0\t0\n' % (rake,slip,NTstf))
+        
+        #Write stf 6 values per line
+        for kstf in range(NTstf):
+            if kstf==0:
+                white_space='\t'
+            elif (kstf+1) % 6 == 0:
+                white_space='\n'
+            elif (kstf+1)==NTstf:
+                white_space='\n'
+            else:
+                white_space='\t'
+            fout.write('%.6f%s' % (stf[kstf],white_space))
+
+    
+    # And done
+    fout.close()
+
 
 
 def convolution_matrix(h):
