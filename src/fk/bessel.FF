@@ -1,0 +1,31 @@
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+c bessel.FF:	Compute Bessel function Jn(z) for n=0,1,2
+c Reivsion History
+c	03/05/1996  Lupei Zhu   Initial coding.
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+      subroutine besselFn(z, aj0, aj1, aj2)
+	IMPLICIT NONE
+        real z, aj0, aj1, aj2
+#ifdef __SUNPRO_F77
+	real*8 j0,j1,jn, zz
+	EXTERNAL j0,j1,jn               !$pragma C(j0,j1,jn)
+	zz = z
+	aj0 = j0(%val(zz))
+	aj1 = j1(%val(zz))
+	aj2 = jn(%val(2),%val(zz))
+#elif __GNUC__
+	aj0 = BesJ0(z)
+	aj1 = BesJ1(z)
+	aj2 = BesJN(2,z)
+#else
+c#warning "no intrinsic Bessel functions found, use it approximation"
+        real phi, pi
+        pi = 3.1415926535
+	phi = z-0.25*pi
+	pi = 1./sqrt(0.5*pi*z)
+	aj0 = cos(phi)*pi
+	aj1 = sin(phi)*pi
+	aj2 =-aj0
+#endif
+        return
+      end
