@@ -433,7 +433,7 @@ def rectify_slip(slip_unrectified,percent_reject=10):
 
 
 
-def select_faults(whole_fault,Dstrike,Ddip,target_Mw,buffer_factor,num_modes,scaling_law,no_shallow_epi=True,hypo_depth=10):
+def select_faults(whole_fault,Dstrike,Ddip,target_Mw,buffer_factor,num_modes,scaling_law,force_area,no_shallow_epi=True,hypo_depth=10):
     '''
     Select a random fault to be the hypocenter then based on scaling laws and a 
     target magnitude select only faults within the expected area plus some 
@@ -443,9 +443,10 @@ def select_faults(whole_fault,Dstrike,Ddip,target_Mw,buffer_factor,num_modes,sca
     from numpy.random import randint,normal
     from numpy import array,where,diff
     
-    done=False
-    while not done:
-        #Determine length and width from scaling laws (select from lognormal dsitribution)
+    if force_area==True: #Use entire fault model
+        length=1e10
+        width=1e10
+    else: #Use scaling laws 
         if scaling_law.upper()=='T':
             length_mean=-2.37+0.57*target_Mw
             length_std=0.10#0.12#0.18
@@ -460,62 +461,52 @@ def select_faults(whole_fault,Dstrike,Ddip,target_Mw,buffer_factor,num_modes,sca
             width_mean=-1.12+0.3*target_Mw
             width_std=0.08#0.15
             width=10**normal(width_mean,width_std)            
-        
-        #Select random subfault as hypocenter
-        hypo_fault=randint(0,len(whole_fault)-1)
+    
+    #Select random subfault as hypocenter
+    hypo_fault=randint(0,len(whole_fault)-1)
 
-        #Get max/min distances from hypocenter to all faults
-        dstrike_max=Dstrike[:,hypo_fault].max()
-        dstrike_min=Dstrike[:,hypo_fault].min()
-        dstrike_range=dstrike_max-dstrike_min
-        ddip_max=Ddip[:,hypo_fault].max()
-        ddip_min=Ddip[:,hypo_fault].min()
-        ddip_range=ddip_max-ddip_min
+    #Get max/min distances from hypocenter to all faults
+    dstrike_max=Dstrike[:,hypo_fault].max()
+    dstrike_min=Dstrike[:,hypo_fault].min()
+    dstrike_range=dstrike_max-dstrike_min
+    ddip_max=Ddip[:,hypo_fault].max()
+    ddip_min=Ddip[:,hypo_fault].min()
+    ddip_range=ddip_max-ddip_min
+    
+    #Work on strike first
+    strike_bounds=array([-length/2,length/2])
+    if strike_bounds[0]<dstrike_min:#Length is outside domain
+        strike_bounds[1]=strike_bounds[1]+abs(dstrike_min-strike_bounds[0])
+        strike_bounds[0]=dstrike_min
+    if strike_bounds[1]>dstrike_max:#Length is outside domain
+        strike_bounds[0]=strike_bounds[0]-abs(dstrike_max-strike_bounds[1])
+        strike_bounds[1]=dstrike_max
         
-        #Work on strike first
-        strike_bounds=array([-length/2,length/2])
-        if strike_bounds[0]<dstrike_min:#Length is outside domain
-            strike_bounds[1]=strike_bounds[1]+abs(dstrike_min-strike_bounds[0])
-            strike_bounds[0]=dstrike_min
-        if strike_bounds[1]>dstrike_max:#Length is outside domain
-            strike_bounds[0]=strike_bounds[0]-abs(dstrike_max-strike_bounds[1])
-            strike_bounds[1]=dstrike_max
-            
-        #Now get dip ranges
-        dip_bounds=array([-width/2,width/2])
-        if dip_bounds[0]<ddip_min:#Length is outside domain
-            dip_bounds[1]=dip_bounds[1]+abs(ddip_min-dip_bounds[0])
-            dip_bounds[0]=ddip_min
-        if dip_bounds[1]>ddip_max:#Length is outside domain
-            dip_bounds[0]=dip_bounds[0]-abs(ddip_max-dip_bounds[1])
-            dip_bounds[1]=ddip_max
-        Ds=Dstrike[:,hypo_fault]
-        Dd=Ddip[:,hypo_fault]
-        #Now select faults within those distances
-        selected_faults=where((Ds>=strike_bounds[0]) & (Ds<=strike_bounds[1]) & (Dd>=dip_bounds[0]) & (Dd<=dip_bounds[1]))[0]
-        #From within the selected faults randomly select the hypocenter
-        #if len(selected_faults)<num_modes:
-        #    done=False
-        #else:
-        #    i=randint(0,len(selected_faults)-1)
-        #    hypo_fault=selected_faults[i]
-        #    break
-        hypo_found=False
-        i=randint(0,len(selected_faults)-1)
-        hypo_fault=selected_faults[i]
-        if no_shallow_epi==True:
-            while hypo_found==False:
-                if whole_fault[hypo_fault,3]<hypo_depth:
-                    print '... ... ... hypocenter is km too shallow at %dkm, recalculating...' %(whole_fault[hypo_fault,3])
-                    i=randint(0,len(selected_faults)-1)
-                    hypo_fault=selected_faults[i]
-                else:
-                    hypo_found=True
+    #Now get dip ranges
+    dip_bounds=array([-width/2,width/2])
+    if dip_bounds[0]<ddip_min:#Length is outside domain
+        dip_bounds[1]=dip_bounds[1]+abs(ddip_min-dip_bounds[0])
+        dip_bounds[0]=ddip_min
+    if dip_bounds[1]>ddip_max:#Length is outside domain
+        dip_bounds[0]=dip_bounds[0]-abs(ddip_max-dip_bounds[1])
+        dip_bounds[1]=ddip_max
+    Ds=Dstrike[:,hypo_fault]
+    Dd=Ddip[:,hypo_fault]
+    #Now select faults within those distances
+    selected_faults=where((Ds>=strike_bounds[0]) & (Ds<=strike_bounds[1]) & (Dd>=dip_bounds[0]) & (Dd<=dip_bounds[1]))[0]
+    #From within the selected faults randomly select the hypocenter
+    hypo_found=False
+    i=randint(0,len(selected_faults)-1)
+    hypo_fault=selected_faults[i]
+    if no_shallow_epi==True:
+        while hypo_found==False:
+            if whole_fault[hypo_fault,3]<hypo_depth:
+                print '... ... ... hypocenter is km too shallow at %dkm, recalculating...' %(whole_fault[hypo_fault,3])
+                i=randint(0,len(selected_faults)-1)
+                hypo_fault=selected_faults[i]
+            else:
+                hypo_found=True
                 
-        break
-            
-            
-            
     #From the selected faults determine the actual along strike length (Leff) and down-dip width (Weff)
     #Check it doesn't exceed physically permissible thresholds
     if strike_bounds[0]<dstrike_min:
@@ -695,9 +686,10 @@ def get_centroid(fault):
                                                 
     
 def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
-    load_distances,distances_name,UTM_zone,target_Mw,model_name,hurst,Ldip,Lstrike,
-    num_modes,Nrealizations,rake,buffer_factor,rise_time_depths,time_epi,max_slip,
-    source_time_function,lognormal,slip_standard_deviation,scaling_law,force_magnitude):
+        load_distances,distances_name,UTM_zone,target_Mw,model_name,hurst,Ldip,
+        Lstrike,num_modes,Nrealizations,rake,buffer_factor,rise_time_depths,time_epi,
+        max_slip,source_time_function,lognormal,slip_standard_deviation,scaling_law,
+        force_magnitude,force_area):
     
     '''
     Depending on user selected flags parse the work out to different functions
@@ -743,7 +735,7 @@ def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
             success=False
             while success==False:
                 #Select only a subset of the faults based on magnitude scaling
-                ifaults,hypo_fault,Lmax,Wmax,Leff,Weff=select_faults(whole_fault,Dstrike,Ddip,target_Mw[kmag],buffer_factor,num_modes,scaling_law,no_shallow_epi=False)
+                ifaults,hypo_fault,Lmax,Wmax,Leff,Weff=select_faults(whole_fault,Dstrike,Ddip,target_Mw[kmag],buffer_factor,num_modes,scaling_law,force_area,no_shallow_epi=False)
                 fault_array=whole_fault[ifaults,:]
                 Dstrike_selected=Dstrike[ifaults,:][:,ifaults]
                 Ddip_selected=Ddip[ifaults,:][:,ifaults]

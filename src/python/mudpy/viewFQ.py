@@ -2467,7 +2467,8 @@ def slip_rate_and_spectrum(rupt,epicenter,dt=0.005,t_total=50,ref1offset=-10,ref
     plt.show()
 
 
-def fence_slip(home,project_name,run_name,run_number,UTM_zone='10S',elev=20,azimuth=None,fudge=10,fake_hypo=[0.1,0.1],borderwidth=0.5):
+def fence_slip(home,project_name,run_name,run_number,UTM_zone='10S',elev=20,azimuth=None,fudge=10,fake_hypo=[0.1,0.1],
+        borderwidth=0.5,figsize=(21,7),xtick=10,ytick=10,ztick=5):
     '''
     Make fence diagram of rupture file
     '''
@@ -2534,15 +2535,16 @@ def fence_slip(home,project_name,run_name,run_number,UTM_zone='10S',elev=20,azim
         azimuth=strike+90
     
     #Plot init, axes positions etc
-    fig=plt.figure(figsize=(21,7))
+    fig=plt.figure(figsize=figsize)
+    
     ax1 = fig.add_subplot(311, projection='3d')
     ax1.set_xlim([corners[:,0].min()-fudge,corners[:,0].max()+fudge])
     ax1.set_ylim([corners[:,1].min()-fudge,corners[:,1].max()+fudge])
     ax1.set_zlim([corners[:,2].min()-fudge/4,corners[:,2].max()+fudge/4])
     #Fenagle the axis ticks
-    xmajorLocator = MultipleLocator(10)
-    ymajorLocator = MultipleLocator(20)
-    zmajorLocator = MultipleLocator(5)
+    xmajorLocator = MultipleLocator(xtick)
+    ymajorLocator = MultipleLocator(ytick)
+    zmajorLocator = MultipleLocator(ztick)
     ax1.xaxis.set_major_locator(xmajorLocator)
     ax1.yaxis.set_major_locator(ymajorLocator)
     ax1.zaxis.set_major_locator(zmajorLocator)
@@ -2601,9 +2603,6 @@ def fence_slip(home,project_name,run_name,run_number,UTM_zone='10S',elev=20,azim
     ax2.set_ylim([corners[:,1].min()-fudge,corners[:,1].max()+fudge])
     ax2.set_zlim([corners[:,2].min()-fudge/4,corners[:,2].max()+fudge/4])
     #Fenagle the axis ticks
-    xmajorLocator = MultipleLocator(10)
-    ymajorLocator = MultipleLocator(20)
-    zmajorLocator = MultipleLocator(5)
     ax2.xaxis.set_major_locator(xmajorLocator)
     ax2.yaxis.set_major_locator(ymajorLocator)
     ax2.zaxis.set_major_locator(zmajorLocator)
@@ -2658,9 +2657,6 @@ def fence_slip(home,project_name,run_name,run_number,UTM_zone='10S',elev=20,azim
     ax3.set_ylim([corners[:,1].min()-fudge,corners[:,1].max()+fudge])
     ax3.set_zlim([corners[:,2].min()-fudge/4,corners[:,2].max()+fudge/4])
     #Fenagle the axis ticks
-    xmajorLocator = MultipleLocator(10)
-    ymajorLocator = MultipleLocator(20)
-    zmajorLocator = MultipleLocator(5)
     ax3.xaxis.set_major_locator(xmajorLocator)
     ax3.yaxis.set_major_locator(ymajorLocator)
     ax3.zaxis.set_major_locator(zmajorLocator)
