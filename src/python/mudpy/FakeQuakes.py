@@ -569,7 +569,7 @@ def get_rupture_onset(home,project_name,slip,fault_array,model_name,hypocenter,r
     onset times
     '''
         
-    from numpy import genfromtxt,zeros,arctan,sin,r_,where,log10,isnan,argmin,setxor1d
+    from numpy import genfromtxt,zeros,arctan2,sin,r_,where,log10,isnan,argmin,setxor1d
     from numpy .random import rand
     from obspy.geodetics import gps2dist_azimuth
     
@@ -610,6 +610,9 @@ def get_rupture_onset(home,project_name,slip,fault_array,model_name,hypocenter,r
          
     #Loop over all faults
     t_onset=zeros(len(slip))
+    #Perturb all subfault depths a tiny amount by some random number so that they NEVER lie on a layer interface
+    z_perturb=(rand(len(fault_array))-0.5)*1e-6
+    fault_array[:,3]=fault_array[:,3]+z_perturb
     for kfault in range(len(slip)):
         D,az,baz=gps2dist_azimuth(hypocenter[1],hypocenter[0],fault_array[kfault,2],fault_array[kfault,1])
         D=D/1000
@@ -621,7 +624,7 @@ def get_rupture_onset(home,project_name,slip,fault_array,model_name,hypocenter,r
             zdeep=fault_array[kfault,3]
             zshallow=hypocenter[2]
         #Get angle between depths
-        theta=arctan((zdeep-zshallow)/D)
+        theta=arctan2(zdeep-zshallow,D)
         # get hypotenuse distance on all layers
         delta_ray=vel[:,0]/sin(theta)
         # Calculate distance in each layer
