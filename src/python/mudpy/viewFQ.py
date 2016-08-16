@@ -2496,6 +2496,8 @@ def fence_slip(home,project_name,run_name,run_number,UTM_zone='10S',elev=20,azim
             s=replace(s,')','')
             hypocenter=array(s.split(',')).astype('float')
             loop_go=False  
+        if 'Actual magnitude' in line:
+            Mw=float(line.split(':')[-1].split(' ')[-1])   
     f.close() 
     
     #get subfault corners
@@ -2577,8 +2579,8 @@ def fence_slip(home,project_name,run_name,run_number,UTM_zone='10S',elev=20,azim
     ax1.set_ylabel('\n\nEast (km)')
     ax1.set_xlabel('\n\nNorth (km)')
     ax1.set_zlabel('Depth (km)',rotation=90)
-    plt.title(home+project_name+'/output/ruptures/%s.%s.rupt' % (run_name,run_number))
-    
+    #plt.title(home+project_name+'/output/ruptures/%s.%s.rupt' % (run_name,run_number))
+    plt.title(run_name+' '+run_number+' Mw '+str(Mw))
 
     
 
