@@ -940,6 +940,54 @@ def move_seafloor(home,project_name,run_name,topo_dx_file,topo_dy_file,tgf_file,
     savetxt(data_dir+outname+'.dtopo',dtopo,fmt='%i\t%.6f\t%.6f\t%.4e')   
     print 'Output to '+data_dir+outname+'.dtopo' 
             
+
+def move_seafloor_okada(mudpy_file,out_file,x,y,mu=40e9):
+    """
+    Use the Okada routine in GeoClaw to generate the dtopo file
+    """
+    
+    from clawpack.geoclaw import dtopotools
+    from numpy import genfromtxt,arctan2,rad2deg,squeeze
+    
+    #load rupture info
+    f=genfromtxt(mudpy_file)
+    
+    #init object
+    fault = dtopotools.Fault()
+    
+    #Make one subfault object at a time
+    for k in range(0,len(f)):
+        subfault = dtopotools.SubFault()
+        subfault.strike = f[k,4]
+        subfault.dip = f[k,5]
+        if subfault.dip==90:
+            subfault.dip=89.9
+        subfault.rake = rad2deg(arctan2(f[k,9],f[k,8]))
+        subfault.length = f[k,10]
+        subfault.width = f[k,11]
+        subfault.depth = f[k,3]*1000
+        subfault.slip = (f[k,9]**2+f[k,8]**2)**0.5
+        subfault.longitude = f[k,1]
+        subfault.latitude = f[k,2]
+        subfault.mu=mu
+        subfault.coordinate_specification = "centroid"
+        
+        if k==0:
+            fault.subfaults=[subfault]
+        else:
+            fault.subfaults.append(subfault)
+     
+    #Run Okada   
+    fault.create_dtopography(x,y,[1.],verbose=True)
+    #Get dtopo
+    dtopo=fault.dtopo
+    
+    return fault, subfault
+    
+
+
+
+
 ###########                Tools and trinkets                      #############
     
 def get_mu(structure,zs):

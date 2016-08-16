@@ -2444,6 +2444,8 @@ def slip_rate_and_spectrum(rupt,epicenter,dt=0.005,t_total=50,ref1offset=-10,ref
     plt.ylim([5e-8,1e-1])
     plt.xlabel('Frequency (Hz)')
     plt.ylabel('Fourier amplitude')
+    ax=plt.gca()
+    
     
     fref=logspace(0,1)
     ref1=10**(-log10(fref)+ref1offset)
