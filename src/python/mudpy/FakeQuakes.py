@@ -446,21 +446,28 @@ def select_faults(whole_fault,Dstrike,Ddip,target_Mw,buffer_factor,num_modes,sca
     if force_area==True: #Use entire fault model
         length=1e10
         width=1e10
-    else: #Use scaling laws 
+    else: #Use scaling laws from Blaser et al 2010
         if scaling_law.upper()=='T':
             length_mean=-2.37+0.57*target_Mw
-            length_std=0.10#0.12#0.18
+            length_std=0.10
             length=10**normal(length_mean,length_std)
             width_mean=-1.86+0.46*target_Mw
-            width_std=0.09#0.11#0.17
+            width_std=0.08
             width=10**normal(width_mean,width_std)
         elif scaling_law.upper()=='S':
             length_mean=-2.69+0.64*target_Mw
-            length_std=0.10#0.18
+            length_std=0.10
             length=10**normal(length_mean,length_std)
             width_mean=-1.12+0.3*target_Mw
-            width_std=0.08#0.15
-            width=10**normal(width_mean,width_std)            
+            width_std=0.08
+            width=10**normal(width_mean,width_std) 
+        elif scaling_law.upper()=='N':
+            length_mean=-1.91+0.52*target_Mw
+            length_std=0.10
+            length=10**normal(length_mean,length_std)
+            width_mean=-1.2+0.36*target_Mw
+            width_std=0.08
+            width=10**normal(width_mean,width_std)           
     
     #Select random subfault as hypocenter
     hypo_fault=randint(0,len(whole_fault)-1)
