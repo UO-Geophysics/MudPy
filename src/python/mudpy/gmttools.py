@@ -84,7 +84,7 @@
 #        savetxt(fname, c_[lon,lat,depth,ss,ds],fmt='%.6f\t%.6f\t%.4f\t%.2f\t%.2f')
       
 def make_total_model(rupt,thresh):
-    from numpy import genfromtxt,unique,where,zeros,c_,savetxt,sqrt
+    from numpy import genfromtxt,unique,where,zeros,c_,savetxt,sqrt,arctan2,rad2deg
     
     f=genfromtxt(rupt)
     num=f[:,0]
@@ -105,7 +105,13 @@ def make_total_model(rupt,thresh):
     ss[i]=0
     ds[i]=0
     fname=rupt+'.total'
-    savetxt(fname, c_[f[0:len(unum),0:8],ss,ds,f[0:len(unum),10:12],f[0:len(unum),13]],fmt='%d\t%10.4f\t%10.4f\t%8.4f\t%8.2f\t%6.2f\t%6.2f\t%6.2f\t%12.4e\t%12.4e\t%8.2f\t%8.2f\t%8.4e')
+    savetxt(fname, c_[f[0:len(unum),0:8],ss,ds,f[0:len(unum),10:12],f[0:len(unum),13]],fmt='%d\t%10.4f\t%10.4f\t%8.4f\t%8.2f\t%6.2f\t%6.2f\t%6.2f\t%12.4e\t%12.4e\t%8.2f\t%8.2f\t%8.4e',header='No,lon,lat,z(km),strike,dip,rise,dura,ss-slip(m),ds-slip(m),ss_len(m),ds_len(m),rupt_time(s),rigidity(Pa)')
+    
+    #Now dor akes
+    rakes=rad2deg(arctan2(ds,ss))
+    fname=rupt+'.rakes'
+    savetxt(fname, c_[f[0:len(unum),1:3],ss,ds,rakes],fmt='%d\t%10.4f\t%10.4f\t%8.4f\t%8.2f',header='lon,lat,z(km),ss-slip(m),ds-slip(m),rake(deg)')
+    
     
 def make_subfault(rupt):
     from numpy import genfromtxt,unique,where,zeros,c_,savetxt

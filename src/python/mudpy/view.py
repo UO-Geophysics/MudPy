@@ -1548,9 +1548,9 @@ def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpas
             #xticklabel=['','5','','15','','25','','35',''] #Lefkada preferred
         if k==len(i)-1 and nsta>1: #Last plot
             axe.set_xlabel('Time (s)')
-            axn.xaxis.set_ticklabels(xticklabel)
-            axe.xaxis.set_ticklabels(xticklabel)
-            axu.xaxis.set_ticklabels(xticklabel)
+            #axn.xaxis.set_ticklabels(xticklabel)
+            #axe.xaxis.set_ticklabels(xticklabel)
+            #axu.xaxis.set_ticklabels(xticklabel)
             #axn.xaxis.set_ticks(xtick)
             #axe.xaxis.set_ticks(xtick)
             #axu.xaxis.set_ticks(xtick)

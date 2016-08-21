@@ -941,49 +941,141 @@ def move_seafloor(home,project_name,run_name,topo_dx_file,topo_dy_file,tgf_file,
     print 'Output to '+data_dir+outname+'.dtopo' 
             
 
-def move_seafloor_okada(mudpy_file,out_file,x,y,mu=40e9):
+def move_seafloor_okada(mudpy_file,out_file,x,y,refine_factor=None,mu=40e9,return_object=False):
     """
     Use the Okada routine in GeoClaw to generate the dtopo file
     """
     
     from clawpack.geoclaw import dtopotools
     from numpy import genfromtxt,arctan2,rad2deg,squeeze
+    from copy import deepcopy
     
     #load rupture info
     f=genfromtxt(mudpy_file)
     
     #init object
-    fault = dtopotools.Fault()
-    
+    fault = dtopotools.Fault() 
+              
     #Make one subfault object at a time
     for k in range(0,len(f)):
         subfault = dtopotools.SubFault()
         subfault.strike = f[k,4]
         subfault.dip = f[k,5]
+        #Vertical faults introduce errors
         if subfault.dip==90:
             subfault.dip=89.9
         subfault.rake = rad2deg(arctan2(f[k,9],f[k,8]))
+        subfault.mu=mu
+        subfault.coordinate_specification = "centroid"                
         subfault.length = f[k,10]
         subfault.width = f[k,11]
         subfault.depth = f[k,3]*1000
         subfault.slip = (f[k,9]**2+f[k,8]**2)**0.5
         subfault.longitude = f[k,1]
         subfault.latitude = f[k,2]
-        subfault.mu=mu
-        subfault.coordinate_specification = "centroid"
-        
+        if refine_factor!=None:
+            #How many times are we doing it?
+            for ksplit in range(int(refine_factor)):
+                if ksplit==0:    
+                    subfault_list=split_subfault(subfault)
+                else:
+                    subfault_list=split_subfault(subfault_list)#len(split_subfault(subfault_list)) len(subfault_list)
+        #Decide how to append     
         if k==0:
-            fault.subfaults=[subfault]
+            if refine_factor==None:
+                fault.subfaults=[subfault]
+            else:
+                fault.subfaults=deepcopy(subfault_list)
         else:
-            fault.subfaults.append(subfault)
+            if refine_factor==None:
+                fault.subfaults.append(subfault)
+            else:
+                fault.subfaults.extend(subfault_list)
      
-    #Run Okada   
-    fault.create_dtopography(x,y,[1.],verbose=True)
+    ##Run Okada   
+    fault.create_dtopography(x,y,times=[0.,1.],verbose=True)
+    
     #Get dtopo
     dtopo=fault.dtopo
+    dtopo.write(path=out_file,dtopo_type=1)
     
-    return fault, subfault
+    if return_object:
+        return fault
     
+
+
+def split_subfault(subfault_list):
+    '''
+    Split a subfault object into 4 samller subfaults
+    '''
+    
+    from pyproj import Geod
+    from numpy import deg2rad,cos,sin
+    from copy import deepcopy
+    
+    try:
+        Nsubs=len(subfault_list)
+    except:
+        Nsubs=1
+    #Loop over all elements in subfault_list
+    for ksub in range(Nsubs):
+        if Nsubs==1:
+            subfault=deepcopy(subfault_list)
+        else:
+            subfault=deepcopy(subfault_list[ksub])
+            
+    
+        #Assing useful object properties
+        lon=subfault.longitude
+        lat=subfault.latitude
+        depth=subfault.depth
+        strike=subfault.strike
+        dip=subfault.dip
+        L=subfault.length
+        W=subfault.width
+        
+        #Projection object
+        P=Geod(ellps='WGS84')
+        
+        #Lon lat of pseudo centers
+        lon_P1,lat_P1,baz=P.fwd(lon,lat,strike,L/4.0)
+        lon_P2,lat_P2,baz=P.fwd(lon,lat,strike,-L/4.0)
+        
+        # Pseudo widths
+        wH=W*cos(deg2rad(dip))
+        wV=W*sin(deg2rad(dip))
+        
+        #Get final lon lat depth of 4 new faults
+        lon1,lat1,baz=P.fwd(lon_P1,lat_P1,strike-90,wH/4.0)
+        lon2,lat2,baz=P.fwd(lon_P1,lat_P1,strike-90,-wH/4.0)
+        z1=depth-wV/4.
+        z2=depth+wV/4.
+        
+        lon3,lat3,baz=P.fwd(lon_P2,lat_P2,strike-90,wH/4.0)
+        lon4,lat4,baz=P.fwd(lon_P2,lat_P2,strike-90,-wH/4.0)
+        z3=depth-wV/4.
+        z4=depth+wV/4.
+        
+        #Assemble into subfault objects and into list
+        subfault1 = deepcopy(subfault)
+        subfault2 = deepcopy(subfault)
+        subfault3 = deepcopy(subfault)
+        subfault4 = deepcopy(subfault)
+        
+        subfault1.length = subfault2.length = subfault3.length = subfault4.length = L/2.
+        subfault1.width = subfault2.width = subfault3.width = subfault4.width = W/2.
+        
+        subfault1.longitude=lon1 ; subfault1.latitude=lat1 ; subfault1.depth=z1
+        subfault2.longitude=lon2 ; subfault2.latitude=lat2 ; subfault2.depth=z2
+        subfault3.longitude=lon3 ; subfault3.latitude=lat3 ; subfault3.depth=z3
+        subfault4.longitude=lon4 ; subfault4.latitude=lat4 ; subfault4.depth=z4
+        
+        if ksub==0:
+            subfault_list_out=[subfault1,subfault2,subfault3,subfault4]
+        else:
+            subfault_list_out.extend([subfault1,subfault2,subfault3,subfault4])
+            
+    return subfault_list_out
 
 
 

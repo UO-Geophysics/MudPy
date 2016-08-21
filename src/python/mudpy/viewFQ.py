@@ -2140,9 +2140,9 @@ def plot_3stations(home,project_name,run_name,run_number,GF_list,stations=['chzz
     
     plt.subplot(131)
     eoffset=3 ; noffset=0 ; zoffset=-1.5
-    n=read(home+project_name+'/output/waveforms/'+run_name+'.'+run_number+'/'+sta[0]+'.LYN.sac')
-    e=read(home+project_name+'/output/waveforms/'+run_name+'.'+run_number+'/'+sta[0]+'.LYE.sac')
-    z=read(home+project_name+'/output/waveforms/'+run_name+'.'+run_number+'/'+sta[0]+'.LYZ.sac')
+    n=read(home+project_name+'/output/dreger_4tau/'+run_name+'.'+run_number+'/'+sta[0]+'.LYN.sac')
+    e=read(home+project_name+'/output/dreger_4tau/'+run_name+'.'+run_number+'/'+sta[0]+'.LYE.sac')
+    z=read(home+project_name+'/output/dreger_4tau/'+run_name+'.'+run_number+'/'+sta[0]+'.LYZ.sac')
     plt.plot(e[0].times(),e[0].data+eoffset,'k',lw=1,label='East')
     plt.plot(n[0].times(),n[0].data+noffset,'#FF6347',lw=1,label='North')
     plt.plot(z[0].times(),z[0].data+zoffset,'#4169E1',lw=1,label='Vertical')
@@ -2168,9 +2168,9 @@ def plot_3stations(home,project_name,run_name,run_number,GF_list,stations=['chzz
     
     plt.subplot(132)
     eoffset=1 ; noffset=0 ; zoffset=-0.5
-    n=read(home+project_name+'/output/waveforms/'+run_name+'.'+run_number+'/'+sta[1]+'.LYN.sac')
-    e=read(home+project_name+'/output/waveforms/'+run_name+'.'+run_number+'/'+sta[1]+'.LYE.sac')
-    z=read(home+project_name+'/output/waveforms/'+run_name+'.'+run_number+'/'+sta[1]+'.LYZ.sac')
+    n=read(home+project_name+'/output/dreger_4tau/'+run_name+'.'+run_number+'/'+sta[1]+'.LYN.sac')
+    e=read(home+project_name+'/output/dreger_4tau/'+run_name+'.'+run_number+'/'+sta[1]+'.LYE.sac')
+    z=read(home+project_name+'/output/dreger_4tau/'+run_name+'.'+run_number+'/'+sta[1]+'.LYZ.sac')
     plt.plot(e[0].times(),e[0].data+eoffset,'k',lw=1,label='East')
     plt.plot(n[0].times(),n[0].data+noffset,'#FF6347',lw=1,label='North')
     plt.plot(z[0].times(),z[0].data+zoffset,'#4169E1',lw=1,label='Vertical')
@@ -2194,9 +2194,9 @@ def plot_3stations(home,project_name,run_name,run_number,GF_list,stations=['chzz
 
     plt.subplot(133)
     eoffset=0.2 ; noffset=0 ; zoffset=-0.1
-    n=read(home+project_name+'/output/waveforms/'+run_name+'.'+run_number+'/'+sta[2]+'.LYN.sac')
-    e=read(home+project_name+'/output/waveforms/'+run_name+'.'+run_number+'/'+sta[2]+'.LYE.sac')
-    z=read(home+project_name+'/output/waveforms/'+run_name+'.'+run_number+'/'+sta[2]+'.LYZ.sac')
+    n=read(home+project_name+'/output/dreger_4tau/'+run_name+'.'+run_number+'/'+sta[2]+'.LYN.sac')
+    e=read(home+project_name+'/output/dreger_4tau/'+run_name+'.'+run_number+'/'+sta[2]+'.LYE.sac')
+    z=read(home+project_name+'/output/dreger_4tau/'+run_name+'.'+run_number+'/'+sta[2]+'.LYZ.sac')
     plt.plot(e[0].times(),e[0].data+eoffset,'k',lw=1,label='East')
     plt.plot(n[0].times(),n[0].data+noffset,'#FF6347',lw=1,label='North')
     plt.plot(z[0].times(),z[0].data+zoffset,'#4169E1',lw=1,label='Vertical')
