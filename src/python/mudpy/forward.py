@@ -1435,7 +1435,7 @@ def inv2coulomb(rupt,epicenter,fout):
     f=open(fout,'w')
     for k in range(len(u)):
         #out='1   %10.4f %10.4f %10.4f %10.4f 100 %10.4f %10.4f %10.4f %10.4f %10.4f %i\n' % (xstart[k],ystart[k],xfin[k],yfin[k],rake[k],slip[k],dip[k],ztop[k],zbot[k],k)
-        out='1   %10.4f %10.4f %10.4f %10.4f 100 %10.4f %10.4f %10.4f %10.4f %10.4f %i\n' % (xstart[k],ystart[k],xfin[k],yfin[k],-ss[k],ds[k],dip[k],ztop[k],zbot[k],k)
+        out='1\t%.4f\t%.4f\t%.4f\t%.4f\t100\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%d\n' % (xstart[k],ystart[k],xfin[k],yfin[k],-ss[k],ds[k],dip[k],ztop[k],zbot[k],k+1)
         f.write(out)
     f.close()
     
@@ -1446,9 +1446,9 @@ def coulomb_xy2latlon(f,epicenter,fout):
     from numpy import genfromtxt,zeros,rad2deg,arctan,isnan,savetxt
     import pyproj
     
-    s=genfromtxt(f,delimiter=',')
-    x=s[:,1]
-    y=s[:,2]
+    s=genfromtxt(f)
+    x=s[:,0]
+    y=s[:,1]
     #Now use pyproj to dead reckon anf get lat/lon coordinates of subfaults
     g = pyproj.Geod(ellps='WGS84')
     #first get azimuths of all points, go by quadrant
@@ -1475,8 +1475,8 @@ def coulomb_xy2latlon(f,epicenter,fout):
             la[k]=epicenter[1]
         else:
             lo[k],la[k],ba=g.fwd(epicenter[0],epicenter[1],az[k],d[k])
-    s[:,1]=lo
-    s[:,2]=la
+    s[:,0]=lo
+    s[:,1]=la
     savetxt(fout,s,fmt='%.6f')
     
 def coulomb_disp_xy2latlon(f,epicenter,fout):

@@ -2469,13 +2469,13 @@ def slip_rate_and_spectrum(rupt,epicenter,dt=0.005,t_total=50,ref1offset=-10,ref
     plt.show()
 
 
-def fence_slip(home,project_name,run_name,run_number,UTM_zone='10S',elev=20,azimuth=None,fudge=10,fake_hypo=[0.1,0.1],
-        borderwidth=0.5,figsize=(21,7),xtick=10,ytick=10,ztick=5):
+def fence_slip(home,project_name,run_name,run_number,maxslip=None,UTM_zone='10S',elev=20,azimuth=None,fudge=10,fake_hypo=[0.1,0.1],
+        borderwidth=0.5,figsize=(21,7),xtick=10,ytick=10,ztick=5,inverse_model=False,hypocenter=None):
     '''
     Make fence diagram of rupture file
     '''
     
-    from numpy import genfromtxt,array,zeros
+    from numpy import genfromtxt,array,zeros,where
     from matplotlib import pyplot as plt
     from matplotlib import colors
     from pyproj import Proj
@@ -2483,24 +2483,42 @@ def fence_slip(home,project_name,run_name,run_number,UTM_zone='10S',elev=20,azim
     from string import replace
     from matplotlib import ticker
     from matplotlib.ticker import MultipleLocator
+    from mudpy import gmttools
 
     #Get rupture data
-    fault=genfromtxt(home+project_name+'/output/ruptures/%s.%s.rupt' % (run_name,run_number))
+    if inverse_model==False:
+        fault=genfromtxt(home+project_name+'/output/ruptures/%s.%s.rupt' % (run_name,run_number))
+        #Parse log file for hypocenter
+        log_file=home+project_name+'/output/ruptures/%s.%s.log' % (run_name,run_number)
+        f=open(log_file,'r')
+        loop_go=True
+        while loop_go:
+            line=f.readline()
+            if 'Hypocenter (lon,lat,z[km])' in line:                
+                s=replace(line.split(':')[-1],'(','')
+                s=replace(s,')','')
+                hypocenter=array(s.split(',')).astype('float')
+                loop_go=False  
+            if 'Actual magnitude' in line:
+                Mw=float(line.split(':')[-1].split(' ')[-1])   
+        f.close() 
+    else:
+        fault_name=home+project_name+'/output/inverse_models/models/%s.%s.inv' % (run_name,run_number)
+        gmttools.make_total_model(fault_name,thresh=0)
+        fault=genfromtxt(home+project_name+'/output/inverse_models/models/%s.%s.inv.total' % (run_name,run_number))
+        #Parse log file for hypocenter
+        log_file=home+project_name+'/output/inverse_models/models/%s.%s.log' % (run_name,run_number)
+        f=open(log_file,'r')
+        loop_go=True
+        while loop_go:
+            line=f.readline()  
+            if 'Mw' in line:
+                Mw=float(line.split(':')[-1].split(' ')[-1])   
+                loop_go=False
+        f.close() 
     
-    #Parse log file for hypocenter
-    log_file=home+project_name+'/output/ruptures/%s.%s.log' % (run_name,run_number)
-    f=open(log_file,'r')
-    loop_go=True
-    while loop_go:
-        line=f.readline()
-        if 'Hypocenter (lon,lat,z[km])' in line:                
-            s=replace(line.split(':')[-1],'(','')
-            s=replace(s,')','')
-            hypocenter=array(s.split(',')).astype('float')
-            loop_go=False  
-        if 'Actual magnitude' in line:
-            Mw=float(line.split(':')[-1].split(' ')[-1])   
-    f.close() 
+
+
     
     #get subfault corners
     corners=get_subfault_corners(fault)
@@ -2529,10 +2547,17 @@ def fence_slip(home,project_name,run_name,run_number,UTM_zone='10S',elev=20,azim
     
     #Normalized slip
     slip=(fault[:,8]**2+fault[:,9]**2)**0.5
+    
+    #Saturate to maxslip
+    if maxslip!=None:
+        imax=where(slip>maxslip)[0]
+        slip[imax]=maxslip
+    #normalize
     norm_slip=slip/slip.max()
     
     #Get colormaps
     pqlx = colors.LinearSegmentedColormap('pqlx',pqlx_dict,256)
+    whitejet =colors.LinearSegmentedColormap('whitejet',whitejet_dict,256)
     
     #Azimuth viewing angle
     if azimuth==None:
@@ -2559,6 +2584,7 @@ def fence_slip(home,project_name,run_name,run_number,UTM_zone='10S',elev=20,azim
     for ksub in range(len(corners)):
         vertices=[[tuple(corners[ksub,0:3]),tuple(corners[ksub,3:6]),tuple(corners[ksub,6:9]),tuple(corners[ksub,9:12])]]
         subfault=Poly3DCollection(vertices, linewidths=borderwidth)
+        #subfault.set_color(pqlx(norm_slip[ksub]))
         subfault.set_color(pqlx(norm_slip[ksub]))
         subfault.set_linewidth(borderwidth)
         subfault.set_edgecolor('#505050')
@@ -2578,8 +2604,8 @@ def fence_slip(home,project_name,run_name,run_number,UTM_zone='10S',elev=20,azim
     cb.set_label('Slip (m)')
     
     #Labels n' stuff
-    ax1.set_ylabel('\n\nEast (km)')
-    ax1.set_xlabel('\n\nNorth (km)')
+    ax1.set_xlabel('\n\nEast (km)')
+    ax1.set_ylabel('\n\nNorth (km)')
     ax1.set_zlabel('Depth (km)',rotation=90)
     #plt.title(home+project_name+'/output/ruptures/%s.%s.rupt' % (run_name,run_number))
     plt.title(run_name+' '+run_number+' Mw '+str(Mw))
@@ -2636,8 +2662,8 @@ def fence_slip(home,project_name,run_name,run_number,UTM_zone='10S',elev=20,azim
     cb.set_label('Rise time (s)')
     
     #Labels n' stuff
-    ax2.set_ylabel('\n\nEast (km)')
-    ax2.set_xlabel('\n\nNorth (km)')
+    ax2.set_xlabel('\n\nEast (km)')
+    ax2.set_ylabel('\n\nNorth (km)')
     ax2.set_zlabel('Depth (km)',rotation=90)  
 
 
@@ -2692,8 +2718,8 @@ def fence_slip(home,project_name,run_name,run_number,UTM_zone='10S',elev=20,azim
     cb.set_label('Onset time (s)')
     
     #Labels n' stuff
-    ax3.set_ylabel('\n\nEast (km)')
-    ax3.set_xlabel('\n\nNorth (km)')
+    ax3.set_xlabel('\n\nEast (km)')
+    ax3.set_ylabel('\n\nNorth (km)')
     ax3.set_zlabel('Depth (km)',rotation=90)          
       
     

@@ -256,7 +256,7 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tsunami,td
     OUT:
         G: Partially assembled GF with all synthetics from a particular data type
     '''
-    from numpy import genfromtxt,loadtxt,zeros,array
+    from numpy import genfromtxt,loadtxt,zeros,array,diff,r_
     from string import rjust
     from obspy import read,Stream,Trace
     from mudpy.forward import tshift
@@ -420,6 +420,8 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tsunami,td
                         Eds[ktrace]=stdecimate(Eds[ktrace],decimate)
                         Nds[ktrace]=stdecimate(Nds[ktrace],decimate)
                         Zds[ktrace]=stdecimate(Zds[ktrace],decimate)
+                        
+                    
                     ktrace+=1            
         #Read time series
         for ksta in range(Nsta):
@@ -637,7 +639,7 @@ def getdata(home,project_name,GF_list,decimate,bandpass,quiet=False):
     i=where(GF[:,kgf]==1)[0]
     for ksta in range(len(i)):
         if quiet==False:  
-            print 'Assembling velocity waveforms from '+stations[i[ksta]]+' into data vector.'
+            print 'Assembling acceleration waveforms from '+stations[i[ksta]]+' into data vector.'
         n=read(GFfiles[i[ksta],kgf]+'.n')
         e=read(GFfiles[i[ksta],kgf]+'.e')
         u=read(GFfiles[i[ksta],kgf]+'.u')

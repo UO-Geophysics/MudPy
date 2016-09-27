@@ -699,7 +699,7 @@ def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
         load_distances,distances_name,UTM_zone,target_Mw,model_name,hurst,Ldip,
         Lstrike,num_modes,Nrealizations,rake,buffer_factor,rise_time_depths,time_epi,
         max_slip,source_time_function,lognormal,slip_standard_deviation,scaling_law,
-        force_magnitude,force_area):
+        force_magnitude=False,force_area=False):
     
     '''
     Depending on user selected flags parse the work out to different functions

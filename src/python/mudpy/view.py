@@ -50,37 +50,31 @@ cdict = {'red': ((0., 1, 1),
                   (1, 0, 0))}
 whitejet = matplotlib.colors.LinearSegmentedColormap('whitejet',cdict,256)
 
-'''
-numpy.interp(x, xp, fp, left=None, right=None)[source]
-One-dimensional linear interpolation.
-
-Returns the one-dimensional piecewise linear interpolant to a function with given values at discrete data-points.
-
-Parameters:	
-    x : array_like
-    The x-coordinates of the interpolated values.
-    
-    xp : 1-D sequence of floats
-    The x-coordinates of the data points, must be increasing.
-    
-    fp : 1-D sequence of floats
-    The y-coordinates of the data points, same length as xp.
-    
-    left : float, optional
-    Value to return for x < xp[0], default is fp[0].
-
-    right : float, optional
-    Value to return for x > xp[-1], default is fp[-1].
-    
-Returns:	
-    y : {float, ndarray}
-    The interpolated values, same shape as x.
-
-Raises:	
-
-    ValueError :
-    If xp and fp have different length
-'''
+pqlx_dict={'blue': (( 0.  ,  1.  ,  1.  ),
+            ( 0.1,  1.  ,  1.  ),
+            ( 0.22,  1.  ,  1.  ),
+            ( 0.35 ,  1.  ,  1.  ),
+            ( 0.6 ,  1.  ,  1.  ),
+            ( 0.7 ,  0.  ,  0.  ),
+            ( 0.89 ,  0.  ,  0.  ),
+            ( 1.  ,  0.  ,  0.  )), 
+            'green': (( 0.  ,  1.  ,  1.  ),
+            ( 0.1,  1.  ,  1.  ),
+            ( 0.22,  0.  ,  0.  ),
+            ( 0.35 ,  0.  ,  0. ),
+            ( 0.6 ,  1.  ,  1.  ),
+            ( 0.7 ,  1.  ,  1.  ),
+            ( 0.89 ,  1.  ,  1.  ),
+            ( 1.  ,  0.  ,  0. )), 
+            'red': (( 0.  ,  1.  ,  1.  ),
+            ( 0.1,  1.  ,  1.  ),
+            ( 0.22,  1.  ,  1.  ),
+            ( 0.35 ,  0.  ,  0.  ),
+            ( 0.6 ,  0.  ,  0.  ),
+            ( 0.7 ,  0.  ,  0.  ),
+            ( 0.89 ,  1.  ,  1.  ),
+            ( 1.  ,  1.  ,  1.  ))}
+            
 
 
 def quick_model(rupt):
@@ -248,6 +242,134 @@ def slip3D(rupt,marker_size=60,clims=None):
     plt.subplots_adjust(left=0.1, bottom=0.1, right=1.0, top=0.9, wspace=0, hspace=0)
     plt.title(rupt)
     plt.show()
+
+
+
+def fence_slip(home,project_name,run_name,run_number,maxslip=None,UTM_zone='10S',elev=20,azimuth=None,fudge=10,fake_hypo=[0.1,0.1],
+        borderwidth=0.5,figsize=(21,4),xtick=10,ytick=10,ztick=5,hypocenter=None):
+    '''
+    Make fence diagram of rupture file
+    '''
+    
+    from numpy import genfromtxt,array,zeros,where
+    from matplotlib import pyplot as plt
+    from matplotlib import colors
+    from pyproj import Proj
+    from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+    from string import replace
+    from matplotlib import ticker
+    from matplotlib.ticker import MultipleLocator
+    from mudpy.viewFQ import get_subfault_corners,corners2utm
+    from mudpy import gmttools
+
+    #Get rupture data
+    fault_name=home+project_name+'/output/inverse_models/models/%s.%s.inv' % (run_name,run_number)
+    gmttools.make_total_model(fault_name,thresh=0)
+    fault=genfromtxt(home+project_name+'/output/inverse_models/models/%s.%s.inv.total' % (run_name,run_number))
+    #Parse log file for hypocenter
+    log_file=home+project_name+'/output/inverse_models/models/%s.%s.log' % (run_name,run_number)
+    f=open(log_file,'r')
+    loop_go=True
+    while loop_go:
+        line=f.readline()  
+        if 'Mw' in line:
+            Mw=float(line.split(':')[-1].split(' ')[-1])   
+            loop_go=False
+    f.close() 
+    
+    #get subfault corners
+    corners=get_subfault_corners(fault)
+    
+    #Convert ot UTM (in km)
+    corners=corners2utm(corners,UTM_zone=UTM_zone)
+    
+    #Get UTM coords of hypocenter
+    P=Proj(proj='utm',ellps='WGS84',zone=UTM_zone)
+    hypocenter[0],hypocenter[1]=P(hypocenter[0],hypocenter[1])
+    hypocenter[0]/=1000
+    hypocenter[1]/=1000
+    
+    #Make hypocenter the origin
+    corners[:,0]-=hypocenter[0]
+    corners[:,3]-=hypocenter[0]
+    corners[:,6]-=hypocenter[0]
+    corners[:,9]-=hypocenter[0]
+    corners[:,1]-=hypocenter[1]
+    corners[:,4]-=hypocenter[1]
+    corners[:,7]-=hypocenter[1]
+    corners[:,10]-=hypocenter[1]
+    
+    #Get mean strike for inital viewing angle
+    strike=fault[:,4].mean()
+    
+    #Normalized slip
+    slip=(fault[:,8]**2+fault[:,9]**2)**0.5
+    
+    #Saturate to maxslip
+    if maxslip!=None:
+        imax=where(slip>maxslip)[0]
+        slip[imax]=maxslip
+    #normalize
+    norm_slip=slip/slip.max()
+    
+    #Get colormaps
+    pqlx = colors.LinearSegmentedColormap('pqlx',pqlx_dict,256)
+    
+    #Azimuth viewing angle
+    if azimuth==None:
+        azimuth=strike+90
+    
+    #Plot init, axes positions etc
+    fig=plt.figure(figsize=figsize)
+    
+    ax1 = fig.add_subplot(111, projection='3d')
+    ax1.set_xlim([corners[:,0].min()-fudge,corners[:,0].max()+fudge])
+    ax1.set_ylim([corners[:,1].min()-fudge,corners[:,1].max()+fudge])
+    ax1.set_zlim([corners[:,2].min()-fudge/4,corners[:,2].max()+fudge/4])
+    #Fenagle the axis ticks
+    xmajorLocator = MultipleLocator(xtick)
+    ymajorLocator = MultipleLocator(ytick)
+    zmajorLocator = MultipleLocator(ztick)
+    ax1.xaxis.set_major_locator(xmajorLocator)
+    ax1.yaxis.set_major_locator(ymajorLocator)
+    ax1.zaxis.set_major_locator(zmajorLocator)
+    ax1.invert_zaxis()
+    ax1.view_init(elev=elev, azim=azimuth)
+
+    #Make one patch per subfault
+    for ksub in range(len(corners)):
+        vertices=[[tuple(corners[ksub,0:3]),tuple(corners[ksub,3:6]),tuple(corners[ksub,6:9]),tuple(corners[ksub,9:12])]]
+        subfault=Poly3DCollection(vertices, linewidths=borderwidth)
+        #subfault.set_color(pqlx(norm_slip[ksub]))
+        subfault.set_color(pqlx(norm_slip[ksub]))
+        subfault.set_linewidth(borderwidth)
+        subfault.set_edgecolor('#505050')
+        ax1.add_collection3d(subfault)
+    
+    #Hypocenter
+    ax1.scatter(fake_hypo[0],fake_hypo[1],hypocenter[2],s=220,marker='*',c='#7CFC00')
+    
+    #Dummy mapable for colorbar
+    s=plt.scatter(zeros(len(fault)),zeros(len(fault)),c=slip,cmap=pqlx,s=0.00001,lw=0)
+    
+    #Mke colorbar
+    cb=plt.colorbar(s,shrink=0.9,pad=-0.07)
+    tick_locator = ticker.MaxNLocator(nbins=5)
+    cb.locator=tick_locator
+    cb.update_ticks()
+    cb.set_label('Slip (m)')
+    
+    #Labels n' stuff
+    ax1.set_xlabel('\n\nEast (km)')
+    ax1.set_ylabel('\n\nNorth (km)')
+    ax1.set_zlabel('Depth (km)',rotation=90)
+    #plt.title(home+project_name+'/output/ruptures/%s.%s.rupt' % (run_name,run_number))
+    plt.title(run_name+' '+run_number+' Mw '+str(Mw))
+    
+    plt.show()
+
+
+
 
 
 def plot_insar(home,project_name,GF_list,(los_min,los_max)):
@@ -1370,7 +1492,7 @@ def plot_data(home,project_name,gflist,vord,decimate,lowpass,t_lim,sort,scale,k_
     #plt.subplots_adjust(left=0.2, bottom=0.05, right=0.8, top=0.95, wspace=0, hspace=0)
     plt.subplots_adjust(left=0.2, bottom=0.15, right=0.8, top=0.85, wspace=0, hspace=0)
       
-def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpass,t_lim,sort,scale,k_or_g,uncert=False):
+def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpass,t_lim,sort,scale,k_or_g,uncert=False,waveforms_as_accel=False):
     '''
     Plot synthetics vs real data
     
@@ -1400,8 +1522,11 @@ def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpas
             datasuffix='disp'
         synthsuffix='disp'
     elif vord.lower()=='v':
-        kgf=1 #disp
-        datasuffix='vel'
+        kgf=1 #vel
+        if waveforms_as_accel==False:
+            datasuffix='vel'
+        else:
+            datasuffix='accel'
         synthsuffix='vel'
     #Decide on sorting
     i=where(gf[:,kgf]==1)[0]  
