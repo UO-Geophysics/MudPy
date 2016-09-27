@@ -2009,7 +2009,9 @@ def mudpy2srf(rupt,log_file,stf_dt=0.1,stf_type='dreger'):
     dip_hypo_position=(hypocenter[2]-depth_top)*sin(deg2rad(dip))
     
     #Get hypocenter row of subfaults and find coordinates of middle
-    hypo_row=where(f[:,3]==hypocenter[2])[0]
+    i=argmin(abs(f[:,3]-hypocenter[2]))
+    test_depth=f[i,3]
+    hypo_row=where(f[:,3]==test_depth)[0]
     hypo_center_lon=f[hypo_row,1].mean()
     hypo_center_lat=f[hypo_row,2].mean()
     #Distance from edge
@@ -2019,6 +2021,9 @@ def mudpy2srf(rupt,log_file,stf_dt=0.1,stf_type='dreger'):
     #Now decide if distance is positive or negative
     if strike>180:
         strike_rectified=strike-360
+    else:
+        strike_rectified=strike
+    
     if sign(az)==sign(strike_rectified):
         strike_hypo_position=-dist_from_center/1000
     else:
