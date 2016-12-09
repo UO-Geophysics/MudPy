@@ -1671,11 +1671,12 @@ def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpas
             #xticklabel=['','','40','','80','','120','','160',''] #Iquique preferred
             #xticklabel=['','10','','30','','50',''] #Nepal preferred
             #xticklabel=['','5','','15','','25','','35',''] #Lefkada preferred
+            xticklabel=['','5','','15','','25',''] #Amatrice preferred
         if k==len(i)-1 and nsta>1: #Last plot
             axe.set_xlabel('Time (s)')
-            #axn.xaxis.set_ticklabels(xticklabel)
-            #axe.xaxis.set_ticklabels(xticklabel)
-            #axu.xaxis.set_ticklabels(xticklabel)
+            axn.xaxis.set_ticklabels(xticklabel)
+            axe.xaxis.set_ticklabels(xticklabel)
+            axu.xaxis.set_ticklabels(xticklabel)
             #axn.xaxis.set_ticks(xtick)
             #axe.xaxis.set_ticks(xtick)
             #axu.xaxis.set_ticks(xtick)
@@ -1787,7 +1788,7 @@ def insar_residual(home,project_name,run_name,run_number,gflist,zlims):
     plt.grid()
     
     
-def insar_results(home,project_name,run_name,run_number,gflist,zlims):
+def insar_results(home,project_name,run_name,run_number,gflist,zlims,figsize=(8,5),title=None):
     '''
     Plot insar observed in one panel and insar modeled in the other
     
@@ -1822,7 +1823,7 @@ def insar_results(home,project_name,run_name,run_number,gflist,zlims):
     #Make plot
     out=c_[lon,lat,los_data,los_synth,los_data-los_synth]
     savetxt(home+project_name+'/analysis/'+run_name+'.'+run_number+'.insar.res',out,fmt='%.6f\t%.6f\t%8.5f\t%8.5f\t%8.5f',header='lon,lat,los_data(m),los_synthetic(m),data-synthetic(m)')
-    plt.figure()
+    plt.figure(figsize=figsize)
     ax=plt.subplot(211)
     ax.tick_params(labelbottom='off') 
     plt.scatter(lon,lat,c=los_data,cmap=cm.jet,vmin=zlims[0],vmax=zlims[1],s=50,lw=0)
@@ -1840,7 +1841,8 @@ def insar_results(home,project_name,run_name,run_number,gflist,zlims):
     plt.ylabel('Latitude')
     plt.xlabel('Longitude')
     plt.grid()
-            
+    plt.suptitle(title)
+    
 def tsunami_synthetics(home,project_name,run_name,run_number,gflist,t_lim,sort,scale):
     '''
     Plot synthetics vs real data

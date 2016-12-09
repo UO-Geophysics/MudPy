@@ -2110,6 +2110,49 @@ def mudpy2srf(rupt,log_file,stf_dt=0.1,stf_type='dreger'):
 
 
 
+def mudpy2pecmp(rupt,outfile):
+    '''
+    Convert mudpy rupture to input for poroelastic PEGRN/PECMP calculation
+    '''
+    
+    from numpy import genfromtxt,cos,deg2rad,sin
+    from pyproj import Geod
+    
+    
+    f=genfromtxt(rupt)
+    #projection object
+    p=Geod(ellps='WGS84')
+
+    fout=open(outfile,'w')
+    for k in range(len(f)):
+        
+        #read subfault quantities
+        lon=f[k,1]
+        lat=f[k,2]
+        depth=f[k,3]
+        strike=f[k,4]
+        dip=f[k,5]
+        ss=f[k,8]
+        ds=f[k,9]
+        L=f[k,10]
+        W=f[k,11]
+        #Get coordinates of top center
+        lon_center,lat_center,az=p.fwd(lon,lat,strike-90,(W/2.)*cos(deg2rad(dip)))
+        #Find the top left corner of the fault (again, godammit)
+        lon_top_left,lat_top_left,az=p.fwd(lon_center,lat_center,strike-180,L/2.0)
+        depth_top_left=depth-(W/2.)*sin(deg2rad(dip))/1000
+        if depth_top_left<0:
+            depth_top_left=0.0
+        
+        
+        line1='%d\t%.4f\t%.4f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t1\t1\t0.0\n' %(k+1,lat_top_left,lon_top_left,depth_top_left,L/1000.,W/1000.,strike,dip)
+        line2='\t%.2f\t%.2f\t%.2f\t%.2f\t0.0\n' %(L/2000.,W/2000.,ss,ds)
+        fout.write(line1)
+        fout.write(line2)
+    fout.close()
+    
+
+
 def convolution_matrix(h):
     '''
     Return the TOeplitz-like convolution matrix for a time series
