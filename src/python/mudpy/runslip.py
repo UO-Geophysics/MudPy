@@ -570,12 +570,13 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
                                                         
 def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_from_file,G_name,epicenter,
                 rupture_speed,num_windows,reg_spatial,reg_temporal,nfaults,beta,decimate,bandpass,
-                solver,bounds,weight=False,Ltype=2):
+                solver,bounds,weight=False,Ltype=2,target_moment=None):
     '''
     Assemble G and d, determine smoothing and run the inversion
     '''
     from mudpy import inverse as inv
-    from numpy import zeros,dot,array,squeeze,expand_dims,empty,tile,eye
+    from mudpy.forward import get_mu_and_area
+    from numpy import zeros,dot,array,squeeze,expand_dims,empty,tile,eye,ones,arange
     from numpy.linalg import lstsq
     from scipy.sparse import csr_matrix as sparse
     from scipy.optimize import nnls
@@ -618,9 +619,23 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
     if reg_spatial!=None:
         if Ltype==2: #Laplacian smoothing
             Ls=inv.getLs(home,project_name,fault_name,nfaults,num_windows,bounds)
-        else: #Tikhonov smoothing
+        elif Ltype==0: #Tikhonov smoothing
             N=nfaults[0]*nfaults[1]*num_windows*2 #Get total no. of model parameters
             Ls=eye(N) 
+        elif Ltype==3:  #moment regularization
+            N=nfaults[0]*nfaults[1]*num_windows*2 #Get total no. of model parameters
+            Ls=ones((1,N))
+            #Add rigidity and subfault area
+            mu,area=get_mu_and_area(home,project_name,fault_name,model_name)
+            istrike=arange(0,N,2)
+            Ls[0,istrike]=area*mu
+            idip=arange(1,N,2)
+            Ls[0,idip]=area*mu
+            #Modify inversion quantities
+            x=x+Ls.T.dot(target_moment)
+        else:
+            print 'ERROR: Unrecognized regularization type requested'
+            return
         Ninversion=len(reg_spatial)
     else:
         Ls=zeros(K.shape)

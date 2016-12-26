@@ -1110,6 +1110,27 @@ def get_mu(structure,zs):
     else: #Model is a halfspace
         mu=((1000*structure[0,1])**2)*structure[0,3]*1000
     return mu
+    
+def get_mu_and_area(home,project_name,fault_name,model_name):
+    
+    from numpy import genfromtxt,zeros
+    
+    #load fault
+    fault=genfromtxt(home+project_name+'/data/model_info/'+fault_name)
+    #load structure
+    structure=genfromtxt(home+project_name+'/structure/'+model_name)
+    
+    #get rigidities
+    mu=zeros(len(fault))
+    for k in range(len(mu)):
+        depth=fault[k,3]
+        mu[k]=get_mu(structure,depth)
+        
+    #Get areas
+    area=fault[:,-2]*fault[:,-1]
+    
+    return mu,area
+    
 
 def get_source_time_function(mu,area,rise_time,t0,slip):
     '''
@@ -2110,7 +2131,7 @@ def mudpy2srf(rupt,log_file,stf_dt=0.1,stf_type='dreger'):
 
 
 
-def mudpy2pecmp(rupt,outfile):
+def mudpy2pecmp(rupt,outfile,thresh=0.0):
     '''
     Convert mudpy rupture to input for poroelastic PEGRN/PECMP calculation
     '''
@@ -2144,6 +2165,11 @@ def mudpy2pecmp(rupt,outfile):
         if depth_top_left<0:
             depth_top_left=0.0
         
+        #Apply threshold filter
+        slip=(ss**2+ds**2)**0.5
+        if slip<thresh:
+            ss=0
+            ds=0
         
         line1='%d\t%.4f\t%.4f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t1\t1\t0.0\n' %(k+1,lat_top_left,lon_top_left,depth_top_left,L/1000.,W/1000.,strike,dip)
         line2='\t%.2f\t%.2f\t%.2f\t%.2f\t0.0\n' %(L/2000.,W/2000.,ss,ds)

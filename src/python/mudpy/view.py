@@ -534,8 +534,8 @@ def tile_slip(rupt,nstrike,ndip,(slip_bounds),geographic=False,epicenter=0,epice
         rakess=rakess*slip
         rakeds=rakeds*slip
         plt.figure(num=None, figsize=(13, 3.5), dpi=80)
-        #plt.scatter(along_strike,depth,marker='s',linewidth=0.5,edgecolor='#CCCCCC',c=slip,s=250,cmap=whitejet,vmin=slip_min,vmax=slip_max)
-        plt.scatter(along_strike,depth,marker='s',linewidth=0.5,edgecolor='#CCCCCC',c=slip,s=250,cmap=plt.cm.magma_r,vmin=slip_min,vmax=slip_max)
+        plt.scatter(along_strike,depth,marker='s',linewidth=0.5,edgecolor='#CCCCCC',c=slip,s=250,cmap=whitejet,vmin=slip_min,vmax=slip_max)
+        #plt.scatter(along_strike,depth,marker='s',linewidth=0.5,edgecolor='#CCCCCC',c=slip,s=250,cmap=plt.cm.magma_r,vmin=slip_min,vmax=slip_max)
         cb=plt.colorbar()
         #plt.scatter(along_strike_afters,depth_afters,marker='.',c='#404040',s=35)
         plt.ylabel('Depth (km)')
@@ -547,11 +547,11 @@ def tile_slip(rupt,nstrike,ndip,(slip_bounds),geographic=False,epicenter=0,epice
         plt.scatter(0,-epicenter[2],marker='*',edgecolor='k',facecolor='#00FF00',s=350,linewidth=2)
         for k in range(len(along_strike)):
             scale_slip=slip[k]/slip.max()
-            plt.quiver(along_strike[k],depth[k],rakess[k]/sqrt(rakess[k]**2+rakeds[k]**2),rakeds[k]/sqrt(rakess[k]**2+rakeds[k]**2),color='green',width=0.002,scale=50/scale_slip)
+            #plt.quiver(along_strike[k],depth[k],rakess[k]/sqrt(rakess[k]**2+rakeds[k]**2),rakeds[k]/sqrt(rakess[k]**2+rakeds[k]**2),color='green',width=0.002,scale=50/scale_slip)
     plt.annotate('North',xy=(28,0),fontsize=16)
     plt.annotate('South',xy=(-36,0),fontsize=16)
     #plt.title(r'2015 Lefkada $M_w6.55$, $v_r=2.6$km/s, $\sigma=020$, $\delta=65$',fontsize=16)
-    cb.set_label('Slip(m)')
+    cb.set_label('Coeff. Var.')
     plt.subplots_adjust(left=0.15, bottom=0.15, right=0.92, top=0.92, wspace=0, hspace=0)
     plt.show()
 
