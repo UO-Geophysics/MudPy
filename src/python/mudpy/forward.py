@@ -2278,4 +2278,24 @@ def read_fakequakes_hypo_time(home,project_name,rupture_name):
             break
     return epicenter,time_epi
     
+
+
+def make_grid(home,project_name,GF_list,out_file):
+    '''
+    Convert a bunch of single file neu's to one big grid file
+    '''
     
+    from numpy import genfromtxt
+    
+    sta=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=0,dtype='S')
+    lonlat=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=[1,2])
+    fout=home+'/'+project_name+'/output/forward_models/'+out_file
+    f=open(fout,'w')
+    
+    #read offsets
+    f.write('# sta,lon,lat,N(m),E(m),U(m)\n')
+    for k in range(len(sta)):
+        neu=genfromtxt(home+project_name+'/output/forward_models/'+sta[k]+'.static.neu')
+        line='%s\t%.4f\t%.4f\t%.6f\t%.6f\t%.6f\n' % (sta[k],lonlat[k,0],lonlat[k,1],neu[0],neu[1],neu[2])
+        f.write(line)
+    f.close()

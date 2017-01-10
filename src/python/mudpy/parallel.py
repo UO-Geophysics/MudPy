@@ -97,7 +97,7 @@ def run_parallel_green(home,project_name,station_file,model_name,dt,NFFT,static,
             
 
 def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,static,tsunami,time_epi,
-                beta,custom_stf,impulse,rank,size):
+                beta,custom_stf,impulse,rank,size,okada,mu_okada):
     '''
     Use green functions and compute synthetics at stations for a single source
     and multiple stations. This code makes an external system call to syn.c first it
@@ -126,11 +126,12 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
     from numpy import array,genfromtxt,loadtxt,savetxt,log10
     from obspy import read
     from shlex import split
-    from mudpy.green import src2sta,rt2ne,origin_time
+    from mudpy.green import src2sta,rt2ne,origin_time,okada_synthetics
     from glob import glob
     from mudpy.green import silentremove
     from os import remove
-        #What parameters are we using?
+    
+    #What parameters are we using?
     if rank==0:
         out='''Running all processes with:
         home = %s
@@ -144,24 +145,33 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
         beta = %d
         custom_stf = %s
         impulse = %s
-        ''' %(home,project_name,station_file,model_name,str(integrate),str(static),str(tsunami),str(time_epi),beta,custom_stf,impulse)
+        okada = %s
+        mu = %.2e
+        ''' %(home,project_name,station_file,model_name,str(integrate),str(static),str(tsunami),str(time_epi),beta,custom_stf,impulse,okada,mu_okada)
         print out
+        
     #Read your corresponding source file
     mpi_source=genfromtxt(home+project_name+'/data/model_info/mpi_source.'+str(rank)+'.fault')
+    
     #Constant parameters
     rakeDS=90+beta #90 is thrust, -90 is normal
     rakeSS=0+beta #0 is left lateral, 180 is right lateral
     tb=50 #Number of samples before first arrival (should be 50, NEVER CHANGE, if you do then adjust in fk.pl)
+    
     #Figure out custom STF
     if custom_stf.lower()!='none':
         custom_stf=home+project_name+'/GFs/STFs/'+custom_stf
     else:
         custom_stf=None
+    
     #Load structure
     model_file=home+project_name+'/structure/'+model_name
     structure=loadtxt(model_file,ndmin=2)
+    
     for ksource in range(len(mpi_source)):
+        
         source=mpi_source[ksource,:]
+        
         #Parse the soruce information
         num=rjust(str(int(source[0])),4,'0')
         zs=source[3]
@@ -185,12 +195,15 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
         staname=genfromtxt(station_file,dtype="S6",usecols=0)
         if staname.shape==(): #Single staiton file
             staname=array([staname])
+        
         #Compute distances and azimuths
         d,az=src2sta(station_file,source)
+        
         #Get moment corresponding to 1 meter of slip on subfault
         mu=get_mu(structure,zs)
-        Mo=mu*ss_length*ds_length*1
+        Mo=mu*ss_length*ds_length*1.0
         Mw=(2./3)*(log10(Mo)-9.1)
+        
         #Move to output folder
         os.chdir(green_path)
         print 'Processor '+str(rank)+' is working on subfault '+str(int(source[0]))+' and '+str(len(d))+' stations '
@@ -352,53 +365,61 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
                         silentremove(staname[k]+".subfault"+num+'.DS.vel.ti')
                         silentremove(staname[k]+".subfault"+num+'.DS.vel.zi')
             else: #Compute static synthetics
-                temp_pipe=[]
-                diststr='%.1f' % d[k] #Need current distance in string form for external call
-                green_file=model_name+".static."+strdepth+".sub"+subfault #Output dir
-                statics=loadtxt(green_file) #Load GFs
-                if len(statics)<1:
-                    print 'ERROR: Empty GF file'
-                    break
-                #Print static GFs into a pipe and pass into synthetics command
-                try:
-                    temp_pipe=statics[k,:]
-                except:
-                    temp_pipe=statics
-                inpipe=''
-                for j in range(len(temp_pipe)):
-                    inpipe=inpipe+' %.6e' % temp_pipe[j]
-                #Form command for external call
-                commandDS="syn -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeDS)+\
-                        " -A"+str(az[k])+" -P"
-                commandSS="syn -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeSS)+\
-                        " -A"+str(az[k])+" -P"
-                commandSS=split(commandSS) #Lexical split
-                commandDS=split(commandDS)
-                #Make system calls, one for DS, one for SS
-                ps=subprocess.Popen(['printf',inpipe],stdout=subprocess.PIPE)  #This is the statics pipe, pint stdout to syn's stdin
-                p=subprocess.Popen(commandSS,stdin=ps.stdout,stdout=open(staname[k]+'.subfault'+num+'.SS.static.rtz','w'))     
-                p.communicate()  
-                ps=subprocess.Popen(['printf',inpipe],stdout=subprocess.PIPE)  #This is the statics pipe, pint stdout to syn's stdin
-                p=subprocess.Popen(commandDS,stdin=ps.stdout,stdout=open(staname[k]+'.subfault'+num+'.DS.static.rtz','w'))     
-                p.communicate()       
-                #Rotate radial/transverse to East/North, correct vertical and scale to m
-                statics=loadtxt(staname[k]+'.subfault'+num+'.SS.static.rtz')
-                u=statics[2]/100
-                r=statics[3]/100
-                t=statics[4]/100
-                ntemp,etemp=rt2ne(array([r,r]),array([t,t]),az[k])
-                n=ntemp[0]
-                e=etemp[0]
-                savetxt(staname[k]+'.subfault'+num+'.SS.static.neu',(n,e,u,beta))
-                statics=loadtxt(staname[k]+'.subfault'+num+'.DS.static.rtz')
-                u=statics[2]/100
-                r=statics[3]/100
-                t=statics[4]/100
-                ntemp,etemp=rt2ne(array([r,r]),array([t,t]),az[k])
-                n=ntemp[0]
-                e=etemp[0]
-                savetxt(staname[k]+'.subfault'+num+'.DS.static.neu',(n,e,u,beta),header='north(m),east(m),up(m),beta(degs)')     
-
+                if okada==False:  #Layered earth model
+                    temp_pipe=[]
+                    diststr='%.1f' % d[k] #Need current distance in string form for external call
+                    green_file=model_name+".static."+strdepth+".sub"+subfault #Output dir
+                    statics=loadtxt(green_file) #Load GFs
+                    if len(statics)<1:
+                        print 'ERROR: Empty GF file'
+                        break
+                    #Print static GFs into a pipe and pass into synthetics command
+                    try:
+                        temp_pipe=statics[k,:]
+                    except:
+                        temp_pipe=statics
+                    inpipe=''
+                    for j in range(len(temp_pipe)):
+                        inpipe=inpipe+' %.6e' % temp_pipe[j]
+                    #Form command for external call
+                    commandDS="syn -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeDS)+\
+                            " -A"+str(az[k])+" -P"
+                    commandSS="syn -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeSS)+\
+                            " -A"+str(az[k])+" -P"
+                    commandSS=split(commandSS) #Lexical split
+                    commandDS=split(commandDS)
+                    #Make system calls, one for DS, one for SS
+                    ps=subprocess.Popen(['printf',inpipe],stdout=subprocess.PIPE)  #This is the statics pipe, pint stdout to syn's stdin
+                    p=subprocess.Popen(commandSS,stdin=ps.stdout,stdout=open(staname[k]+'.subfault'+num+'.SS.static.rtz','w'))     
+                    p.communicate()  
+                    ps=subprocess.Popen(['printf',inpipe],stdout=subprocess.PIPE)  #This is the statics pipe, pint stdout to syn's stdin
+                    p=subprocess.Popen(commandDS,stdin=ps.stdout,stdout=open(staname[k]+'.subfault'+num+'.DS.static.rtz','w'))     
+                    p.communicate()       
+                    #Rotate radial/transverse to East/North, correct vertical and scale to m
+                    statics=loadtxt(staname[k]+'.subfault'+num+'.SS.static.rtz')
+                    u=statics[2]/100
+                    r=statics[3]/100
+                    t=statics[4]/100
+                    ntemp,etemp=rt2ne(array([r,r]),array([t,t]),az[k])
+                    n=ntemp[0]
+                    e=etemp[0]
+                    savetxt(staname[k]+'.subfault'+num+'.SS.static.neu',(n,e,u,beta))
+                    statics=loadtxt(staname[k]+'.subfault'+num+'.DS.static.rtz')
+                    u=statics[2]/100
+                    r=statics[3]/100
+                    t=statics[4]/100
+                    ntemp,etemp=rt2ne(array([r,r]),array([t,t]),az[k])
+                    n=ntemp[0]
+                    e=etemp[0]
+                    savetxt(staname[k]+'.subfault'+num+'.DS.static.neu',(n,e,u,beta),header='north(m),east(m),up(m),beta(degs)')     
+                else: #Okada half space solutions
+                    #SS
+                    okada_synthetics(strike,dip,rake,length,width,lon_source,lat_source,
+                    depth_source,lon_obs,lat_obs,mu)
+                    #DS
+                    okada_synthetics(strike,dip,rake,length,width,lon_source,lat_source,
+                    depth_source,lon_obs,lat_obs,mu)
+                    print ':)'
      
                       
             
@@ -445,7 +466,13 @@ if __name__ == '__main__':
             impulse=True
         elif impulse=='False':
             impulse=False
-        run_parallel_synthetics(home,project_name,station_file,model_name,integrate,static,tsunami,time_epi,beta,custom_stf,impulse,rank,size)
+        okada=sys.argv[13]
+        if okada=='True':
+            okada=True
+        elif okada=='False':
+            okada=False
+        mu_okada=float(sys.argv[14])
+        run_parallel_synthetics(home,project_name,station_file,model_name,integrate,static,tsunami,time_epi,beta,custom_stf,impulse,rank,size,okada,mu_okada)
     else:
         print 'ERROR: You''re not allowed to run '+sys.argv[1]+' from the shell or it does not exist'
         

@@ -55,7 +55,7 @@ def run_green(source,station_file,model_name,dt,NFFT,static,dk,pmin,pmax,kmax):
     
     
 def run_syn(home,project_name,source,station_file,green_path,model_name,integrate,static,tsunami,
-        subfault,time_epi,beta,impulse=False):
+        subfault,time_epi,beta,impulse=False,okada=False,okada_mu=45e9):
     '''
     Use green functions and compute synthetics at stations for a single source
     and multiple stations. This code makes an external system call to syn.c first it
@@ -106,6 +106,8 @@ def run_syn(home,project_name,source,station_file,green_path,model_name,integrat
         duration=source[7]
     ss_length=source[8]
     ds_length=source[9]
+    ss_length_in_km=ss_length/1000.
+    ds_length_in_km=ds_length/1000.
     strdepth='%.4f' % zs
     if static==0 and tsunami==0:  #Where to save dynamic waveforms
         green_path=green_path+'dynamic/'+model_name+"_"+strdepth+".sub"+subfault+"/"
@@ -116,7 +118,7 @@ def run_syn(home,project_name,source,station_file,green_path,model_name,integrat
     if staname.shape==(): #Single staiton file
         staname=array([staname])
     #Compute distances and azimuths
-    d,az=src2sta(station_file,source)
+    d,az,lon_sta,lat_sta=src2sta(station_file,source,output_coordinates=True)
     #Get moment corresponding to 1 meter of slip on subfault
     mu=get_mu(structure,zs)
     Mo=mu*ss_length*ds_length*1
@@ -273,59 +275,119 @@ def run_syn(home,project_name,source,station_file,green_path,model_name,integrat
                     silentremove(staname[k]+".subfault"+num+'.DS.vel.zi')
         else: #Compute static synthetics
             os.chdir(green_path+'static/') #Move to appropriate dir
-            diststr='%.1f' % d[k] #Need current distance in string form for external call
-            green_file=model_name+".static."+strdepth+".sub"+subfault #Output dir
-            print green_file
-            log=log+green_file+'\n' #Append to log
-            statics=loadtxt(green_file) #Load GFs
-            #Print static GFs into a pipe and pass into synthetics command
-            station_index=argmin(abs(statics[:,0]-d[k])) #Look up by distance
-            try:
-                temp_pipe=statics[station_index,:]
-            except:
-                temp_pipe=statics
-            inpipe=''
-            for j in range(len(temp_pipe)):
-                inpipe=inpipe+' %.6e' % temp_pipe[j]
-            #Form command for external call
-            commandDS="syn -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeDS)+\
-                    " -A"+str(az[k])+" -P"
-            commandSS="syn -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeSS)+\
-                    " -A"+str(az[k])+" -P"
-            print staname[k]
-            print commandSS
-            print commandDS
-            log=log+staname[k]+'\n'+commandSS+'\n'+commandDS+'\n' #Append to log
-            commandSS=split(commandSS) #Lexical split
-            commandDS=split(commandDS)
-            #Make system calls, one for DS, one for SS, and save log
-            ps=subprocess.Popen(['printf',inpipe],stdout=subprocess.PIPE,stderr=subprocess.PIPE)  #This is the statics pipe, pint stdout to syn's stdin
-            p=subprocess.Popen(commandSS,stdin=ps.stdout,stdout=open(staname[k]+'.subfault'+num+'.SS.static.rtz','w'),stderr=subprocess.PIPE)     
-            out,err=p.communicate()  
-            log=log+str(out)+str(err)
-            ps=subprocess.Popen(['printf',inpipe],stdout=subprocess.PIPE,stderr=subprocess.PIPE)  #This is the statics pipe, pint stdout to syn's stdin
-            p=subprocess.Popen(commandDS,stdin=ps.stdout,stdout=open(staname[k]+'.subfault'+num+'.DS.static.rtz','w'),stderr=subprocess.PIPE)     
-            out,err=p.communicate() 
-            log=log+str(out)+str(err)       
-            #Rotate radial/transverse to East/North, correct vertical and scale to m
-            statics=loadtxt(staname[k]+'.subfault'+num+'.SS.static.rtz')
-            u=statics[2]/100
-            r=statics[3]/100
-            t=statics[4]/100
-            ntemp,etemp=rt2ne(array([r,r]),array([t,t]),az[k])
-            n=ntemp[0]
-            e=etemp[0]
-            savetxt(staname[k]+'.subfault'+num+'.SS.static.neu',(n,e,u,beta))
-            statics=loadtxt(staname[k]+'.subfault'+num+'.DS.static.rtz')
-            u=statics[2]/100
-            r=statics[3]/100
-            t=statics[4]/100
-            ntemp,etemp=rt2ne(array([r,r]),array([t,t]),az[k])
-            n=ntemp[0]
-            e=etemp[0]
-            savetxt(staname[k]+'.subfault'+num+'.DS.static.neu',(n,e,u,beta),header='north(m),east(m),up(m),beta(degs)')
+            if okada==False:
+                diststr='%.1f' % d[k] #Need current distance in string form for external call
+                green_file=model_name+".static."+strdepth+".sub"+subfault #Output dir
+                print green_file
+                log=log+green_file+'\n' #Append to log
+                statics=loadtxt(green_file) #Load GFs
+                #Print static GFs into a pipe and pass into synthetics command
+                station_index=argmin(abs(statics[:,0]-d[k])) #Look up by distance
+                try:
+                    temp_pipe=statics[station_index,:]
+                except:
+                    temp_pipe=statics
+                inpipe=''
+                for j in range(len(temp_pipe)):
+                    inpipe=inpipe+' %.6e' % temp_pipe[j]
+                #Form command for external call
+                commandDS="syn -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeDS)+\
+                        " -A"+str(az[k])+" -P"
+                commandSS="syn -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeSS)+\
+                        " -A"+str(az[k])+" -P"
+                print staname[k]
+                print commandSS
+                print commandDS
+                log=log+staname[k]+'\n'+commandSS+'\n'+commandDS+'\n' #Append to log
+                commandSS=split(commandSS) #Lexical split
+                commandDS=split(commandDS)
+                #Make system calls, one for DS, one for SS, and save log
+                ps=subprocess.Popen(['printf',inpipe],stdout=subprocess.PIPE,stderr=subprocess.PIPE)  #This is the statics pipe, pint stdout to syn's stdin
+                p=subprocess.Popen(commandSS,stdin=ps.stdout,stdout=open(staname[k]+'.subfault'+num+'.SS.static.rtz','w'),stderr=subprocess.PIPE)     
+                out,err=p.communicate()  
+                log=log+str(out)+str(err)
+                ps=subprocess.Popen(['printf',inpipe],stdout=subprocess.PIPE,stderr=subprocess.PIPE)  #This is the statics pipe, pint stdout to syn's stdin
+                p=subprocess.Popen(commandDS,stdin=ps.stdout,stdout=open(staname[k]+'.subfault'+num+'.DS.static.rtz','w'),stderr=subprocess.PIPE)     
+                out,err=p.communicate() 
+                log=log+str(out)+str(err)       
+                #Rotate radial/transverse to East/North, correct vertical and scale to m
+                statics=loadtxt(staname[k]+'.subfault'+num+'.SS.static.rtz')
+                u=statics[2]/100
+                r=statics[3]/100
+                t=statics[4]/100
+                ntemp,etemp=rt2ne(array([r,r]),array([t,t]),az[k])
+                n=ntemp[0]
+                e=etemp[0]
+                savetxt(staname[k]+'.subfault'+num+'.SS.static.neu',(n,e,u,beta),header='north(m),east(m),up(m),beta(degs)')
+                statics=loadtxt(staname[k]+'.subfault'+num+'.DS.static.rtz')
+                u=statics[2]/100
+                r=statics[3]/100
+                t=statics[4]/100
+                ntemp,etemp=rt2ne(array([r,r]),array([t,t]),az[k])
+                n=ntemp[0]
+                e=etemp[0]
+                savetxt(staname[k]+'.subfault'+num+'.DS.static.neu',(n,e,u,beta),header='north(m),east(m),up(m),beta(degs)')
+            else:
+                #SS
+                n,e,u=okada_synthetics(strike,dip,rakeSS,ss_length_in_km,ds_length_in_km,xs,ys,
+                    zs,lon_sta[k],lat_sta[k],okada_mu)
+                savetxt(staname[k]+'.subfault'+num+'.SS.static.neu',(n,e,u,beta),header='north(m),east(m),up(m),beta(degs)')
+                #DS
+                n,e,u=okada_synthetics(strike,dip,rakeDS,ss_length_in_km,ds_length_in_km,xs,ys,
+                    zs,lon_sta[k],lat_sta[k],okada_mu)
+                savetxt(staname[k]+'.subfault'+num+'.DS.static.neu',(n,e,u,beta),header='north(m),east(m),up(m),beta(degs)')
     return log
 
+
+def okada_synthetics(strike,dip,rake,length,width,lon_source,lat_source,
+                    depth_source,lon_obs,lat_obs,mu):
+    '''
+    Calculate neu synthetics for a subfault using Okada analytical solutions
+    '''
+    
+    from okada_wrapper import dc3dwrapper
+    from numpy import array,cos,sin,deg2rad,zeros
+    from pyproj import Geod
+    
+    theta=strike-90
+    theta=deg2rad(theta)
+    
+    #Rotaion matrices since okada_wrapper is only for east striking fault
+    R=array([[cos(theta),-sin(theta)],[sin(theta),cos(theta)]])
+    R2=array([[cos(-theta),-sin(-theta)],[sin(-theta),cos(-theta)]])
+                       
+    #position of point from lon/lat to x/y assuming subfault center is origin
+    P=Geod(ellps='WGS84')
+    az,baz,dist=P.inv(lon_source,lat_source,lon_obs,lat_obs)
+    dist=dist/1000.
+    x_obs=dist*sin(deg2rad(az))
+    y_obs=dist*cos(deg2rad(az))
+    
+    #Calculate on rotated position
+    xy=R.dot(array([x_obs, y_obs]))
+    
+    #Get Okada displacements
+    lamb=mu
+    alpha = (lamb + mu) / (lamb + 2 * mu)
+    ss_in_m=1.0*cos(deg2rad(rake))
+    ds_in_m=1.0*sin(deg2rad(rake))
+    success, u, grad_u = dc3dwrapper(alpha, [xy[0], xy[1], 0.0],depth_source,dip,
+                            [-length/2., length/2.], [-width/2., width/2],
+                            [ss_in_m, ds_in_m, 0.0])
+            
+    #Rotate output
+    urot=R2.dot(array([[u[0]], [u[1]]]))
+    u[0]=urot[0]
+    u[1]=urot[1]
+    
+    #output
+    n=u[1]
+    e=u[0]
+    z=u[2]  
+      
+    return n,e,z
+    
+    
 
 ##########                   Utilities and stuff                      ##########          
         
@@ -356,7 +418,7 @@ def cartesian_azimuth(x,y,xs,ys):
     az[i]=pi+az[i]
     return rad2deg(az)
     
-def src2sta(station_file,source):
+def src2sta(station_file,source,output_coordinates=False):
     '''
     Compute cartesian source to station distances and azimuths for all station/source pairs.
     
@@ -388,8 +450,14 @@ def src2sta(station_file,source):
     for k in range(len(x)):
         d[k],az[k],baz[k]=gps2dist_azimuth(ys,xs,y[k],x[k])
     d=d/1000
-    return d,az
     
+    if output_coordinates==True:
+        return d,az,x,y
+    else:
+        return d,az
+    
+    
+
 def origin_time(st,time_epi,tb):
     '''
     Make start time of synthetics correspond with epicentral time

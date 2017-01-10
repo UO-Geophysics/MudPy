@@ -82,7 +82,7 @@ def rupt2fault(home,project_name,rupture_name):
 
 # Run green functions          
 def make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,static,tsunami,
-            hot_start,dk,pmin,pmax,kmax):
+            hot_start,dk,pmin,pmax,kmax,okada=False):
     '''
     This routine set's up the computation of GFs for each subfault to all stations.
     The GFs are impulse sources, they don't yet depend on strike and dip.
@@ -111,71 +111,74 @@ def make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,stat
     import datetime
     import gc
     
-    tic=time.time()
-    model_path=home+project_name+'/structure/'
-    green_path=home+project_name+'/GFs/'
-    station_file=home+project_name+'/data/station_info/'+station_file 
-    fault_file=home+project_name+'/data/model_info/'+fault_name  
-    logpath=home+project_name+'/logs/'
-    #log time
-    now=datetime.datetime.now()
-    now=now.strftime('%b-%d-%H%M')
-    chdir(model_path)
-    #Load source model for station-event distance computations
-    source=loadtxt(fault_file,ndmin=2)
-    for k in range(hot_start,source.shape[0]):
-        #Run comptuation for 1 subfault
-        log=green.run_green(source[k,:],station_file,model_name,dt,NFFT,static,dk,pmin,pmax,kmax)
-        #Write log
-        f=open(logpath+'make_green.'+now+'.log','a')    
-        f.write(log)
-        f.close()
-        #Move to correct directory
-        strdepth='%.4f' % source[k,3]
-        subfault=rjust(str(k+1),4,'0')
-        if static==0 and tsunami==False:
-            #Move results to dynamic GF dir
-            dirs=glob.glob('*.mod_'+strdepth)
-            #Where am I writting this junk too?
-            outgreen=green_path+'/dynamic/'+path.split(dirs[0])[1]+'.sub'+subfault
-            #Check if GF subdir already exists
-            if path.exists(outgreen)==False:
-                #It doesn't, make it, don't be lazy
-                makedirs(outgreen)
-            #Now copy GFs in, this will OVERWRITE EXISTING GFs of the same name
-            flist=glob.glob(dirs[0]+'/*')
-            for k in range(len(flist)):
-                copy(flist[k],outgreen)
-            #Cleanup
-            rmtree(dirs[0])
-            gc.collect()
-        elif static==0 and tsunami==True: #Tsunami GFs
-            #Move results to tsunami GF dir
-            dirs=glob.glob('*.mod_'+strdepth)
-            #Where am I writting this junk too?
-            outgreen=green_path+'/tsunami/'+path.split(dirs[0])[1]+'.sub'+subfault
-            #Check if GF subdir already exists
-            if path.exists(outgreen)==False:
-                #It doesn't, make it, don't be lazy
-                makedirs(outgreen)
-            #Now copy GFs in, this will OVERWRITE EXISTING GFs of the same name
-            flist=glob.glob(dirs[0]+'/*')
-            for k in range(len(flist)):
-                copy(flist[k],outgreen)
-            #Cleanup
-            rmtree(dirs[0])
-            gc.collect()
-        else:  #Static GFs
-            copy('staticgf',green_path+'static/'+model_name+'.static.'+strdepth+'.sub'+subfault)
-            #Cleanup
-            remove('staticgf')     
-    #How long was I working for?
-    toc=time.time()
-    print 'GFs computed in '+str((toc-tic)/60)+' minutes...'
+    if okada==False:
+        tic=time.time()
+        model_path=home+project_name+'/structure/'
+        green_path=home+project_name+'/GFs/'
+        station_file=home+project_name+'/data/station_info/'+station_file 
+        fault_file=home+project_name+'/data/model_info/'+fault_name  
+        logpath=home+project_name+'/logs/'
+        #log time
+        now=datetime.datetime.now()
+        now=now.strftime('%b-%d-%H%M')
+        chdir(model_path)
+        #Load source model for station-event distance computations
+        source=loadtxt(fault_file,ndmin=2)
+        for k in range(hot_start,source.shape[0]):
+            #Run comptuation for 1 subfault
+            log=green.run_green(source[k,:],station_file,model_name,dt,NFFT,static,dk,pmin,pmax,kmax)
+            #Write log
+            f=open(logpath+'make_green.'+now+'.log','a')    
+            f.write(log)
+            f.close()
+            #Move to correct directory
+            strdepth='%.4f' % source[k,3]
+            subfault=rjust(str(k+1),4,'0')
+            if static==0 and tsunami==False:
+                #Move results to dynamic GF dir
+                dirs=glob.glob('*.mod_'+strdepth)
+                #Where am I writting this junk too?
+                outgreen=green_path+'/dynamic/'+path.split(dirs[0])[1]+'.sub'+subfault
+                #Check if GF subdir already exists
+                if path.exists(outgreen)==False:
+                    #It doesn't, make it, don't be lazy
+                    makedirs(outgreen)
+                #Now copy GFs in, this will OVERWRITE EXISTING GFs of the same name
+                flist=glob.glob(dirs[0]+'/*')
+                for k in range(len(flist)):
+                    copy(flist[k],outgreen)
+                #Cleanup
+                rmtree(dirs[0])
+                gc.collect()
+            elif static==0 and tsunami==True: #Tsunami GFs
+                #Move results to tsunami GF dir
+                dirs=glob.glob('*.mod_'+strdepth)
+                #Where am I writting this junk too?
+                outgreen=green_path+'/tsunami/'+path.split(dirs[0])[1]+'.sub'+subfault
+                #Check if GF subdir already exists
+                if path.exists(outgreen)==False:
+                    #It doesn't, make it, don't be lazy
+                    makedirs(outgreen)
+                #Now copy GFs in, this will OVERWRITE EXISTING GFs of the same name
+                flist=glob.glob(dirs[0]+'/*')
+                for k in range(len(flist)):
+                    copy(flist[k],outgreen)
+                #Cleanup
+                rmtree(dirs[0])
+                gc.collect()
+            else:  #Static GFs
+                copy('staticgf',green_path+'static/'+model_name+'.static.'+strdepth+'.sub'+subfault)
+                #Cleanup
+                remove('staticgf')     
+        #How long was I working for?
+        toc=time.time()
+        print 'GFs computed in '+str((toc-tic)/60)+' minutes...'
+    else:
+        print 'GFs not necessary when using an elastic halfspace, exiting make_green'
 
 
 def make_parallel_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,static,tsunami,
-            hot_start,dk,pmin,pmax,kmax,ncpus):
+            hot_start,dk,pmin,pmax,kmax,ncpus,okada=False):
     '''
     This routine set's up the computation of GFs for each subfault to all stations.
     The GFs are impulse sources, they don't yet depend on strike and dip.
@@ -230,16 +233,20 @@ def make_parallel_green(home,project_name,station_file,fault_name,model_name,dt,
     #Make mpi system call
     print "MPI: Starting GFs computation on", ncpus, "CPUs\n"
     mud_source=environ['MUD']+'/src/python/mudpy/'
-    mpi='mpiexec -n '+str(ncpus)+' python '+mud_source+'parallel.py run_parallel_green '+home+' '+project_name+' '+station_file+' '+model_name+' '+str(dt)+' '+str(NFFT)+' '+str(static)+' '+str(dk)+' '+str(pmin)+' '+str(pmax)+' '+str(kmax)+' '+str(tsunami)
-    mpi=split(mpi)
-    p=subprocess.Popen(mpi)
-    p.communicate()
+    if static==1 and okada==True:
+        print 'Static Okada solution requested, no need to run GFs...'
+        pass
+    else:
+        mpi='mpiexec -n '+str(ncpus)+' python '+mud_source+'parallel.py run_parallel_green '+home+' '+project_name+' '+station_file+' '+model_name+' '+str(dt)+' '+str(NFFT)+' '+str(static)+' '+str(dk)+' '+str(pmin)+' '+str(pmax)+' '+str(kmax)+' '+str(tsunami)
+        mpi=split(mpi)
+        p=subprocess.Popen(mpi)
+        p.communicate()
 
    
 
 #Now make synthetics for source/station pairs
 def make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,tsunami,beta,
-                    hot_start,time_epi,impulse=False):
+                    hot_start,time_epi,impulse=False,okada=False,mu=45e9):
     '''
     This routine will take the impulse response (GFs) and pass it into the routine that will
     convovle them with the source time function according to each subfaults strike and dip.
@@ -276,9 +283,10 @@ def make_synthetics(home,project_name,station_file,fault_name,model_name,integra
     source=loadtxt(fault_file,ndmin=2)
     #Now compute synthetics please, one sub fault at a time
     for k in range(hot_start,source.shape[0]):
+        print 'ksource = ' + str(k)
         subfault=rjust(str(k+1),4,'0')
         log=green.run_syn(home,project_name,source[k,:],station_file,green_path,model_name,integrate,static,tsunami,
-                subfault,time_epi,beta,impulse)
+                subfault,time_epi,beta,impulse,okada,mu)
         f=open(logpath+'make_synth.'+now+'.log','a')
         f.write(log)
         f.close()
@@ -287,7 +295,7 @@ def make_synthetics(home,project_name,station_file,fault_name,model_name,integra
         
 #Now make synthetics for source/station pairs
 def make_parallel_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,tsunami,beta,
-                    hot_start,time_epi,ncpus,custom_stf,impulse=False):
+                    hot_start,time_epi,ncpus,custom_stf,impulse=False,okada=False,mu=45e9):
     '''
     This routine will take the impulse response (GFs) and pass it into the routine that will
     convovle them with the source time function according to each subfaults strike and dip.
@@ -330,7 +338,7 @@ def make_parallel_synthetics(home,project_name,station_file,fault_name,model_nam
     #Make mpi system call
     print "MPI: Starting synthetics computation on", ncpus, "CPUs\n"
     mud_source=environ['MUD']+'/src/python/mudpy/'
-    mpi='mpiexec -n '+str(ncpus)+' python '+mud_source+'parallel.py run_parallel_synthetics '+home+' '+project_name+' '+station_file+' '+model_name+' '+str(integrate)+' '+str(static)+' '+str(tsunami)+' '+str(time_epi)+' '+str(beta)+' '+str(custom_stf)+' '+str(impulse)
+    mpi='mpiexec -n '+str(ncpus)+' python '+mud_source+'parallel.py run_parallel_synthetics '+home+' '+project_name+' '+station_file+' '+model_name+' '+str(integrate)+' '+str(static)+' '+str(tsunami)+' '+str(time_epi)+' '+str(beta)+' '+str(custom_stf)+' '+str(impulse)+' '+str(okada)+' '+str(mu)
     mpi=split(mpi)
     p=subprocess.Popen(mpi)
     p.communicate()
