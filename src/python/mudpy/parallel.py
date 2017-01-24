@@ -174,6 +174,8 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
         
         #Parse the soruce information
         num=rjust(str(int(source[0])),4,'0')
+        xs=source[1]
+        ys=source[2]
         zs=source[3]
         strike=source[4]
         dip=source[5]
@@ -184,6 +186,8 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
             duration=source[7]
         ss_length=source[8]
         ds_length=source[9]
+        ss_length_in_km=ss_length/1000.
+        ds_length_in_km=ds_length/1000.
         strdepth='%.4f' % zs
         subfault=rjust(str(int(source[0])),4,'0')
         if static==0 and tsunami==0:  #Where to save dynamic waveforms
@@ -197,7 +201,7 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
             staname=array([staname])
         
         #Compute distances and azimuths
-        d,az=src2sta(station_file,source)
+        d,az,lon_sta,lat_sta=src2sta(station_file,source,output_coordinates=True)
         
         #Get moment corresponding to 1 meter of slip on subfault
         mu=get_mu(structure,zs)
@@ -413,13 +417,14 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
                     e=etemp[0]
                     savetxt(staname[k]+'.subfault'+num+'.DS.static.neu',(n,e,u,beta),header='north(m),east(m),up(m),beta(degs)')     
                 else: #Okada half space solutions
-                    #SS
-                    okada_synthetics(strike,dip,rake,length,width,lon_source,lat_source,
-                    depth_source,lon_obs,lat_obs,mu)
+                #SS
+                    n,e,u=okada_synthetics(strike,dip,rakeSS,ss_length_in_km,ds_length_in_km,xs,ys,
+                        zs,lon_sta[k],lat_sta[k],mu_okada)
+                    savetxt(staname[k]+'.subfault'+num+'.SS.static.neu',(n,e,u,beta),header='north(m),east(m),up(m),beta(degs)')
                     #DS
-                    okada_synthetics(strike,dip,rake,length,width,lon_source,lat_source,
-                    depth_source,lon_obs,lat_obs,mu)
-                    print ':)'
+                    n,e,u=okada_synthetics(strike,dip,rakeDS,ss_length_in_km,ds_length_in_km,xs,ys,
+                        zs,lon_sta[k],lat_sta[k],mu_okada)
+                    savetxt(staname[k]+'.subfault'+num+'.DS.static.neu',(n,e,u,beta),header='north(m),east(m),up(m),beta(degs)')
      
                       
             

@@ -944,6 +944,9 @@ def move_seafloor(home,project_name,run_name,topo_dx_file,topo_dy_file,tgf_file,
 def move_seafloor_okada(mudpy_file,out_file,x,y,refine_factor=None,mu=40e9,return_object=False):
     """
     Use the Okada routine in GeoClaw to generate the dtopo file
+    
+    x=arange(-75,-73,0.05)
+    y=arange(-44.5,-42.5,0.05)
     """
     
     from clawpack.geoclaw import dtopotools
@@ -2280,7 +2283,7 @@ def read_fakequakes_hypo_time(home,project_name,rupture_name):
     
 
 
-def make_grid(home,project_name,GF_list,out_file):
+def convert_to_grid(home,project_name,GF_list,out_file):
     '''
     Convert a bunch of single file neu's to one big grid file
     '''

@@ -133,7 +133,7 @@ def make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,stat
             f.close()
             #Move to correct directory
             strdepth='%.4f' % source[k,3]
-            subfault=rjust(str(k+1),4,'0')
+            subfault=rjust(str(int(source[k,0])),4,'0')
             if static==0 and tsunami==False:
                 #Move results to dynamic GF dir
                 dirs=glob.glob('*.mod_'+strdepth)
@@ -420,7 +420,7 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
                             hot_start,dk,pmin,pmax,kmax)
         if tgf_file!=None: #Tsunami
             print 'Seafloor displacement GFs requested...'
-            static=0
+            static=1
             tsunami=True
             station_file=tgf_file
             if ncpus>1:

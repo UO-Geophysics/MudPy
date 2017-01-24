@@ -1837,12 +1837,15 @@ def data_covariance(gf_file,decimate):
     
     
     
-def make_tgf_dtopo(home,project_name,model_name,topo_dx_file,topo_dy_file,
-                tgf_file,coast_file,fault_name,time_epi,tsun_dt,maxt,instantaneous=True):
+def make_tgf_dtopo(home,project_name,model_name,tgf_file,coast_file,fault_name,
+            time_epi,tsun_dt,maxt,topo_dx_file,topo_dy_file,
+            topo_effect=False,instantaneous=True):
     '''
     Create moving topography input files for geoclaw
     
     tsun_dt - Sampling itnerval of synthetics ALREADY made
+    model_name is structure file
+    time_epi is UTC string
     
     '''
     import datetime
@@ -1872,16 +1875,16 @@ def make_tgf_dtopo(home,project_name,model_name,topo_dx_file,topo_dy_file,
     zdx=bathy_dx.variables['z'][:]
     bathy_dy=Dataset(topo_dy_file,'r')
     zdy=bathy_dy.variables['z'][:]
-    #Make mesh that matches it for interpolation later
+#Make mesh that matches it for interpolation later
     try:
         lonb=bathy_dx.variables['lon'][:]
         latb=bathy_dx.variables['lat'][:]
     except:
         lonb=bathy_dx.variables['x'][:]
         latb=bathy_dx.variables['y'][:]
-    print "Correcting longitude"
-    lon=360+lon
-    lonb=360+lonb
+    #print "Correcting longitude"
+    #lon=360+lon
+    #lonb=360+lonb
     loni,lati=meshgrid(lonb,latb)
     #Now apply motion from every subfault
     for ksub in range(len(f)): #Loops through subfaults
@@ -1979,8 +1982,9 @@ def make_tgf_dtopo(home,project_name,model_name,topo_dx_file,topo_dy_file,
             uout_ds=uds
             uout_ss=uss
             #Apply effect of topography advection
-            uout_ds[imask1,imask2]=uout_ds[imask1,imask2]+zdx[imask1,imask2]*eds[imask1,imask2]+zdy[imask1,imask2]*nds[imask1,imask2]
-            uout_ss[imask1,imask2]=uout_ss[imask1,imask2]+zdx[imask1,imask2]*ess[imask1,imask2]+zdy[imask1,imask2]*nss[imask1,imask2]
+            if topo_effect==True:
+                uout_ds[imask1,imask2]=uout_ds[imask1,imask2]+zdx[imask1,imask2]*eds[imask1,imask2]+zdy[imask1,imask2]*nds[imask1,imask2]
+                uout_ss[imask1,imask2]=uout_ss[imask1,imask2]+zdx[imask1,imask2]*ess[imask1,imask2]+zdy[imask1,imask2]*nss[imask1,imask2]
             #Convert to column format and append
             xyz_ds=grd2xyz(uout_ds,loni,lati)
             xyz_ss=grd2xyz(uout_ss,loni,lati)

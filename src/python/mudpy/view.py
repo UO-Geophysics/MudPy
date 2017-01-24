@@ -526,7 +526,7 @@ def tile_slip(rupt,nstrike,ndip,(slip_bounds),geographic=False,epicenter=0,epice
         plt.xlabel('Along-strike index')
         plt.xlim(istrike.min()-1,istrike.max()+1)
         plt.ylim(idip.min()-1,idip.max()+1)
-        plt.quiver(istrike,idip,rakess,rakeds,color='green',width=0.0001)
+        plt.quiver(istrike,idip,rakess,rakeds,color='green',width=0.005,scale=60.0)
         plt.axis('equal')
         plt.grid()    
         plt.title(rupt)
@@ -540,18 +540,15 @@ def tile_slip(rupt,nstrike,ndip,(slip_bounds),geographic=False,epicenter=0,epice
         #plt.scatter(along_strike_afters,depth_afters,marker='.',c='#404040',s=35)
         plt.ylabel('Depth (km)')
         plt.xlabel('Along-strike distance (km)')
-        #plt.xlim(along_strike.min()-5,along_strike.max()+5)
-        #plt.ylim(depth.min()-5,depth.max()+5)   
-        plt.xlim(-39,41)
-        plt.ylim(-17,1.5)       
+        plt.xlim(along_strike.min()-5,along_strike.max()+5)
+        plt.ylim(depth.min()-5,depth.max()+5)         
         plt.scatter(0,-epicenter[2],marker='*',edgecolor='k',facecolor='#00FF00',s=350,linewidth=2)
         for k in range(len(along_strike)):
             scale_slip=slip[k]/slip.max()
-            #plt.quiver(along_strike[k],depth[k],rakess[k]/sqrt(rakess[k]**2+rakeds[k]**2),rakeds[k]/sqrt(rakess[k]**2+rakeds[k]**2),color='green',width=0.002,scale=50/scale_slip)
-    plt.annotate('North',xy=(28,0),fontsize=16)
-    plt.annotate('South',xy=(-36,0),fontsize=16)
-    #plt.title(r'2015 Lefkada $M_w6.55$, $v_r=2.6$km/s, $\sigma=020$, $\delta=65$',fontsize=16)
-    cb.set_label('Coeff. Var.')
+            plt.quiver(along_strike[k],depth[k],rakess[k]/sqrt(rakess[k]**2+rakeds[k]**2),rakeds[k]/sqrt(rakess[k]**2+rakeds[k]**2),color='green',width=0.002,scale=50/scale_slip)
+    #plt.annotate('North',xy=(28,0),fontsize=16)
+    #plt.annotate('South',xy=(-36,0),fontsize=16)
+    cb.set_label('Slip (m)')
     plt.subplots_adjust(left=0.15, bottom=0.15, right=0.92, top=0.92, wspace=0, hspace=0)
     plt.show()
 
@@ -1671,7 +1668,8 @@ def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpas
             #xticklabel=['','','40','','80','','120','','160',''] #Iquique preferred
             #xticklabel=['','10','','30','','50',''] #Nepal preferred
             #xticklabel=['','5','','15','','25','','35',''] #Lefkada preferred
-            xticklabel=['','5','','15','','25',''] #Amatrice preferred
+            #xticklabel=['','5','','15','','25',''] #Amatrice preferred
+            xticklabel=['','10','','30','','50','','70',''] #Melinka preferred
         if k==len(i)-1 and nsta>1: #Last plot
             axe.set_xlabel('Time (s)')
             axn.xaxis.set_ticklabels(xticklabel)
