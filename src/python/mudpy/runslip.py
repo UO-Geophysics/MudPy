@@ -420,7 +420,7 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
                             hot_start,dk,pmin,pmax,kmax)
         if tgf_file!=None: #Tsunami
             print 'Seafloor displacement GFs requested...'
-            static=1
+            static=0
             tsunami=True
             station_file=tgf_file
             if ncpus>1:

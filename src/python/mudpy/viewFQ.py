@@ -2295,7 +2295,7 @@ def amplitude_all(home,project_name,nbins_ampl=20,nbins_freq=20,ampl_lims=[1e-10
             
                               
             
-def source_time_function(rupt,epicenter,dt=0.001,t_total=500,stf_type='dreger'):
+def source_time_function(rupt,epicenter,dt=0.001,t_total=500,stf_type='dreger',plot=True):
     '''
     Plot source time function of complete rupture
     '''
@@ -2348,13 +2348,14 @@ def source_time_function(rupt,epicenter,dt=0.001,t_total=500,stf_type='dreger'):
     #Get power
     exp=floor(log10(Mrate.max()))
     M1=Mrate/(10**exp)
-    plt.figure()
-    plt.fill(t,Mrate,'b',alpha=0.5)
-    plt.plot(t,Mrate,color='k',lw=0.1)
-    plt.grid()
-    plt.xlabel('Time(s)')
-    plt.ylabel('Moment Rate ('+r'$\times 10^{'+str(int(exp))+r'}$Nm/s)')
-    plt.subplots_adjust(left=0.3, bottom=0.3, right=0.7, top=0.7, wspace=0, hspace=0)
+    if plot==True:
+        plt.figure()
+        plt.fill(t,Mrate,'b',alpha=0.5)
+        plt.plot(t,Mrate,color='k',lw=0.1)
+        plt.grid()
+        plt.xlabel('Time(s)')
+        plt.ylabel('Moment Rate ('+r'$\times 10^{'+str(int(exp))+r'}$Nm/s)')
+        plt.subplots_adjust(left=0.3, bottom=0.3, right=0.7, top=0.7, wspace=0, hspace=0)
     return t,Mrate  
     
          

@@ -1839,7 +1839,7 @@ def data_covariance(gf_file,decimate):
     
 def make_tgf_dtopo(home,project_name,model_name,tgf_file,coast_file,fault_name,
             time_epi,tsun_dt,maxt,topo_dx_file,topo_dy_file,
-            topo_effect=False,instantaneous=True):
+            topo_effect=False,instantaneous=True,hot_start=0):
     '''
     Create moving topography input files for geoclaw
     
@@ -1887,7 +1887,7 @@ def make_tgf_dtopo(home,project_name,model_name,tgf_file,coast_file,fault_name,
     #lonb=360+lonb
     loni,lati=meshgrid(lonb,latb)
     #Now apply motion from every subfault
-    for ksub in range(len(f)): #Loops through subfaults
+    for ksub in range(hot_start,len(f)): #Loops through subfaults
         if ksub%10==0:
             print '... working on subfault '+str(ksub)+' of '+str(len(f))
         #Depth string

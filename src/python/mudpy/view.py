@@ -1095,7 +1095,7 @@ def tile_moment(rupt,epicenter,nstrike,ndip,covfile,beta=0,(vfast,vslow)=(0,0),s
     return tout,Mout
 
 
-def source_time_function(rupt,epicenter):
+def source_time_function(rupt,epicenter,plot=True):
     '''
     Plot source time function of complete rupture
     '''
@@ -1142,13 +1142,14 @@ def source_time_function(rupt,epicenter):
     #Get power
     exp=floor(log10(M1.max()))
     M1=M1/(10**exp)
-    plt.figure()
-    plt.fill(t1,M1,'b',alpha=0.5)
-    plt.plot(t1,M1,color='k')
-    plt.grid()
-    plt.xlabel('Time(s)')
-    plt.ylabel('Moment Rate ('+r'$\times 10^{'+str(int(exp))+r'}$Nm/s)')
-    plt.subplots_adjust(left=0.3, bottom=0.3, right=0.7, top=0.7, wspace=0, hspace=0)
+    if plot==True:
+        plt.figure()
+        plt.fill(t1,M1,'b',alpha=0.5)
+        plt.plot(t1,M1,color='k')
+        plt.grid()
+        plt.xlabel('Time(s)')
+        plt.ylabel('Moment Rate ('+r'$\times 10^{'+str(int(exp))+r'}$Nm/s)')
+        plt.subplots_adjust(left=0.3, bottom=0.3, right=0.7, top=0.7, wspace=0, hspace=0)
     return t1,M1
     
 def geographic_STFs(rupt,epicenter,nstrike,ndip,tscale=100,Mscale=1,figsize=(8,10),tout=[],Mout=[]):
