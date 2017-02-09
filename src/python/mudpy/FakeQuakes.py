@@ -114,7 +114,7 @@ def subfault_distances_3D(home,project_name,fault_name,slab_name,projection_zone
 
     """
 
-    from numpy import sqrt,sin,cos,deg2rad,zeros,meshgrid,linspace,where,c_,unravel_index,sort,diff,genfromtxt,sign
+    from numpy import sqrt,sin,cos,deg2rad,zeros,meshgrid,linspace,where,c_,unravel_index,sort,diff,genfromtxt,sign,unique
     from matplotlib.mlab import griddata
     from matplotlib import pyplot as plt
     from scipy.spatial.distance import cdist
@@ -203,7 +203,7 @@ def subfault_distances_3D(home,project_name,fault_name,slab_name,projection_zone
         Z = griddata(slab_x, slab_y, slab_z, X, Y,interp='linear')
         
         # X, Y and Z are matrices with the grid info, now create one contour at each subfault centroid depth
-        contour_levels=fault[:,3]
+        contour_levels=unique(sort(fault[:,3]))
         all_contours=plt.contour(X,Y,Z,levels=contour_levels)
         
         # x-coordinates for down_dip line
