@@ -256,11 +256,12 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tsunami,td
     OUT:
         G: Partially assembled GF with all synthetics from a particular data type
     '''
-    from numpy import genfromtxt,loadtxt,zeros,array,diff,r_
+    from numpy import genfromtxt,loadtxt,zeros,array,inf
     from string import rjust
     from obspy import read,Stream,Trace
     from mudpy.forward import tshift
     from mudpy.forward import lowpass as lfilt
+    from mudpy.forward import highpass as hfilt
     from mudpy.green import stdecimate
     
     #Load fault model
@@ -349,8 +350,10 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tsunami,td
     if gftype.lower()=='disp' or gftype.lower()=='vel':  #Full waveforms
         if gftype.lower()=='disp':
             vord='disp'
+            BP=bandpass[0]
         else:
             vord='vel'
+            BP=bandpass[1]
             tsunami=False
         if first_window==True: #Read in GFs from file
             ktrace=0
@@ -381,20 +384,29 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tsunami,td
                         Nds+=read(syn_path+staname[ksta]+'.'+nfault+'.DS.'+vord+'.n')
                         Zds+=read(syn_path+staname[ksta]+'.'+nfault+'.DS.'+vord+'.z')
                     #Perform operations that need to only happen once (filtering and decimation)
-                    if bandpass!=None:# or ksta==1: #Apply low pass filter to data (** DIRTY HACK!**)
+                    if BP!=None:# or ksta==1: #Apply low pass filter to data (** DIRTY HACK!**)
                         if kfault==0:
-                            print 'Bandpassing...'
-                            print staname[ksta]
+                            print 'Bandpassing on frequency band:\n'
+                            print '... '+str(BP)
+                            print '... station '+staname[ksta]
                         #print 'Bandpassing hack...'
                         #print staname[ksta]
                         #bandpass=0.015
-                        fsample=1./Ess[0].stats.delta
-                        Ess[ktrace].data=lfilt(Ess[ktrace].data,bandpass,fsample,2)
-                        Nss[ktrace].data=lfilt(Nss[ktrace].data,bandpass,fsample,2)
-                        Zss[ktrace].data=lfilt(Zss[ktrace].data,bandpass,fsample,2)
-                        Eds[ktrace].data=lfilt(Eds[ktrace].data,bandpass,fsample,2)
-                        Nds[ktrace].data=lfilt(Nds[ktrace].data,bandpass,fsample,2)
-                        Zds[ktrace].data=lfilt(Zds[ktrace].data,bandpass,fsample,2)
+                        fsample=1./Ess[ktrace].stats.delta
+                        if BP[1]==inf: #A high pass filter has been requested
+                            Ess[ktrace].data=hfilt(Ess[ktrace].data,BP[0],fsample,2)
+                            Nss[ktrace].data=hfilt(Nss[ktrace].data,BP[0],fsample,2)
+                            Zss[ktrace].data=hfilt(Zss[ktrace].data,BP[0],fsample,2)
+                            Eds[ktrace].data=hfilt(Eds[ktrace].data,BP[0],fsample,2)
+                            Nds[ktrace].data=hfilt(Nds[ktrace].data,BP[0],fsample,2)
+                            Zds[ktrace].data=hfilt(Zds[ktrace].data,BP[0],fsample,2)                        
+                        else: #A low pass or bandpass filter has been requested
+                            Ess[ktrace].data=lfilt(Ess[ktrace].data,BP,fsample,2)
+                            Nss[ktrace].data=lfilt(Nss[ktrace].data,BP,fsample,2)
+                            Zss[ktrace].data=lfilt(Zss[ktrace].data,BP,fsample,2)
+                            Eds[ktrace].data=lfilt(Eds[ktrace].data,BP,fsample,2)
+                            Nds[ktrace].data=lfilt(Nds[ktrace].data,BP,fsample,2)
+                            Zds[ktrace].data=lfilt(Zds[ktrace].data,BP,fsample,2)
                         #bandpass=None
                     
                     ### HAAAAAACCCCKKKK!!!!
@@ -501,6 +513,7 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tsunami,td
             G[insert_position:insert_position+3*npts,:]=Gtemp
             insert_position+=3*npts #Update for next station
         return G,Ess,Eds,Nss,Nds,Zss,Zds
+    
     if gftype.lower()=='tsun':
         if first_window==True: #Read in GFs from file
             ktrace=0
@@ -519,6 +532,22 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tsunami,td
                     else: #Just add to stream object
                         SS+=read(syn_path+staname[ksta]+'.ss.tsun')
                         DS+=read(syn_path+staname[ksta]+'.ds.tsun')
+                    
+                    #Band pass filter data
+                    BP=bandpass[2]
+                    if BP!=None:
+                        if kfault==0:
+                            print 'Bandpassing on frequency band\n:'
+                            print '... '+str(BP)
+                            print '... station '+staname[ksta]
+                        fsample=1./SS[ktrace].stats.delta
+                        if bandpass[1]==inf: #A high pass filter has been requested
+                            SS[ktrace].data=hfilt(SS[ktrace].data,BP[0],fsample,2)
+                            DS[ktrace].data=hfilt(DS[ktrace].data,BP[0],fsample,2)                    
+                        else: #A low pass or bandpass filter has been requested
+                            SS[ktrace].data=lfilt(SS[ktrace].data,BP,fsample,2)
+                            DS[ktrace].data=lfilt(DS[ktrace].data,BP,fsample,2)
+                                                
                     ktrace+=1            
         else:
             SS=Ess.copy()
@@ -1839,7 +1868,7 @@ def data_covariance(gf_file,decimate):
     
 def make_tgf_dtopo(home,project_name,model_name,tgf_file,coast_file,fault_name,
             time_epi,tsun_dt,maxt,topo_dx_file,topo_dy_file,
-            topo_effect=False,instantaneous=True,hot_start=0):
+            topo_effect=False,instantaneous=True,hot_start=0,average_instantaneous=10):
     '''
     Create moving topography input files for geoclaw
     
@@ -1849,7 +1878,7 @@ def make_tgf_dtopo(home,project_name,model_name,tgf_file,coast_file,fault_name,
     
     '''
     import datetime
-    from numpy import genfromtxt,zeros,arange,meshgrid,ones,c_,savetxt,argmin,nan,where
+    from numpy import genfromtxt,zeros,arange,meshgrid,ones,c_,savetxt,argmin,nan,where,mean
     from obspy import read
     from string import rjust
     from netCDF4 import Dataset
@@ -1870,12 +1899,12 @@ def make_tgf_dtopo(home,project_name,model_name,tgf_file,coast_file,fault_name,
     #Maximum time to be modeled
     tmax=time_epi+td_max
     Nt=(tmax-time_epi)/tsun_dt
-    #Read topo/bathy derivative file
+    #Read topo/bathy derivative fileksub=0
     bathy_dx=Dataset(topo_dx_file,'r')
     zdx=bathy_dx.variables['z'][:]
     bathy_dy=Dataset(topo_dy_file,'r')
     zdy=bathy_dy.variables['z'][:]
-#Make mesh that matches it for interpolation later
+    #Make mesh that matches it for interpolation later
     try:
         lonb=bathy_dx.variables['lon'][:]
         latb=bathy_dx.variables['lat'][:]
@@ -1965,19 +1994,20 @@ def make_tgf_dtopo(home,project_name,model_name,tgf_file,coast_file,fault_name,
             if kt%20==0:
                 print '... ... working on time slice '+str(kt)+' of '+str(nt_iter)
             if instantaneous==True and kt==1:
-                nds=griddata((lon,lat),nDS[-1,:],(loni,lati),method='cubic',fill_value=0)
-                eds=griddata((lon,lat),eDS[-1,:],(loni,lati),method='cubic',fill_value=0)
-                uds=griddata((lon,lat),uDS[-1,:],(loni,lati),method='cubic',fill_value=0)
-                nss=griddata((lon,lat),nSS[-1,:],(loni,lati),method='cubic',fill_value=0)
-                ess=griddata((lon,lat),eSS[-1,:],(loni,lati),method='cubic',fill_value=0)
-                uss=griddata((lon,lat),uSS[-1,:],(loni,lati),method='cubic',fill_value=0)
+                
+                nds=griddata((lon,lat),mean(nDS[-average_instantaneous:,:],axis=0),(loni,lati),method='linear',fill_value=0)
+                eds=griddata((lon,lat),mean(eDS[-average_instantaneous:,:],axis=0),(loni,lati),method='linear',fill_value=0)
+                uds=griddata((lon,lat),mean(uDS[-average_instantaneous:,:],axis=0),(loni,lati),method='linear',fill_value=0)
+                nss=griddata((lon,lat),mean(nSS[-average_instantaneous:,:],axis=0),(loni,lati),method='linear',fill_value=0)
+                ess=griddata((lon,lat),mean(eSS[-average_instantaneous:,:],axis=0),(loni,lati),method='linear',fill_value=0)
+                uss=griddata((lon,lat),mean(uSS[-average_instantaneous:,:],axis=0),(loni,lati),method='linear',fill_value=0)
             else:
-                nds=griddata((lon,lat),nDS[kt,:],(loni,lati),method='cubic',fill_value=0)
-                eds=griddata((lon,lat),eDS[kt,:],(loni,lati),method='cubic',fill_value=0)
-                uds=griddata((lon,lat),uDS[kt,:],(loni,lati),method='cubic',fill_value=0)
-                nss=griddata((lon,lat),nSS[kt,:],(loni,lati),method='cubic',fill_value=0)
-                ess=griddata((lon,lat),eSS[kt,:],(loni,lati),method='cubic',fill_value=0)
-                uss=griddata((lon,lat),uSS[kt,:],(loni,lati),method='cubic',fill_value=0)
+                nds=griddata((lon,lat),nDS[kt,:],(loni,lati),method='linear',fill_value=0)
+                eds=griddata((lon,lat),eDS[kt,:],(loni,lati),method='linear',fill_value=0)
+                uds=griddata((lon,lat),uDS[kt,:],(loni,lati),method='linear',fill_value=0)
+                nss=griddata((lon,lat),nSS[kt,:],(loni,lati),method='linear',fill_value=0)
+                ess=griddata((lon,lat),eSS[kt,:],(loni,lati),method='linear',fill_value=0)
+                uss=griddata((lon,lat),uSS[kt,:],(loni,lati),method='linear',fill_value=0)
             #Output vertical
             uout_ds=uds
             uout_ss=uss
@@ -2089,7 +2119,6 @@ def tsunami2sac(home,project_name,model_name,fault_name,tlims,dt,time_epi,hot_st
     #Where is the data
     green_dir=home+project_name+'/GFs/tsunami/'  
     for ksub in range(hot_start,len(f)):
-        print '... working on subfault '+str(ksub)+' of '+str(len(f))
         #Depth string
         zs=f[ksub,3]        
         strdepth='%.4f' % zs
@@ -2097,19 +2126,24 @@ def tsunami2sac(home,project_name,model_name,fault_name,tlims,dt,time_epi,hot_st
         sub=rjust(str(ksub+1),4,'0')
         #Subfault dir
         subdir=green_dir+model_name+'_'+strdepth+'.sub'+sub+'/'
-        #Read gauge.fort file
-        gds=genfromtxt(subdir+'_DS/_output/fort.gauge')
-        gss=genfromtxt(subdir+'_SS/_output/fort.gauge')
-        for kgauge in range(len(gauges)):
-            print kgauge
-            iss=where(gss[:,0]==gaugesGC[kgauge])[0]
-            ids=where(gds[:,0]==gaugesGC[kgauge])[0]
+        print '... working on  '+subdir
+        for kgauge in range(gauges.size):
+            #Read gauge.fort file
+            if gauges.size<2:
+                dsfile=subdir+'_DS/_output/gauge%s.txt' % (rjust(str(int(gaugesGC)),5,'0'))
+                ssfile=subdir+'_SS/_output/gauge%s.txt' % (rjust(str(int(gaugesGC)),5,'0'))
+            else:
+                dsfile=subdir+'_DS/_output/gauge%s.txt' % (rjust(str(int(gaugesGC[kgauge])),5,'0'))
+                ssfile=subdir+'_SS/_output/gauge%s.txt' % (rjust(str(int(gaugesGC[kgauge])),5,'0'))
+            gds=genfromtxt(dsfile)
+            gss=genfromtxt(ssfile)
+            
             #Get time vector
-            tss=gss[iss,2]
-            tds=gds[ids,2]
+            tss=gss[:,1]
+            tds=gds[:,1]
             #Get data
-            etass=gss[iss,6]
-            etads=gds[ids,6]
+            etass=gss[:,5]
+            etads=gds[:,5]
             #Trim and resample to regular interval
             itrim=intersect1d(where(tss>=tlims[0])[0],where(tss<=tlims[1])[0])
             tss=tss[itrim]
@@ -2137,8 +2171,12 @@ def tsunami2sac(home,project_name,model_name,fault_name,tlims,dt,time_epi,hot_st
             stds[0].stats.delta=dt
             stds[0].stats.starttime=time_epi
             #Write to file
-            stss.write(subdir+gauges[kgauge]+'.ss.tsun',format='SAC')
-            stds.write(subdir+gauges[kgauge]+'.ds.tsun',format='SAC')
+            if gauges.size<2:
+                stss.write(subdir+str(gauges)+'.ss.tsun',format='SAC')
+                stds.write(subdir+str(gauges)+'.ds.tsun',format='SAC')
+            else:
+                stss.write(subdir+str(gauges[kgauge])+'.ss.tsun',format='SAC')
+                stds.write(subdir+str(gauges[kgauge])+'.ds.tsun',format='SAC')
 
 
     

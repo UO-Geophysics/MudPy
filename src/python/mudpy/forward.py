@@ -1957,12 +1957,14 @@ def static2kineamtic(rupt,epicenter,vr,fout):
 
 
 
-def mudpy2srf(rupt,log_file,stf_dt=0.1,stf_type='dreger'):
+def mudpy2srf(rupt,log_file,stf_dt=0.1,stf_type='dreger',Ndip=None):
     '''
     Convert a mudpy .rupt or .inv file to SRF version 2 format
     
     See for SRF format description here:
         https://scec.usc.edu/scecpedia/Standard_Rupture_Format
+        
+    if Ndip != None it means try to apportion Nstrike and Ndip to avoid huge Nstrike number
     '''
     
     from numpy import genfromtxt,where,sin,deg2rad,array,argmin,sqrt,sign,arctan2,rad2deg,arange,ones
@@ -1994,12 +1996,15 @@ def mudpy2srf(rupt,log_file,stf_dt=0.1,stf_type='dreger'):
     #Top center latitude
     elat=fmin[:,2].mean()
     
-    #Number of faults along strike
-    Nstrike=len(fmin)
-    
-    #Number of faults along dip
-    Ndip=len(f)/Nstrike
-    
+    if Ndip==None:
+        #Number of faults along strike
+        Nstrike=len(fmin)
+        #Number of faults along dip
+        Ndip=len(f)/Nstrike
+    else:
+        #Number of faults along strike
+        Nstrike=len(f)/Ndip
+        
     #Subfault dimensions (in km)
     dx_strike=f[0,10]/1000.0
     dx_dip=f[0,11]/1000.0
@@ -2199,10 +2204,9 @@ def convolution_matrix(h):
     return Hfinal
     
     
-def build_source_time_function(rise_time,dt,total_time,stf_type='triangle',zeta=0.2,dreger_falloff_rate=4,scale=True):
+def build_source_time_function(rise_time,dt,total_time,stf_type='triangle',zeta=0.2,dreger_falloff_rate=4,scale=True,time_offset=0):
     '''
-    Compute source time function for a given rise time, right now it assumes 1m of slip
-    and a triangle STF
+    Compute source time function for a given rise time
     '''
     from numpy import zeros,arange,where,pi,cos,sin,isnan,exp
     from scipy.integrate import trapz
@@ -2250,6 +2254,9 @@ def build_source_time_function(rise_time,dt,total_time,stf_type='triangle',zeta=
     if isnan(Mdot[0])==True:
         print 'ERROR: woops, STF has nan values!'
         return
+        
+    #offset origin time
+    t=t+time_offset
     return t,Mdot
     
     
