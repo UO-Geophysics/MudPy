@@ -386,7 +386,7 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tsunami,td
                     #Perform operations that need to only happen once (filtering and decimation)
                     if BP!=None:# or ksta==1: #Apply low pass filter to data (** DIRTY HACK!**)
                         if kfault==0:
-                            print 'Bandpassing on frequency band:\n'
+                            print 'Bandpassing on frequency band:'
                             print '... '+str(BP)
                             print '... station '+staname[ksta]
                         #print 'Bandpassing hack...'
@@ -537,11 +537,11 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tsunami,td
                     BP=bandpass[2]
                     if BP!=None:
                         if kfault==0:
-                            print 'Bandpassing on frequency band\n:'
+                            print 'Bandpassing on frequency band:'
                             print '... '+str(BP)
                             print '... station '+staname[ksta]
                         fsample=1./SS[ktrace].stats.delta
-                        if bandpass[1]==inf: #A high pass filter has been requested
+                        if BP[1]==inf: #A high pass filter has been requested
                             SS[ktrace].data=hfilt(SS[ktrace].data,BP[0],fsample,2)
                             DS[ktrace].data=hfilt(DS[ktrace].data,BP[0],fsample,2)                    
                         else: #A low pass or bandpass filter has been requested
