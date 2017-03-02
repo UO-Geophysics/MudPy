@@ -578,13 +578,13 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
                                                         
 def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_from_file,G_name,epicenter,
                 rupture_speed,num_windows,reg_spatial,reg_temporal,nfaults,beta,decimate,bandpass,
-                solver,bounds,weight=False,Ltype=2,target_moment=None):
+                solver,bounds,weight=False,Ltype=2,target_moment=None,data_vector=None):
     '''
     Assemble G and d, determine smoothing and run the inversion
     '''
     from mudpy import inverse as inv
     from mudpy.forward import get_mu_and_area
-    from numpy import zeros,dot,array,squeeze,expand_dims,empty,tile,eye,ones,arange
+    from numpy import zeros,dot,array,squeeze,expand_dims,empty,tile,eye,ones,arange,load
     from numpy.linalg import lstsq
     from scipy.sparse import csr_matrix as sparse
     from scipy.optimize import nnls
@@ -595,7 +595,10 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
 
     t1=datetime.now()
     #Get data vector
-    d=inv.getdata(home,project_name,GF_list,decimate,bandpass=None)
+    if data_vector==None:
+        d=inv.getdata(home,project_name,GF_list,decimate,bandpass=None)
+    else:
+        d=load(data_vector) 
     #Get GFs
     G=inv.getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epicenter,
                 rupture_speed,num_windows,decimate,bandpass)
