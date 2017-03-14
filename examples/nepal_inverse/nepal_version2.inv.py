@@ -20,15 +20,15 @@ run_name='example'
 
 #####              What-do-you-want-to-do flags, 1=do, 0=leave be          #####close   
 
-init=0 #Initalize project
-make_green=1 #Compute GFs
-make_synthetics=1 #Compute synthetics for a given model at given stations
+init=1 #Initalize project
+make_green=0 #Compute GFs
+make_synthetics=0 #Compute synthetics for a given model at given stations
 G_from_file=0# =0 read GFs and create a new G, =1 load G from file
-invert=1  # =1 runs inversion, =0 does nothing
+invert=0  # =1 runs inversion, =0 does nothing
 ###############################################################################
 
 ###############          view  Green function parameters               #############
-ncpus=8
+ncpus=1
 hot_start=0 #Start at a certain subfault number
 model_name='avouac.mod'   #Velocity model
 fault_name='nepal_10.fault'    #Fault geometry
