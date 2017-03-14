@@ -393,7 +393,7 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tsunami,td
                         #print staname[ksta]
                         #bandpass=0.015
                         fsample=1./Ess[ktrace].stats.delta
-                        if BP[1]==inf: #A high pass filter has been requested
+                        if len(BP)>1 and BP[1]==inf: #A high pass filter has been requested
                             Ess[ktrace].data=hfilt(Ess[ktrace].data,BP[0],fsample,2)
                             Nss[ktrace].data=hfilt(Nss[ktrace].data,BP[0],fsample,2)
                             Zss[ktrace].data=hfilt(Zss[ktrace].data,BP[0],fsample,2)
