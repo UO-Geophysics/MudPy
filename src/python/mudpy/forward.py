@@ -256,8 +256,8 @@ def waveforms_matrix(home,project_name,fault_name,rupture_name,station_file,GF_l
 
         
 def waveforms_fakequakes(home,project_name,fault_name,rupture_list,GF_list,
-                model_name,run_name,dt,NFFT,G_from_file,G_name,source_time_function,
-                stf_falloff_rate):
+                model_name,run_name,dt,NFFT,G_from_file,G_name,source_time_function='dreger',
+                stf_falloff_rate=4.0):
     '''
     To supplant waveforms_matrix() it needs to include resmapling and all that jazz...
     
@@ -2035,7 +2035,7 @@ def mudpy2srf(rupt,log_file,stf_dt=0.1,stf_type='dreger',Ndip=None):
     flog.close()
     
     #Down dip location with regards to top of fault
-    dip_hypo_position=(hypocenter[2]-depth_top)*sin(deg2rad(dip))
+    dip_hypo_position=(hypocenter[2]-depth_top)/sin(deg2rad(dip))
     
     #Get hypocenter row of subfaults and find coordinates of middle
     i=argmin(abs(f[:,3]-hypocenter[2]))

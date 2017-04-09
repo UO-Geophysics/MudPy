@@ -1714,7 +1714,7 @@ def static_synthetics(home,project_name,run_name,run_number,gflist,qscale):
     es=zeros(len(i))
     us=zeros(len(i))
     for k in range(len(i)):
-        neu=genfromtxt(datapath+sta[i[k]]+'.neu')
+        neu=genfromtxt(datapath+sta[i[k]]+'.static.neu')
         #neu=genfromtxt(datapath+sta[i[k]]+'.static.neu')
         n[k]=neu[0] ; e[k]=neu[1] ; u[k]=neu[2]
         neus=genfromtxt(synthpath+run_name+'.'+run_number+'.'+sta[i[k]]+'.static.neu')
@@ -1729,8 +1729,8 @@ def static_synthetics(home,project_name,run_name,run_number,gflist,qscale):
     plt.quiver(lon,lat,es,ns,color='r',scale=qscale)
     plt.grid()
     plt.title('Horizontals')
-    for k in range(len(i)):
-        plt.annotate(sta[i[k]],xy=(lon[k],lat[k]))
+    #for k in range(len(i)):
+    #    plt.annotate(sta[i[k]],xy=(lon[k],lat[k]))
     plt.xlim([lon.min()-lonadjust,lon.max()+lonadjust])
     plt.ylim([lat.min()-latadjust,lat.max()+latadjust])
     plt.subplot(122)
@@ -1738,8 +1738,8 @@ def static_synthetics(home,project_name,run_name,run_number,gflist,qscale):
     plt.quiver(lon,lat,zeros(len(us)),us,color='r',scale=qscale)
     plt.grid()
     plt.title('Verticals')
-    for k in range(len(i)):
-        plt.annotate(sta[i[k]],xy=(lon[k],lat[k]))
+    #for k in range(len(i)):
+    #    plt.annotate(sta[i[k]],xy=(lon[k],lat[k]))
     plt.xlim([lon.min()-lonadjust,lon.max()+lonadjust])
     plt.ylim([lat.min()-latadjust,lat.max()+latadjust])
     #plt.legend('Data','Synth')
@@ -1787,16 +1787,17 @@ def insar_residual(home,project_name,run_name,run_number,gflist,zlims):
     plt.grid()
     
     
-def insar_results(home,project_name,run_name,run_number,gflist,zlims,figsize=(8,5),title=None):
+def insar_results(home,project_name,run_name,run_number,gflist,zlims,cmap,figsize=(8,5),title=None,interpolate=True,method='linear',npts=100):
     '''
     Plot insar observed in one panel and insar modeled in the other
     
     gflist: The GF control file that decides what to plot/not plot
     datapath
     '''
-    from numpy import genfromtxt,where,zeros,sqrt,c_,savetxt
+    from numpy import genfromtxt,where,zeros,sqrt,c_,savetxt,linspace,meshgrid
     import matplotlib.pyplot as plt
     import matplotlib
+    from scipy.interpolate import griddata
     
     matplotlib.rcParams.update({'font.size': 14})
     #Decide what to plot
@@ -1822,25 +1823,55 @@ def insar_results(home,project_name,run_name,run_number,gflist,zlims,figsize=(8,
     #Make plot
     out=c_[lon,lat,los_data,los_synth,los_data-los_synth]
     savetxt(home+project_name+'/analysis/'+run_name+'.'+run_number+'.insar.res',out,fmt='%.6f\t%.6f\t%8.5f\t%8.5f\t%8.5f',header='lon,lat,los_data(m),los_synthetic(m),data-synthetic(m)')
-    plt.figure(figsize=figsize)
-    ax=plt.subplot(211)
-    ax.tick_params(labelbottom='off') 
-    plt.scatter(lon,lat,c=los_data,cmap=cm.jet,vmin=zlims[0],vmax=zlims[1],s=50,lw=0)
-    plt.title('LOS observed (m)')
-    plt.colorbar()
-    plt.grid()
-    plt.ylabel('Latitude')
-    #replt.axis('equal')
-    plt.subplot(212)
-    plt.xticks(rotation=30)
-    plt.scatter(lon,lat,c=los_synth,cmap=cm.jet,vmin=zlims[0],vmax=zlims[1],s=50,lw=0)
-    plt.title('LOS modeled(m)')
-    #plt.axis('equal')
-    plt.colorbar()
-    plt.ylabel('Latitude')
-    plt.xlabel('Longitude')
-    plt.grid()
-    plt.suptitle(title)
+    
+    plt.figure()
+    
+    #Interpolate to regular grid?
+    if interpolate==True:
+        x=linspace(lon.min(),lon.max(),npts)
+        y=linspace(lat.min(),lat.max(),npts)
+        X,Y=meshgrid(x,y)
+        los_data_interp=griddata((lon,lat),los_data,(X,Y),method=method,fill_value=0)
+        los_synth_interp=griddata((lon,lat),los_synth,(X,Y),method=method,fill_value=0)
+        
+        ax=plt.subplot(211)
+        ax.tick_params(labelbottom='off') 
+        plt.pcolormesh(X,Y,los_data_interp,cmap=cmap,vmin=zlims[0],vmax=zlims[1])
+        plt.title('LOS observed (m)')
+        plt.colorbar()
+        plt.grid()
+        plt.ylabel('Latitude')
+        #replt.axis('equal')
+        plt.subplot(212)
+        plt.xticks(rotation=30)
+        plt.pcolormesh(X,Y,los_synth_interp,cmap=cmap,vmin=zlims[0],vmax=zlims[1])
+        plt.title('LOS modeled(m)')
+        #plt.axis('equal')
+        plt.colorbar()
+        plt.ylabel('Latitude')
+        plt.xlabel('Longitude')
+        plt.grid()
+        plt.suptitle(title)
+        
+    else:    
+        ax=plt.subplot(211)
+        ax.tick_params(labelbottom='off') 
+        plt.scatter(lon,lat,c=los_data,cmap=cmap,vmin=zlims[0],vmax=zlims[1],s=50,lw=0)
+        plt.title('LOS observed (m)')
+        plt.colorbar()
+        plt.grid()
+        plt.ylabel('Latitude')
+        #replt.axis('equal')
+        plt.subplot(212)
+        plt.xticks(rotation=30)
+        plt.scatter(lon,lat,c=los_synth,cmap=cmap,vmin=zlims[0],vmax=zlims[1],s=50,lw=0)
+        plt.title('LOS modeled(m)')
+        #plt.axis('equal')
+        plt.colorbar()
+        plt.ylabel('Latitude')
+        plt.xlabel('Longitude')
+        plt.grid()
+        plt.suptitle(title)
     
 def tsunami_synthetics(home,project_name,run_name,run_number,gflist,t_lim,sort,scale):
     '''
@@ -2388,7 +2419,7 @@ def dtopo_slices(dtopo_file,fault_file,out):
         plt.close("all")
         
 
-def plot_grd(grdfile,zlims,cmap,flip_lon=False):
+def plot_grd(grdfile,zlims,cmap,flip_lon=False,return_data=False):
     '''
     Quick plot of any GMT grd file, this will only work for NETCDF4 files, 
     i.e. if you use GMT5. If you are outdated and use NETCDF3 you can edit this
@@ -2419,6 +2450,9 @@ def plot_grd(grdfile,zlims,cmap,flip_lon=False):
     plt.xlabel('Longitude')
     plt.ylabel('Latitude')
     plt.show()
+    
+    if return_data:
+        return X,Y,z
 
 
 
