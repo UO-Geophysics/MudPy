@@ -426,7 +426,177 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
                         zs,lon_sta[k],lat_sta[k],mu_okada)
                     savetxt(staname[k]+'.subfault'+num+'.DS.static.neu',(n,e,u,beta),header='north(m),east(m),up(m),beta(degs)')
      
+
                       
+                                            
+                                                                  
+def run_parallel_synthetics_mt3d(home,project_name,station_file,model_name,rank,size):
+    '''
+    Use green functions and compute synthetics at stations for a single source
+    and multiple stations. This code makes an external system call to syn.c first it
+    will make the external call for the strike-slip component then a second externall
+    call will be made for the dip-slip component. The unit amount of moment is 1e15
+    which corresponds to Mw=3.9333...
+    
+    IN:
+        source: 1-row numpy array containig informaiton aboutt he source, lat, lon, depth, etc...
+        station_file: File name with the station coordinates
+        green_path: Directopry where GFs are stored
+        model_file: File containing the Earth velocity structure
+        integrate: =0 if youw ant velocity waveforms, =1 if you want displacements
+        static: =0 if computing full waveforms, =1 if computing only the static field
+        subfault: String indicating the subfault being worked on
+        coord_type: =0 if problem is in cartesian coordinates, =1 if problem is in lat/lon
+        
+    OUT:
+        log: Sysytem standard output and standard error for log
+    '''
+
+    import os
+    import subprocess
+    from mudpy.forward import get_mu
+    from string import rjust
+    from numpy import array,genfromtxt,loadtxt,savetxt,log10
+    from obspy import read
+    from shlex import split
+    from mudpy.green import src2sta,rt2ne,origin_time,okada_synthetics
+    from glob import glob
+    from mudpy.green import silentremove
+    from os import remove
+    
+    #What parameters are we using?
+    if rank==0:
+        out='''Running all processes with:
+        home = %s
+        project_name = %s
+        station_file = %s
+        model_name = %s
+        ''' %(home,project_name,station_file,model_name)
+        print out
+        
+    #temporary outoput files to be merged later
+    tmp_Mxx='tmp_Mxx_process'+str(rank)
+    tmp_Mxy='tmp_Mxy_process'+str(rank)
+    tmp_Mxz='tmp_Mxz_process'+str(rank)
+    tmp_Myy='tmp_Myy_process'+str(rank)
+    tmp_Myz='tmp_Myz_process'+str(rank)
+    tmp_Mzz='tmp_Mzz_process'+str(rank)
+    
+        
+    #Read your corresponding source file
+    mpi_source=genfromtxt(home+project_name+'/data/model_info/mpi_source.'+str(rank)+'.source')
+    
+    #Constant parameters
+    tb=50 #Number of samples before first arrival (should be 50, NEVER CHANGE, if you do then adjust in fk.pl)
+    
+    #Load structure
+    model_file=home+project_name+'/structure/'+model_name
+    structure=loadtxt(model_file,ndmin=2)
+    
+    for ksource in range(len(mpi_source)):
+        
+        source=mpi_source[ksource,:]
+        
+        #Parse the soruce information
+        num=rjust(str(int(source[0])),4,'0')
+        xs=source[1]
+        ys=source[2]
+        zs=source[3]
+ 
+        strdepth='%.4f' % zs
+        subfault=rjust(str(int(source[0])),4,'0')
+        green_path=home+project_name+'/GFs/static/'
+        staname=genfromtxt(station_file,dtype="S6",usecols=0)
+        
+        if staname.shape==(): #Single staiton file
+            staname=array([staname])
+        
+        #Compute distances and azimuths
+        d,az,lon_sta,lat_sta=src2sta(station_file,source,output_coordinates=True)
+        
+        #Get moment corresponding to 1 meter of slip on subfault
+        Mw=5.0
+        M0=10**(5.0*1.5+9.1)*1e7 #to dyne-cm
+        
+        #Move to output folder
+        os.chdir(green_path)
+        print 'Processor '+str(rank)+' is working on subfault '+str(int(source[0]))+' and '+str(len(d))+' stations '
+        for k in range(len(d)):
+            
+            temp_pipe=[]
+            diststr='%.1f' % d[k] #Need current distance in string form for external call
+            green_file=model_name+".static."+strdepth+".sub"+subfault #Output dir
+            statics=loadtxt(green_file) #Load GFs
+            if len(statics)<1:
+                print 'ERROR: Empty GF file'
+                break
+            #Print static GFs into a pipe and pass into synthetics command
+            try:
+                temp_pipe=statics[k,:]
+            except:
+                temp_pipe=statics
+            inpipe=''
+            for j in range(len(temp_pipe)):
+                inpipe=inpipe+' %.6e' % temp_pipe[j]
+            
+            #Form command for external call (remember syn.c and mudpy coordiante systems are not the same)
+            # order of elelments in syn.c is M0/Mxx/Mxy/Mxz/Myy/Myz/Mzz
+            Mxx=0 ; Myy=1 ; Mzz=0 ;Mxy=0; Mxz=0, Myz=0
+            command_Mxx="syn -M"+str(M0)+"/"+str(Mxx)+"/"+str(Mxy)+"/"+str(Mxz)+"/"+str(Myy)+"/"+str(Myz)+"/"+str(Mzz)+\
+                    " -A"+str(az[k])+" -P"
+            
+            Mxx=0 ; Myy=0 ; Mzz=0 ;Mxy=1; Mxz=0, Myz=0
+            command_Mxy="syn -M"+str(M0)+"/"+str(Mxx)+"/"+str(Mxy)+"/"+str(Mxz)+"/"+str(Myy)+"/"+str(Myz)+"/"+str(Mzz)+\
+                    " -A"+str(az[k])+" -P"
+                    
+            Mxx=0 ; Myy=0 ; Mzz=0 ;Mxy=0; Mxz=0, Myz=-1
+            command_Mxz="syn -M"+str(M0)+"/"+str(Mxx)+"/"+str(Mxy)+"/"+str(Mxz)+"/"+str(Myy)+"/"+str(Myz)+"/"+str(Mzz)+\
+                    " -A"+str(az[k])+" -P"
+                    
+            Mxx=1 ; Myy=0 ; Mzz=0 ;Mxy=0; Mxz=0, Myz=0
+            command_Myy="syn -M"+str(M0)+"/"+str(Mxx)+"/"+str(Mxy)+"/"+str(Mxz)+"/"+str(Myy)+"/"+str(Myz)+"/"+str(Mzz)+\
+                    " -A"+str(az[k])+" -P"
+                    
+            Mxx=0 ; Myy=0 ; Mzz=0 ;Mxy=0; Mxz=-1, Myz=0
+            command_Myz="syn -M"+str(M0)+"/"+str(Mxx)+"/"+str(Mxy)+"/"+str(Mxz)+"/"+str(Myy)+"/"+str(Myz)+"/"+str(Mzz)+\
+                    " -A"+str(az[k])+" -P"
+                    
+            Mxx=0 ; Myy=0 ; Mzz=-1 ;Mxy=0; Mxz=0, Myz=0
+            command_Mzz="syn -M"+str(M0)+"/"+str(Mxx)+"/"+str(Mxy)+"/"+str(Mxz)+"/"+str(Myy)+"/"+str(Myz)+"/"+str(Mzz)+\
+                    " -A"+str(az[k])+" -P"
+                    
+            command_Mxx=split(command_Mxx) #Lexical split
+            command_Mxy=split(command_Mxy)
+            command_Mxz=split(command_Mxz)
+            command_Myy=split(command_Myy)
+            command_Myz=split(command_Myz)
+            command_Mzz=split(command_Mzz)
+            
+            #Make system calls, one for each MT component (rememebr to delete file when youa re done
+            ps=subprocess.Popen(['printf',inpipe],stdout=subprocess.PIPE)  #This is the statics pipe, pint stdout to syn's stdin
+            p=subprocess.Popen(commandSS,stdin=ps.stdout,stdout=open(staname[k]+'.subfault'+num+'.SS.static.rtz','w'))     
+            p.communicate()  
+            ps=subprocess.Popen(['printf',inpipe],stdout=subprocess.PIPE)  #This is the statics pipe, pint stdout to syn's stdin
+            p=subprocess.Popen(commandDS,stdin=ps.stdout,stdout=open(staname[k]+'.subfault'+num+'.DS.static.rtz','w'))     
+            p.communicate()       
+            #Rotate radial/transverse to East/North, correct vertical and scale to m
+            statics=loadtxt(staname[k]+'.subfault'+num+'.SS.static.rtz')
+            u=statics[2]/100
+            r=statics[3]/100
+            t=statics[4]/100
+            ntemp,etemp=rt2ne(array([r,r]),array([t,t]),az[k])
+            n=ntemp[0]
+            e=etemp[0]
+            savetxt(staname[k]+'.subfault'+num+'.SS.static.neu',(n,e,u,beta))
+            statics=loadtxt(staname[k]+'.subfault'+num+'.DS.static.rtz')
+            u=statics[2]/100
+            r=statics[3]/100
+            t=statics[4]/100
+            ntemp,etemp=rt2ne(array([r,r]),array([t,t]),az[k])
+            n=ntemp[0]
+            e=etemp[0]
+            savetxt(staname[k]+'.subfault'+num+'.DS.static.neu',(n,e,u,beta),header='north(m),east(m),up(m),beta(degs)')     
+                  
             
             
 #If main entry point
@@ -478,6 +648,13 @@ if __name__ == '__main__':
             okada=False
         mu_okada=float(sys.argv[14])
         run_parallel_synthetics(home,project_name,station_file,model_name,integrate,static,tsunami,time_epi,beta,custom_stf,impulse,rank,size,okada,mu_okada)
+    elif sys.argv[1]=='run_parallel_synthetics_mt3d':
+        #Parse command line arguments
+        home=sys.argv[2]
+        project_name=sys.argv[3]
+        station_file=sys.argv[4]
+        model_name=sys.argv[5]
+        run_parallel_synthetics_mt3d(home,project_name,station_file,model_name,rank,size)
     else:
         print 'ERROR: You''re not allowed to run '+sys.argv[1]+' from the shell or it does not exist'
         
