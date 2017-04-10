@@ -59,34 +59,34 @@ def inversionGFs(home,project_name,GF_list,source_name,model_name,
 
             collect()   
     
-    # Synthetics
-    if synth_flag==1:
-
-        station_file='temp.sta'
-        #Decide which synthetics are required
-        
-        i=where(GF[:,2]==1)[0]
-        if len(i)>0: #Static offset
-            print 'Static synthetics requested'
-            #Make dummy station file
-            f=open(home+project_name+'/data/station_info/'+station_file,'w')
-            for k in range(len(i)):
-                out=stations[i[k]]+'\t'+repr(GF[i[k],0])+'\t'+repr(GF[i[k],1])+'\n'
-                f.write(out)
-            f.close()
-            make_parallel_synthetics(home,project_name,station_file,source_name,model_name,hot_start,ncpus)
-
-        #Decide which synthetics are required
-        i=where(GF[:,6]==1)[0]
-        if len(i)>0: # InSAR LOS
-            print 'InSAR synthetics requested'
-            #Make dummy station file
-            f=open(home+project_name+'/data/station_info/'+station_file,'w')
-            for k in range(len(i)):
-                out=stations[i[k]]+'\t'+repr(GF[i[k],0])+'\t'+repr(GF[i[k],1])+'\n'
-                f.write(out)
-            f.close()
-            make_parallel_synthetics(home,project_name,station_file,source_name,model_name,hot_start,ncpus)
+#    # Synthetics
+#    if synth_flag==1:
+#
+#        station_file='temp.sta'
+#        #Decide which synthetics are required
+#        
+#        i=where(GF[:,2]==1)[0]
+#        if len(i)>0: #Static offset
+#            print 'Static synthetics requested'
+#            #Make dummy station file
+#            f=open(home+project_name+'/data/station_info/'+station_file,'w')
+#            for k in range(len(i)):
+#                out=stations[i[k]]+'\t'+repr(GF[i[k],0])+'\t'+repr(GF[i[k],1])+'\n'
+#                f.write(out)
+#            f.close()
+#            make_parallel_synthetics(home,project_name,station_file,source_name,model_name,hot_start,ncpus)
+#
+#        #Decide which synthetics are required
+#        i=where(GF[:,6]==1)[0]
+#        if len(i)>0: # InSAR LOS
+#            print 'InSAR synthetics requested'
+#            #Make dummy station file
+#            f=open(home+project_name+'/data/station_info/'+station_file,'w')
+#            for k in range(len(i)):
+#                out=stations[i[k]]+'\t'+repr(GF[i[k],0])+'\t'+repr(GF[i[k],1])+'\n'
+#                f.write(out)
+#            f.close()
+#            make_parallel_synthetics(home,project_name,station_file,source_name,model_name,hot_start,ncpus)
 
 
 

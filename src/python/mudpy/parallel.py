@@ -474,7 +474,7 @@ def run_parallel_synthetics_mt3d(home,project_name,station_file,model_name,rank,
         ''' %(home,project_name,station_file,model_name)
         print out
         
-    #temporary outoput files to be merged later
+    #temporary outoput files to be merged later, these will hold every soruce this process runs
     tmp_Mxx='tmp_Mxx_process'+str(rank)
     tmp_Mxy='tmp_Mxy_process'+str(rank)
     tmp_Mxz='tmp_Mxz_process'+str(rank)
@@ -482,6 +482,13 @@ def run_parallel_synthetics_mt3d(home,project_name,station_file,model_name,rank,
     tmp_Myz='tmp_Myz_process'+str(rank)
     tmp_Mzz='tmp_Mzz_process'+str(rank)
     
+    #temproary throw away files that will contain only one source
+    tmp_small_Mxx='tMxx_proc'+str(rank)
+    tmp_small_Mxy='tMxy_proc'+str(rank)
+    tmp_small_Mxz='tMxz_proc'+str(rank)
+    tmp_small_Myy='tMyy_proc'+str(rank)
+    tmp_small_Myz='tMyz_proc'+str(rank)
+    tmp_small_Mzz='tMzz_proc'+str(rank)    
         
     #Read your corresponding source file
     mpi_source=genfromtxt(home+project_name+'/data/model_info/mpi_source.'+str(rank)+'.source')
@@ -541,27 +548,27 @@ def run_parallel_synthetics_mt3d(home,project_name,station_file,model_name,rank,
             
             #Form command for external call (remember syn.c and mudpy coordiante systems are not the same)
             # order of elelments in syn.c is M0/Mxx/Mxy/Mxz/Myy/Myz/Mzz
-            Mxx=0 ; Myy=1 ; Mzz=0 ;Mxy=0; Mxz=0, Myz=0
+            Mxx=0 ; Myy=1 ; Mzz=0 ;Mxy=0; Mxz=0; Myz=0
             command_Mxx="syn -M"+str(M0)+"/"+str(Mxx)+"/"+str(Mxy)+"/"+str(Mxz)+"/"+str(Myy)+"/"+str(Myz)+"/"+str(Mzz)+\
                     " -A"+str(az[k])+" -P"
             
-            Mxx=0 ; Myy=0 ; Mzz=0 ;Mxy=1; Mxz=0, Myz=0
+            Mxx=0 ; Myy=0 ; Mzz=0 ;Mxy=1; Mxz=0; Myz=0
             command_Mxy="syn -M"+str(M0)+"/"+str(Mxx)+"/"+str(Mxy)+"/"+str(Mxz)+"/"+str(Myy)+"/"+str(Myz)+"/"+str(Mzz)+\
                     " -A"+str(az[k])+" -P"
                     
-            Mxx=0 ; Myy=0 ; Mzz=0 ;Mxy=0; Mxz=0, Myz=-1
+            Mxx=0 ; Myy=0 ; Mzz=0 ;Mxy=0; Mxz=0; Myz=-1
             command_Mxz="syn -M"+str(M0)+"/"+str(Mxx)+"/"+str(Mxy)+"/"+str(Mxz)+"/"+str(Myy)+"/"+str(Myz)+"/"+str(Mzz)+\
                     " -A"+str(az[k])+" -P"
                     
-            Mxx=1 ; Myy=0 ; Mzz=0 ;Mxy=0; Mxz=0, Myz=0
+            Mxx=1 ; Myy=0 ; Mzz=0 ;Mxy=0; Mxz=0; Myz=0
             command_Myy="syn -M"+str(M0)+"/"+str(Mxx)+"/"+str(Mxy)+"/"+str(Mxz)+"/"+str(Myy)+"/"+str(Myz)+"/"+str(Mzz)+\
                     " -A"+str(az[k])+" -P"
                     
-            Mxx=0 ; Myy=0 ; Mzz=0 ;Mxy=0; Mxz=-1, Myz=0
+            Mxx=0 ; Myy=0 ; Mzz=0 ;Mxy=0; Mxz=-1; Myz=0
             command_Myz="syn -M"+str(M0)+"/"+str(Mxx)+"/"+str(Mxy)+"/"+str(Mxz)+"/"+str(Myy)+"/"+str(Myz)+"/"+str(Mzz)+\
                     " -A"+str(az[k])+" -P"
                     
-            Mxx=0 ; Myy=0 ; Mzz=-1 ;Mxy=0; Mxz=0, Myz=0
+            Mxx=0 ; Myy=0 ; Mzz=-1 ;Mxy=0; Mxz=0; Myz=0
             command_Mzz="syn -M"+str(M0)+"/"+str(Mxx)+"/"+str(Mxy)+"/"+str(Mxz)+"/"+str(Myy)+"/"+str(Myz)+"/"+str(Mzz)+\
                     " -A"+str(az[k])+" -P"
                     
@@ -574,28 +581,53 @@ def run_parallel_synthetics_mt3d(home,project_name,station_file,model_name,rank,
             
             #Make system calls, one for each MT component (rememebr to delete file when youa re done
             ps=subprocess.Popen(['printf',inpipe],stdout=subprocess.PIPE)  #This is the statics pipe, pint stdout to syn's stdin
-            p=subprocess.Popen(commandSS,stdin=ps.stdout,stdout=open(staname[k]+'.subfault'+num+'.SS.static.rtz','w'))     
+            p=subprocess.Popen(command_Mxx,stdin=ps.stdout,stdout=open('tmp_small_Mxx','w'))     
             p.communicate()  
+            p.wait()
+
             ps=subprocess.Popen(['printf',inpipe],stdout=subprocess.PIPE)  #This is the statics pipe, pint stdout to syn's stdin
-            p=subprocess.Popen(commandDS,stdin=ps.stdout,stdout=open(staname[k]+'.subfault'+num+'.DS.static.rtz','w'))     
-            p.communicate()       
-            #Rotate radial/transverse to East/North, correct vertical and scale to m
-            statics=loadtxt(staname[k]+'.subfault'+num+'.SS.static.rtz')
-            u=statics[2]/100
-            r=statics[3]/100
-            t=statics[4]/100
-            ntemp,etemp=rt2ne(array([r,r]),array([t,t]),az[k])
-            n=ntemp[0]
-            e=etemp[0]
-            savetxt(staname[k]+'.subfault'+num+'.SS.static.neu',(n,e,u,beta))
-            statics=loadtxt(staname[k]+'.subfault'+num+'.DS.static.rtz')
-            u=statics[2]/100
-            r=statics[3]/100
-            t=statics[4]/100
-            ntemp,etemp=rt2ne(array([r,r]),array([t,t]),az[k])
-            n=ntemp[0]
-            e=etemp[0]
-            savetxt(staname[k]+'.subfault'+num+'.DS.static.neu',(n,e,u,beta),header='north(m),east(m),up(m),beta(degs)')     
+            p=subprocess.Popen(command_Mxy,stdin=ps.stdout,stdout=open('tmp_small_Mxy','w'))     
+            p.communicate()  
+            p.wait()
+
+            ps=subprocess.Popen(['printf',inpipe],stdout=subprocess.PIPE)  #This is the statics pipe, pint stdout to syn's stdin
+            p=subprocess.Popen(command_Mxz,stdin=ps.stdout,stdout=open('tmp_small_Mxz','w'))     
+            p.communicate()  
+            p.wait()
+
+            ps=subprocess.Popen(['printf',inpipe],stdout=subprocess.PIPE)  #This is the statics pipe, pint stdout to syn's stdin
+            p=subprocess.Popen(command_Myy,stdin=ps.stdout,stdout=open('tmp_small_Myy','w'))     
+            p.communicate()  
+            p.wait()
+
+            ps=subprocess.Popen(['printf',inpipe],stdout=subprocess.PIPE)  #This is the statics pipe, pint stdout to syn's stdin
+            p=subprocess.Popen(command_Myz,stdin=ps.stdout,stdout=open('tmp_small_Myz','w'))     
+            p.communicate()  
+            p.wait()
+
+            ps=subprocess.Popen(['printf',inpipe],stdout=subprocess.PIPE)  #This is the statics pipe, pint stdout to syn's stdin
+            p=subprocess.Popen(command_Mzz,stdin=ps.stdout,stdout=open('tmp_small_Mzz','w'))     
+            p.communicate()  
+            p.wait()
+                            
+            
+            ##Rotate radial/transverse to East/North, correct vertical and scale to m
+            #statics=loadtxt(staname[k]+'.subfault'+num+'.SS.static.rtz')
+            #u=statics[2]/100
+            #r=statics[3]/100
+            #t=statics[4]/100
+            #ntemp,etemp=rt2ne(array([r,r]),array([t,t]),az[k])
+            #n=ntemp[0]
+            #e=etemp[0]
+            #savetxt(staname[k]+'.subfault'+num+'.SS.static.neu',(n,e,u,beta))
+            #statics=loadtxt(staname[k]+'.subfault'+num+'.DS.static.rtz')
+            #u=statics[2]/100
+            #r=statics[3]/100
+            #t=statics[4]/100
+            #ntemp,etemp=rt2ne(array([r,r]),array([t,t]),az[k])
+            #n=ntemp[0]
+            #e=etemp[0]
+            #savetxt(staname[k]+'.subfault'+num+'.DS.static.neu',(n,e,u,beta),header='north(m),east(m),up(m),beta(degs)')     
                   
             
             
