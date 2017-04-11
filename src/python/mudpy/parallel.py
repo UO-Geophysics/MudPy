@@ -491,7 +491,7 @@ def run_parallel_synthetics_mt3d(home,project_name,station_file,model_name,rank,
     tmp_small_Mzz='tMzz_proc'+str(rank)    
         
     #Read your corresponding source file
-    mpi_source=genfromtxt(home+project_name+'/data/model_info/mpi_source.'+str(rank)+'.source')
+    mpi_source=genfromtxt(home+project_name+'/data/model_info/mpi_source.'+str(rank)+'.fault')
     
     #Constant parameters
     tb=50 #Number of samples before first arrival (should be 50, NEVER CHANGE, if you do then adjust in fk.pl)
@@ -500,6 +500,45 @@ def run_parallel_synthetics_mt3d(home,project_name,station_file,model_name,rank,
     model_file=home+project_name+'/structure/'+model_name
     structure=loadtxt(model_file,ndmin=2)
     
+    #Where the data
+    green_path=home+project_name+'/GFs/static/'
+    
+    #delete files from rpevious runs
+    try:
+        remove(green_path+tmp_Mxx)
+    except:
+        pass
+    try:
+        remove(green_path+tmp_Mxy)
+    except:
+        pass
+    try:
+        remove(green_path+tmp_Mxz)
+    except:
+        pass
+    try:
+        remove(green_path+tmp_Myy)
+    except:
+        pass
+    try:
+        remove(green_path+tmp_Myz)
+    except:
+        pass
+    try:
+        remove(green_path+tmp_Mzz)
+    except:
+        pass
+    
+    
+    #Create output files
+    f_Mxx=open(green_path+tmp_Mxx,'a+')
+    f_Mxy=open(green_path+tmp_Mxy,'a+')
+    f_Mxz=open(green_path+tmp_Mxz,'a+')
+    f_Myy=open(green_path+tmp_Myy,'a+')
+    f_Myz=open(green_path+tmp_Myz,'a+')
+    f_Mzz=open(green_path+tmp_Mzz,'a+')
+    
+    #Off we go now
     for ksource in range(len(mpi_source)):
         
         source=mpi_source[ksource,:]
@@ -512,7 +551,6 @@ def run_parallel_synthetics_mt3d(home,project_name,station_file,model_name,rank,
  
         strdepth='%.4f' % zs
         subfault=rjust(str(int(source[0])),4,'0')
-        green_path=home+project_name+'/GFs/static/'
         staname=genfromtxt(station_file,dtype="S6",usecols=0)
         
         if staname.shape==(): #Single staiton file
@@ -528,7 +566,10 @@ def run_parallel_synthetics_mt3d(home,project_name,station_file,model_name,rank,
         #Move to output folder
         os.chdir(green_path)
         print 'Processor '+str(rank)+' is working on subfault '+str(int(source[0]))+' and '+str(len(d))+' stations '
+        
+        #Go one station at a time for that subfault
         for k in range(len(d)):
+            
             
             temp_pipe=[]
             diststr='%.1f' % d[k] #Need current distance in string form for external call
@@ -581,55 +622,104 @@ def run_parallel_synthetics_mt3d(home,project_name,station_file,model_name,rank,
             
             #Make system calls, one for each MT component (rememebr to delete file when youa re done
             ps=subprocess.Popen(['printf',inpipe],stdout=subprocess.PIPE)  #This is the statics pipe, pint stdout to syn's stdin
-            p=subprocess.Popen(command_Mxx,stdin=ps.stdout,stdout=open('tmp_small_Mxx','w'))     
+            p=subprocess.Popen(command_Mxx,stdin=ps.stdout,stdout=open(tmp_small_Mxx,'w'))     
             p.communicate()  
             p.wait()
 
             ps=subprocess.Popen(['printf',inpipe],stdout=subprocess.PIPE)  #This is the statics pipe, pint stdout to syn's stdin
-            p=subprocess.Popen(command_Mxy,stdin=ps.stdout,stdout=open('tmp_small_Mxy','w'))     
+            p=subprocess.Popen(command_Mxy,stdin=ps.stdout,stdout=open(tmp_small_Mxy,'w'))     
             p.communicate()  
             p.wait()
 
             ps=subprocess.Popen(['printf',inpipe],stdout=subprocess.PIPE)  #This is the statics pipe, pint stdout to syn's stdin
-            p=subprocess.Popen(command_Mxz,stdin=ps.stdout,stdout=open('tmp_small_Mxz','w'))     
+            p=subprocess.Popen(command_Mxz,stdin=ps.stdout,stdout=open(tmp_small_Mxz,'w'))     
             p.communicate()  
             p.wait()
 
             ps=subprocess.Popen(['printf',inpipe],stdout=subprocess.PIPE)  #This is the statics pipe, pint stdout to syn's stdin
-            p=subprocess.Popen(command_Myy,stdin=ps.stdout,stdout=open('tmp_small_Myy','w'))     
+            p=subprocess.Popen(command_Myy,stdin=ps.stdout,stdout=open(tmp_small_Myy,'w'))     
             p.communicate()  
             p.wait()
 
             ps=subprocess.Popen(['printf',inpipe],stdout=subprocess.PIPE)  #This is the statics pipe, pint stdout to syn's stdin
-            p=subprocess.Popen(command_Myz,stdin=ps.stdout,stdout=open('tmp_small_Myz','w'))     
+            p=subprocess.Popen(command_Myz,stdin=ps.stdout,stdout=open(tmp_small_Myz,'w'))     
             p.communicate()  
             p.wait()
 
             ps=subprocess.Popen(['printf',inpipe],stdout=subprocess.PIPE)  #This is the statics pipe, pint stdout to syn's stdin
-            p=subprocess.Popen(command_Mzz,stdin=ps.stdout,stdout=open('tmp_small_Mzz','w'))     
+            p=subprocess.Popen(command_Mzz,stdin=ps.stdout,stdout=open(tmp_small_Mzz,'w'))     
             p.communicate()  
             p.wait()
                             
             
-            ##Rotate radial/transverse to East/North, correct vertical and scale to m
-            #statics=loadtxt(staname[k]+'.subfault'+num+'.SS.static.rtz')
-            #u=statics[2]/100
-            #r=statics[3]/100
-            #t=statics[4]/100
-            #ntemp,etemp=rt2ne(array([r,r]),array([t,t]),az[k])
-            #n=ntemp[0]
-            #e=etemp[0]
-            #savetxt(staname[k]+'.subfault'+num+'.SS.static.neu',(n,e,u,beta))
-            #statics=loadtxt(staname[k]+'.subfault'+num+'.DS.static.rtz')
-            #u=statics[2]/100
-            #r=statics[3]/100
-            #t=statics[4]/100
-            #ntemp,etemp=rt2ne(array([r,r]),array([t,t]),az[k])
-            #n=ntemp[0]
-            #e=etemp[0]
-            #savetxt(staname[k]+'.subfault'+num+'.DS.static.neu',(n,e,u,beta),header='north(m),east(m),up(m),beta(degs)')     
-                  
+            #Rotate radial/transverse to East/North, correct vertical and scale to m
+            statics=loadtxt(tmp_small_Mxx)
+            u=statics[2]/100
+            r=statics[3]/100
+            t=statics[4]/100
+            ntemp,etemp=rt2ne(array([r,r]),array([t,t]),az[k])
+            n=ntemp[0]
+            e=etemp[0]
+            line='%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\t%.4e\t%.4e\n' % (rjust(str(subfault),5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,n,e,u)
+            f_Mxx.write(line)
+           
+            statics=loadtxt(tmp_small_Mxy)
+            u=statics[2]/100
+            r=statics[3]/100
+            t=statics[4]/100
+            ntemp,etemp=rt2ne(array([r,r]),array([t,t]),az[k])
+            n=ntemp[0]
+            e=etemp[0]
+            line='%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\t%.4e\t%.4e\n' % (rjust(str(subfault),5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,n,e,u)
+            f_Mxy.write(line)
             
+            statics=loadtxt(tmp_small_Mxz)
+            u=statics[2]/100
+            r=statics[3]/100
+            t=statics[4]/100
+            ntemp,etemp=rt2ne(array([r,r]),array([t,t]),az[k])
+            n=ntemp[0]
+            e=etemp[0]
+            line='%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\t%.4e\t%.4e\n' % (rjust(str(subfault),5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,n,e,u)
+            f_Mxz.write(line)
+           
+            statics=loadtxt(tmp_small_Myy)
+            u=statics[2]/100
+            r=statics[3]/100
+            t=statics[4]/100
+            ntemp,etemp=rt2ne(array([r,r]),array([t,t]),az[k])
+            n=ntemp[0]
+            e=etemp[0]
+            line='%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\t%.4e\t%.4e\n' % (rjust(str(subfault),5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,n,e,u)
+            f_Myy.write(line)
+           
+            statics=loadtxt(tmp_small_Myz)
+            u=statics[2]/100
+            r=statics[3]/100
+            t=statics[4]/100
+            ntemp,etemp=rt2ne(array([r,r]),array([t,t]),az[k])
+            n=ntemp[0]
+            e=etemp[0]
+            line='%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\t%.4e\t%.4e\n' % (rjust(str(subfault),5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,n,e,u)
+            f_Myz.write(line)
+            
+            statics=loadtxt(tmp_small_Mzz)
+            u=statics[2]/100
+            r=statics[3]/100
+            t=statics[4]/100
+            ntemp,etemp=rt2ne(array([r,r]),array([t,t]),az[k])
+            n=ntemp[0]
+            e=etemp[0]
+            line='%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\t%.4e\t%.4e\n' % (rjust(str(subfault),5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,n,e,u)
+            f_Mzz.write(line)
+    
+                  
+    f_Mxx.close()
+    f_Mxy.close()
+    f_Mxz.close()
+    f_Myy.close()
+    f_Myz.close()
+    f_Mzz.close()        
             
 #If main entry point
 if __name__ == '__main__':

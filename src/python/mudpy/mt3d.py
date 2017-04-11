@@ -59,34 +59,34 @@ def inversionGFs(home,project_name,GF_list,source_name,model_name,
 
             collect()   
     
-#    # Synthetics
-#    if synth_flag==1:
-#
-#        station_file='temp.sta'
-#        #Decide which synthetics are required
-#        
-#        i=where(GF[:,2]==1)[0]
-#        if len(i)>0: #Static offset
-#            print 'Static synthetics requested'
-#            #Make dummy station file
-#            f=open(home+project_name+'/data/station_info/'+station_file,'w')
-#            for k in range(len(i)):
-#                out=stations[i[k]]+'\t'+repr(GF[i[k],0])+'\t'+repr(GF[i[k],1])+'\n'
-#                f.write(out)
-#            f.close()
-#            make_parallel_synthetics(home,project_name,station_file,source_name,model_name,hot_start,ncpus)
-#
-#        #Decide which synthetics are required
-#        i=where(GF[:,6]==1)[0]
-#        if len(i)>0: # InSAR LOS
-#            print 'InSAR synthetics requested'
-#            #Make dummy station file
-#            f=open(home+project_name+'/data/station_info/'+station_file,'w')
-#            for k in range(len(i)):
-#                out=stations[i[k]]+'\t'+repr(GF[i[k],0])+'\t'+repr(GF[i[k],1])+'\n'
-#                f.write(out)
-#            f.close()
-#            make_parallel_synthetics(home,project_name,station_file,source_name,model_name,hot_start,ncpus)
+    # Synthetics
+    if synth_flag==1:
+
+        station_file='temp.sta'
+        #Decide which synthetics are required
+        
+        i=where(GF[:,2]==1)[0]
+        if len(i)>0: #Static offset
+            print 'Static synthetics requested'
+            #Make dummy station file
+            f=open(home+project_name+'/data/station_info/'+station_file,'w')
+            for k in range(len(i)):
+                out=stations[i[k]]+'\t'+repr(GF[i[k],0])+'\t'+repr(GF[i[k],1])+'\n'
+                f.write(out)
+            f.close()
+            make_parallel_synthetics(home,project_name,station_file,source_name,model_name,hot_start,ncpus)
+
+        #Decide which synthetics are required
+        i=where(GF[:,6]==1)[0]
+        if len(i)>0: # InSAR LOS
+            print 'InSAR synthetics requested'
+            #Make dummy station file
+            f=open(home+project_name+'/data/station_info/'+station_file,'w')
+            for k in range(len(i)):
+                out=stations[i[k]]+'\t'+repr(GF[i[k],0])+'\t'+repr(GF[i[k],1])+'\n'
+                f.write(out)
+            f.close()
+            make_parallel_synthetics(home,project_name,station_file,source_name,model_name,hot_start,ncpus)
 
 
 
@@ -180,6 +180,7 @@ def make_parallel_synthetics(home,project_name,station_file,source_name,model_na
     
     station_file=home+project_name+'/data/station_info/'+station_file
     fault_file=home+project_name+'/data/model_info/'+source_name
+    synth_path=home+project_name+'/GFs/static/'
     #Time for log file
     now=datetime.datetime.now()
     now=now.strftime('%b-%d-%H%M')
@@ -198,3 +199,66 @@ def make_parallel_synthetics(home,project_name,station_file,source_name,model_na
     mpi=split(mpi)
     p=subprocess.Popen(mpi)
     p.communicate()
+    
+    #Now merge files (loop over MT components
+    #Make list of files to be merged
+    filenames_Mxx=[]
+    filenames_Mxy=[]
+    filenames_Mxz=[]
+    filenames_Myy=[]
+    filenames_Myz=[]
+    filenames_Mzz=[]
+    
+    #List of file names to cocnatenate
+    for kfile in range(ncpus):
+        filenames_Mxx.append(synth_path+'tmp_Mxx_process'+str(int(kfile)))
+        filenames_Mxy.append(synth_path+'tmp_Mxy_process'+str(int(kfile)))
+        filenames_Mxz.append(synth_path+'tmp_Mxz_process'+str(int(kfile)))
+        filenames_Myy.append(synth_path+'tmp_Myy_process'+str(int(kfile)))
+        filenames_Myz.append(synth_path+'tmp_Myz_process'+str(int(kfile)))
+        filenames_Mzz.append(synth_path+'tmp_Mzz_process'+str(int(kfile)))
+
+    
+    #Make final output files
+    with open(synth_path+'_Mxx.neu', 'w') as outfile:
+        outfile.write('# src_num,lon_sta,lat_sta,lon_src,lat_src,z_src(km),n(m),e(m),u(m)\n')
+        for fname in filenames_Mxx:
+            with open(fname) as infile:
+                for line in infile:
+                    outfile.write(line)
+                    
+    with open(synth_path+'_Mxy.neu', 'w') as outfile:
+        outfile.write('# src_num,lon_sta,lat_sta,lon_src,lat_src,z_src(km),n(m),e(m),u(m)\n') 
+        for fname in filenames_Mxy:
+            with open(fname) as infile:
+                for line in infile:
+                    outfile.write(line)
+                    
+    with open(synth_path+'_Mxz.neu', 'w') as outfile:
+        outfile.write('# src_num,lon_sta,lat_sta,lon_src,lat_src,z_src(km),n(m),e(m),u(m)\n')
+        for fname in filenames_Mxz:
+            with open(fname) as infile:
+                for line in infile:
+                    outfile.write(line)
+                    
+    with open(synth_path+'_Myy.neu', 'w') as outfile:
+        outfile.write('# src_num,lon_sta,lat_sta,lon_src,lat_src,z_src(km),n(m),e(m),u(m)\n')
+        for fname in filenames_Myy:
+            with open(fname) as infile:
+                for line in infile:
+                    outfile.write(line)
+                    
+    with open(synth_path+'_Myz.neu', 'w') as outfile:
+        outfile.write('# src_num,lon_sta,lat_sta,lon_src,lat_src,z_src(km),n(m),e(m),u(m)\n')
+        for fname in filenames_Myz:
+            with open(fname) as infile:
+                for line in infile:
+                    outfile.write(line)
+                    
+    with open(synth_path+'_Mzz.neu', 'w') as outfile:
+        outfile.write('# src_num,lon_sta,lat_sta,lon_src,lat_src,z_src(km),n(m),e(m),u(m)\n')
+        for fname in filenames_Mzz:
+            with open(fname) as infile:
+                for line in infile:
+                    outfile.write(line)
+    
