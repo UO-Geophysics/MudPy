@@ -36,6 +36,7 @@ c Note that the source and receiver are located at the bottom of the layer.
       write(0,*)'Input distance range (in km)'
       do i=1,nx
         read(*,*) x
+
 c direct arrival
 	topp = rcv_lay + 1
 	bttm = src_lay

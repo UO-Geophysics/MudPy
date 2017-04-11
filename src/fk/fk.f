@@ -104,7 +104,7 @@ c input velocity model
 	 write(0,'(i4,4f7.2,2e9.2)')i,d(j),a(j),b(j),rho(j),qa(j),qb(j)
 	 if ( j.LT.src .AND. j.GE.rcv ) hs = hs + d(j)
       enddo
-      write(0,'(a15,f8.3)') 'source-station separation =',hs
+      write(0,'(a15,f10.3)') 'source-station separation =',hs
 
       vs = b(src)
       call source(stype, xi(src), mu(src), si, flip)
@@ -156,9 +156,9 @@ c input distance ranges
       endif
       xmax = hs
       do ix=1,nx
-	write(0, '(a)') 'Input x t0 output_name (2f10.3,1x,a)'
+	write(0, '(a)') 'Input x t0 output_name (2f10.5,1x,a)'
 c 2f10.3 DMM
-        read(*,'(2f10.3,1x,a)')x(ix),t0(ix),fout(ix)
+        read(*,'(f10.5,f10.5,1x,a)')x(ix),t0(ix),fout(ix)
 	if (xmax .LT. x(ix)) xmax=x(ix)
         t0(ix) = t0(ix)-tb*dt
       enddo
@@ -247,7 +247,7 @@ c*************** do inverse fourier transform
       do ix=1,nx
 	 if ( nfft2.EQ.1 ) then
 c	    write(*,'(f5.1,9e11.3)')x(ix),(real(sum(ix,l,1)),l=1,nCom)
-	    write(*,'(f8.1,13e15.7)')x(ix),(real(sum(ix,l,1)),l=1,nCom)
+	    write(*,'(f10.3,13e15.7)')x(ix),(real(sum(ix,l,1)),l=1,nCom)
 	 else
             iblank = index(fout(ix),' ')
 	    fout(ix)(iblank+1:iblank+1) = char(0)

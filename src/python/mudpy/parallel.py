@@ -3,7 +3,7 @@ Module for routines that use paralell computing
 '''
 
 
-def run_parallel_green(home,project_name,station_file,model_name,dt,NFFT,static,dk,pmin,pmax,kmax,tsunami,rank,size):
+def run_parallel_green(home,project_name,station_file,model_name,dt,NFFT,static,dk,pmin,pmax,kmax,tsunami,insar,rank,size):
     '''
     Compute GFs using Zhu & Rivera code for a given velocity model, source depth
     and station file. This function will make an external system call to fk.pl
@@ -45,7 +45,8 @@ def run_parallel_green(home,project_name,station_file,model_name,dt,NFFT,static,
         pmin = %.3f
         pmax = %.3f
         kmax = %.3f
-        ''' %(home,project_name,station_file,model_name,str(static),str(tsunami),dt,NFFT,dk,pmin,pmax,kmax)
+        insar = %s
+        ''' %(home,project_name,station_file,model_name,str(static),str(tsunami),dt,NFFT,dk,pmin,pmax,kmax,str(insar))
         print out
     #read your corresponding source file
     source=genfromtxt(home+project_name+'/data/model_info/mpi_source.'+str(rank)+'.fault')
@@ -68,7 +69,7 @@ def run_parallel_green(home,project_name,station_file,model_name,dt,NFFT,static,
         #Make distance string for system call
         diststr=''
         for k in range(len(d)):
-            diststr=diststr+' %.3f' % d[k] #Truncate distance to 3 decimal palces (meters)
+            diststr=diststr+' %.6f' % d[k] #Truncate distance to 6 decimal palces (meters)
         # Keep the user informed, lest he get nervous
         print 'MPI: processor #',rank,'is now working on subfault',int(source[ksource,0]),'(',ksource+1,'/',len(source),')'
         #Make the calculation
@@ -83,7 +84,11 @@ def run_parallel_green(home,project_name,station_file,model_name,dt,NFFT,static,
                 copy(f,newf)
             rmtree(subfault_folder+'/'+model_name+'_'+depth)
         else: #Compute only statics
-            write_file=subfault_folder+model_name+'.static.'+depth+'.sub'+subfault
+            if insar==True:
+                suffix='insar'
+            else:
+                suffix='gps'
+            write_file=subfault_folder+model_name+'.static.'+depth+'.sub'+subfault+'.'+suffix
             command=split("fk.pl -M"+model_name+"/"+depth+"/f -N1 "+diststr)
             file_is_empty=True
             while file_is_empty:
@@ -430,7 +435,7 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
                       
                                             
                                                                   
-def run_parallel_synthetics_mt3d(home,project_name,station_file,model_name,rank,size):
+def run_parallel_synthetics_mt3d(home,project_name,station_file,model_name,insar,rank,size):
     '''
     Use green functions and compute synthetics at stations for a single source
     and multiple stations. This code makes an external system call to syn.c first it
@@ -471,7 +476,8 @@ def run_parallel_synthetics_mt3d(home,project_name,station_file,model_name,rank,
         project_name = %s
         station_file = %s
         model_name = %s
-        ''' %(home,project_name,station_file,model_name)
+        insar = %s
+        ''' %(home,project_name,station_file,model_name,str(insar))
         print out
         
     #temporary outoput files to be merged later, these will hold every soruce this process runs
@@ -563,6 +569,9 @@ def run_parallel_synthetics_mt3d(home,project_name,station_file,model_name,rank,
         Mw=5.0
         M0=10**(5.0*1.5+9.1)*1e7 #to dyne-cm
         
+        #Load LOS vector for projection
+        los_path=home+project_name+'/data/statics/'
+        
         #Move to output folder
         os.chdir(green_path)
         print 'Processor '+str(rank)+' is working on subfault '+str(int(source[0]))+' and '+str(len(d))+' stations '
@@ -570,14 +579,21 @@ def run_parallel_synthetics_mt3d(home,project_name,station_file,model_name,rank,
         #Go one station at a time for that subfault
         for k in range(len(d)):
             
+            #Read los vector for this subfault
+            if insar==True:
+                los=genfromtxt(los_path+staname[k]+'.los')
+                los=los[1:]
             
-            temp_pipe=[]
-            diststr='%.1f' % d[k] #Need current distance in string form for external call
-            green_file=model_name+".static."+strdepth+".sub"+subfault #Output dir
+            # Load the GFs
+            if insar==False:
+                green_file=model_name+".static."+strdepth+".sub"+subfault+'.gps' #Output dir
+            else:
+                green_file=model_name+".static."+strdepth+".sub"+subfault+'.insar' #Output dir
             statics=loadtxt(green_file) #Load GFs
             if len(statics)<1:
                 print 'ERROR: Empty GF file'
                 break
+            
             #Print static GFs into a pipe and pass into synthetics command
             try:
                 temp_pipe=statics[k,:]
@@ -658,9 +674,15 @@ def run_parallel_synthetics_mt3d(home,project_name,station_file,model_name,rank,
             r=statics[3]/100
             t=statics[4]/100
             ntemp,etemp=rt2ne(array([r,r]),array([t,t]),az[k])
-            n=ntemp[0]
-            e=etemp[0]
-            line='%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\t%.4e\t%.4e\n' % (rjust(str(subfault),5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,n,e,u)
+            #now project onto LOS if doing insar
+            if insar==True:
+                los_mt=los.dot(array([ntemp[0],etemp[0],u]))
+                line='%s\t%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\n' % (staname[k],rjust(str(subfault),5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,los_mt)
+            else:
+                n=ntemp[0]
+                e=etemp[0]
+                line='%s\t%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\t%.4e\t%.4e\n' % (staname[k],rjust(str(subfault),5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,n,e,u)
+            #write to file
             f_Mxx.write(line)
            
             statics=loadtxt(tmp_small_Mxy)
@@ -670,7 +692,15 @@ def run_parallel_synthetics_mt3d(home,project_name,station_file,model_name,rank,
             ntemp,etemp=rt2ne(array([r,r]),array([t,t]),az[k])
             n=ntemp[0]
             e=etemp[0]
-            line='%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\t%.4e\t%.4e\n' % (rjust(str(subfault),5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,n,e,u)
+            #now project onto LOS if doing insar
+            if insar==True:
+                los_mt=los.dot(array([ntemp[0],etemp[0],u]))
+                line='%s\t%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\n' % (staname[k],rjust(str(subfault),5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,los_mt)
+            else:
+                n=ntemp[0]
+                e=etemp[0]
+                line='%s\t%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\t%.4e\t%.4e\n' % (staname[k],rjust(str(subfault),5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,n,e,u)
+            #write to file
             f_Mxy.write(line)
             
             statics=loadtxt(tmp_small_Mxz)
@@ -680,7 +710,15 @@ def run_parallel_synthetics_mt3d(home,project_name,station_file,model_name,rank,
             ntemp,etemp=rt2ne(array([r,r]),array([t,t]),az[k])
             n=ntemp[0]
             e=etemp[0]
-            line='%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\t%.4e\t%.4e\n' % (rjust(str(subfault),5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,n,e,u)
+            #now project onto LOS if doing insar
+            if insar==True:
+                los_mt=los.dot(array([ntemp[0],etemp[0],u]))
+                line='%s\t%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\n' % (staname[k],rjust(str(subfault),5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,los_mt)
+            else:
+                n=ntemp[0]
+                e=etemp[0]
+                line='%s\t%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\t%.4e\t%.4e\n' % (staname[k],rjust(str(subfault),5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,n,e,u)
+            #write to file
             f_Mxz.write(line)
            
             statics=loadtxt(tmp_small_Myy)
@@ -690,7 +728,15 @@ def run_parallel_synthetics_mt3d(home,project_name,station_file,model_name,rank,
             ntemp,etemp=rt2ne(array([r,r]),array([t,t]),az[k])
             n=ntemp[0]
             e=etemp[0]
-            line='%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\t%.4e\t%.4e\n' % (rjust(str(subfault),5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,n,e,u)
+            #now project onto LOS if doing insar
+            if insar==True:
+                los_mt=los.dot(array([ntemp[0],etemp[0],u]))
+                line='%s\t%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\n' % (staname[k],rjust(str(subfault),5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,los_mt)
+            else:
+                n=ntemp[0]
+                e=etemp[0]
+                line='%s\t%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\t%.4e\t%.4e\n' % (staname[k],rjust(str(subfault),5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,n,e,u)
+            #write to file
             f_Myy.write(line)
            
             statics=loadtxt(tmp_small_Myz)
@@ -700,7 +746,15 @@ def run_parallel_synthetics_mt3d(home,project_name,station_file,model_name,rank,
             ntemp,etemp=rt2ne(array([r,r]),array([t,t]),az[k])
             n=ntemp[0]
             e=etemp[0]
-            line='%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\t%.4e\t%.4e\n' % (rjust(str(subfault),5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,n,e,u)
+            #now project onto LOS if doing insar
+            if insar==True:
+                los_mt=los.dot(array([ntemp[0],etemp[0],u]))
+                line='%s\t%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\n' % (staname[k],rjust(str(subfault),5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,los_mt)
+            else:
+                n=ntemp[0]
+                e=etemp[0]
+                line='%s\t%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\t%.4e\t%.4e\n' % (staname[k],rjust(str(subfault),5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,n,e,u)
+            #write to file
             f_Myz.write(line)
             
             statics=loadtxt(tmp_small_Mzz)
@@ -710,17 +764,26 @@ def run_parallel_synthetics_mt3d(home,project_name,station_file,model_name,rank,
             ntemp,etemp=rt2ne(array([r,r]),array([t,t]),az[k])
             n=ntemp[0]
             e=etemp[0]
-            line='%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\t%.4e\t%.4e\n' % (rjust(str(subfault),5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,n,e,u)
+            #now project onto LOS if doing insar
+            if insar==True:
+                los_mt=los.dot(array([ntemp[0],etemp[0],u]))
+                line='%s\t%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\n' % (staname[k],rjust(str(subfault),5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,los_mt)
+            else:
+                n=ntemp[0]
+                e=etemp[0]
+                line='%s\t%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\t%.4e\t%.4e\n' % (staname[k],rjust(str(subfault),5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,n,e,u)
+            #write to file
             f_Mzz.write(line)
-    
-                  
+                      
     f_Mxx.close()
     f_Mxy.close()
     f_Mxz.close()
     f_Myy.close()
     f_Myz.close()
     f_Mzz.close()        
+    
             
+                            
 #If main entry point
 if __name__ == '__main__':
     import sys
@@ -745,7 +808,12 @@ if __name__ == '__main__':
         pmax=int(sys.argv[11])
         kmax=int(sys.argv[12])
         tsunami=sys.argv[13]=='True'
-        run_parallel_green(home,project_name,station_file,model_name,dt,NFFT,static,dk,pmin,pmax,kmax,tsunami,rank,size)
+        insar=sys.argv[14]
+        if insar=='True':
+            insar=True
+        elif insar=='False':
+            insar=False
+        run_parallel_green(home,project_name,station_file,model_name,dt,NFFT,static,dk,pmin,pmax,kmax,tsunami,insar,rank,size)
     elif sys.argv[1]=='run_parallel_synthetics':
         #Parse command line arguments
         home=sys.argv[2]
@@ -776,7 +844,12 @@ if __name__ == '__main__':
         project_name=sys.argv[3]
         station_file=sys.argv[4]
         model_name=sys.argv[5]
-        run_parallel_synthetics_mt3d(home,project_name,station_file,model_name,rank,size)
+        insar=sys.argv[6]
+        if insar=='True':
+            insar=True
+        elif insar=='False':
+            insar=False
+        run_parallel_synthetics_mt3d(home,project_name,station_file,model_name,insar,rank,size)
     else:
         print 'ERROR: You''re not allowed to run '+sys.argv[1]+' from the shell or it does not exist'
         
