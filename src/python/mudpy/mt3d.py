@@ -336,6 +336,7 @@ def getG(home,project_name,source_name,model_name,GF_list,G_from_file,G_name):
             GF=expand_dims(GF,0)
             GFfiles=expand_dims(GFfiles,0)
             stations=array([stations])
+        
         #static field GFs
         kgf=2 
         Gstatic=array([])
@@ -349,11 +350,32 @@ def getG(home,project_name,source_name,model_name,GF_list,G_from_file,G_name):
             if len(i)>0: #There's actually something to do
                 inv.mini_station_file(mini_station,stations[i],GF[i,0],GF[i,1],GFfiles[i,0])
                 gftype='static'
-                tdelay=0
                 Gstatic= makeG(home,project_name,source_name,model_name,split(mini_station)[1],gftype)
                 remove(mini_station) #Cleanup  
 
-
+        #static field GFs
+        kgf=6 
+        Ginsar=array([])
+        if GF[:,kgf].sum()>0:
+            try:
+                remove(mini_station) #Cleanup  
+            except:
+                pass
+            #Make mini station file 
+            i=where(GF[:,kgf]==1)[0]
+            if len(i)>0: #There's actually something to do
+                inv.mini_station_file(mini_station,stations[i],GF[i,0],GF[i,1],GFfiles[i,0])
+                gftype='insar'
+                Ginsar= makeG(home,project_name,source_name,model_name,split(mini_station)[1],gftype)
+                remove(mini_station) #Cleanup  
+        
+        #Done, concat, save to file, release the memory
+        print Gstatic.shape
+        print Ginsar.shape
+        G=concatenate([g for g in [Gstatic,Ginsar] if g.size > 0])
+        print 'Saving GF matrix to '+G_name+' this might take just a second...'
+        save(G_name,G)
+    return G
 
 
 
@@ -374,7 +396,7 @@ def makeG(home,project_name,source_name,model_name,station_file,gftype):
         G: Partially assembled GF with all synthetics from a particular data type
     '''
     
-    from numpy import genfromtxt,loadtxt,zeros,array,inf
+    from numpy import genfromtxt,loadtxt,zeros,array,inf,where,unique
     from string import rjust
 
     
@@ -385,6 +407,7 @@ def makeG(home,project_name,source_name,model_name,station_file,gftype):
     station_file=home+project_name+'/data/station_info/'+station_file
     staname=genfromtxt(station_file,dtype="S6",usecols=0)
     datafiles=genfromtxt(station_file,dtype="S",usecols=3)
+    syn_path=home+project_name+'/GFs/static/'
     
     #Deal with one station issue
     try:
@@ -393,86 +416,177 @@ def makeG(home,project_name,source_name,model_name,station_file,gftype):
         Nsta=1
         staname=array([staname])
         datafiles=array([datafiles])
-    insert_position=0
     
     #Initalize G for faster assignments
     if gftype.lower()=='static': #Initialize output matrix
         G=zeros((Nsta*3,Nfaults*6))
     elif gftype.lower()=='insar': #Initialize output matrix
         G=zeros((Nsta,Nfaults*6))
-    else:
-        pass #For disp or vel waveforms G is initalized below
         
     if gftype.lower()=='static': #Make matrix of static GFs
+        #Load the synthetics files
+        Mxx=genfromtxt(syn_path+'_Mxx.neu')
+        Mxy=genfromtxt(syn_path+'_Mxy.neu')
+        Mxz=genfromtxt(syn_path+'_Mxz.neu')
+        Myy=genfromtxt(syn_path+'_Myy.neu')
+        Myz=genfromtxt(syn_path+'_Myz.neu')
+        Mzz=genfromtxt(syn_path+'_Mzz.neu')
+        Mxx_sta=genfromtxt(syn_path+'_Mxx.neu',usecols=0,dtype='S')
+        Mxy_sta=genfromtxt(syn_path+'_Mxy.neu',usecols=0,dtype='S')
+        Mxz_sta=genfromtxt(syn_path+'_Mxz.neu',usecols=0,dtype='S')
+        Myy_sta=genfromtxt(syn_path+'_Myy.neu',usecols=0,dtype='S')
+        Myz_sta=genfromtxt(syn_path+'_Myz.neu',usecols=0,dtype='S')
+        Mzz_sta=genfromtxt(syn_path+'_Mzz.neu',usecols=0,dtype='S')
+        src_list=unique(Mxx[:,1])
+        
         for ksta in range(Nsta):
             print 'Assembling static GFs for station '+staname[ksta]
             #Initalize output variable
-            Gtemp=zeros([3,Nfaults*2])
-            #Where's the data
-            syn_path=home+project_name+'/GFs/static/'
+            Gtemp=zeros([3,Nfaults*6])
+            
             #Loop over subfaults
             for kfault in range(Nfaults):
                 if kfault%10==0:
                     print '... working on subfault '+str(kfault)+' of '+str(Nfaults)
-                nfault='subfault'+rjust(str(int(source[kfault,0])),4,'0')
-                coseis_ss=loadtxt(syn_path+staname[ksta]+'.'+nfault+'.SS.static.neu')
-                nss=coseis_ss[0]
-                ess=coseis_ss[1]
-                zss=coseis_ss[2]
-                coseis_ds=loadtxt(syn_path+staname[ksta]+'.'+nfault+'.DS.static.neu')
-                nds=coseis_ds[0]
-                eds=coseis_ds[1]
-                zds=coseis_ds[2]
+                    
+                #what am I working on
+                sta=staname[ksta]
+                src=src_list[kfault]
+                
+                #Find the position ine ach file of this station/subfault pairs position
+                ixx=where((Mxx_sta==sta) & (Mxx[:,1]==src))[0]
+                ixy=where((Mxy_sta==sta) & (Mxy[:,1]==src))[0]
+                ixz=where((Mxz_sta==sta) & (Mxz[:,1]==src))[0]
+                iyy=where((Myy_sta==sta) & (Myy[:,1]==src))[0]
+                iyz=where((Myz_sta==sta) & (Myz[:,1]==src))[0]
+                izz=where((Mzz_sta==sta) & (Mzz[:,1]==src))[0]
+                neu_xx=Mxx[ixx,7:]
+                neu_xy=Mxy[ixy,7:]
+                neu_xz=Mxz[ixz,7:]
+                neu_yy=Myy[iyy,7:]
+                neu_yz=Myz[iyz,7:]
+                neu_zz=Mzz[izz,7:]
+                    
                 #Place into G matrix
-                Gtemp[0,2*kfault]=nss   ; Gtemp[0,2*kfault+1]=nds    #North
-                Gtemp[1,2*kfault]=ess ; Gtemp[1,2*kfault+1]=eds  #East
-                Gtemp[2,2*kfault]=zss ; Gtemp[2,2*kfault+1]=zds  #Up
-                #Append to G
+                #North
+                Gtemp[0,6*kfault]=neu_xx[0,0]   ; Gtemp[0,6*kfault+1]=neu_xy[0,0] ; Gtemp[0,6*kfault+2]=neu_xz[0,0]
+                Gtemp[0,6*kfault+3]=neu_yy[0,0] ; Gtemp[0,6*kfault+4]=neu_yz[0,0] ; Gtemp[0,6*kfault+5]=neu_zz[0,0]
+                
+                #East
+                Gtemp[1,6*kfault]=neu_xx[0,1]   ; Gtemp[1,6*kfault+1]=neu_xy[0,1] ; Gtemp[1,6*kfault+2]=neu_xz[0,1]
+                Gtemp[1,6*kfault+3]=neu_yy[0,1] ; Gtemp[1,6*kfault+4]=neu_yz[0,1] ; Gtemp[1,6*kfault+5]=neu_zz[0,1]
+                
+                #Up
+                Gtemp[2,6*kfault]=neu_xx[0,2]   ; Gtemp[2,6*kfault+1]=neu_xy[0,2] ; Gtemp[2,6*kfault+2]=neu_xz[0,2]
+                Gtemp[2,6*kfault+3]=neu_yy[0,2] ; Gtemp[2,6*kfault+4]=neu_yz[0,2] ; Gtemp[2,6*kfault+5]=neu_zz[0,2]
+                
             #Append to output matrix
             G[ksta*3:ksta*3+3,:]=Gtemp   
         return G   
-    if gftype.lower()=='insar': #Make matrix of insar LOS GFs
+    
+    elif gftype.lower()=='insar': #Make matrix of insar LOS GFs
+        #Load the synthetics files
+        Mxx=genfromtxt(syn_path+'_Mxx.los')
+        Mxy=genfromtxt(syn_path+'_Mxy.los')
+        Mxz=genfromtxt(syn_path+'_Mxz.los')
+        Myy=genfromtxt(syn_path+'_Myy.los')
+        Myz=genfromtxt(syn_path+'_Myz.los')
+        Mzz=genfromtxt(syn_path+'_Mzz.los')
+        Mxx_sta=genfromtxt(syn_path+'_Mxx.los',usecols=0,dtype='S')
+        Mxy_sta=genfromtxt(syn_path+'_Mxy.los',usecols=0,dtype='S')
+        Mxz_sta=genfromtxt(syn_path+'_Mxz.los',usecols=0,dtype='S')
+        Myy_sta=genfromtxt(syn_path+'_Myy.los',usecols=0,dtype='S')
+        Myz_sta=genfromtxt(syn_path+'_Myz.los',usecols=0,dtype='S')
+        Mzz_sta=genfromtxt(syn_path+'_Mzz.los',usecols=0,dtype='S')
+        src_list=unique(Mxx[:,1])
+        
         for ksta in range(Nsta):
             print 'Assembling static GFs for station '+staname[ksta]
             #Initalize output variable
-            Gtemp=zeros([1,Nfaults*2])
-            #Where's the data
-            syn_path=home+project_name+'/GFs/static/'
-            #Data path, need this to find LOS vector
-            los_path=home+project_name+'/data/statics/'
-            #Read los vector for this subfault
-            los=genfromtxt(los_path+staname[ksta]+'.los')
-            los=los[1:]
+            Gtemp=zeros([1,Nfaults*6])
+            
             #Loop over subfaults
             for kfault in range(Nfaults):
                 if kfault%10==0:
                     print '... working on subfault '+str(kfault)+' of '+str(Nfaults)
-                nfault='subfault'+rjust(str(int(source[kfault,0])),4,'0')
-                coseis_ss=loadtxt(syn_path+staname[ksta]+'.'+nfault+'.SS.static.neu')
-                nss=coseis_ss[0]
-                ess=coseis_ss[1]
-                zss=coseis_ss[2]
-                coseis_ds=loadtxt(syn_path+staname[ksta]+'.'+nfault+'.DS.static.neu')
-                nds=coseis_ds[0]
-                eds=coseis_ds[1]
-                zds=coseis_ds[2]
-                # Dot product of GFs and los vector
-                los_ss=los.dot(array([nss,ess,zss]))
-                los_ds=los.dot(array([nds,eds,zds]))
+                    
+                #what am I working on
+                sta=staname[ksta]
+                src=src_list[kfault]
+                
+                #Find the position ine ach file of this station/subfault pairs position
+                ixx=where((Mxx_sta==sta) & (Mxx[:,1]==src))[0]
+                ixy=where((Mxy_sta==sta) & (Mxy[:,1]==src))[0]
+                ixz=where((Mxz_sta==sta) & (Mxz[:,1]==src))[0]
+                iyy=where((Myy_sta==sta) & (Myy[:,1]==src))[0]
+                iyz=where((Myz_sta==sta) & (Myz[:,1]==src))[0]
+                izz=where((Mzz_sta==sta) & (Mzz[:,1]==src))[0]
+                neu_xx=Mxx[ixx,7]
+                neu_xy=Mxy[ixy,7]
+                neu_xz=Mxz[ixz,7]
+                neu_yy=Myy[iyy,7]
+                neu_yz=Myz[iyz,7]
+                neu_zz=Mzz[izz,7]
+                    
                 #Place into G matrix
-                Gtemp[0,2*kfault]=los_ss   ; Gtemp[0,2*kfault+1]=los_ds  
-                #Append to G
+                # LOS
+                Gtemp[0,6*kfault]=neu_xx   ; Gtemp[0,6*kfault+1]=neu_xy ; Gtemp[0,6*kfault+2]=neu_xz
+                Gtemp[0,6*kfault+3]=neu_yy ; Gtemp[0,6*kfault+4]=neu_yz ; Gtemp[0,6*kfault+5]=neu_zz
+
+                
             #Append to output matrix
-            G[ksta*1,:]=Gtemp   
-        return G 
+            G[ksta,:]=Gtemp   
+        return G   
 
 
+def get_moment(home,project_name,source_name,sol):
+    '''
+    Compute total moment from an inversion
+    '''
+    from numpy import log10,genfromtxt,loadtxt,arange,zeros,array
+    from mudpy.forward import get_mu
+    from numpy.linalg import eig
+   
+    unitMw=5.0
+    unitM0=10**(unitMw*1.5+9.1) #Keep it in N-m
+   
+    #Open model file
+    f=genfromtxt(home+project_name+'/data/model_info/'+source_name)
 
+    #Get mt components
+    ixx=6*arange(len(sol)/6)
+    ixy=6*arange(len(sol)/6)+1
+    ixz=6*arange(len(sol)/6)+2
+    iyy=6*arange(len(sol)/6)+3
+    iyz=6*arange(len(sol)/6)+4
+    izz=6*arange(len(sol)/6)+5
+    
+    mt_xx=sol[ixx,0]
+    mt_xy=sol[ixy,0]
+    mt_xz=sol[ixz,0]
+    mt_yy=sol[iyy,0]
+    mt_yz=sol[iyz,0]
+    mt_zz=sol[izz,0]
+    
+    #Get total moment
+    M0=zeros(len(mt_xx))
+    for k in range(len(mt_xx)):
+        M=array([[mt_xx[k],mt_xy[k],mt_xz[k]],[mt_xy[k],mt_yy[k],mt_yz[k]],[mt_xz[k],mt_yz[k],mt_zz[k]]])
+        M=M*unitM0
+        eigVal,eigVec=eig(M)
+        M0[k]=(0.5*sum(eigVal**2))**0.5
+    
+
+    #Total up and copute magnitude
+    M0=M0.sum()
+    Mw=(2./3)*(log10(M0)-9.1)
+    
+    return M0,Mw
 
 
 
 def run_inversion(home,project_name,run_name,source_name,model_name,GF_list,G_from_file,G_name,
-        reg_spatial,reg_temporal,nfaults,solver,weight=False,Ltype=2):
+        reg_spatial,reg_temporal,nsources,solver,weight=False,Ltype=2):
     '''
     Assemble G and d, determine smoothing and run the inversion
     '''
@@ -493,3 +607,78 @@ def run_inversion(home,project_name,run_name,source_name,model_name,GF_list,G_fr
 
     #Get GFs
     G=getG(home,project_name,source_name,model_name,GF_list,G_from_file,G_name)
+    
+    #Get data weights
+    if weight==True:
+        print 'Applying data weights'
+        w=inv.get_data_weights(home,project_name,GF_list,d,None)
+        W=empty(G.shape)
+        W=tile(w,(G.shape[1],1)).T
+        WG=empty(G.shape)
+        WG=W*G
+        wd=w*d.squeeze()
+        wd=expand_dims(wd,axis=1)
+        #Clear up extraneous variables
+        W=None
+        w=None
+        #Define inversion quantities
+        x=WG.transpose().dot(wd)
+        print 'Computing G\'G'
+        K=(WG.T).dot(WG)
+    else:
+        #Define inversion quantities if no weightd
+        x=G.transpose().dot(d)
+        print 'Computing G\'G'
+        K=(G.T).dot(G)
+    
+    #Get regularization matrices (set to 0 matrix if not needed)
+    if reg_spatial!=None:
+        Ls=eye(nsources*6) 
+        Ninversion=len(reg_spatial)
+
+    #Make L's sparse
+    Ls=sparse(Ls)
+    #Get regularization tranposes for ABIC
+    LsLs=Ls.transpose().dot(Ls)
+    #inflate
+    Ls=Ls.todense()
+    LsLs=LsLs.todense()
+
+    #off we go
+    dt=datetime.now()-t1
+    print 'Preprocessing wall time was '+str(dt)
+    print '\n--- RUNNING INVERSIONS ---\n'
+    ttotal=datetime.now()
+    kout=0
+    
+    for ks in range(len(reg_spatial)):
+        
+        t1=datetime.now()
+        lambda_spatial=reg_spatial[ks]
+        print 'Running inversion '+str(kout+1)+' of '+str(Ninversion)+' at regularization levels: ls ='+repr(lambda_spatial)
+        
+        Kinv=K+(lambda_spatial**2)*LsLs
+        sol,res,rank,s=lstsq(Kinv,x)
+
+        #Compute synthetics
+        ds=dot(G,sol)
+        
+        #Get stats
+        L2,Lmodel=inv.get_stats(Kinv,sol,x)
+        VR=inv.get_VR(home,project_name,GF_list,sol,d,ds,None)
+
+        #Get moment
+        Mo,Mw=inv.get_moment(home,project_name,source_name,model_name,sol)
+
+        #Write log
+        inv.write_log(home,project_name,run_name,kout,rupture_speed,num_windows,lambda_spatial,lambda_temporal,beta,
+            L2,Lmodel,VR,ABIC,Mo,Mw,model_name,fault_name,G_name,GF_list,solver)
+        
+        #Write output to file
+        inv.write_synthetics(home,project_name,run_name,GF_list,G,sol,ds,kout,decimate)
+        inv.write_model(home,project_name,run_name,fault_name,model_name,rupture_speed,num_windows,epicenter,sol,kout)
+        
+        kout+=1
+        dt1=datetime.now()-t1
+        dt2=datetime.now()-ttotal
+        print '... inversion wall time was '+str(dt1)+', total wall time elapsed is '+str(dt2)
