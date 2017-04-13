@@ -305,7 +305,7 @@ class MT:
     """
     A moment tensor class
     """
-    def __init__(self, m11,m22,m33,m12,m13,m23,lon,lat,depth,mt_style='rtp'):
+    def __init__(self, m11,m12,m13,m22,m23,m33,lon,lat,depth,mt_style='rtp'):
         from numpy import array
         self.tensor = array([[m11,m12,m13],[m12,m22,m23],[m13,m23,m33]])
         self.lon = lon

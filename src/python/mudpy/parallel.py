@@ -102,7 +102,7 @@ def run_parallel_green(home,project_name,station_file,model_name,dt,NFFT,static,
             
 
 def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,static,tsunami,time_epi,
-                beta,custom_stf,impulse,rank,size,okada,mu_okada):
+                beta,custom_stf,impulse,rank,size,insar=False,okada=False,mu_okada=45e9):
     '''
     Use green functions and compute synthetics at stations for a single source
     and multiple stations. This code makes an external system call to syn.c first it
@@ -150,9 +150,10 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
         beta = %d
         custom_stf = %s
         impulse = %s
+        insar = %s
         okada = %s
         mu = %.2e
-        ''' %(home,project_name,station_file,model_name,str(integrate),str(static),str(tsunami),str(time_epi),beta,custom_stf,impulse,okada,mu_okada)
+        ''' %(home,project_name,station_file,model_name,str(integrate),str(static),str(tsunami),str(time_epi),beta,custom_stf,impulse,insar,okada,mu_okada)
         print out
         
     #Read your corresponding source file
@@ -377,7 +378,10 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
                 if okada==False:  #Layered earth model
                     temp_pipe=[]
                     diststr='%.1f' % d[k] #Need current distance in string form for external call
-                    green_file=model_name+".static."+strdepth+".sub"+subfault #Output dir
+                    if insar==True:
+                        green_file=model_name+".static."+strdepth+".sub"+subfault+'.los' #Output dir
+                    else: #GPS
+                        green_file=model_name+".static."+strdepth+".sub"+subfault+'.gps' #Output dir
                     statics=loadtxt(green_file) #Load GFs
                     if len(statics)<1:
                         print 'ERROR: Empty GF file'
@@ -605,7 +609,7 @@ def run_parallel_synthetics_mt3d(home,project_name,station_file,model_name,insar
             
             #Form command for external call (remember syn.c and mudpy coordiante systems are not the same)
             # order of elelments in syn.c is M0/Mxx/Mxy/Mxz/Myy/Myz/Mzz
-            Mxx=0 ; Myy=1 ; Mzz=0 ;Mxy=0; Mxz=0; Myz=0
+            Mxx=1 ; Myy=0 ; Mzz=0 ;Mxy=0; Mxz=0; Myz=0
             command_Mxx="syn -M"+str(M0)+"/"+str(Mxx)+"/"+str(Mxy)+"/"+str(Mxz)+"/"+str(Myy)+"/"+str(Myz)+"/"+str(Mzz)+\
                     " -A"+str(az[k])+" -P"
             
@@ -613,19 +617,19 @@ def run_parallel_synthetics_mt3d(home,project_name,station_file,model_name,insar
             command_Mxy="syn -M"+str(M0)+"/"+str(Mxx)+"/"+str(Mxy)+"/"+str(Mxz)+"/"+str(Myy)+"/"+str(Myz)+"/"+str(Mzz)+\
                     " -A"+str(az[k])+" -P"
                     
-            Mxx=0 ; Myy=0 ; Mzz=0 ;Mxy=0; Mxz=0; Myz=-1
+            Mxx=0 ; Myy=0 ; Mzz=0 ;Mxy=0; Mxz=1; Myz=0
             command_Mxz="syn -M"+str(M0)+"/"+str(Mxx)+"/"+str(Mxy)+"/"+str(Mxz)+"/"+str(Myy)+"/"+str(Myz)+"/"+str(Mzz)+\
                     " -A"+str(az[k])+" -P"
                     
-            Mxx=1 ; Myy=0 ; Mzz=0 ;Mxy=0; Mxz=0; Myz=0
+            Mxx=0 ; Myy=1 ; Mzz=0 ;Mxy=0; Mxz=0; Myz=0
             command_Myy="syn -M"+str(M0)+"/"+str(Mxx)+"/"+str(Mxy)+"/"+str(Mxz)+"/"+str(Myy)+"/"+str(Myz)+"/"+str(Mzz)+\
                     " -A"+str(az[k])+" -P"
                     
-            Mxx=0 ; Myy=0 ; Mzz=0 ;Mxy=0; Mxz=-1; Myz=0
+            Mxx=0 ; Myy=0 ; Mzz=0 ;Mxy=0; Mxz=0; Myz=1
             command_Myz="syn -M"+str(M0)+"/"+str(Mxx)+"/"+str(Mxy)+"/"+str(Mxz)+"/"+str(Myy)+"/"+str(Myz)+"/"+str(Mzz)+\
                     " -A"+str(az[k])+" -P"
                     
-            Mxx=0 ; Myy=0 ; Mzz=-1 ;Mxy=0; Mxz=0; Myz=0
+            Mxx=0 ; Myy=0 ; Mzz=1 ;Mxy=0; Mxz=0; Myz=0
             command_Mzz="syn -M"+str(M0)+"/"+str(Mxx)+"/"+str(Mxy)+"/"+str(Mxz)+"/"+str(Myy)+"/"+str(Myz)+"/"+str(Mzz)+\
                     " -A"+str(az[k])+" -P"
                     
@@ -831,13 +835,19 @@ if __name__ == '__main__':
             impulse=True
         elif impulse=='False':
             impulse=False
-        okada=sys.argv[13]
+        insar=sys.argv[13]
+        if insar=='True':
+            insar=True
+        elif insar=='False':
+            insar=False
+        okada=sys.argv[14]
         if okada=='True':
             okada=True
         elif okada=='False':
             okada=False
-        mu_okada=float(sys.argv[14])
-        run_parallel_synthetics(home,project_name,station_file,model_name,integrate,static,tsunami,time_epi,beta,custom_stf,impulse,rank,size,okada,mu_okada)
+        mu_okada=float(sys.argv[15])
+
+        run_parallel_synthetics(home,project_name,station_file,model_name,integrate,static,tsunami,time_epi,beta,custom_stf,impulse,rank,size,insar,okada,mu_okada)
     elif sys.argv[1]=='run_parallel_synthetics_mt3d':
         #Parse command line arguments
         home=sys.argv[2]

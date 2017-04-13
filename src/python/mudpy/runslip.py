@@ -178,7 +178,7 @@ def make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,stat
 
 
 def make_parallel_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,static,tsunami,
-            hot_start,dk,pmin,pmax,kmax,ncpus,okada=False):
+            hot_start,dk,pmin,pmax,kmax,ncpus,insar=False,okada=False):
     '''
     This routine set's up the computation of GFs for each subfault to all stations.
     The GFs are impulse sources, they don't yet depend on strike and dip.
@@ -237,7 +237,7 @@ def make_parallel_green(home,project_name,station_file,fault_name,model_name,dt,
         print 'Static Okada solution requested, no need to run GFs...'
         pass
     else:
-        mpi='mpiexec -n '+str(ncpus)+' python '+mud_source+'parallel.py run_parallel_green '+home+' '+project_name+' '+station_file+' '+model_name+' '+str(dt)+' '+str(NFFT)+' '+str(static)+' '+str(dk)+' '+str(pmin)+' '+str(pmax)+' '+str(kmax)+' '+str(tsunami)
+        mpi='mpiexec -n '+str(ncpus)+' python '+mud_source+'parallel.py run_parallel_green '+home+' '+project_name+' '+station_file+' '+model_name+' '+str(dt)+' '+str(NFFT)+' '+str(static)+' '+str(dk)+' '+str(pmin)+' '+str(pmax)+' '+str(kmax)+' '+str(tsunami)+' '+str(insar)
         mpi=split(mpi)
         p=subprocess.Popen(mpi)
         p.communicate()
@@ -295,7 +295,7 @@ def make_synthetics(home,project_name,station_file,fault_name,model_name,integra
         
 #Now make synthetics for source/station pairs
 def make_parallel_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,tsunami,beta,
-                    hot_start,time_epi,ncpus,custom_stf,impulse=False,okada=False,mu=45e9):
+                    hot_start,time_epi,ncpus,custom_stf,impulse=False,insar=False,okada=False,mu=45e9):
     '''
     This routine will take the impulse response (GFs) and pass it into the routine that will
     convovle them with the source time function according to each subfaults strike and dip.
@@ -338,7 +338,7 @@ def make_parallel_synthetics(home,project_name,station_file,fault_name,model_nam
     #Make mpi system call
     print "MPI: Starting synthetics computation on", ncpus, "CPUs\n"
     mud_source=environ['MUD']+'/src/python/mudpy/'
-    mpi='mpiexec -n '+str(ncpus)+' python '+mud_source+'parallel.py run_parallel_synthetics '+home+' '+project_name+' '+station_file+' '+model_name+' '+str(integrate)+' '+str(static)+' '+str(tsunami)+' '+str(time_epi)+' '+str(beta)+' '+str(custom_stf)+' '+str(impulse)+' '+str(okada)+' '+str(mu)
+    mpi='mpiexec -n '+str(ncpus)+' python '+mud_source+'parallel.py run_parallel_synthetics '+home+' '+project_name+' '+station_file+' '+model_name+' '+str(integrate)+' '+str(static)+' '+str(tsunami)+' '+str(time_epi)+' '+str(beta)+' '+str(custom_stf)+' '+str(impulse)+' '+str(insar)+' '+str(okada)+' '+str(mu)
     mpi=split(mpi)
     p=subprocess.Popen(mpi)
     p.communicate()
@@ -380,9 +380,10 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
             f.close()
             static=1
             tsunami=False
+            insar=False
             if ncpus>1:
                 make_parallel_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,static,tsunami,
-                            hot_start,dk,pmin,pmax,kmax,ncpus)
+                            hot_start,dk,pmin,pmax,kmax,ncpus,insar)
             else:
                 make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,static,tsunami,
                             hot_start,dk,pmin,pmax,kmax)
@@ -439,9 +440,10 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
             f.close()
             static=1
             tsunami=False
+            insar=True
             if ncpus>1:
                 make_parallel_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,static,tsunami,
-                            hot_start,dk,pmin,pmax,kmax,ncpus)
+                            hot_start,dk,pmin,pmax,kmax,ncpus,insar)
             else:
                 make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,static,tsunami,
                             hot_start,dk,pmin,pmax,kmax)
@@ -508,7 +510,8 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
                 integrate=0
                 static=1
                 tsunami=False
-                make_parallel_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,tsunami,beta,hot_start,time_epi,ncpus,custom_stf,impulse)
+                insar=False
+                make_parallel_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,tsunami,beta,hot_start,time_epi,ncpus,custom_stf,impulse,insar)
             #Decide which synthetics are required
             i=where(GF[:,3]==1)[0]
             if len(i)>0: #dispalcement waveform
@@ -571,7 +574,8 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
                 integrate=0
                 static=1
                 tsunami=False
-                make_parallel_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,tsunami,beta,hot_start,time_epi,ncpus,custom_stf,impulse)
+                insar=True
+                make_parallel_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,tsunami,beta,hot_start,time_epi,ncpus,custom_stf,impulse,insar)
     
                     
                                 

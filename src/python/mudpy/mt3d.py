@@ -322,7 +322,7 @@ def getG(home,project_name,source_name,model_name,GF_list,G_from_file,G_name):
     G_name=home+project_name+'/GFs/matrices/'+G_name
     if G_from_file==True: #load from file
         print 'Loading G from file '+G_name
-        G=load(G_name)
+        G=load(G_name+'.npy')
     else: #assemble G one data type at a time
         print 'Assembling G from synthetic computations...'
         #Read in GFlist and decide what to compute
@@ -578,15 +578,144 @@ def get_moment(home,project_name,source_name,sol):
     
 
     #Total up and copute magnitude
-    M0=M0.sum()
-    Mw=(2./3)*(log10(M0)-9.1)
+    M0total=M0.sum()
+    Mw=(2./3)*(log10(M0total)-9.1)
     
-    return M0,Mw
+    return M0total,M0,Mw
+
+
+def write_log(home,project_name,run_name,k,lambda_spatial,
+        L2,Lm,VR,Mo,Mw,velmod,source,g_name,gflist):
+    '''
+    Write inversion sumamry to .log file
+    
+    IN:
+        home: Home directory location
+        project_name: Name of the problem
+        run_name: Name of inversion run
+        k: Inversion run number
+        rupture_speed: Fastest rupture speed allowed
+        num_windows: Number of temporal rupture windows
+        lambda_spatial: Spatial regularization parameter
+        lambda_temporal: Temporal regularization parameter
+        beta: Angular offset applied to rake
+        L2: L2 norm of ivnersion L2=||Gm-d||
+        Lm: Model norm Lm=||L*m||
+        VR: Variance reduction
+        ABIC: Value of Akaike's Bayesian ifnormation criterion
+        Mo: Moment in N-m
+        Mw: Moment magnitude
+        velmod: Earth structure model used
+        fault: Fault model used
+        g_name: GF matrix used
+        gflist: GF control file sued
+        solver: Type of solver used
+    OUT:
+        Nothing
+    '''
+    
+    from string import rjust
+    
+    num=rjust(str(k),4,'0')
+    f=open(home+project_name+'/output/inverse_models/models/'+run_name+'.'+num+'.log','w')
+    f.write('Project: '+project_name+'\n')
+    f.write('Run name: '+run_name+'\n')
+    f.write('Run number: '+num+'\n')
+    f.write('Source model: '+source+'\n')
+    f.write('G name: '+g_name+'\n')
+    f.write('GF list: '+gflist+'\n')
+    f.write('lambda_spatial = '+repr(lambda_spatial)+'\n')
+    f.write('L2 = '+repr(L2)+'\n')
+    f.write('VR static(%) = '+repr(VR[0])+'\n')
+    f.write('VR InSAR LOS(%) = '+repr(VR[4])+'\n')
+    f.write('Lm = '+repr(Lm)+'\n')
+    f.write('M0(N-m) = '+repr(Mo)+'\n')
+    f.write('Mw = '+repr(Mw)+'\n')
+    f.close()
+
+
+
+def write_model(home,project_name,run_name,source_name,model_name,sol,num):
+    '''
+    Write inversion results to .inv file
+    
+    IN:
+        home: Home directory location
+        project_name: Name of the problem
+        run_name: Name of inversion run
+        fault_name: Name of fault description file
+        model_name: Name of velocity structure file
+        rupture_speed: Fastest rupture speed allowed in the problem
+        num_windows: Number of temporal rupture windows allowed
+        epicenter: Epicenter coordinates
+        sol: The solution vector from the inversion
+        num: ID number of the inversion
+        GF_list: Name of GF control file
+    OUT:
+        Nothing
+    '''
+    
+    from numpy import genfromtxt,loadtxt,arange,zeros,c_,savetxt,r_,array
+    from mudpy.forward import get_mu
+    from string import rjust
+    from numpy.linalg import eig
+    from mudpy import analysis
+   
+    #Open model file
+    f=genfromtxt(home+project_name+'/data/model_info/'+source_name)
+    
+    unitMw=5.0
+    unitM0=10**(unitMw*1.5+9.1) #Keep it in N-m
+    
+    #Get MT components and MT related quantities (moment, strike dip, etc)-
+    ixx=6*arange(len(sol)/6)
+    ixy=6*arange(len(sol)/6)+1
+    ixz=6*arange(len(sol)/6)+2
+    iyy=6*arange(len(sol)/6)+3
+    iyz=6*arange(len(sol)/6)+4
+    izz=6*arange(len(sol)/6)+5
+    
+    mt_xx=sol[ixx,0]*unitM0
+    mt_xy=sol[ixy,0]*unitM0
+    mt_xz=sol[ixz,0]*unitM0
+    mt_yy=sol[iyy,0]*unitM0
+    mt_yz=sol[iyz,0]*unitM0
+    mt_zz=sol[izz,0]*unitM0
+    
+    #Get total moment
+    M0=zeros(len(mt_xx))
+    strike1=zeros(len(mt_xx))
+    dip1=zeros(len(mt_xx))
+    rake1=zeros(len(mt_xx))
+    strike2=zeros(len(mt_xx))
+    dip2=zeros(len(mt_xx))
+    rake2=zeros(len(mt_xx))
+    for k in range(len(mt_xx)):
+        mt=analysis.MT(mt_xx[k],mt_xy[k],mt_xz[k],mt_yy[k],mt_yz[k],mt_zz[k],1,1,1)
+        mt.get_nodal_planes()
+        NP1=mt.nodal_plane1
+        NP2=mt.nodal_plane2
+        M0[k]=mt.moment()
+        strike1[k]=NP1[0]
+        dip1[k]=NP1[1]
+        rake1[k]=NP1[2]
+        strike2[k]=NP2[0]
+        dip2[k]=NP2[1]
+        rake2[k]=NP2[2]
+    
+
+    #Prepare for output
+    out=c_[f,mt_xx,mt_xy,mt_xz,mt_yy,mt_yz,mt_zz,strike1,dip1,rake1,strike2,dip2,rake2,M0]
+    outdir=home+project_name+'/output/inverse_models/models/'+run_name+'.'+rjust(str(num),4,'0')+'.inv'
+    #CHANGE this to rupture definition as #No  x            y        z(km)      str     dip      rake       rise    dura     slip    ss_len  ds_len rupt_time
+    fmtout='%6i\t%11.4f\t%11.4f\t%11.4f\t%13.4e\t%13.4e\t%13.4e\t%13.4e\t%13.4e\t%13.4e\t%7.2f\t%7.2f\t%7.2f\t%7.2f\t%7.2f\t%7.2f\t%13.4e'
+    print '... writing model results to file '+outdir
+    savetxt(outdir,out,fmtout,header='No,lon,lat,z(km),Mxx(Nm),Mxy(Nm),Mxz(Nm),Myy(Nm),Myz(Nm),Mzz(Nm),strike1,dip1,rake1,strike2,dip2,rake2,M0(Nm)')
 
 
 
 def run_inversion(home,project_name,run_name,source_name,model_name,GF_list,G_from_file,G_name,
-        reg_spatial,reg_temporal,nsources,solver,weight=False,Ltype=2):
+        reg_spatial,nsources,solver,weight=False,Ltype=0):
     '''
     Assemble G and d, determine smoothing and run the inversion
     '''
@@ -632,9 +761,9 @@ def run_inversion(home,project_name,run_name,source_name,model_name,GF_list,G_fr
         K=(G.T).dot(G)
     
     #Get regularization matrices (set to 0 matrix if not needed)
-    if reg_spatial!=None:
-        Ls=eye(nsources*6) 
-        Ninversion=len(reg_spatial)
+    Ls=eye(nsources*6) 
+    print 'Nsources: '+str(nsources)
+    Ninversion=len(reg_spatial)
 
     #Make L's sparse
     Ls=sparse(Ls)
@@ -668,15 +797,15 @@ def run_inversion(home,project_name,run_name,source_name,model_name,GF_list,G_fr
         VR=inv.get_VR(home,project_name,GF_list,sol,d,ds,None)
 
         #Get moment
-        Mo,Mw=inv.get_moment(home,project_name,source_name,model_name,sol)
+        M0total,M0,Mw=get_moment(home,project_name,source_name,sol)
 
         #Write log
-        inv.write_log(home,project_name,run_name,kout,rupture_speed,num_windows,lambda_spatial,lambda_temporal,beta,
-            L2,Lmodel,VR,ABIC,Mo,Mw,model_name,fault_name,G_name,GF_list,solver)
+        write_log(home,project_name,run_name,kout,lambda_spatial,
+            L2,Lmodel,VR,M0total,Mw,model_name,source_name,G_name,GF_list)
         
         #Write output to file
-        inv.write_synthetics(home,project_name,run_name,GF_list,G,sol,ds,kout,decimate)
-        inv.write_model(home,project_name,run_name,fault_name,model_name,rupture_speed,num_windows,epicenter,sol,kout)
+        inv.write_synthetics(home,project_name,run_name,GF_list,G,sol,ds,kout,None)
+        write_model(home,project_name,run_name,source_name,model_name,sol,kout)
         
         kout+=1
         dt1=datetime.now()-t1
