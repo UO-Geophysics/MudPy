@@ -379,7 +379,7 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
                     temp_pipe=[]
                     diststr='%.1f' % d[k] #Need current distance in string form for external call
                     if insar==True:
-                        green_file=model_name+".static."+strdepth+".sub"+subfault+'.los' #Output dir
+                        green_file=model_name+".static."+strdepth+".sub"+subfault+'.insar' #Output dir
                     else: #GPS
                         green_file=model_name+".static."+strdepth+".sub"+subfault+'.gps' #Output dir
                     statics=loadtxt(green_file) #Load GFs
@@ -439,7 +439,7 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
                       
                                             
                                                                   
-def run_parallel_synthetics_mt3d(home,project_name,station_file,model_name,insar,rank,size):
+def run_parallel_synthetics_mt3d(home,project_name,station_file,model_name,forceMT,mt,insar,rank,size):
     '''
     Use green functions and compute synthetics at stations for a single source
     and multiple stations. This code makes an external system call to syn.c first it
@@ -480,8 +480,10 @@ def run_parallel_synthetics_mt3d(home,project_name,station_file,model_name,insar
         project_name = %s
         station_file = %s
         model_name = %s
+        forceMT = %s
+        mt = %s
         insar = %s
-        ''' %(home,project_name,station_file,model_name,str(insar))
+        ''' %(home,project_name,station_file,model_name,str(forceMT),str(mt),str(insar))
         print out
         
     #temporary outoput files to be merged later, these will hold every soruce this process runs
@@ -548,6 +550,10 @@ def run_parallel_synthetics_mt3d(home,project_name,station_file,model_name,insar
     f_Myz=open(green_path+tmp_Myz,'a+')
     f_Mzz=open(green_path+tmp_Mzz,'a+')
     
+    #Make moment tensor components
+    if forceMT==True:
+        Mxx=mt[0] ; Mxy=mt[1] ; Mxz=mt[2] ;Myy=mt[3]; Myz=mt[4]; Mzz=mt[5]
+    
     #Off we go now
     for ksource in range(len(mpi_source)):
         
@@ -609,27 +615,33 @@ def run_parallel_synthetics_mt3d(home,project_name,station_file,model_name,insar
             
             #Form command for external call (remember syn.c and mudpy coordiante systems are not the same)
             # order of elelments in syn.c is M0/Mxx/Mxy/Mxz/Myy/Myz/Mzz
-            Mxx=1 ; Myy=0 ; Mzz=0 ;Mxy=0; Mxz=0; Myz=0
+            if forceMT==False:
+                Mxx=1 ; Myy=0 ; Mzz=0 ;Mxy=0; Mxz=0; Myz=0
             command_Mxx="syn -M"+str(M0)+"/"+str(Mxx)+"/"+str(Mxy)+"/"+str(Mxz)+"/"+str(Myy)+"/"+str(Myz)+"/"+str(Mzz)+\
                     " -A"+str(az[k])+" -P"
             
-            Mxx=0 ; Myy=0 ; Mzz=0 ;Mxy=1; Mxz=0; Myz=0
+            if forceMT==False:
+                Mxx=0 ; Myy=0 ; Mzz=0 ;Mxy=1; Mxz=0; Myz=0
             command_Mxy="syn -M"+str(M0)+"/"+str(Mxx)+"/"+str(Mxy)+"/"+str(Mxz)+"/"+str(Myy)+"/"+str(Myz)+"/"+str(Mzz)+\
                     " -A"+str(az[k])+" -P"
                     
-            Mxx=0 ; Myy=0 ; Mzz=0 ;Mxy=0; Mxz=1; Myz=0
+            if forceMT==False:
+                Mxx=0 ; Myy=0 ; Mzz=0 ;Mxy=0; Mxz=1; Myz=0
             command_Mxz="syn -M"+str(M0)+"/"+str(Mxx)+"/"+str(Mxy)+"/"+str(Mxz)+"/"+str(Myy)+"/"+str(Myz)+"/"+str(Mzz)+\
                     " -A"+str(az[k])+" -P"
-                    
-            Mxx=0 ; Myy=1 ; Mzz=0 ;Mxy=0; Mxz=0; Myz=0
+            
+            if forceMT==False:        
+                Mxx=0 ; Myy=1 ; Mzz=0 ;Mxy=0; Mxz=0; Myz=0
             command_Myy="syn -M"+str(M0)+"/"+str(Mxx)+"/"+str(Mxy)+"/"+str(Mxz)+"/"+str(Myy)+"/"+str(Myz)+"/"+str(Mzz)+\
                     " -A"+str(az[k])+" -P"
                     
-            Mxx=0 ; Myy=0 ; Mzz=0 ;Mxy=0; Mxz=0; Myz=1
+            if forceMT==False:
+                Mxx=0 ; Myy=0 ; Mzz=0 ;Mxy=0; Mxz=0; Myz=1
             command_Myz="syn -M"+str(M0)+"/"+str(Mxx)+"/"+str(Mxy)+"/"+str(Mxz)+"/"+str(Myy)+"/"+str(Myz)+"/"+str(Mzz)+\
                     " -A"+str(az[k])+" -P"
                     
-            Mxx=0 ; Myy=0 ; Mzz=1 ;Mxy=0; Mxz=0; Myz=0
+            if forceMT==False:
+                Mxx=0 ; Myy=0 ; Mzz=1 ;Mxy=0; Mxz=0; Myz=0
             command_Mzz="syn -M"+str(M0)+"/"+str(Mxx)+"/"+str(Mxy)+"/"+str(Mxz)+"/"+str(Myy)+"/"+str(Myz)+"/"+str(Mzz)+\
                     " -A"+str(az[k])+" -P"
                     
@@ -854,12 +866,24 @@ if __name__ == '__main__':
         project_name=sys.argv[3]
         station_file=sys.argv[4]
         model_name=sys.argv[5]
-        insar=sys.argv[6]
+        forceMT=sys.argv[6]
+        if forceMT=='True':
+            forceMT=True
+        elif insar=='False':
+            forceMTr=False
+        Mxx=float(sys.argv[7])
+        Mxy=float(sys.argv[8])
+        Mxz=float(sys.argv[9])
+        Myy=float(sys.argv[10])
+        Myz=float(sys.argv[11])
+        Mzz=float(sys.argv[12])
+        mt=[Mxx,Mxy,Mxz,Myy,Myz,Mzz]
+        insar=sys.argv[13]
         if insar=='True':
             insar=True
         elif insar=='False':
             insar=False
-        run_parallel_synthetics_mt3d(home,project_name,station_file,model_name,insar,rank,size)
+        run_parallel_synthetics_mt3d(home,project_name,station_file,model_name,forceMT,mt,insar,rank,size)
     else:
         print 'ERROR: You''re not allowed to run '+sys.argv[1]+' from the shell or it does not exist'
         

@@ -9,7 +9,7 @@ Apr 4th 2017
 
 #Compute GFs for the ivenrse problem            
 def inversionGFs(home,project_name,GF_list,source_name,model_name,
-        green_flag,synth_flag,dk,pmin,pmax,kmax,hot_start,ncpus):
+        green_flag,synth_flag,dk,pmin,pmax,kmax,hot_start,ncpus,forceMT,mt):
     '''
     This routine will read a .gflist file and compute the required GF type for each station
     '''
@@ -74,7 +74,7 @@ def inversionGFs(home,project_name,GF_list,source_name,model_name,
                 out=stations[i[k]]+'\t'+repr(GF[i[k],0])+'\t'+repr(GF[i[k],1])+'\n'
                 f.write(out)
             f.close()
-            make_parallel_synthetics(home,project_name,station_file,source_name,model_name,hot_start,ncpus,insar=False)
+            make_parallel_synthetics(home,project_name,station_file,source_name,model_name,hot_start,ncpus,forceMT,mt,insar=False)
 
         #Decide which synthetics are required
         i=where(GF[:,6]==1)[0]
@@ -86,7 +86,7 @@ def inversionGFs(home,project_name,GF_list,source_name,model_name,
                 out=stations[i[k]]+'\t'+repr(GF[i[k],0])+'\t'+repr(GF[i[k],1])+'\n'
                 f.write(out)
             f.close()
-            make_parallel_synthetics(home,project_name,station_file,source_name,model_name,hot_start,ncpus,insar=True)
+            make_parallel_synthetics(home,project_name,station_file,source_name,model_name,hot_start,ncpus,forceMT,mt,insar=True)
 
 
 
@@ -151,7 +151,7 @@ def make_parallel_green(home,project_name,station_file,fault_name,model_name,dt,
     
 #Now make synthetics for source/station pairs
 def make_parallel_synthetics(home,project_name,station_file,source_name,model_name,
-                    hot_start,ncpus,insar=False):
+                    hot_start,ncpus,forceMT,mt,insar=False):
     '''
     This routine will take the impulse response (GFs) and pass it into the routine that will
     convovle them with the source time function according to each subfaults strike and dip.
@@ -193,10 +193,13 @@ def make_parallel_synthetics(home,project_name,station_file,source_name,model_na
         fmt='%d\t%10.6f\t%10.6f\t%10.6f'
         savetxt(home+project_name+'/data/model_info/mpi_source.'+str(k)+'.fault',mpi_source,fmt=fmt)
     
+    if forceMT==False:
+        mt=[0,0,0,0,0,0]
+    
     #Make mpi system call
     print "MPI: Starting synthetics computation on", ncpus, "CPUs\n"
     mud_source=environ['MUD']+'/src/python/mudpy/'
-    mpi='mpiexec -n '+str(ncpus)+' python '+mud_source+'parallel.py run_parallel_synthetics_mt3d '+home+' '+project_name+' '+station_file+' '+model_name+' '+str(insar)
+    mpi='mpiexec -n '+str(ncpus)+' python '+mud_source+'parallel.py run_parallel_synthetics_mt3d '+home+' '+project_name+' '+station_file+' '+model_name+' '+str(forceMT)+' '+str(mt[0])+' '+str(mt[1])+' '+str(mt[2])+' '+str(mt[3])+' '+str(mt[4])+' '+str(mt[5])+' '+str(insar)
     mpi=split(mpi)
     p=subprocess.Popen(mpi)
     p.communicate()
@@ -310,7 +313,7 @@ def make_parallel_synthetics(home,project_name,station_file,source_name,model_na
                         
     
 
-def getG(home,project_name,source_name,model_name,GF_list,G_from_file,G_name):
+def getG(home,project_name,source_name,model_name,GF_list,G_from_file,G_name,forceMT):
     '''
     Build the G matrix
     '''
@@ -350,7 +353,7 @@ def getG(home,project_name,source_name,model_name,GF_list,G_from_file,G_name):
             if len(i)>0: #There's actually something to do
                 inv.mini_station_file(mini_station,stations[i],GF[i,0],GF[i,1],GFfiles[i,0])
                 gftype='static'
-                Gstatic= makeG(home,project_name,source_name,model_name,split(mini_station)[1],gftype)
+                Gstatic= makeG(home,project_name,source_name,model_name,split(mini_station)[1],gftype,forceMT)
                 remove(mini_station) #Cleanup  
 
         #static field GFs
@@ -366,7 +369,7 @@ def getG(home,project_name,source_name,model_name,GF_list,G_from_file,G_name):
             if len(i)>0: #There's actually something to do
                 inv.mini_station_file(mini_station,stations[i],GF[i,0],GF[i,1],GFfiles[i,0])
                 gftype='insar'
-                Ginsar= makeG(home,project_name,source_name,model_name,split(mini_station)[1],gftype)
+                Ginsar= makeG(home,project_name,source_name,model_name,split(mini_station)[1],gftype,forceMT)
                 remove(mini_station) #Cleanup  
         
         #Done, concat, save to file, release the memory
@@ -379,7 +382,7 @@ def getG(home,project_name,source_name,model_name,GF_list,G_from_file,G_name):
 
 
 
-def makeG(home,project_name,source_name,model_name,station_file,gftype):
+def makeG(home,project_name,source_name,model_name,station_file,gftype,forceMT):
     '''
     This routine is called from getG and will assemble the GFs from available synthetics
     depending on data type requested 
@@ -418,10 +421,15 @@ def makeG(home,project_name,source_name,model_name,station_file,gftype):
         datafiles=array([datafiles])
     
     #Initalize G for faster assignments
+    if forceMT==True:
+        Ncomponents=1
+    else:
+        Ncomponents=6
+        
     if gftype.lower()=='static': #Initialize output matrix
-        G=zeros((Nsta*3,Nfaults*6))
+        G=zeros((Nsta*3,Nfaults*Ncomponents))
     elif gftype.lower()=='insar': #Initialize output matrix
-        G=zeros((Nsta,Nfaults*6))
+        G=zeros((Nsta,Nfaults*Ncomponents))
         
     if gftype.lower()=='static': #Make matrix of static GFs
         #Load the synthetics files
@@ -442,8 +450,11 @@ def makeG(home,project_name,source_name,model_name,station_file,gftype):
         for ksta in range(Nsta):
             print 'Assembling static GFs for station '+staname[ksta]
             #Initalize output variable
-            Gtemp=zeros([3,Nfaults*6])
-            
+            if forceMT==False:
+                Gtemp=zeros([3,Nfaults*6])
+            else:
+                Gtemp=zeros([3,Nfaults])
+                
             #Loop over subfaults
             for kfault in range(Nfaults):
                 if kfault%10==0:
@@ -468,17 +479,25 @@ def makeG(home,project_name,source_name,model_name,station_file,gftype):
                 neu_zz=Mzz[izz,7:]
                     
                 #Place into G matrix
-                #North
-                Gtemp[0,6*kfault]=neu_xx[0,0]   ; Gtemp[0,6*kfault+1]=neu_xy[0,0] ; Gtemp[0,6*kfault+2]=neu_xz[0,0]
-                Gtemp[0,6*kfault+3]=neu_yy[0,0] ; Gtemp[0,6*kfault+4]=neu_yz[0,0] ; Gtemp[0,6*kfault+5]=neu_zz[0,0]
-                
-                #East
-                Gtemp[1,6*kfault]=neu_xx[0,1]   ; Gtemp[1,6*kfault+1]=neu_xy[0,1] ; Gtemp[1,6*kfault+2]=neu_xz[0,1]
-                Gtemp[1,6*kfault+3]=neu_yy[0,1] ; Gtemp[1,6*kfault+4]=neu_yz[0,1] ; Gtemp[1,6*kfault+5]=neu_zz[0,1]
-                
-                #Up
-                Gtemp[2,6*kfault]=neu_xx[0,2]   ; Gtemp[2,6*kfault+1]=neu_xy[0,2] ; Gtemp[2,6*kfault+2]=neu_xz[0,2]
-                Gtemp[2,6*kfault+3]=neu_yy[0,2] ; Gtemp[2,6*kfault+4]=neu_yz[0,2] ; Gtemp[2,6*kfault+5]=neu_zz[0,2]
+                if forceMT==False:
+                    #North
+                    Gtemp[0,6*kfault]=neu_xx[0,0]   ; Gtemp[0,6*kfault+1]=neu_xy[0,0] ; Gtemp[0,6*kfault+2]=neu_xz[0,0]
+                    Gtemp[0,6*kfault+3]=neu_yy[0,0] ; Gtemp[0,6*kfault+4]=neu_yz[0,0] ; Gtemp[0,6*kfault+5]=neu_zz[0,0]
+                    
+                    #East
+                    Gtemp[1,6*kfault]=neu_xx[0,1]   ; Gtemp[1,6*kfault+1]=neu_xy[0,1] ; Gtemp[1,6*kfault+2]=neu_xz[0,1]
+                    Gtemp[1,6*kfault+3]=neu_yy[0,1] ; Gtemp[1,6*kfault+4]=neu_yz[0,1] ; Gtemp[1,6*kfault+5]=neu_zz[0,1]
+                    
+                    #Up
+                    Gtemp[2,6*kfault]=neu_xx[0,2]   ; Gtemp[2,6*kfault+1]=neu_xy[0,2] ; Gtemp[2,6*kfault+2]=neu_xz[0,2]
+                    Gtemp[2,6*kfault+3]=neu_yy[0,2] ; Gtemp[2,6*kfault+4]=neu_yz[0,2] ; Gtemp[2,6*kfault+5]=neu_zz[0,2]
+                else:
+                    #North
+                    Gtemp[0,kfault]=neu_xx[0,0]
+                    #East
+                    Gtemp[1,kfault]=neu_xx[0,1]                 
+                    #Up
+                    Gtemp[2,kfault]=neu_xx[0,2]
                 
             #Append to output matrix
             G[ksta*3:ksta*3+3,:]=Gtemp   
@@ -503,8 +522,11 @@ def makeG(home,project_name,source_name,model_name,station_file,gftype):
         for ksta in range(Nsta):
             print 'Assembling static GFs for station '+staname[ksta]
             #Initalize output variable
-            Gtemp=zeros([1,Nfaults*6])
-            
+            if forceMT==False:
+                Gtemp=zeros([1,Nfaults*6])
+            else:
+                Gtemp=zeros([1,Nfaults])
+                
             #Loop over subfaults
             for kfault in range(Nfaults):
                 if kfault%10==0:
@@ -530,8 +552,11 @@ def makeG(home,project_name,source_name,model_name,station_file,gftype):
                     
                 #Place into G matrix
                 # LOS
-                Gtemp[0,6*kfault]=neu_xx   ; Gtemp[0,6*kfault+1]=neu_xy ; Gtemp[0,6*kfault+2]=neu_xz
-                Gtemp[0,6*kfault+3]=neu_yy ; Gtemp[0,6*kfault+4]=neu_yz ; Gtemp[0,6*kfault+5]=neu_zz
+                if forceMT==False:
+                    Gtemp[0,6*kfault]=neu_xx   ; Gtemp[0,6*kfault+1]=neu_xy ; Gtemp[0,6*kfault+2]=neu_xz
+                    Gtemp[0,6*kfault+3]=neu_yy ; Gtemp[0,6*kfault+4]=neu_yz ; Gtemp[0,6*kfault+5]=neu_zz
+                else:
+                    Gtemp[0,kfault]=neu_xx
 
                 
             #Append to output matrix
@@ -539,7 +564,7 @@ def makeG(home,project_name,source_name,model_name,station_file,gftype):
         return G   
 
 
-def get_moment(home,project_name,source_name,sol):
+def get_moment(home,project_name,source_name,sol,forceMT):
     '''
     Compute total moment from an inversion
     '''
@@ -550,33 +575,37 @@ def get_moment(home,project_name,source_name,sol):
     unitMw=5.0
     unitM0=10**(unitMw*1.5+9.1) #Keep it in N-m
    
-    #Open model file
-    f=genfromtxt(home+project_name+'/data/model_info/'+source_name)
-
-    #Get mt components
-    ixx=6*arange(len(sol)/6)
-    ixy=6*arange(len(sol)/6)+1
-    ixz=6*arange(len(sol)/6)+2
-    iyy=6*arange(len(sol)/6)+3
-    iyz=6*arange(len(sol)/6)+4
-    izz=6*arange(len(sol)/6)+5
+    if forceMT==True: 
+        M0=sol*unitM0  
     
-    mt_xx=sol[ixx,0]
-    mt_xy=sol[ixy,0]
-    mt_xz=sol[ixz,0]
-    mt_yy=sol[iyy,0]
-    mt_yz=sol[iyz,0]
-    mt_zz=sol[izz,0]
+    else:
+        #Open model file
+        f=genfromtxt(home+project_name+'/data/model_info/'+source_name)
     
-    #Get total moment
-    M0=zeros(len(mt_xx))
-    for k in range(len(mt_xx)):
-        M=array([[mt_xx[k],mt_xy[k],mt_xz[k]],[mt_xy[k],mt_yy[k],mt_yz[k]],[mt_xz[k],mt_yz[k],mt_zz[k]]])
-        M=M*unitM0
-        eigVal,eigVec=eig(M)
-        M0[k]=(0.5*sum(eigVal**2))**0.5
+        #Get mt components
+        ixx=6*arange(len(sol)/6)
+        ixy=6*arange(len(sol)/6)+1
+        ixz=6*arange(len(sol)/6)+2
+        iyy=6*arange(len(sol)/6)+3
+        iyz=6*arange(len(sol)/6)+4
+        izz=6*arange(len(sol)/6)+5
+        
+        mt_xx=sol[ixx,0]
+        mt_xy=sol[ixy,0]
+        mt_xz=sol[ixz,0]
+        mt_yy=sol[iyy,0]
+        mt_yz=sol[iyz,0]
+        mt_zz=sol[izz,0]
+        
+        #Get total moment
+        M0=zeros(len(mt_xx))
+        for k in range(len(mt_xx)):
+            M=array([[mt_xx[k],mt_xy[k],mt_xz[k]],[mt_xy[k],mt_yy[k],mt_yz[k]],[mt_xz[k],mt_yz[k],mt_zz[k]]])
+            M=M*unitM0
+            eigVal,eigVec=eig(M)
+            M0[k]=(0.5*sum(eigVal**2))**0.5
+        
     
-
     #Total up and copute magnitude
     M0total=M0.sum()
     Mw=(2./3)*(log10(M0total)-9.1)
@@ -635,7 +664,7 @@ def write_log(home,project_name,run_name,k,lambda_spatial,
 
 
 
-def write_model(home,project_name,run_name,source_name,model_name,sol,num):
+def write_model(home,project_name,run_name,source_name,model_name,sol,num,forceMT,mt):
     '''
     Write inversion results to .inv file
     
@@ -675,12 +704,21 @@ def write_model(home,project_name,run_name,source_name,model_name,sol,num):
     iyz=6*arange(len(sol)/6)+4
     izz=6*arange(len(sol)/6)+5
     
-    mt_xx=sol[ixx,0]*unitM0
-    mt_xy=sol[ixy,0]*unitM0
-    mt_xz=sol[ixz,0]*unitM0
-    mt_yy=sol[iyy,0]*unitM0
-    mt_yz=sol[iyz,0]*unitM0
-    mt_zz=sol[izz,0]*unitM0
+    if forceMT==True:
+        mt_xx=mt[0]*sol*unitM0
+        mt_xy=mt[1]*sol*unitM0
+        mt_xz=mt[2]*sol*unitM0
+        mt_yy=mt[3]*sol*unitM0
+        mt_yz=mt[4]*sol*unitM0
+        mt_zz=mt[5]*sol*unitM0
+    
+    else: 
+        mt_xx=sol[ixx,0]*unitM0
+        mt_xy=sol[ixy,0]*unitM0
+        mt_xz=sol[ixz,0]*unitM0
+        mt_yy=sol[iyy,0]*unitM0
+        mt_yz=sol[iyz,0]*unitM0
+        mt_zz=sol[izz,0]*unitM0
     
     #Get total moment
     M0=zeros(len(mt_xx))
@@ -691,7 +729,7 @@ def write_model(home,project_name,run_name,source_name,model_name,sol,num):
     dip2=zeros(len(mt_xx))
     rake2=zeros(len(mt_xx))
     for k in range(len(mt_xx)):
-        mt=analysis.MT(mt_xx[k],mt_xy[k],mt_xz[k],mt_yy[k],mt_yz[k],mt_zz[k],1,1,1)
+        mt=analysis.MT(mt_xx[k],mt_xy[k],mt_xz[k],mt_yy[k],mt_yz[k],mt_zz[k],1,1,1,mt_style='xyz')
         mt.get_nodal_planes()
         NP1=mt.nodal_plane1
         NP2=mt.nodal_plane2
@@ -715,7 +753,7 @@ def write_model(home,project_name,run_name,source_name,model_name,sol,num):
 
 
 def run_inversion(home,project_name,run_name,source_name,model_name,GF_list,G_from_file,G_name,
-        reg_spatial,nsources,solver,weight=False,Ltype=0):
+        reg_spatial,nsources,solver,forceMT,mt,weight=False,Ltype=0):
     '''
     Assemble G and d, determine smoothing and run the inversion
     '''
@@ -735,7 +773,7 @@ def run_inversion(home,project_name,run_name,source_name,model_name,GF_list,G_fr
     d=inv.getdata(home,project_name,GF_list,decimate=None,bandpass=None)
 
     #Get GFs
-    G=getG(home,project_name,source_name,model_name,GF_list,G_from_file,G_name)
+    G=getG(home,project_name,source_name,model_name,GF_list,G_from_file,G_name,forceMT)
     
     #Get data weights
     if weight==True:
@@ -761,7 +799,10 @@ def run_inversion(home,project_name,run_name,source_name,model_name,GF_list,G_fr
         K=(G.T).dot(G)
     
     #Get regularization matrices (set to 0 matrix if not needed)
-    Ls=eye(nsources*6) 
+    if forceMT==False:
+        Ls=eye(nsources*6) 
+    else:
+        Ls=eye(nsources)
     print 'Nsources: '+str(nsources)
     Ninversion=len(reg_spatial)
 
@@ -787,7 +828,11 @@ def run_inversion(home,project_name,run_name,source_name,model_name,GF_list,G_fr
         print 'Running inversion '+str(kout+1)+' of '+str(Ninversion)+' at regularization levels: ls ='+repr(lambda_spatial)
         
         Kinv=K+(lambda_spatial**2)*LsLs
-        sol,res,rank,s=lstsq(Kinv,x)
+        
+        if solver=='lstsq':
+            sol,res,rank,s=lstsq(Kinv,x)
+        elif solver=='nnls':
+            sol,res=nnls(Kinv,squeeze(x.T))
 
         #Compute synthetics
         ds=dot(G,sol)
@@ -797,7 +842,7 @@ def run_inversion(home,project_name,run_name,source_name,model_name,GF_list,G_fr
         VR=inv.get_VR(home,project_name,GF_list,sol,d,ds,None)
 
         #Get moment
-        M0total,M0,Mw=get_moment(home,project_name,source_name,sol)
+        M0total,M0,Mw=get_moment(home,project_name,source_name,sol,forceMT)
 
         #Write log
         write_log(home,project_name,run_name,kout,lambda_spatial,
@@ -805,7 +850,7 @@ def run_inversion(home,project_name,run_name,source_name,model_name,GF_list,G_fr
         
         #Write output to file
         inv.write_synthetics(home,project_name,run_name,GF_list,G,sol,ds,kout,None)
-        write_model(home,project_name,run_name,source_name,model_name,sol,kout)
+        write_model(home,project_name,run_name,source_name,model_name,sol,kout,forceMT,mt)
         
         kout+=1
         dt1=datetime.now()-t1
