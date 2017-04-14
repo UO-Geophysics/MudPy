@@ -224,92 +224,112 @@ def make_parallel_synthetics(home,project_name,station_file,source_name,model_na
 
     
     #Make final output files for GPS
-    if insar==False:
-        with open(synth_path+'_Mxx.neu', 'w') as outfile:
-            outfile.write('# sta_name,src_num,lon_sta,lat_sta,lon_src,lat_src,z_src(km),n(m),e(m),u(m)\n')
-            for fname in filenames_Mxx:
-                with open(fname) as infile:
-                    for line in infile:
-                        outfile.write(line)
-                        
-        with open(synth_path+'_Mxy.neu', 'w') as outfile:
-            outfile.write('# sta_name,src_num,lon_sta,lat_sta,lon_src,lat_src,z_src(km),n(m),e(m),u(m)\n') 
-            for fname in filenames_Mxy:
-                with open(fname) as infile:
-                    for line in infile:
-                        outfile.write(line)
-                        
-        with open(synth_path+'_Mxz.neu', 'w') as outfile:
-            outfile.write('# sta_name,src_num,lon_sta,lat_sta,lon_src,lat_src,z_src(km),n(m),e(m),u(m)\n')
-            for fname in filenames_Mxz:
-                with open(fname) as infile:
-                    for line in infile:
-                        outfile.write(line)
-                        
-        with open(synth_path+'_Myy.neu', 'w') as outfile:
-            outfile.write('# sta_name,src_num,lon_sta,lat_sta,lon_src,lat_src,z_src(km),n(m),e(m),u(m)\n')
-            for fname in filenames_Myy:
-                with open(fname) as infile:
-                    for line in infile:
-                        outfile.write(line)
-                        
-        with open(synth_path+'_Myz.neu', 'w') as outfile:
-            outfile.write('# sta_name,src_num,lon_sta,lat_sta,lon_src,lat_src,z_src(km),n(m),e(m),u(m)\n')
-            for fname in filenames_Myz:
-                with open(fname) as infile:
-                    for line in infile:
-                        outfile.write(line)
-                        
-        with open(synth_path+'_Mzz.neu', 'w') as outfile:
-            outfile.write('# sta_name,src_num,lon_sta,lat_sta,lon_src,lat_src,z_src(km),n(m),e(m),u(m)\n')
-            for fname in filenames_Mzz:
-                with open(fname) as infile:
-                    for line in infile:
-                        outfile.write(line)
+    if forceMT==True:
+        if insar==False:
+            with open(synth_path+'_Mxx.neu', 'w') as outfile:
+                outfile.write('# sta_name,src_num,lon_sta,lat_sta,lon_src,lat_src,z_src(km),n(m),e(m),u(m)\n')
+                for fname in filenames_Mxx:
+                    with open(fname) as infile:
+                        for line in infile:
+                            outfile.write(line)
     
+        else: #Output for Insar
+            with open(synth_path+'_Mxx.los', 'w') as outfile:
+                outfile.write('# sta_name,src_num,lon_sta,lat_sta,lon_src,lat_src,z_src(km),los(m)\n')
+                for fname in filenames_Mxx:
+                    with open(fname) as infile:
+                        for line in infile:
+                            outfile.write(line)
+                            
 
-    else: #Output for Insar
-        with open(synth_path+'_Mxx.los', 'w') as outfile:
-            outfile.write('# sta_name,src_num,lon_sta,lat_sta,lon_src,lat_src,z_src(km),los(m)\n')
-            for fname in filenames_Mxx:
-                with open(fname) as infile:
-                    for line in infile:
-                        outfile.write(line)
-                        
-        with open(synth_path+'_Mxy.los', 'w') as outfile:
-            outfile.write('# sta_name,src_num,lon_sta,lat_sta,lon_src,lat_src,z_src(km),los(m)\n') 
-            for fname in filenames_Mxy:
-                with open(fname) as infile:
-                    for line in infile:
-                        outfile.write(line)
-                        
-        with open(synth_path+'_Mxz.los', 'w') as outfile:
-            outfile.write('# sta_name,src_num,lon_sta,lat_sta,lon_src,lat_src,z_src(km),los(m)\n')
-            for fname in filenames_Mxz:
-                with open(fname) as infile:
-                    for line in infile:
-                        outfile.write(line)
-                        
-        with open(synth_path+'_Myy.los', 'w') as outfile:
-            outfile.write('# sta_name,src_num,lon_sta,lat_sta,lon_src,lat_src,z_src(km),los(m)\n')
-            for fname in filenames_Myy:
-                with open(fname) as infile:
-                    for line in infile:
-                        outfile.write(line)
-                        
-        with open(synth_path+'_Myz.los', 'w') as outfile:
-            outfile.write('# sta_name,src_num,lon_sta,lat_sta,lon_src,lat_src,z_src(km),los(m)\n')
-            for fname in filenames_Myz:
-                with open(fname) as infile:
-                    for line in infile:
-                        outfile.write(line)
-                        
-        with open(synth_path+'_Mzz.los', 'w') as outfile:
-            outfile.write('# sta_name,src_num,lon_sta,lat_sta,lon_src,lat_src,z_src(km),los(m)\n')
-            for fname in filenames_Mzz:
-                with open(fname) as infile:
-                    for line in infile:
-                        outfile.write(line)
+        
+    else: #Stuff to do when you want all 6 MT components
+        if insar==False:
+            with open(synth_path+'_Mxx.neu', 'w') as outfile:
+                outfile.write('# sta_name,src_num,lon_sta,lat_sta,lon_src,lat_src,z_src(km),n(m),e(m),u(m)\n')
+                for fname in filenames_Mxx:
+                    with open(fname) as infile:
+                        for line in infile:
+                            outfile.write(line)
+                            
+            with open(synth_path+'_Mxy.neu', 'w') as outfile:
+                outfile.write('# sta_name,src_num,lon_sta,lat_sta,lon_src,lat_src,z_src(km),n(m),e(m),u(m)\n') 
+                for fname in filenames_Mxy:
+                    with open(fname) as infile:
+                        for line in infile:
+                            outfile.write(line)
+                            
+            with open(synth_path+'_Mxz.neu', 'w') as outfile:
+                outfile.write('# sta_name,src_num,lon_sta,lat_sta,lon_src,lat_src,z_src(km),n(m),e(m),u(m)\n')
+                for fname in filenames_Mxz:
+                    with open(fname) as infile:
+                        for line in infile:
+                            outfile.write(line)
+                            
+            with open(synth_path+'_Myy.neu', 'w') as outfile:
+                outfile.write('# sta_name,src_num,lon_sta,lat_sta,lon_src,lat_src,z_src(km),n(m),e(m),u(m)\n')
+                for fname in filenames_Myy:
+                    with open(fname) as infile:
+                        for line in infile:
+                            outfile.write(line)
+                            
+            with open(synth_path+'_Myz.neu', 'w') as outfile:
+                outfile.write('# sta_name,src_num,lon_sta,lat_sta,lon_src,lat_src,z_src(km),n(m),e(m),u(m)\n')
+                for fname in filenames_Myz:
+                    with open(fname) as infile:
+                        for line in infile:
+                            outfile.write(line)
+                            
+            with open(synth_path+'_Mzz.neu', 'w') as outfile:
+                outfile.write('# sta_name,src_num,lon_sta,lat_sta,lon_src,lat_src,z_src(km),n(m),e(m),u(m)\n')
+                for fname in filenames_Mzz:
+                    with open(fname) as infile:
+                        for line in infile:
+                            outfile.write(line)
+        
+    
+        else: #Output for Insar
+            with open(synth_path+'_Mxx.los', 'w') as outfile:
+                outfile.write('# sta_name,src_num,lon_sta,lat_sta,lon_src,lat_src,z_src(km),los(m)\n')
+                for fname in filenames_Mxx:
+                    with open(fname) as infile:
+                        for line in infile:
+                            outfile.write(line)
+                            
+            with open(synth_path+'_Mxy.los', 'w') as outfile:
+                outfile.write('# sta_name,src_num,lon_sta,lat_sta,lon_src,lat_src,z_src(km),los(m)\n') 
+                for fname in filenames_Mxy:
+                    with open(fname) as infile:
+                        for line in infile:
+                            outfile.write(line)
+                            
+            with open(synth_path+'_Mxz.los', 'w') as outfile:
+                outfile.write('# sta_name,src_num,lon_sta,lat_sta,lon_src,lat_src,z_src(km),los(m)\n')
+                for fname in filenames_Mxz:
+                    with open(fname) as infile:
+                        for line in infile:
+                            outfile.write(line)
+                            
+            with open(synth_path+'_Myy.los', 'w') as outfile:
+                outfile.write('# sta_name,src_num,lon_sta,lat_sta,lon_src,lat_src,z_src(km),los(m)\n')
+                for fname in filenames_Myy:
+                    with open(fname) as infile:
+                        for line in infile:
+                            outfile.write(line)
+                            
+            with open(synth_path+'_Myz.los', 'w') as outfile:
+                outfile.write('# sta_name,src_num,lon_sta,lat_sta,lon_src,lat_src,z_src(km),los(m)\n')
+                for fname in filenames_Myz:
+                    with open(fname) as infile:
+                        for line in infile:
+                            outfile.write(line)
+                            
+            with open(synth_path+'_Mzz.los', 'w') as outfile:
+                outfile.write('# sta_name,src_num,lon_sta,lat_sta,lon_src,lat_src,z_src(km),los(m)\n')
+                for fname in filenames_Mzz:
+                    with open(fname) as infile:
+                        for line in infile:
+                            outfile.write(line)
                         
     
 
@@ -506,17 +526,19 @@ def makeG(home,project_name,source_name,model_name,station_file,gftype,forceMT):
     elif gftype.lower()=='insar': #Make matrix of insar LOS GFs
         #Load the synthetics files
         Mxx=genfromtxt(syn_path+'_Mxx.los')
-        Mxy=genfromtxt(syn_path+'_Mxy.los')
-        Mxz=genfromtxt(syn_path+'_Mxz.los')
-        Myy=genfromtxt(syn_path+'_Myy.los')
-        Myz=genfromtxt(syn_path+'_Myz.los')
-        Mzz=genfromtxt(syn_path+'_Mzz.los')
         Mxx_sta=genfromtxt(syn_path+'_Mxx.los',usecols=0,dtype='S')
-        Mxy_sta=genfromtxt(syn_path+'_Mxy.los',usecols=0,dtype='S')
-        Mxz_sta=genfromtxt(syn_path+'_Mxz.los',usecols=0,dtype='S')
-        Myy_sta=genfromtxt(syn_path+'_Myy.los',usecols=0,dtype='S')
-        Myz_sta=genfromtxt(syn_path+'_Myz.los',usecols=0,dtype='S')
-        Mzz_sta=genfromtxt(syn_path+'_Mzz.los',usecols=0,dtype='S')
+        if forceMT==False:
+            Mxy=genfromtxt(syn_path+'_Mxy.los')
+            Mxz=genfromtxt(syn_path+'_Mxz.los')
+            Myy=genfromtxt(syn_path+'_Myy.los')
+            Myz=genfromtxt(syn_path+'_Myz.los')
+            Mzz=genfromtxt(syn_path+'_Mzz.los')
+            Mxy_sta=genfromtxt(syn_path+'_Mxy.los',usecols=0,dtype='S')
+            Mxz_sta=genfromtxt(syn_path+'_Mxz.los',usecols=0,dtype='S')
+            Myy_sta=genfromtxt(syn_path+'_Myy.los',usecols=0,dtype='S')
+            Myz_sta=genfromtxt(syn_path+'_Myz.los',usecols=0,dtype='S')
+            Mzz_sta=genfromtxt(syn_path+'_Mzz.los',usecols=0,dtype='S')
+        
         src_list=unique(Mxx[:,1])
         
         for ksta in range(Nsta):
@@ -538,17 +560,19 @@ def makeG(home,project_name,source_name,model_name,station_file,gftype,forceMT):
                 
                 #Find the position ine ach file of this station/subfault pairs position
                 ixx=where((Mxx_sta==sta) & (Mxx[:,1]==src))[0]
-                ixy=where((Mxy_sta==sta) & (Mxy[:,1]==src))[0]
-                ixz=where((Mxz_sta==sta) & (Mxz[:,1]==src))[0]
-                iyy=where((Myy_sta==sta) & (Myy[:,1]==src))[0]
-                iyz=where((Myz_sta==sta) & (Myz[:,1]==src))[0]
-                izz=where((Mzz_sta==sta) & (Mzz[:,1]==src))[0]
                 neu_xx=Mxx[ixx,7]
-                neu_xy=Mxy[ixy,7]
-                neu_xz=Mxz[ixz,7]
-                neu_yy=Myy[iyy,7]
-                neu_yz=Myz[iyz,7]
-                neu_zz=Mzz[izz,7]
+                
+                if forceMT==False:
+                    ixy=where((Mxy_sta==sta) & (Mxy[:,1]==src))[0]
+                    ixz=where((Mxz_sta==sta) & (Mxz[:,1]==src))[0]
+                    iyy=where((Myy_sta==sta) & (Myy[:,1]==src))[0]
+                    iyz=where((Myz_sta==sta) & (Myz[:,1]==src))[0]
+                    izz=where((Mzz_sta==sta) & (Mzz[:,1]==src))[0]
+                    neu_xy=Mxy[ixy,7]
+                    neu_xz=Mxz[ixz,7]
+                    neu_yy=Myy[iyy,7]
+                    neu_yz=Myz[iyz,7]
+                    neu_zz=Mzz[izz,7]
                     
                 #Place into G matrix
                 # LOS

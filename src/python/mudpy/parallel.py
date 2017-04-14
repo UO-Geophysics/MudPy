@@ -615,181 +615,206 @@ def run_parallel_synthetics_mt3d(home,project_name,station_file,model_name,force
             
             #Form command for external call (remember syn.c and mudpy coordiante systems are not the same)
             # order of elelments in syn.c is M0/Mxx/Mxy/Mxz/Myy/Myz/Mzz
-            if forceMT==False:
+            
+            if forceMT==True: #Only run one thing
+                command_Mxx="syn -M"+str(M0)+"/"+str(Mxx)+"/"+str(Mxy)+"/"+str(Mxz)+"/"+str(Myy)+"/"+str(Myz)+"/"+str(Mzz)+\
+                    " -A"+str(az[k])+" -P"  
+                    
+                command_Mxx=split(command_Mxx) #Lexical split
+            
+                #Make system calls, one for each MT component (rememebr to delete file when youa re done
+                ps=subprocess.Popen(['printf',inpipe],stdout=subprocess.PIPE)  #This is the statics pipe, pint stdout to syn's stdin
+                p=subprocess.Popen(command_Mxx,stdin=ps.stdout,stdout=open(tmp_small_Mxx,'w'))     
+                p.communicate()  
+                p.wait()        
+                
+                #Rotate radial/transverse to East/North, correct vertical and scale to m
+                statics=loadtxt(tmp_small_Mxx)
+                u=statics[2]/100
+                r=statics[3]/100
+                t=statics[4]/100
+                ntemp,etemp=rt2ne(array([r,r]),array([t,t]),az[k])
+                #now project onto LOS if doing insar
+                if insar==True:
+                    los_mt=los.dot(array([ntemp[0],etemp[0],u]))
+                    line='%s\t%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\n' % (staname[k],rjust(str(subfault),5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,los_mt)
+                else:
+                    n=ntemp[0]
+                    e=etemp[0]
+                    line='%s\t%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\t%.4e\t%.4e\n' % (staname[k],rjust(str(subfault),5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,n,e,u)
+                #write to file
+                f_Mxx.write(line)      
+            
+            else: #Stuff to dow he computing entire MT
                 Mxx=1 ; Myy=0 ; Mzz=0 ;Mxy=0; Mxz=0; Myz=0
-            command_Mxx="syn -M"+str(M0)+"/"+str(Mxx)+"/"+str(Mxy)+"/"+str(Mxz)+"/"+str(Myy)+"/"+str(Myz)+"/"+str(Mzz)+\
-                    " -A"+str(az[k])+" -P"
-            
-            if forceMT==False:
+                command_Mxx="syn -M"+str(M0)+"/"+str(Mxx)+"/"+str(Mxy)+"/"+str(Mxz)+"/"+str(Myy)+"/"+str(Myz)+"/"+str(Mzz)+\
+                        " -A"+str(az[k])+" -P"
+                
                 Mxx=0 ; Myy=0 ; Mzz=0 ;Mxy=1; Mxz=0; Myz=0
-            command_Mxy="syn -M"+str(M0)+"/"+str(Mxx)+"/"+str(Mxy)+"/"+str(Mxz)+"/"+str(Myy)+"/"+str(Myz)+"/"+str(Mzz)+\
-                    " -A"+str(az[k])+" -P"
-                    
-            if forceMT==False:
+                command_Mxy="syn -M"+str(M0)+"/"+str(Mxx)+"/"+str(Mxy)+"/"+str(Mxz)+"/"+str(Myy)+"/"+str(Myz)+"/"+str(Mzz)+\
+                        " -A"+str(az[k])+" -P"
+                        
                 Mxx=0 ; Myy=0 ; Mzz=0 ;Mxy=0; Mxz=1; Myz=0
-            command_Mxz="syn -M"+str(M0)+"/"+str(Mxx)+"/"+str(Mxy)+"/"+str(Mxz)+"/"+str(Myy)+"/"+str(Myz)+"/"+str(Mzz)+\
-                    " -A"+str(az[k])+" -P"
-            
-            if forceMT==False:        
+                command_Mxz="syn -M"+str(M0)+"/"+str(Mxx)+"/"+str(Mxy)+"/"+str(Mxz)+"/"+str(Myy)+"/"+str(Myz)+"/"+str(Mzz)+\
+                        " -A"+str(az[k])+" -P"
+                       
                 Mxx=0 ; Myy=1 ; Mzz=0 ;Mxy=0; Mxz=0; Myz=0
-            command_Myy="syn -M"+str(M0)+"/"+str(Mxx)+"/"+str(Mxy)+"/"+str(Mxz)+"/"+str(Myy)+"/"+str(Myz)+"/"+str(Mzz)+\
-                    " -A"+str(az[k])+" -P"
-                    
-            if forceMT==False:
+                command_Myy="syn -M"+str(M0)+"/"+str(Mxx)+"/"+str(Mxy)+"/"+str(Mxz)+"/"+str(Myy)+"/"+str(Myz)+"/"+str(Mzz)+\
+                        " -A"+str(az[k])+" -P"
+                        
                 Mxx=0 ; Myy=0 ; Mzz=0 ;Mxy=0; Mxz=0; Myz=1
-            command_Myz="syn -M"+str(M0)+"/"+str(Mxx)+"/"+str(Mxy)+"/"+str(Mxz)+"/"+str(Myy)+"/"+str(Myz)+"/"+str(Mzz)+\
-                    " -A"+str(az[k])+" -P"
-                    
-            if forceMT==False:
+                command_Myz="syn -M"+str(M0)+"/"+str(Mxx)+"/"+str(Mxy)+"/"+str(Mxz)+"/"+str(Myy)+"/"+str(Myz)+"/"+str(Mzz)+\
+                        " -A"+str(az[k])+" -P"
+                        
                 Mxx=0 ; Myy=0 ; Mzz=1 ;Mxy=0; Mxz=0; Myz=0
-            command_Mzz="syn -M"+str(M0)+"/"+str(Mxx)+"/"+str(Mxy)+"/"+str(Mxz)+"/"+str(Myy)+"/"+str(Myz)+"/"+str(Mzz)+\
-                    " -A"+str(az[k])+" -P"
-                    
-            command_Mxx=split(command_Mxx) #Lexical split
-            command_Mxy=split(command_Mxy)
-            command_Mxz=split(command_Mxz)
-            command_Myy=split(command_Myy)
-            command_Myz=split(command_Myz)
-            command_Mzz=split(command_Mzz)
+                command_Mzz="syn -M"+str(M0)+"/"+str(Mxx)+"/"+str(Mxy)+"/"+str(Mxz)+"/"+str(Myy)+"/"+str(Myz)+"/"+str(Mzz)+\
+                        " -A"+str(az[k])+" -P"
+                        
+                command_Mxx=split(command_Mxx) #Lexical split
+                command_Mxy=split(command_Mxy)
+                command_Mxz=split(command_Mxz)
+                command_Myy=split(command_Myy)
+                command_Myz=split(command_Myz)
+                command_Mzz=split(command_Mzz)
             
-            #Make system calls, one for each MT component (rememebr to delete file when youa re done
-            ps=subprocess.Popen(['printf',inpipe],stdout=subprocess.PIPE)  #This is the statics pipe, pint stdout to syn's stdin
-            p=subprocess.Popen(command_Mxx,stdin=ps.stdout,stdout=open(tmp_small_Mxx,'w'))     
-            p.communicate()  
-            p.wait()
-
-            ps=subprocess.Popen(['printf',inpipe],stdout=subprocess.PIPE)  #This is the statics pipe, pint stdout to syn's stdin
-            p=subprocess.Popen(command_Mxy,stdin=ps.stdout,stdout=open(tmp_small_Mxy,'w'))     
-            p.communicate()  
-            p.wait()
-
-            ps=subprocess.Popen(['printf',inpipe],stdout=subprocess.PIPE)  #This is the statics pipe, pint stdout to syn's stdin
-            p=subprocess.Popen(command_Mxz,stdin=ps.stdout,stdout=open(tmp_small_Mxz,'w'))     
-            p.communicate()  
-            p.wait()
-
-            ps=subprocess.Popen(['printf',inpipe],stdout=subprocess.PIPE)  #This is the statics pipe, pint stdout to syn's stdin
-            p=subprocess.Popen(command_Myy,stdin=ps.stdout,stdout=open(tmp_small_Myy,'w'))     
-            p.communicate()  
-            p.wait()
-
-            ps=subprocess.Popen(['printf',inpipe],stdout=subprocess.PIPE)  #This is the statics pipe, pint stdout to syn's stdin
-            p=subprocess.Popen(command_Myz,stdin=ps.stdout,stdout=open(tmp_small_Myz,'w'))     
-            p.communicate()  
-            p.wait()
-
-            ps=subprocess.Popen(['printf',inpipe],stdout=subprocess.PIPE)  #This is the statics pipe, pint stdout to syn's stdin
-            p=subprocess.Popen(command_Mzz,stdin=ps.stdout,stdout=open(tmp_small_Mzz,'w'))     
-            p.communicate()  
-            p.wait()
-                            
+                #Make system calls, one for each MT component (rememebr to delete file when youa re done
+                ps=subprocess.Popen(['printf',inpipe],stdout=subprocess.PIPE)  #This is the statics pipe, pint stdout to syn's stdin
+                p=subprocess.Popen(command_Mxx,stdin=ps.stdout,stdout=open(tmp_small_Mxx,'w'))     
+                p.communicate()  
+                p.wait()
+    
+                ps=subprocess.Popen(['printf',inpipe],stdout=subprocess.PIPE)  #This is the statics pipe, pint stdout to syn's stdin
+                p=subprocess.Popen(command_Mxy,stdin=ps.stdout,stdout=open(tmp_small_Mxy,'w'))     
+                p.communicate()  
+                p.wait()
+    
+                ps=subprocess.Popen(['printf',inpipe],stdout=subprocess.PIPE)  #This is the statics pipe, pint stdout to syn's stdin
+                p=subprocess.Popen(command_Mxz,stdin=ps.stdout,stdout=open(tmp_small_Mxz,'w'))     
+                p.communicate()  
+                p.wait()
+    
+                ps=subprocess.Popen(['printf',inpipe],stdout=subprocess.PIPE)  #This is the statics pipe, pint stdout to syn's stdin
+                p=subprocess.Popen(command_Myy,stdin=ps.stdout,stdout=open(tmp_small_Myy,'w'))     
+                p.communicate()  
+                p.wait()
+    
+                ps=subprocess.Popen(['printf',inpipe],stdout=subprocess.PIPE)  #This is the statics pipe, pint stdout to syn's stdin
+                p=subprocess.Popen(command_Myz,stdin=ps.stdout,stdout=open(tmp_small_Myz,'w'))     
+                p.communicate()  
+                p.wait()
+    
+                ps=subprocess.Popen(['printf',inpipe],stdout=subprocess.PIPE)  #This is the statics pipe, pint stdout to syn's stdin
+                p=subprocess.Popen(command_Mzz,stdin=ps.stdout,stdout=open(tmp_small_Mzz,'w'))     
+                p.communicate()  
+                p.wait()
+                                
+                
+                #Rotate radial/transverse to East/North, correct vertical and scale to m
+                statics=loadtxt(tmp_small_Mxx)
+                u=statics[2]/100
+                r=statics[3]/100
+                t=statics[4]/100
+                ntemp,etemp=rt2ne(array([r,r]),array([t,t]),az[k])
+                #now project onto LOS if doing insar
+                if insar==True:
+                    los_mt=los.dot(array([ntemp[0],etemp[0],u]))
+                    line='%s\t%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\n' % (staname[k],rjust(str(subfault),5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,los_mt)
+                else:
+                    n=ntemp[0]
+                    e=etemp[0]
+                    line='%s\t%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\t%.4e\t%.4e\n' % (staname[k],rjust(str(subfault),5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,n,e,u)
+                #write to file
+                f_Mxx.write(line)
             
-            #Rotate radial/transverse to East/North, correct vertical and scale to m
-            statics=loadtxt(tmp_small_Mxx)
-            u=statics[2]/100
-            r=statics[3]/100
-            t=statics[4]/100
-            ntemp,etemp=rt2ne(array([r,r]),array([t,t]),az[k])
-            #now project onto LOS if doing insar
-            if insar==True:
-                los_mt=los.dot(array([ntemp[0],etemp[0],u]))
-                line='%s\t%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\n' % (staname[k],rjust(str(subfault),5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,los_mt)
-            else:
+                statics=loadtxt(tmp_small_Mxy)
+                u=statics[2]/100
+                r=statics[3]/100
+                t=statics[4]/100
+                ntemp,etemp=rt2ne(array([r,r]),array([t,t]),az[k])
                 n=ntemp[0]
                 e=etemp[0]
-                line='%s\t%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\t%.4e\t%.4e\n' % (staname[k],rjust(str(subfault),5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,n,e,u)
-            #write to file
-            f_Mxx.write(line)
-           
-            statics=loadtxt(tmp_small_Mxy)
-            u=statics[2]/100
-            r=statics[3]/100
-            t=statics[4]/100
-            ntemp,etemp=rt2ne(array([r,r]),array([t,t]),az[k])
-            n=ntemp[0]
-            e=etemp[0]
-            #now project onto LOS if doing insar
-            if insar==True:
-                los_mt=los.dot(array([ntemp[0],etemp[0],u]))
-                line='%s\t%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\n' % (staname[k],rjust(str(subfault),5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,los_mt)
-            else:
+                #now project onto LOS if doing insar
+                if insar==True:
+                    los_mt=los.dot(array([ntemp[0],etemp[0],u]))
+                    line='%s\t%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\n' % (staname[k],rjust(str(subfault),5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,los_mt)
+                else:
+                    n=ntemp[0]
+                    e=etemp[0]
+                    line='%s\t%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\t%.4e\t%.4e\n' % (staname[k],rjust(str(subfault),5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,n,e,u)
+                #write to file
+                f_Mxy.write(line)
+                
+                statics=loadtxt(tmp_small_Mxz)
+                u=statics[2]/100
+                r=statics[3]/100
+                t=statics[4]/100
+                ntemp,etemp=rt2ne(array([r,r]),array([t,t]),az[k])
                 n=ntemp[0]
                 e=etemp[0]
-                line='%s\t%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\t%.4e\t%.4e\n' % (staname[k],rjust(str(subfault),5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,n,e,u)
-            #write to file
-            f_Mxy.write(line)
+                #now project onto LOS if doing insar
+                if insar==True:
+                    los_mt=los.dot(array([ntemp[0],etemp[0],u]))
+                    line='%s\t%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\n' % (staname[k],rjust(str(subfault),5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,los_mt)
+                else:
+                    n=ntemp[0]
+                    e=etemp[0]
+                    line='%s\t%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\t%.4e\t%.4e\n' % (staname[k],rjust(str(subfault),5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,n,e,u)
+                #write to file
+                f_Mxz.write(line)
             
-            statics=loadtxt(tmp_small_Mxz)
-            u=statics[2]/100
-            r=statics[3]/100
-            t=statics[4]/100
-            ntemp,etemp=rt2ne(array([r,r]),array([t,t]),az[k])
-            n=ntemp[0]
-            e=etemp[0]
-            #now project onto LOS if doing insar
-            if insar==True:
-                los_mt=los.dot(array([ntemp[0],etemp[0],u]))
-                line='%s\t%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\n' % (staname[k],rjust(str(subfault),5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,los_mt)
-            else:
+                statics=loadtxt(tmp_small_Myy)
+                u=statics[2]/100
+                r=statics[3]/100
+                t=statics[4]/100
+                ntemp,etemp=rt2ne(array([r,r]),array([t,t]),az[k])
                 n=ntemp[0]
                 e=etemp[0]
-                line='%s\t%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\t%.4e\t%.4e\n' % (staname[k],rjust(str(subfault),5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,n,e,u)
-            #write to file
-            f_Mxz.write(line)
-           
-            statics=loadtxt(tmp_small_Myy)
-            u=statics[2]/100
-            r=statics[3]/100
-            t=statics[4]/100
-            ntemp,etemp=rt2ne(array([r,r]),array([t,t]),az[k])
-            n=ntemp[0]
-            e=etemp[0]
-            #now project onto LOS if doing insar
-            if insar==True:
-                los_mt=los.dot(array([ntemp[0],etemp[0],u]))
-                line='%s\t%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\n' % (staname[k],rjust(str(subfault),5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,los_mt)
-            else:
-                n=ntemp[0]
-                e=etemp[0]
-                line='%s\t%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\t%.4e\t%.4e\n' % (staname[k],rjust(str(subfault),5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,n,e,u)
-            #write to file
-            f_Myy.write(line)
-           
-            statics=loadtxt(tmp_small_Myz)
-            u=statics[2]/100
-            r=statics[3]/100
-            t=statics[4]/100
-            ntemp,etemp=rt2ne(array([r,r]),array([t,t]),az[k])
-            n=ntemp[0]
-            e=etemp[0]
-            #now project onto LOS if doing insar
-            if insar==True:
-                los_mt=los.dot(array([ntemp[0],etemp[0],u]))
-                line='%s\t%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\n' % (staname[k],rjust(str(subfault),5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,los_mt)
-            else:
-                n=ntemp[0]
-                e=etemp[0]
-                line='%s\t%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\t%.4e\t%.4e\n' % (staname[k],rjust(str(subfault),5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,n,e,u)
-            #write to file
-            f_Myz.write(line)
+                #now project onto LOS if doing insar
+                if insar==True:
+                    los_mt=los.dot(array([ntemp[0],etemp[0],u]))
+                    line='%s\t%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\n' % (staname[k],rjust(str(subfault),5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,los_mt)
+                else:
+                    n=ntemp[0]
+                    e=etemp[0]
+                    line='%s\t%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\t%.4e\t%.4e\n' % (staname[k],rjust(str(subfault),5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,n,e,u)
+                #write to file
+                f_Myy.write(line)
             
-            statics=loadtxt(tmp_small_Mzz)
-            u=statics[2]/100
-            r=statics[3]/100
-            t=statics[4]/100
-            ntemp,etemp=rt2ne(array([r,r]),array([t,t]),az[k])
-            n=ntemp[0]
-            e=etemp[0]
-            #now project onto LOS if doing insar
-            if insar==True:
-                los_mt=los.dot(array([ntemp[0],etemp[0],u]))
-                line='%s\t%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\n' % (staname[k],rjust(str(subfault),5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,los_mt)
-            else:
+                statics=loadtxt(tmp_small_Myz)
+                u=statics[2]/100
+                r=statics[3]/100
+                t=statics[4]/100
+                ntemp,etemp=rt2ne(array([r,r]),array([t,t]),az[k])
                 n=ntemp[0]
                 e=etemp[0]
-                line='%s\t%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\t%.4e\t%.4e\n' % (staname[k],rjust(str(subfault),5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,n,e,u)
-            #write to file
-            f_Mzz.write(line)
+                #now project onto LOS if doing insar
+                if insar==True:
+                    los_mt=los.dot(array([ntemp[0],etemp[0],u]))
+                    line='%s\t%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\n' % (staname[k],rjust(str(subfault),5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,los_mt)
+                else:
+                    n=ntemp[0]
+                    e=etemp[0]
+                    line='%s\t%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\t%.4e\t%.4e\n' % (staname[k],rjust(str(subfault),5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,n,e,u)
+                #write to file
+                f_Myz.write(line)
+                
+                statics=loadtxt(tmp_small_Mzz)
+                u=statics[2]/100
+                r=statics[3]/100
+                t=statics[4]/100
+                ntemp,etemp=rt2ne(array([r,r]),array([t,t]),az[k])
+                n=ntemp[0]
+                e=etemp[0]
+                #now project onto LOS if doing insar
+                if insar==True:
+                    los_mt=los.dot(array([ntemp[0],etemp[0],u]))
+                    line='%s\t%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\n' % (staname[k],rjust(str(subfault),5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,los_mt)
+                else:
+                    n=ntemp[0]
+                    e=etemp[0]
+                    line='%s\t%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\t%.4e\t%.4e\n' % (staname[k],rjust(str(subfault),5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,n,e,u)
+                #write to file
+                f_Mzz.write(line)
                       
     f_Mxx.close()
     f_Mxy.close()
