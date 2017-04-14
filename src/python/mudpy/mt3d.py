@@ -419,7 +419,7 @@ def makeG(home,project_name,source_name,model_name,station_file,gftype,forceMT):
         G: Partially assembled GF with all synthetics from a particular data type
     '''
     
-    from numpy import genfromtxt,loadtxt,zeros,array,inf,where,unique
+    from numpy import genfromtxt,loadtxt,zeros,array,inf,where,unique,argsort,arange
     from string import rjust
 
     
@@ -465,62 +465,71 @@ def makeG(home,project_name,source_name,model_name,station_file,gftype,forceMT):
         Myy_sta=genfromtxt(syn_path+'_Myy.neu',usecols=0,dtype='S')
         Myz_sta=genfromtxt(syn_path+'_Myz.neu',usecols=0,dtype='S')
         Mzz_sta=genfromtxt(syn_path+'_Mzz.neu',usecols=0,dtype='S')
-        src_list=unique(Mxx[:,1])
         
         for ksta in range(Nsta):
-            print 'Assembling static GFs for station '+staname[ksta]
+            
+            #Loop over stations
+            if ksta%10==0:
+                print '... working on station '+str(ksta)+' of '+str(Nsta)
+            
             #Initalize output variable
             if forceMT==False:
                 Gtemp=zeros([3,Nfaults*6])
             else:
                 Gtemp=zeros([3,Nfaults])
                 
-            #Loop over subfaults
-            for kfault in range(Nfaults):
-                if kfault%10==0:
-                    print '... working on subfault '+str(kfault)+' of '+str(Nfaults)
-                    
-                #what am I working on
-                sta=staname[ksta]
-                src=src_list[kfault]
-                
-                #Find the position ine ach file of this station/subfault pairs position
-                ixx=where((Mxx_sta==sta) & (Mxx[:,1]==src))[0]
-                ixy=where((Mxy_sta==sta) & (Mxy[:,1]==src))[0]
-                ixz=where((Mxz_sta==sta) & (Mxz[:,1]==src))[0]
-                iyy=where((Myy_sta==sta) & (Myy[:,1]==src))[0]
-                iyz=where((Myz_sta==sta) & (Myz[:,1]==src))[0]
-                izz=where((Mzz_sta==sta) & (Mzz[:,1]==src))[0]
-                neu_xx=Mxx[ixx,7:]
-                neu_xy=Mxy[ixy,7:]
-                neu_xz=Mxz[ixz,7:]
-                neu_yy=Myy[iyy,7:]
-                neu_yz=Myz[iyz,7:]
-                neu_zz=Mzz[izz,7:]
-                    
-                #Place into G matrix
-                if forceMT==False:
-                    #North
-                    Gtemp[0,6*kfault]=neu_xx[0,0]   ; Gtemp[0,6*kfault+1]=neu_xy[0,0] ; Gtemp[0,6*kfault+2]=neu_xz[0,0]
-                    Gtemp[0,6*kfault+3]=neu_yy[0,0] ; Gtemp[0,6*kfault+4]=neu_yz[0,0] ; Gtemp[0,6*kfault+5]=neu_zz[0,0]
-                    
-                    #East
-                    Gtemp[1,6*kfault]=neu_xx[0,1]   ; Gtemp[1,6*kfault+1]=neu_xy[0,1] ; Gtemp[1,6*kfault+2]=neu_xz[0,1]
-                    Gtemp[1,6*kfault+3]=neu_yy[0,1] ; Gtemp[1,6*kfault+4]=neu_yz[0,1] ; Gtemp[1,6*kfault+5]=neu_zz[0,1]
-                    
-                    #Up
-                    Gtemp[2,6*kfault]=neu_xx[0,2]   ; Gtemp[2,6*kfault+1]=neu_xy[0,2] ; Gtemp[2,6*kfault+2]=neu_xz[0,2]
-                    Gtemp[2,6*kfault+3]=neu_yy[0,2] ; Gtemp[2,6*kfault+4]=neu_yz[0,2] ; Gtemp[2,6*kfault+5]=neu_zz[0,2]
-                else:
-                    #North
-                    Gtemp[0,kfault]=neu_xx[0,0]
-                    #East
-                    Gtemp[1,kfault]=neu_xx[0,1]                 
-                    #Up
-                    Gtemp[2,kfault]=neu_xx[0,2]
-                
-            #Append to output matrix
-            G[ksta*3:ksta*3+3,:]=Gtemp   
+            #what am I working on
+            sta=staname[ksta]
+            
+            #Find the position ine ach file of allsubfaults for this station
+            i=where(Mxx_sta==sta)[0]
+            isort=argsort(Mxx[i,1])
+            neu_xx=Mxx[i[isort],7:10]
+            
+            i=where(Mxy_sta==sta)[0]
+            isort=argsort(Mxy[i,1])
+            neu_xy=Mxy[i[isort],7:10]
+            
+            i=where(Mxz_sta==sta)[0]
+            isort=argsort(Mxz[i,1])
+            neu_xz=Mxz[i[isort],7:10]
+            
+            i=where(Myy_sta==sta)[0]
+            isort=argsort(Myy[i,1])
+            neu_yy=Myy[i[isort],7:10]
+            
+            i=where(Myz_sta==sta)[0]
+            isort=argsort(Myz[i,1])
+            neu_yz=Myz[i[isort],7:10]
+            
+            i=where(Mzz_sta==sta)[0]
+            isort=argsort(Mzz[i,1])
+            neu_zz=Mzz[i[isort],7:10]
+            
+            ##Needs work
+            ##Place into G matrix
+            #if forceMT==False:
+            #    #North
+            #    Gtemp[0,6*kfault]=neu_xx[0,0]   ; Gtemp[0,6*kfault+1]=neu_xy[0,0] ; Gtemp[0,6*kfault+2]=neu_xz[0,0]
+            #    Gtemp[0,6*kfault+3]=neu_yy[0,0] ; Gtemp[0,6*kfault+4]=neu_yz[0,0] ; Gtemp[0,6*kfault+5]=neu_zz[0,0]
+            #    
+            #    #East
+            #    Gtemp[1,6*kfault]=neu_xx[0,1]   ; Gtemp[1,6*kfault+1]=neu_xy[0,1] ; Gtemp[1,6*kfault+2]=neu_xz[0,1]
+            #    Gtemp[1,6*kfault+3]=neu_yy[0,1] ; Gtemp[1,6*kfault+4]=neu_yz[0,1] ; Gtemp[1,6*kfault+5]=neu_zz[0,1]
+            #    
+            #    #Up
+            #    Gtemp[2,6*kfault]=neu_xx[0,2]   ; Gtemp[2,6*kfault+1]=neu_xy[0,2] ; Gtemp[2,6*kfault+2]=neu_xz[0,2]
+            #    Gtemp[2,6*kfault+3]=neu_yy[0,2] ; Gtemp[2,6*kfault+4]=neu_yz[0,2] ; Gtemp[2,6*kfault+5]=neu_zz[0,2]
+            #else:
+            #    #North
+            #    Gtemp[0,kfault]=neu_xx[0,0]
+            #    #East
+            #    Gtemp[1,kfault]=neu_xx[0,1]                 
+            #    #Up
+            #    Gtemp[2,kfault]=neu_xx[0,2]
+            #    
+            ##Append to output matrix
+            #G[ksta*3:ksta*3+3,:]=Gtemp   
         return G   
     
     elif gftype.lower()=='insar': #Make matrix of insar LOS GFs
@@ -539,48 +548,59 @@ def makeG(home,project_name,source_name,model_name,station_file,gftype,forceMT):
             Myz_sta=genfromtxt(syn_path+'_Myz.los',usecols=0,dtype='S')
             Mzz_sta=genfromtxt(syn_path+'_Mzz.los',usecols=0,dtype='S')
         
-        src_list=unique(Mxx[:,1])
         
         for ksta in range(Nsta):
-            print 'Assembling static GFs for station '+staname[ksta]
+            #Loop over stations
+            if ksta%10==0:
+                print '... working on station '+str(ksta)+' of '+str(Nsta)
+            
             #Initalize output variable
             if forceMT==False:
                 Gtemp=zeros([1,Nfaults*6])
             else:
                 Gtemp=zeros([1,Nfaults])
                 
-            #Loop over subfaults
-            for kfault in range(Nfaults):
-                if kfault%10==0:
-                    print '... working on subfault '+str(kfault)+' of '+str(Nfaults)
+            #what am I working on
+            sta=staname[ksta]
+            
+            #Find the position ine ach file of allsubfaults for this station
+            i=where(Mxx_sta==sta)[0]
+            isort=argsort(Mxx[i,1])
+            neu_xx=Mxx[i[isort],7]
+            
+            i=where(Mxy_sta==sta)[0]
+            isort=argsort(Mxy[i,1])
+            neu_xy=Mxy[i[isort],7]
+            
+            i=where(Mxz_sta==sta)[0]
+            isort=argsort(Mxz[i,1])
+            neu_xz=Mxz[i[isort],7]
+            
+            i=where(Myy_sta==sta)[0]
+            isort=argsort(Myy[i,1])
+            neu_yy=Myy[i[isort],7]
+            
+            i=where(Myz_sta==sta)[0]
+            isort=argsort(Myz[i,1])
+            neu_yz=Myz[i[isort],7]
+            
+            i=where(Mzz_sta==sta)[0]
+            isort=argsort(Mzz[i,1])
+            neu_zz=Mzz[i[isort],7]
                     
-                #what am I working on
-                sta=staname[ksta]
-                src=src_list[kfault]
-                
-                #Find the position ine ach file of this station/subfault pairs position
-                ixx=where((Mxx_sta==sta) & (Mxx[:,1]==src))[0]
-                neu_xx=Mxx[ixx,7]
-                
-                if forceMT==False:
-                    ixy=where((Mxy_sta==sta) & (Mxy[:,1]==src))[0]
-                    ixz=where((Mxz_sta==sta) & (Mxz[:,1]==src))[0]
-                    iyy=where((Myy_sta==sta) & (Myy[:,1]==src))[0]
-                    iyz=where((Myz_sta==sta) & (Myz[:,1]==src))[0]
-                    izz=where((Mzz_sta==sta) & (Mzz[:,1]==src))[0]
-                    neu_xy=Mxy[ixy,7]
-                    neu_xz=Mxz[ixz,7]
-                    neu_yy=Myy[iyy,7]
-                    neu_yz=Myz[iyz,7]
-                    neu_zz=Mzz[izz,7]
-                    
-                #Place into G matrix
-                # LOS
-                if forceMT==False:
-                    Gtemp[0,6*kfault]=neu_xx   ; Gtemp[0,6*kfault+1]=neu_xy ; Gtemp[0,6*kfault+2]=neu_xz
-                    Gtemp[0,6*kfault+3]=neu_yy ; Gtemp[0,6*kfault+4]=neu_yz ; Gtemp[0,6*kfault+5]=neu_zz
-                else:
-                    Gtemp[0,kfault]=neu_xx
+            #Place into G matrix
+            # LOS
+            if forceMT==False:
+                ixx=arange(0,Nfaults*6,6)
+                ixy=arange(1,Nfaults*6,6)
+                ixz=arange(2,Nfaults*6,6)
+                iyy=arange(3,Nfaults*6,6)
+                iyz=arange(4,Nfaults*6,6)
+                izz=arange(5,Nfaults*6,6)
+                Gtemp[0,ixx]=neu_xx   ; Gtemp[0,ixy]=neu_xy ; Gtemp[0,ixz]=neu_xz
+                Gtemp[0,iyy]=neu_yy ; Gtemp[0,iyz]=neu_yz ; Gtemp[0,izz]=neu_zz
+            else:
+                Gtemp[0,kfault]=neu_xx
 
                 
             #Append to output matrix
