@@ -534,19 +534,25 @@ def makeG(home,project_name,source_name,model_name,station_file,gftype,forceMT):
     
     elif gftype.lower()=='insar': #Make matrix of insar LOS GFs
         #Load the synthetics files
+        print '... loading Mxx'
         Mxx=genfromtxt(syn_path+'_Mxx.los')
         Mxx_sta=genfromtxt(syn_path+'_Mxx.los',usecols=0,dtype='S')
         if forceMT==False:
+            print '... loading Mxy'
             Mxy=genfromtxt(syn_path+'_Mxy.los')
-            Mxz=genfromtxt(syn_path+'_Mxz.los')
-            Myy=genfromtxt(syn_path+'_Myy.los')
-            Myz=genfromtxt(syn_path+'_Myz.los')
-            Mzz=genfromtxt(syn_path+'_Mzz.los')
             Mxy_sta=genfromtxt(syn_path+'_Mxy.los',usecols=0,dtype='S')
+            print '... loading Mxz'
+            Mxz=genfromtxt(syn_path+'_Mxz.los')
             Mxz_sta=genfromtxt(syn_path+'_Mxz.los',usecols=0,dtype='S')
+            print '... loading Myy'
+            Myy=genfromtxt(syn_path+'_Myy.los')
             Myy_sta=genfromtxt(syn_path+'_Myy.los',usecols=0,dtype='S')
+            print '... loading Myz'
+            Myz=genfromtxt(syn_path+'_Myz.los')
             Myz_sta=genfromtxt(syn_path+'_Myz.los',usecols=0,dtype='S')
-            Mzz_sta=genfromtxt(syn_path+'_Mzz.los',usecols=0,dtype='S')
+            print '... loading Mzz'
+            Mzz=genfromtxt(syn_path+'_Mzz.los')
+            Mzz_sta=genfromtxt(syn_path+'_Mzz.los',usecols=0,dtype='S')     
         
         
         for ksta in range(Nsta):
@@ -836,11 +842,18 @@ def run_inversion(home,project_name,run_name,source_name,model_name,GF_list,G_fr
         x=WG.transpose().dot(wd)
         print 'Computing G\'G'
         K=(WG.T).dot(WG)
+        #And cleanup
+        W=None
+        WG=None
+        wd=None
     else:
         #Define inversion quantities if no weightd
         x=G.transpose().dot(d)
         print 'Computing G\'G'
         K=(G.T).dot(G)
+    
+    #Cleanup
+    #G=None 
     
     #Get regularization matrices (set to 0 matrix if not needed)
     if forceMT==False:

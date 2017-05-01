@@ -219,7 +219,7 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
         print 'Processor '+str(rank)+' is working on subfault '+str(int(source[0]))+' and '+str(len(d))+' stations '
         for k in range(len(d)):
             if static==0: #Compute full waveforms
-                diststr='%.3f' % d[k] #Need current distance in string form for external call
+                diststr='%.6f' % d[k] #Need current distance in string form for external call
                 #Form the strings to be used for the system calls according to user desired options
                 if integrate==1: #Make displ.
                     #First Stike-Slip GFs
@@ -894,8 +894,8 @@ if __name__ == '__main__':
         forceMT=sys.argv[6]
         if forceMT=='True':
             forceMT=True
-        elif insar=='False':
-            forceMTr=False
+        elif forceMT=='False':
+            forceMT=False
         Mxx=float(sys.argv[7])
         Mxy=float(sys.argv[8])
         Mxz=float(sys.argv[9])
@@ -903,6 +903,7 @@ if __name__ == '__main__':
         Myz=float(sys.argv[11])
         Mzz=float(sys.argv[12])
         mt=[Mxx,Mxy,Mxz,Myy,Myz,Mzz]
+        
         insar=sys.argv[13]
         if insar=='True':
             insar=True
