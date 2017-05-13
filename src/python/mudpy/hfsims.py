@@ -93,6 +93,9 @@ def stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,model_
             #And finally multiply everything together to get the subfault amplitude spectrum
             A=C*S*G*P
             
+            #Generate windowed time series
+            w=windowed_gaussian(duration,hf_dt,window_type='saragoni_hart')
+            
                         
                         
 def get_local_rupture_speed(zs,beta,rise_time_depths): 
@@ -221,3 +224,35 @@ def get_attenuation(f,structure,ray,Qexp):
     Q=exp(-pi*weightedQ*f**(1-Qexp))
     
     return Q
+
+
+def windowed_gaussian(duration,hf_dt,window_type='saragoni_hart',M=5.0,dist_in_km=50.):
+    '''
+    Get a gaussian white noise time series and window it
+    '''
+    
+    from numpy.random import normal
+    from numpy import log,exp,arange
+    from scipy.special import gamma
+    import Cua2008
+    
+    mean=0.0
+    std=1.0
+    num_samples = int(duration/hf_dt)
+    t=arange(0,duration,hf_dt)
+    noise = normal(mean, std, size=num_samples)
+    
+    if window_type=='saragoni_hart':
+        epsilon=0.2
+        eta=0.05
+        b=-epsilon*log(eta)/(1+eta*(log(epsilon)-1))
+        c=b/(epsilon*duration)
+        a=(((2*c)**(2*b+1))/gamma(2*b+1))**0.5
+        window=a*t**b*exp(-c*t)
+    elif window_type=='cua':
+        TT=0
+        window=Cua2008.envelope(M,dist_in_km,t,TT,Pcoeff=0,Scoeff=12)
+        
+    
+    
+    
