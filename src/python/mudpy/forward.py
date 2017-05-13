@@ -342,7 +342,7 @@ def hf_waveforms(home,project_name,fault_name,rupture_list,GF_list,
                                                          
                                                                                            
 def stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,model_name,
-        rise_time_depths,hf_dt=0.02,stress_parameter=50e5,kappa=0.04,Qexp=0.6): 
+        rise_time_depths,hf_dt=0.01,stress_parameter=50e5,kappa=0.04,Qexp=0.6): 
     '''
     Run stochastic HF sims
     '''
@@ -420,9 +420,14 @@ def stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,model_
             #get quarter wavelength amplificationf actors
             I=get_amplification_factors(f,structure,zs,beta,rho)
             
-            #Get ray paths for alld irect S arrivals
+            #Get ray paths for all direct S arrivals
             paths=velmod.get_ray_paths(zs+taup_perturb,dist_in_degs,phase_list=['S','s'])
+            
+            #Get attenuation due to geometrical spreading (from the path length)
             path_length=get_path_length(paths[0],zs,dist_in_degs)
+            
+            #Get effect of intrinsic attenuation for that ray (path integrated)
+            Q=get_attenuation(f,structure,paths[0],Qexp)
             
                         
                         
@@ -526,7 +531,31 @@ def get_path_length(ray,zs,dist_in_degs):
     
     return path_length
     
+
+def get_attenuation(f,structure,ray,Qexp):
+    '''
+    Get effect of intrinsic attenuation along the ray path
+    '''
     
+    from numpy import diff,zeros,exp,pi
+    
+    time=ray.path['time']
+    time_in_layer=diff(time)
+    depth=ray.path['depth']
+    
+    Qp=zeros(len(time_in_layer))
+    Qs=zeros(len(time_in_layer))
+    
+    for k in range(len(Qp)):
+        Qp[k],Qs[k]=get_Q(structure,depth[k])
+        
+    #Get the travel tiem weighted sum
+    weightedQ=sum(time_in_layer/Qs)
+    
+    #get frequency dependence
+    Q=exp(-pi*weightedQ*f**(1-Qexp))
+    
+    return Q
 
 
 
@@ -1338,6 +1367,39 @@ def get_mu(structure,zs,return_beta=False):
         return mu
     else: 
         return mu,beta
+        
+        
+def get_Q(structure,zs,perturb=0.0001):
+    '''
+    Look in structure model return Qp,Qs
+    
+    IN:
+        structure: Array with velocity structure information
+        zs: depth in km at which you want to compute mu
+        
+    OUT:
+        Qp and Qs
+    '''
+    from numpy import nonzero
+    
+    if len(structure)>1: #Model is more than jsut the halfspace
+        Z=structure[:,0].cumsum()
+        #Which layer do I want?
+        i=nonzero(zs>Z)[0]
+        if i.size==0: #It's in top layer
+            imu=0
+        else:
+            imu=max(i)+1
+        if imu>=structure.shape[0]:
+            imu=imu-1#It's int he half-space
+        Qp=structure[imu,5]
+        Qs=structure[imu,4]
+    else: #Model is a halfspace
+        Qp=structure[0,5]
+        Qp=structure[0,4]
+    
+    return Qp,Qs
+        
     
 def get_mu_and_area(home,project_name,fault_name,model_name):
     
