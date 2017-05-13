@@ -350,10 +350,16 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tsunami,td
     if gftype.lower()=='disp' or gftype.lower()=='vel':  #Full waveforms
         if gftype.lower()=='disp':
             vord='disp'
-            BP=bandpass[0]
+            if bandpass == None:
+                BP=None
+            else:
+                BP=bandpass[0]
         else:
             vord='vel'
-            BP=bandpass[1]
+            if bandpass == None:
+                BP=None
+            else:
+                BP=bandpass[1]
             tsunami=False
         if first_window==True: #Read in GFs from file
             ktrace=0

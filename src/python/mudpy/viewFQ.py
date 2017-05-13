@@ -1810,29 +1810,29 @@ def record_section(home,project_name,GF_list,rupture,factor=10):
         #Get ray arrivals
         deg=locations2degrees(hypo[1],hypo[0],lonlat[k,1],lonlat[k,0])
         
-        # Ray trace
-        try: #This is to deal with some weird bug in obspy.TauP
-            arrivals = velmod.get_travel_times(source_depth_in_km=hypo[2],distance_in_degree=deg,phase_list=['P','Pn','S','Sn','p','s'])
-        except:
-            print 'No phases for '+rupture
-            plt.close()
-            return
+        ## Ray trace
+        #try: #This is to deal with some weird bug in obspy.TauP
+        #    arrivals = velmod.get_travel_times(source_depth_in_km=hypo[2],distance_in_degree=deg,phase_list=['P','Pn','S','Sn','p','s'])
+        #except:
+        #    print 'No phases for '+rupture
+        #    plt.close()
+        #    return
         
-        #Determine P and S arrivals
-        for kphase in range(len(arrivals)):
-            if 'P' == arrivals[kphase].name or 'p' == arrivals[kphase].name or 'Pn' == arrivals[kphase].name:
-                if arrivals[kphase].time<ptime[k]:
-                    ptime[k]=arrivals[kphase].time
-            if 'S' == arrivals[kphase].name or 's' == arrivals[kphase].name or 'Sn' == arrivals[kphase].name:
-                if arrivals[kphase].time<stime[k]:
-                    stime[k]=arrivals[kphase].time
+        ##Determine P and S arrivals
+        #for kphase in range(len(arrivals)):
+        #    if 'P' == arrivals[kphase].name or 'p' == arrivals[kphase].name or 'Pn' == arrivals[kphase].name:
+        #        if arrivals[kphase].time<ptime[k]:
+        #            ptime[k]=arrivals[kphase].time
+        #    if 'S' == arrivals[kphase].name or 's' == arrivals[kphase].name or 'Sn' == arrivals[kphase].name:
+        #        if arrivals[kphase].time<stime[k]:
+        #            stime[k]=arrivals[kphase].time
     
     #plot on figure
     plt.figure(figsize=(18,10))
     
     plt.subplot(131)
-    plt.scatter(ptime,d,c='b',marker='|',s=80,lw=1.5)     
-    plt.scatter(stime,d,c='r',marker='|',s=80,lw=1.5)    
+    #plt.scatter(ptime,d,c='b',marker='|',s=80,lw=1.5)     
+    #plt.scatter(stime,d,c='r',marker='|',s=80,lw=1.5)    
     for k in range(len(sta)):
         plt.plot(N[k].times(),N[k].data,'k',lw=0.5)         
     #After axis adjsutments
@@ -1851,8 +1851,8 @@ def record_section(home,project_name,GF_list,rupture,factor=10):
     plt.title('North')
     
     plt.subplot(132)
-    plt.scatter(ptime,d,c='b',marker='|',s=80,lw=1.5)     
-    plt.scatter(stime,d,c='r',marker='|',s=80,lw=1.5)    
+    #plt.scatter(ptime,d,c='b',marker='|',s=80,lw=1.5)     
+    #plt.scatter(stime,d,c='r',marker='|',s=80,lw=1.5)    
     for k in range(len(sta)):
         plt.plot(E[k].times(),E[k].data,'k',lw=0.5)         
     #After axis adjsutments
@@ -1871,8 +1871,8 @@ def record_section(home,project_name,GF_list,rupture,factor=10):
     plt.title('East')
     
     plt.subplot(133)
-    plt.scatter(ptime,d,c='b',marker='|',s=80,lw=1.5)     
-    plt.scatter(stime,d,c='r',marker='|',s=80,lw=1.5)    
+    #plt.scatter(ptime,d,c='b',marker='|',s=80,lw=1.5)     
+    #plt.scatter(stime,d,c='r',marker='|',s=80,lw=1.5)    
     for k in range(len(sta)):
         plt.plot(Z[k].times(),Z[k].data,'k',lw=0.5)         
     #After axis adjsutments
