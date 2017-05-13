@@ -8,6 +8,7 @@ def stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,model_
     from pyproj import Geod
     from obspy.geodetics import kilometer2degrees
     from obspy.taup import taup_create,TauPyModel
+    from mudpy.forward import get_mu
     
     #Load the source
     fault=genfromtxt(rupture_name)    
