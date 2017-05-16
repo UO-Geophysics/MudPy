@@ -312,8 +312,8 @@ def waveforms_fakequakes(home,project_name,fault_name,rupture_list,GF_list,
         
                 
 def hf_waveforms(home,project_name,fault_name,rupture_list,GF_list,
-                model_name,run_name,dt,NFFT,G_from_file,G_name,source_time_function='dreger',
-                stf_falloff_rate=4.0):
+                model_name,run_name,dt,NFFT,G_from_file,G_name,rise_time_depths,
+                source_time_function='dreger',stf_falloff_rate=4.0,hf_dt=0.02):
     '''
     Make semistochastic high frequency accelerograms
     '''                        
@@ -334,14 +334,140 @@ def hf_waveforms(home,project_name,fault_name,rupture_list,GF_list,
         #Get epicentral time
         epicenter,time_epi=read_fakequakes_hypo_time(home,project_name,rupture_name)
         
-        waveforms=hfsims.stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,model_name,hf_dt)
+        waveforms_N=hfsims.stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,
+                        model_name,rise_time_depths,hf_dt=hf_dt)
+        waveforms_E=hfsims.stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,
+                        model_name,rise_time_depths,hf_dt=hf_dt)
+        waveforms_Z=hfsims.stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,
+                        model_name,rise_time_depths,hf_dt=hf_dt)
+        
         #Write output
-        write_fakequakes_waveforms(home,project_name,rupture_name,waveforms,GF_list,NFFT,time_epi,dt)   
+        write_fakequakes_hf_waveforms(home,project_name,rupture_name,waveforms_N,waveforms_E,waveforms_Z)   
     
                        
-                                        
-                                                                                                                                    
 
+def write_fakequakes_hf_waveforms(home,project_name,rupture_name,n,e,z):
+    '''
+    write HF waveforms to file
+    '''
+
+    from os import path,makedirs
+    from numpy import genfromtxt,squeeze,sqrt
+    from obspy import Stream,Trace
+    
+    #Where am I writting to?
+    rupture=rupture_name.split('.')[0]+'.'+rupture_name.split('.')[1]
+    directory=home+project_name+'/output/waveforms/'+rupture+'/'
+    
+    #Check if dir exists if not then create it
+    if not path.exists(directory):
+        makedirs(directory)   
+        
+    for ksta in range(len(n)):
+        sta=n[ksta].stats.station
+        n[ksta].write(directory+sta+'.HNN.sac',format='SAC')
+        e[ksta].write(directory+sta+'.HNE.sac',format='SAC')
+        z[ksta].write(directory+sta+'.HNZ.sac',format='SAC')
+        
+                                                                                      
+
+def match_filter(home,project_name,fault_name,rupture_list,GF_list,time_epi,
+        zero_phase=False,order=2,fcorner=1.0):
+    '''
+    match filter waveforms
+    '''
+    
+    from numpy import genfromtxt,where,r_,diff,interp
+    from obspy import read
+    
+    #read stations list
+    sta=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=0,dtype='S')
+    ista=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=4)
+    ista=where(ista==1)[0]
+    sta=sta[ista]
+    
+    #read ruptures
+    ruptures=genfromtxt(home+project_name+'/data/'+rupture_list,dtype='S')
+    
+    for krup in range(len(ruptures)):
+        
+        rupture=ruptures[krup]
+        rupture=rupture.replace('.rupt','')
+        directory=home+project_name+'/output/waveforms/'+rupture+'/'
+        
+        for ksta in range(len(sta)):
+            
+            #Read HF accelerograms
+            hf_n=read(directory+sta[ksta]+'.HNN.sac')
+            hf_e=read(directory+sta[ksta]+'.HNE.sac')
+            hf_z=read(directory+sta[ksta]+'.HNZ.sac')
+        
+            #Read LF displacements
+            lf_n=read(directory+sta[ksta]+'.LYN.sac')
+            lf_e=read(directory+sta[ksta]+'.LYE.sac')
+            lf_z=read(directory+sta[ksta]+'.LYZ.sac')
+            
+            #Apply filters
+            fsample=1./hf_n[0].stats.delta
+            hf_n[0].data=highpass(hf_n[0].data,fcorner,fsample,order,zerophase=zero_phase)
+            hf_e[0].data=highpass(hf_e[0].data,fcorner,fsample,order,zerophase=zero_phase)
+            hf_z[0].data=highpass(hf_z[0].data,fcorner,fsample,order,zerophase=zero_phase)
+
+            fsample=1./lf_n[0].stats.delta
+            lf_n[0].data=lowpass(lf_n[0].data,fcorner,fsample,order,zerophase=zero_phase)
+            lf_e[0].data=lowpass(lf_e[0].data,fcorner,fsample,order,zerophase=zero_phase)
+            lf_z[0].data=lowpass(lf_z[0].data,fcorner,fsample,order,zerophase=zero_phase)
+            
+            #Diff LF to acceleration
+            dt=lf_n[0].stats.delta
+            
+            lf_n[0].data=r_[0,diff(lf_n[0].data)/dt]
+            lf_e[0].data=r_[0,diff(lf_e[0].data)/dt]
+            lf_z[0].data=r_[0,diff(lf_z[0].data)/dt]
+            
+            lf_n[0].data=r_[0,diff(lf_n[0].data)/dt]
+            lf_e[0].data=r_[0,diff(lf_e[0].data)/dt]
+            lf_z[0].data=r_[0,diff(lf_z[0].data)/dt]
+            
+            #Resample LF to HF sample rate
+            tinterp=hf_n[0].times() #interpolation time vector
+            lf_n[0].data=interp(tinterp,lf_n[0].times(),lf_n[0].data)
+            lf_e[0].data=interp(tinterp,lf_e[0].times(),lf_e[0].data)
+            lf_z[0].data=interp(tinterp,lf_z[0].times(),lf_z[0].data)
+            lf_n[0].stats.delta=hf_n[0].stats.delta
+            lf_e[0].stats.delta=hf_n[0].stats.delta
+            lf_z[0].stats.delta=hf_n[0].stats.delta
+            
+            #Trim HF and LF to match each otehrs start and end times
+            
+            if lf_n[0].stats.endtime < hf_n[0].stats.endtime:
+                tend=lf_n[0].stats.endtime
+            else:
+                tend=hf_n[0].stats.endtime
+            
+            lf_n[0].trim(starttime=time_epi,endtime=tend)
+            hf_n[0].trim(starttime=time_epi,endtime=tend)
+            lf_e[0].trim(starttime=time_epi,endtime=tend)
+            hf_e[0].trim(starttime=time_epi,endtime=tend)
+            lf_z[0].trim(starttime=time_epi,endtime=tend)
+            hf_z[0].trim(starttime=time_epi,endtime=tend)
+            
+            #Add together for final waveform
+            bb_n=lf_n.copy()
+            bb_n[0].data=lf_n[0].data+hf_n[0].data
+            bb_e=lf_e.copy()
+            bb_e[0].data=lf_e[0].data+hf_e[0].data
+            bb_z=lf_z.copy()
+            bb_z[0].data=lf_z[0].data+hf_z[0].data
+            
+            #Write to file
+            bb_n.write(directory+sta[ksta]+'.bb.HNN.sac',format='SAC')
+            bb_e.write(directory+sta[ksta]+'.bb.HNE.sac',format='SAC')
+            bb_z.write(directory+sta[ksta]+'.bb.HNZ.sac',format='SAC')
+            
+            
+            
+            
 
 def load_fakequakes_synthetics(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name):
     ''''
@@ -1438,11 +1564,11 @@ def upsample(st,delta):
     st[0].data=yi
     st[0].stats.delta=delta
 
-def lowpass(data,fcorner,fsample,order):
+def lowpass(data,fcorner,fsample,order,zerophase=True):
     '''
     Make a lowpass zero phase filter
     '''
-    from scipy.signal import butter,filtfilt
+    from scipy.signal import butter,filtfilt,lfilter
     from numpy import size,array
     
     if size(fcorner)==2:
@@ -1451,19 +1577,27 @@ def lowpass(data,fcorner,fsample,order):
         ftype='lowpass'
     fnyquist=fsample/2
     b, a = butter(order, array(fcorner)/(fnyquist),ftype)
-    data_filt=filtfilt(b,a,data)
+    if zerophase==True:
+        data_filt=filtfilt(b,a,data)
+    else:
+        data_filt=lfilter(b,a,data)
+        
     return data_filt
     
-def highpass(data,fcorner,fsample,order):
+def highpass(data,fcorner,fsample,order,zerophase=True):
     '''
     Make a highpass zero phase filter
     '''
-    from scipy.signal import butter,filtfilt
+    from scipy.signal import butter,filtfilt,lfilter
     from numpy import size,array
     
     fnyquist=fsample/2
     b, a = butter(order, array(fcorner)/(fnyquist),'highpass')
-    data_filt=filtfilt(b,a,data)
+    if zerophase==True:
+        data_filt=filtfilt(b,a,data)
+    else:
+        data_filt=lfilter(b,a,data)
+    
     return data_filt
     
 
