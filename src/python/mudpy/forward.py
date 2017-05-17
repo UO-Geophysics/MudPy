@@ -311,9 +311,9 @@ def waveforms_fakequakes(home,project_name,fault_name,rupture_list,GF_list,
 
         
                 
-def hf_waveforms(home,project_name,fault_name,rupture_list,GF_list,
-                model_name,run_name,dt,NFFT,G_from_file,G_name,rise_time_depths,
-                source_time_function='dreger',stf_falloff_rate=4.0,hf_dt=0.02):
+def hf_waveforms(home,project_name,fault_name,rupture_list,GF_list,model_name,run_name,dt,NFFT,G_from_file,
+            G_name,rise_time_depths,source_time_function='dreger',duration=100.0,stf_falloff_rate=4.0,
+            hf_dt=0.02):
     '''
     Make semistochastic high frequency accelerograms
     '''                        
@@ -335,11 +335,11 @@ def hf_waveforms(home,project_name,fault_name,rupture_list,GF_list,
         epicenter,time_epi=read_fakequakes_hypo_time(home,project_name,rupture_name)
         
         waveforms_N=hfsims.stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,
-                        model_name,rise_time_depths,hf_dt=hf_dt)
+                        model_name,rise_time_depths,hf_dt=hf_dt,total_duration=duration,component='N')
         waveforms_E=hfsims.stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,
-                        model_name,rise_time_depths,hf_dt=hf_dt)
+                        model_name,rise_time_depths,hf_dt=hf_dt,total_duration=duration,component='E')
         waveforms_Z=hfsims.stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,
-                        model_name,rise_time_depths,hf_dt=hf_dt)
+                        model_name,rise_time_depths,hf_dt=hf_dt,total_duration=duration,component='Z')
         
         #Write output
         write_fakequakes_hf_waveforms(home,project_name,rupture_name,waveforms_N,waveforms_E,waveforms_Z)   
@@ -371,7 +371,7 @@ def write_fakequakes_hf_waveforms(home,project_name,rupture_name,n,e,z):
         
                                                                                       
 
-def match_filter(home,project_name,fault_name,rupture_list,GF_list,time_epi,
+def match_filter(home,project_name,fault_name,rupture_list,GF_list,
         zero_phase=False,order=2,fcorner=1.0):
     '''
     match filter waveforms
@@ -391,9 +391,14 @@ def match_filter(home,project_name,fault_name,rupture_list,GF_list,time_epi,
     
     for krup in range(len(ruptures)):
         
-        rupture=ruptures[krup]
-        rupture=rupture.replace('.rupt','')
+        rupture_name=ruptures[krup]
+        rupture=rupture_name.replace('.rupt','')
         directory=home+project_name+'/output/waveforms/'+rupture+'/'
+        
+        print 'Running matched filter for all stations for rupture '+ rupture_name
+        
+        #Get epicentral time
+        epicenter,time_epi=read_fakequakes_hypo_time(home,project_name,rupture_name)
         
         for ksta in range(len(sta)):
             

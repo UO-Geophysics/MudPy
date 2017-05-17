@@ -1,11 +1,11 @@
 def stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,model_name,
         rise_time_depths,total_duration=100,hf_dt=0.01,stress_parameter=50e5,
-        kappa=0.04,Qexp=0.6): 
+        kappa=0.04,Qexp=0.6,component='N'): 
     '''
     Run stochastic HF sims
     '''
     
-    from numpy import genfromtxt,pi,logspace,log10,mean,where,exp,arange,zeros,argmin
+    from numpy import genfromtxt,pi,logspace,log10,mean,where,exp,arange,zeros,argmin,ones
     from pyproj import Geod
     from obspy.geodetics import kilometer2degrees
     from obspy.taup import taup_create,TauPyModel
@@ -17,6 +17,9 @@ def stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,model_
     
     #Load the source
     fault=genfromtxt(home+project_name+'/output/ruptures/'+rupture_name)    
+    
+    #Onset times for each subfault
+    onset_times=fault[:,12]
     
     #Load stations
     sta=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=[0],dtype='S')
@@ -42,23 +45,23 @@ def stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,model_
     #Moments
     slip=(fault[:,8]**2+fault[:,9]**2)**0.5
     subfault_M0=slip*fault[:,10]*fault[:,11]*fault[:,13]
+    subfault_M0=subfault_M0*1e7 #to dyne-cm
     M0=subfault_M0.sum()
     relative_subfault_M0=subfault_M0/M0
     
     #Corner frequency scaling
     i=where(slip>0)[0] #Non-zero faults
     N=len(i) #number of subfaults
-    dl=mean(fault[:,10]**2+fault[:,11]**2)**0.5 #perdominant length scale
+    dl=mean((fault[:,10]+fault[:,11])/2) #perdominant length scale
+    dl=dl/1000 # to km
     
-    # Frankel 95 scaling (bigC is eq.6)
-    fc_scale=(M0)/(N*(stress_parameter*dl**3)) #Frankel scaling
-    #smoe = stress_parameter*dl*dl*dl #Expected moment on the subfault based on expected stress drop
-    #bigC = M0/smoe
+    # Frankel 95 scaling of corner frequency
+    fc_scale=(M0)/(N*50*dl**3*1e21) #Frankel scaling
     
     #Loop over stations
     for ksta in range(len(lonlat)):
     
-        print '... generating HF semistochastic waveform for station '+sta[ksta]
+        print '... working on '+component+' component semistochastic waveform for station '+sta[ksta]
     
         #initalize output seismogram
         tr=Trace()
@@ -84,25 +87,27 @@ def stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,model_
                 mu,beta=get_mu(structure,zs,return_beta=True)
                 rho=mu/beta**2
                 
-                #Get radiation scale factor (CURRENTLY MISSING CONICALLY AVERAGED RADIATION PATTERN)
-                C=2./(4*pi*rho*beta**3)
+                #Get radiation scale factor
+                if component=='N' or component=='E':
+                    partition=1/2**0.5
+                elif component=='Z':
+                    partition=0.3 #this is addhoc right now, needs to be verified/adjsuted
+                avg_radiation=0.63
+                rho=rho/1000 #to g/cm**3
+                beta=(beta/1000)*1e5 #to cm/s
+                C=(2*partition*avg_radiation)/(4*pi*(rho)*(beta**3))
                 
                 #Get local subfault rupture speed
+                beta=beta/100 #to m/s
                 vr=get_local_rupture_speed(zs,beta,rise_time_depths)
+                vr=vr/1000 #to km/s
                 dip_factor=get_dip_factor(fault[kfault,5])
                 
                 #Subfault corner frequency
                 fc_subfault=(2.1*vr)/(dip_factor*pi*dl)
                 
-                #Frankel convolution operator
-                #frank =  bigC*(fc_subfault + f)/(fc_subfault + bigC*f)
-                
                 #get subfault source spectrum
-                F=M0/(N*stress_parameter*dl**3)
-                S=stress_parameter*(dl**3)*relative_subfault_M0[kfault]*F*(f**2)/(1+F*(f/fc_subfault)**2)
-                #S=((relative_subfault_M0[kfault]*M0/N)*f**2)/(1+F*(f/fc_subfault)**2)
-                #S=smoe*((f**2)/(1+(f/fc_subfault)**2))
-                #S=S*frank
+                S=((relative_subfault_M0[kfault]*M0/N)*f**2)/(1+fc_scale*(f/fc_subfault)**2)
                 
                 #get high frequency decay
                 P=exp(-pi*kappa*f)
@@ -118,7 +123,7 @@ def stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,model_
                 
                 #Get attenuation due to geometrical spreading (from the path length)
                 path_length=get_path_length(Spaths[0],zs,dist_in_degs)
-                
+                path_length=path_length/1000 #to km
                 
                 #Get effect of intrinsic aptimeenuation for that ray (path integrated)
                 Q=get_attenuation(f,structure,Spaths[0],Qexp)
@@ -139,7 +144,8 @@ def stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,model_
                 hf_seis=apply_spectrum(w,A,f,hf_dt)
                 
                 #What time does this time series start at?
-                time_insert=Spaths[0].path['time'][-1]
+                time_insert=Spaths[0].path['time'][-1]+onset_times[kfault]
+                print 'ts = '+str(time_insert)+' , Td = '+str(duration)
                 #time_insert=Ppaths[0].path['time'][-1]
                 i=argmin(abs(t-time_insert))
                 j=i+len(hf_seis)
@@ -148,7 +154,7 @@ def stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,model_
                 hf[i:j]=hf[i:j]+hf_seis
                 
         #Done add to trace and stream
-        tr.data=hf
+        tr.data=hf/100 #convert to m/s**2
         st+=tr
     return st
             
@@ -326,8 +332,8 @@ def apply_spectrum(w,A,f,hf_dt):
     freq=fft.rfftfreq(len(w),hf_dt)
     
     #Make POWER spectrum of windowed time series have a mean of 1
-    #norm_factor=mean(abs(fourier)**2)**0.5
-    norm_factor=mean(abs(fourier))
+    norm_factor=hf_dt*mean(abs(fourier)**2)**0.5
+    #norm_factor=mean(abs(fourier)) 
     fourier=fourier/norm_factor
     
     #Keep phase
