@@ -412,16 +412,6 @@ def match_filter(home,project_name,fault_name,rupture_list,GF_list,
             lf_e=read(directory+sta[ksta]+'.LYE.sac')
             lf_z=read(directory+sta[ksta]+'.LYZ.sac')
             
-            #Apply filters
-            fsample=1./hf_n[0].stats.delta
-            hf_n[0].data=highpass(hf_n[0].data,fcorner,fsample,order,zerophase=zero_phase)
-            hf_e[0].data=highpass(hf_e[0].data,fcorner,fsample,order,zerophase=zero_phase)
-            hf_z[0].data=highpass(hf_z[0].data,fcorner,fsample,order,zerophase=zero_phase)
-
-            fsample=1./lf_n[0].stats.delta
-            lf_n[0].data=lowpass(lf_n[0].data,fcorner,fsample,order,zerophase=zero_phase)
-            lf_e[0].data=lowpass(lf_e[0].data,fcorner,fsample,order,zerophase=zero_phase)
-            lf_z[0].data=lowpass(lf_z[0].data,fcorner,fsample,order,zerophase=zero_phase)
             
             #Diff LF to acceleration
             dt=lf_n[0].stats.delta
@@ -433,6 +423,17 @@ def match_filter(home,project_name,fault_name,rupture_list,GF_list,
             lf_n[0].data=r_[0,diff(lf_n[0].data)/dt]
             lf_e[0].data=r_[0,diff(lf_e[0].data)/dt]
             lf_z[0].data=r_[0,diff(lf_z[0].data)/dt]
+            
+            #Apply filters
+            fsample=1./hf_n[0].stats.delta
+            hf_n[0].data=highpass(hf_n[0].data,fcorner,fsample,order,zerophase=zero_phase)
+            hf_e[0].data=highpass(hf_e[0].data,fcorner,fsample,order,zerophase=zero_phase)
+            hf_z[0].data=highpass(hf_z[0].data,fcorner,fsample,order,zerophase=zero_phase)
+
+            fsample=1./lf_n[0].stats.delta
+            lf_n[0].data=lowpass(lf_n[0].data,fcorner,fsample,order,zerophase=zero_phase)
+            lf_e[0].data=lowpass(lf_e[0].data,fcorner,fsample,order,zerophase=zero_phase)
+            lf_z[0].data=lowpass(lf_z[0].data,fcorner,fsample,order,zerophase=zero_phase)
             
             #Resample LF to HF sample rate
             tinterp=hf_n[0].times() #interpolation time vector

@@ -5,7 +5,7 @@ def stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,model_
     Run stochastic HF sims
     '''
     
-    from numpy import genfromtxt,pi,logspace,log10,mean,where,exp,arange,zeros,argmin,ones
+    from numpy import genfromtxt,pi,logspace,log10,mean,where,exp,arange,zeros,argmin,rad2deg,arctan2
     from pyproj import Geod
     from obspy.geodetics import kilometer2degrees
     from obspy.taup import taup_create,TauPyModel
@@ -30,6 +30,7 @@ def stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,model_
     
     #Frequencies vector
     f=logspace(log10(hf_dt),log10(1/(2*hf_dt))+0.01,50)
+    omega=2*pi*f
     
     #Output time vector (0 is origin time)
     t=arange(0,total_duration,hf_dt)
@@ -55,8 +56,12 @@ def stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,model_
     dl=mean((fault[:,10]+fault[:,11])/2) #perdominant length scale
     dl=dl/1000 # to km
     
-    # Frankel 95 scaling of corner frequency
+    # Frankel 95 scaling of corner frequency #verified this looks the same in GP
+    # Move inside the loop with right dl????
     fc_scale=(M0)/(N*50*dl**3*1e21) #Frankel scaling
+    
+    #Move this inisde loop?
+    small_event_M0 = 50*dl**3*1e21
     
     #Loop over stations
     for ksta in range(len(lonlat)):
@@ -79,7 +84,7 @@ def stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,model_
                 #Get subfault to station distance
                 lon_source=fault[kfault,1]
                 lat_source=fault[kfault,2]
-                az,baz,dist=g.inv(lon_source,lat_source,lonlat[ksta,0],lonlat[ksta,1])
+                azimuth,baz,dist=g.inv(lon_source,lat_source,lonlat[ksta,0],lonlat[ksta,1])
                 dist_in_degs=kilometer2degrees(dist/1000.)
                 
                 #Get rho and beta at subfault depth
@@ -88,13 +93,21 @@ def stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,model_
                 rho=mu/beta**2
                 
                 #Get radiation scale factor
-                if component=='N' or component=='E':
+                if component=='N' :
                     partition=1/2**0.5
+                    component_angle=0
+                if component=='E':
+                    partition=1/2**0.5
+                    component_angle=90
                 elif component=='Z':
-                    partition=0.3 #this is addhoc right now, needs to be verified/adjsuted
-                avg_radiation=0.63
+                    component_angle=-1
+                    partition=0.2 #this is addhoc right now, needs to be verified/adjsuted
+                
+                avg_radiation=1.0
                 rho=rho/1000 #to g/cm**3
                 beta=(beta/1000)*1e5 #to cm/s
+                
+                #Verified this produces same value as in GP
                 C=(2*partition*avg_radiation)/(4*pi*(rho)*(beta**3))
                 
                 #Get local subfault rupture speed
@@ -107,13 +120,17 @@ def stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,model_
                 fc_subfault=(2.1*vr)/(dip_factor*pi*dl)
                 
                 #get subfault source spectrum
-                S=((relative_subfault_M0[kfault]*M0/N)*f**2)/(1+fc_scale*(f/fc_subfault)**2)
+                #S=((relative_subfault_M0[kfault]*M0/N)*f**2)/(1+fc_scale*(f/fc_subfault)**2)
+                S=small_event_M0*(omega**2/(1+(f/fc_subfault)**2))
+                frankel_conv_operator= fc_scale*((fc_subfault**2+f**2)/(fc_subfault**2+fc_scale*f**2))
+                S=S*frankel_conv_operator
                 
                 #get high frequency decay
                 P=exp(-pi*kappa*f)
                 
                 #get quarter wavelength amplificationf actors
-                I=get_amplification_factors(f,structure,zs,beta,rho)
+                # pass rho in kg/m^3 (this units nightmare is what I get for following Graves' code)
+                I=get_amplification_factors(f,structure,zs,beta,rho*1000)
                 
                 #Get ray paths for all direct S arrivals
                 Ppaths=velmod.get_ray_paths(zs-taup_perturb,dist_in_degs,phase_list=['P','p'])
@@ -121,19 +138,32 @@ def stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,model_
                 #Get ray paths for all direct S arrivals
                 Spaths=velmod.get_ray_paths(zs+taup_perturb,dist_in_degs,phase_list=['S','s'])
                 
+                #Take off angle for direct S
+                take_off_angle=Spaths[0].takeoff_angle
+                
+                #Get other geometric parameters
+                strike=fault[kfault,4]
+                dip=fault[kfault,5]
+                ss=fault[kfault,8]
+                ds=fault[kfault,9]
+                rake=rad2deg(arctan2(ds,ss))
+                
+                #Get conically averaged radiation pattern term
+                RP=conically_avg_radiation_pattern(strike,dip,rake,azimuth,take_off_angle,component_angle)
+                RP=abs(RP)
+                
                 #Get attenuation due to geometrical spreading (from the path length)
                 path_length=get_path_length(Spaths[0],zs,dist_in_degs)
-                path_length=path_length/1000 #to km
+                path_length=path_length*100 #to cm
                 
                 #Get effect of intrinsic aptimeenuation for that ray (path integrated)
                 Q=get_attenuation(f,structure,Spaths[0],Qexp)
                 
                 #Build the entire path term
-                G=(I/path_length)*Q
+                G=(I*Q)/path_length
                 
                 #And finally multiply everything together to get the subfault amplitude spectrum
-                A=C*S*G*P
-                #A=S*G*P
+                A=C*S*G*P*RP
                 
                 #Generate windowed time series
                 duration=1./fc_subfault+0.063*(dist/1000)
@@ -143,7 +173,7 @@ def stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,model_
                 #Go to frequency domain, apply amplitude spectrum and ifft for final time series
                 hf_seis=apply_spectrum(w,A,f,hf_dt)
                 
-                #What time does this time series start at?
+                #What time after OT should this time series start at?
                 time_insert=Spaths[0].path['time'][-1]+onset_times[kfault]
                 print 'ts = '+str(time_insert)+' , Td = '+str(duration)
                 #time_insert=Ppaths[0].path['time'][-1]
@@ -156,6 +186,7 @@ def stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,model_
         #Done add to trace and stream
         tr.data=hf/100 #convert to m/s**2
         st+=tr
+    
     return st
             
                         
@@ -192,7 +223,7 @@ def get_dip_factor(dip):
                                                             
 def get_amplification_factors(f,structure,zs,beta,rho):
     '''
-    Get quarter wavelength amplificationf actors
+    Get quarter wavelength amplificationf actors, this guy operates in SI units
     '''
 
     from numpy import zeros,arange
@@ -272,6 +303,7 @@ def get_attenuation(f,structure,ray,Qexp):
     time=ray.path['time']
     time_in_layer=diff(time)
     depth=ray.path['depth']
+    omega=2*pi*f
     
     Qp=zeros(len(time_in_layer))
     Qs=zeros(len(time_in_layer))
@@ -281,9 +313,11 @@ def get_attenuation(f,structure,ray,Qexp):
         
     #Get the travel tiem weighted sum
     weightedQ=sum(time_in_layer/Qs)
+
     
     #get frequency dependence
-    Q=exp(-pi*weightedQ*f**(1-Qexp))
+    #Q=exp(-pi*weightedQ*f**(-Qexp))
+    Q=exp(-0.5*omega*weightedQ*(f**(-Qexp)))
     
     return Q
 
@@ -299,8 +333,12 @@ def windowed_gaussian(duration,hf_dt,window_type='saragoni_hart',M=5.0,dist_in_k
     
     mean=0.0
     num_samples = int(duration/hf_dt)
+    #If num_smaples is even then make odd for FFT stuff later on
+    if num_samples%2==0:
+        num_samples+=1
     t=arange(0,num_samples*hf_dt,hf_dt)
     t=t[0:num_samples]
+
     noise = normal(mean, std, size=num_samples)
     
     if window_type=='saragoni_hart':
@@ -324,16 +362,21 @@ def apply_spectrum(w,A,f,hf_dt):
     Apply the modeled spectrum to the windowed time series
     '''
     
-    from numpy import fft,angle,cos,sin,sqrt,mean
+    from numpy import fft,angle,cos,sin,sqrt,mean,zeros
     from scipy.interpolate import interp1d
     
     #to frequency domain
-    fourier=fft.rfft(w)
-    freq=fft.rfftfreq(len(w),hf_dt)
+    fourier=fft.fft(w)
+    freq=fft.fftfreq(len(w),hf_dt)
     
+    #Get positive frequencies
+    Nf=len(freq)
+    positive_freq=freq[1:1+Nf/2]
+      
     #Make POWER spectrum of windowed time series have a mean of 1
-    norm_factor=hf_dt*mean(abs(fourier)**2)**0.5
-    #norm_factor=mean(abs(fourier)) 
+    #norm_factor=hf_dt*mean(abs(fourier)**2)**0.5
+    #norm_factor=mean(abs(fourier))
+    norm_factor=mean(abs(fourier)**2)**0.5
     fourier=fourier/norm_factor
     
     #Keep phase
@@ -341,8 +384,16 @@ def apply_spectrum(w,A,f,hf_dt):
     
     #resample model amplitude spectr to frequencies
     interp=interp1d(f,A,bounds_error=False)
-    amplitude=interp(freq)
-    amplitude[0]=amplitude[1]/10
+    amplitude_positive=interp(positive_freq)
+    
+    #Place in correct order A[0] is DC value then icnreasing positive freq then decreasing negative freq
+    amplitude=zeros(len(freq))
+    #DC value
+    amplitude[0]=0
+    #Positive freq. div by 2 to keep right power
+    amplitude[1:1+Nf/2]=amplitude_positive/2
+    #Negative freq
+    amplitude[1+Nf/2:]=amplitude_positive[::-1]/2
     
     #Apply model amplitude spectrum
     amplitude=amplitude*abs(fourier)
@@ -353,7 +404,8 @@ def apply_spectrum(w,A,f,hf_dt):
     fourier=R+I*1j
     
     #ifft
-    seis=fft.irfft(fourier)
+    seis=fft.ifft(fourier)
+    seis=seis*len(seis)
     
     return seis         
                                 
@@ -476,3 +528,88 @@ def cua_envelope(M,dist_in_km,times,ptime,stime,Pcoeff=0,Scoeff=12):
     if len(indx): envelope[indx] += (A_s/((times[indx]-stime-t_rise_s-delta_t_s+tau_s)**gamma_s)) # make sure we have data in that time frame and get envelope
     
     return envelope
+    
+
+def conically_avg_radiation_pattern(strike,dip,rake,azimuth,take_off_angle,
+                                    component_angle,angle_range=45,Nrandom=100):
+    '''
+    Get conically averaged radiation pattern, this is meant for horizontal 
+    channels
+    '''
+    from numpy.random import rand
+    from numpy import sin,cos,deg2rad,sign
+    
+    #Sample randomly over angle_range
+    st=strike+angle_range*(rand(Nrandom)-0.5)
+    di=dip+angle_range*(rand(Nrandom)-0.5)
+    ra=rake+angle_range*(rand(Nrandom)-0.5)
+    az=azimuth+angle_range*(rand(Nrandom)-0.5)
+    to=take_off_angle+angle_range*(rand(Nrandom)-0.5)
+ 
+    #Get theoretical radiation pattern 
+    P_theor,SV_theor,SH_theor=radiation_pattern(strike,dip,rake,azimuth,take_off_angle)    
+ 
+    #Get values of radiation pattern at specified angles
+    P,SV,SH=radiation_pattern(st,di,ra,az,to)   
+ 
+    #Projection angles to radians
+    azimuth=deg2rad(azimuth)
+    component_angle=deg2rad(component_angle)
+    
+    #Project SV and SH components onto component angle
+    rad_pattern_theor = SV_theor*cos(component_angle-azimuth)+SH_theor*sin(component_angle-azimuth)
+    rad_pattern = SV*cos(component_angle-azimuth)+SH*sin(component_angle-azimuth)
+    
+    #Square and sum
+    rad_pattern=sum(rad_pattern**2)
+    
+    #Geometric mean
+    rad_pattern=(rad_pattern/Nrandom)**0.5
+    
+    #What was polarity of theoretical rad. pattern?
+    polarity=sign(rad_pattern_theor)
+    
+    #Apply
+    rad_pattern=rad_pattern*polarity
+    
+    return rad_pattern
+    
+    
+    
+    
+def radiation_pattern(strike,dip,rake,azimuth,take_off_angle):
+    '''
+    Build theoretical P,SV and SH radiation patterns see Lay & Wallace p.340
+    
+    Inputs are in DEGREES
+    
+    '''
+    
+    from numpy import cos,sin,deg2rad
+    
+    
+    rake=deg2rad(rake)                            
+    strike=deg2rad(strike)
+    dip=deg2rad(dip)
+    azimuth=deg2rad(azimuth)
+    take_off_angle=deg2rad(take_off_angle)    
+                                                
+    SR=sin(rake)                                                               
+    CR=cos(rake)                                                               
+    SD=sin(dip)                                                               
+    CD=cos(dip)                                                               
+    ST=sin(take_off_angle)                                                                
+    CT=cos(take_off_angle)                                                                
+    SS=sin(azimuth-strike)                                                            
+    CS=cos(azimuth-strike)      
+      
+    # P wave                                                            
+    P = CR*SD*ST**2*2*SS*CS - CR*CD*2*ST*CT*CS + SR*2*SD*CD*(CT**2-ST**2*SS**2) + SR*(CD**2-SD**2)*2*ST*CT*SS                                          
+      
+    #SV
+    SV = SR*(CD**2-SD**2)*(CT**2-ST**2)*SS - CR*CD*(CT**2-ST**2)*CS + CR*SD*ST*CT*2*SS*CS - SR*SD*CD*2*ST*CT*(1+SS**2)  
+
+    #SH                                    
+    SH = CR*CD*CT*SS + CR*SD*ST*(CS**2-SS**2) + SR*(CD**2-SD**2)*CT*CS - SR*SD*CD*ST*2*SS*CS  
+
+    return P,SV,SH
