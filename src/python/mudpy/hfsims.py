@@ -1,5 +1,5 @@
 def stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,model_name,
-        rise_time_depths,total_duration=100,hf_dt=0.01,stress_parameter=50e5,
+        rise_time_depths,moho_depth_in_km,total_duration=100,hf_dt=0.01,stress_parameter=50e5,
         kappa=0.04,Qexp=0.6,component='N'): 
     '''
     Run stochastic HF sims
@@ -41,7 +41,6 @@ def stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,model_
     #Create taup velocity model object, paste on top of iaspei91
     taup_create.build_taup_model(home+project_name+'/structure/bbp_norcal.tvel',output_folder=home+project_name+'/structure/')
     velmod=TauPyModel(model=home+project_name+'/structure/bbp_norcal',verbose=True)
-    taup_perturb=0.1
     
     #Moments
     slip=(fault[:,8]**2+fault[:,9]**2)**0.5
@@ -62,6 +61,9 @@ def stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,model_
     
     #Move this inisde loop?
     small_event_M0 = 50*dl**3*1e21
+    
+    #Tau=p perturbation
+    tau_perturb=0.001
     
     #Loop over stations
     for ksta in range(len(lonlat)):
@@ -131,25 +133,6 @@ def stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,model_
                 # pass rho in kg/m^3 (this units nightmare is what I get for following Graves' code)
                 I=get_amplification_factors(f,structure,zs,beta,rho*1000)
                 
-                #Get ray paths for all direct S arrivals
-                Ppaths=velmod.get_ray_paths(zs-taup_perturb,dist_in_degs,phase_list=['P','p'])
-                
-                #Get ray paths for all direct S arrivals
-                Spaths=velmod.get_ray_paths(zs+taup_perturb,dist_in_degs,phase_list=['S','s'])
-                
-                #Take off angle for direct S
-                take_off_angle=Spaths[0].takeoff_angle
-                
-                #Get attenuation due to geometrical spreading (from the path length)
-                path_length=get_path_length(Spaths[0],zs,dist_in_degs)
-                path_length=path_length*100 #to cm
-                
-                #Get effect of intrinsic aptimeenuation for that ray (path integrated)
-                Q=get_attenuation(f,structure,Spaths[0],Qexp)
-                
-                #Build the entire path term
-                G=(I*Q)/path_length
-                
                 #Get other geometric parameters necessar for radiation pattern
                 strike=fault[kfault,4]
                 dip=fault[kfault,5]
@@ -157,18 +140,50 @@ def stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,model_
                 ds=fault[kfault,9]
                 rake=rad2deg(arctan2(ds,ss))
                 
+                #Get ray paths for all direct S arrivals
+                Ppaths=velmod.get_ray_paths(zs,dist_in_degs,phase_list=['P','p'])
+                
+                #Get ray paths for all direct S arrivals
+                Spaths=velmod.get_ray_paths(zs,dist_in_degs,phase_list=['S','s'])
+                
+                #Get direct s path and moho reflection
+                directS=Spaths[0]
+                if len(Spaths)==1: #only direct S
+                    mohoS=None
+                else:
+                    turn_depth=zeros(len(Spaths)-1) #turning depth of other non-direct rays
+                    for k in range(1,len(Spaths)):
+                        turn_depth[k-1]=Spaths[k].path['depth'].max()
+                    #If there's a ray that turns within 2km of Moho, callt hat guy the Moho reflection
+                    deltaz=abs(turn_depth-moho_depth_in_km)
+                    i=argmin(deltaz)
+                    if deltaz[i]<2: #Yes, this is a moho reflection
+                        mohoS=Spaths[i+1]
+                        
+                #Build path term for directS
+                take_off_angle_S=directS.takeoff_angle
+                
+                #Get attenuation due to geometrical spreading (from the path length)
+                path_length_S=get_path_length(directS,zs,dist_in_degs)
+                path_length_S=path_length_S*100 #to cm
+                
+                #Get effect of intrinsic aptimeenuation for that ray (path integrated)
+                Q_S=get_attenuation(f,structure,directS,Qexp)
+                
+                #Build the entire path term
+                G_S=(I*Q_S)/path_length_S
+
                 #Get conically averaged radiation pattern terms
                 if component=='Z':
-                    RP_vert=conically_avg_vert_radiation_pattern(strike,dip,rake,azimuth,take_off_angle)
+                    RP_vert=conically_avg_vert_radiation_pattern(strike,dip,rake,azimuth,take_off_angle_S)
                     #And finally multiply everything together to get the subfault amplitude spectrum
-                    A=C*S*G*P*RP_vert   
+                    A=C*S*G_S*P*RP_vert   
                 else:
-                    RP=conically_avg_radiation_pattern(strike,dip,rake,azimuth,take_off_angle,component_angle)
+                    RP=conically_avg_radiation_pattern(strike,dip,rake,azimuth,take_off_angle_S,component_angle)
                     RP=abs(RP)
                     #And finally multiply everything together to get the subfault amplitude spectrum
-                    A=C*S*G*P*RP                
+                    A=C*S*G_S*P*RP                
 
-                
                 #Generate windowed time series
                 duration=1./fc_subfault+0.063*(dist/1000)
                 w=windowed_gaussian(duration,hf_dt,window_type='saragoni_hart')

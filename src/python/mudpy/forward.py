@@ -312,8 +312,8 @@ def waveforms_fakequakes(home,project_name,fault_name,rupture_list,GF_list,
         
                 
 def hf_waveforms(home,project_name,fault_name,rupture_list,GF_list,model_name,run_name,dt,NFFT,G_from_file,
-            G_name,rise_time_depths,source_time_function='dreger',duration=100.0,stf_falloff_rate=4.0,
-            hf_dt=0.02):
+            G_name,rise_time_depths,moho_depth_in_km,source_time_function='dreger',duration=100.0,
+            stf_falloff_rate=4.0,hf_dt=0.02):
     '''
     Make semistochastic high frequency accelerograms
     '''                        
@@ -335,11 +335,11 @@ def hf_waveforms(home,project_name,fault_name,rupture_list,GF_list,model_name,ru
         epicenter,time_epi=read_fakequakes_hypo_time(home,project_name,rupture_name)
         
         waveforms_N=hfsims.stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,
-                        model_name,rise_time_depths,hf_dt=hf_dt,total_duration=duration,component='N')
+                        model_name,rise_time_depths,moho_depth_in_km,hf_dt=hf_dt,total_duration=duration,component='N')
         waveforms_E=hfsims.stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,
-                        model_name,rise_time_depths,hf_dt=hf_dt,total_duration=duration,component='E')
+                        model_name,rise_time_depths,moho_depth_in_km,hf_dt=hf_dt,total_duration=duration,component='E')
         waveforms_Z=hfsims.stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,
-                        model_name,rise_time_depths,hf_dt=hf_dt,total_duration=duration,component='Z')
+                        model_name,rise_time_depths,moho_depth_in_km,hf_dt=hf_dt,total_duration=duration,component='Z')
         
         #Write output
         write_fakequakes_hf_waveforms(home,project_name,rupture_name,waveforms_N,waveforms_E,waveforms_Z)   
