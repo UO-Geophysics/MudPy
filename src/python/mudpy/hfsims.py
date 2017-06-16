@@ -100,8 +100,7 @@ def stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,model_
                     partition=1/2**0.5
                     component_angle=90
                 elif component=='Z':
-                    component_angle=-1
-                    partition=0.2 #this is addhoc right now, needs to be verified/adjsuted
+                    partition=1/2**0.5 #this is addhoc right now, needs to be verified/adjsuted
                 
                 avg_radiation=1.0
                 rho=rho/1000 #to g/cm**3
@@ -141,17 +140,6 @@ def stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,model_
                 #Take off angle for direct S
                 take_off_angle=Spaths[0].takeoff_angle
                 
-                #Get other geometric parameters
-                strike=fault[kfault,4]
-                dip=fault[kfault,5]
-                ss=fault[kfault,8]
-                ds=fault[kfault,9]
-                rake=rad2deg(arctan2(ds,ss))
-                
-                #Get conically averaged radiation pattern term
-                RP=conically_avg_radiation_pattern(strike,dip,rake,azimuth,take_off_angle,component_angle)
-                RP=abs(RP)
-                
                 #Get attenuation due to geometrical spreading (from the path length)
                 path_length=get_path_length(Spaths[0],zs,dist_in_degs)
                 path_length=path_length*100 #to cm
@@ -162,8 +150,24 @@ def stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,model_
                 #Build the entire path term
                 G=(I*Q)/path_length
                 
-                #And finally multiply everything together to get the subfault amplitude spectrum
-                A=C*S*G*P*RP
+                #Get other geometric parameters necessar for radiation pattern
+                strike=fault[kfault,4]
+                dip=fault[kfault,5]
+                ss=fault[kfault,8]
+                ds=fault[kfault,9]
+                rake=rad2deg(arctan2(ds,ss))
+                
+                #Get conically averaged radiation pattern terms
+                if component=='Z':
+                    RP_vert=conically_avg_vert_radiation_pattern(strike,dip,rake,azimuth,take_off_angle)
+                    #And finally multiply everything together to get the subfault amplitude spectrum
+                    A=C*S*G*P*RP_vert   
+                else:
+                    RP=conically_avg_radiation_pattern(strike,dip,rake,azimuth,take_off_angle,component_angle)
+                    RP=abs(RP)
+                    #And finally multiply everything together to get the subfault amplitude spectrum
+                    A=C*S*G*P*RP                
+
                 
                 #Generate windowed time series
                 duration=1./fc_subfault+0.063*(dist/1000)
@@ -575,6 +579,60 @@ def conically_avg_radiation_pattern(strike,dip,rake,azimuth,take_off_angle,
     return rad_pattern
     
     
+def conically_avg_vert_radiation_pattern(strike,dip,rake,azimuth,take_off_angle,
+                                    angle_range=45,Nrandom=100):
+    '''
+    Get conically averaged radiation pattern, for the vertical channels
+    '''
+    from numpy.random import rand
+    from numpy import sin,cos,deg2rad,sign,pi ,arccos,ones
+  
+    #To radians
+    rake=deg2rad(rake)                            
+    strike=deg2rad(strike)
+    dip=deg2rad(dip)
+    azimuth=deg2rad(azimuth)
+    take_off_angle=deg2rad(take_off_angle)   
+                                                                                                           
+    #get theoretical rad pattern
+    P,SV,SH=radiation_pattern(strike,dip,rake,azimuth,take_off_angle)                          
+    
+    #Angles to use
+    theta1=take_off_angle-deg2rad(angle_range)
+    theta2=take_off_angle+deg2rad(angle_range)
+      
+    #Make sure angles aren't larger/smaller than reasonable
+    if(theta1<pi/2):
+        theta1=pi/2
+    if(theta2>pi):
+        theta2=pi 
+
+    #Random numbers we'll use
+    rand_num=rand(Nrandom)                                                                
+                                               
+    #Get suite of take off angles (theta) and azimuths (fa)                                                           
+    theta=arccos((1.0-rand_num)*cos(theta1)+rand_num*cos(theta2))    
+    fa=2*pi*rand(Nrandom) 
+      
+    #convert angles to radians
+    strike=strike*ones(Nrandom)
+    dip=dip*ones(Nrandom)
+    rake=rake*ones(Nrandom)
+           
+    # Get radiation patterns                              
+    P,SV,SH=radiation_pattern(strike,dip,rake,fa,theta)                             
+    
+    #Project
+    SV=SV*sin(theta)
+    
+    #Sum
+    SV=sum(abs(SV))
+    
+    #Get mean
+    SVH=SV/(2*Nrandom)             
+                                                  
+    return SVH
+    
     
     
 def radiation_pattern(strike,dip,rake,azimuth,take_off_angle):
@@ -587,7 +645,7 @@ def radiation_pattern(strike,dip,rake,azimuth,take_off_angle):
     
     from numpy import cos,sin,deg2rad
     
-    
+    #To radians
     rake=deg2rad(rake)                            
     strike=deg2rad(strike)
     dip=deg2rad(dip)
