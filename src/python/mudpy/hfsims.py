@@ -179,7 +179,7 @@ def stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,model_
                 
                 #What time after OT should this time series start at?
                 time_insert=Spaths[0].path['time'][-1]+onset_times[kfault]
-                print 'ts = '+str(time_insert)+' , Td = '+str(duration)
+                #print 'ts = '+str(time_insert)+' , Td = '+str(duration)
                 #time_insert=Ppaths[0].path['time'][-1]
                 i=argmin(abs(t-time_insert))
                 j=i+len(hf_seis)
@@ -535,7 +535,7 @@ def cua_envelope(M,dist_in_km,times,ptime,stime,Pcoeff=0,Scoeff=12):
     
 
 def conically_avg_radiation_pattern(strike,dip,rake,azimuth,take_off_angle,
-                                    component_angle,angle_range=45,Nrandom=100):
+                                    component_angle,angle_range=45,Nrandom=1000):
     '''
     Get conically averaged radiation pattern, this is meant for horizontal 
     channels
@@ -580,22 +580,22 @@ def conically_avg_radiation_pattern(strike,dip,rake,azimuth,take_off_angle,
     
     
 def conically_avg_vert_radiation_pattern(strike,dip,rake,azimuth,take_off_angle,
-                                    angle_range=45,Nrandom=100):
+                                    angle_range=40,Nrandom=1000):
     '''
     Get conically averaged radiation pattern, for the vertical channels
     '''
     from numpy.random import rand
-    from numpy import sin,cos,deg2rad,sign,pi ,arccos,ones
+    from numpy import sin,cos,deg2rad,sign,pi ,arccos,ones,rad2deg
+  
+    #get theoretical rad pattern
+    P,SV,SH=radiation_pattern(strike,dip,rake,azimuth,take_off_angle) 
   
     #To radians
     rake=deg2rad(rake)                            
     strike=deg2rad(strike)
     dip=deg2rad(dip)
     azimuth=deg2rad(azimuth)
-    take_off_angle=deg2rad(take_off_angle)   
-                                                                                                           
-    #get theoretical rad pattern
-    P,SV,SH=radiation_pattern(strike,dip,rake,azimuth,take_off_angle)                          
+    take_off_angle=deg2rad(take_off_angle)                                                                                                                                  
     
     #Angles to use
     theta1=take_off_angle-deg2rad(angle_range)
@@ -614,13 +614,13 @@ def conically_avg_vert_radiation_pattern(strike,dip,rake,azimuth,take_off_angle,
     theta=arccos((1.0-rand_num)*cos(theta1)+rand_num*cos(theta2))    
     fa=2*pi*rand(Nrandom) 
       
-    #convert angles to radians
+    #Make vector of angles
     strike=strike*ones(Nrandom)
     dip=dip*ones(Nrandom)
     rake=rake*ones(Nrandom)
            
     # Get radiation patterns                              
-    P,SV,SH=radiation_pattern(strike,dip,rake,fa,theta)                             
+    P,SV,SH=radiation_pattern(rad2deg(strike),rad2deg(dip),rad2deg(rake),rad2deg(fa),rad2deg(theta))                           
     
     #Project
     SV=SV*sin(theta)
