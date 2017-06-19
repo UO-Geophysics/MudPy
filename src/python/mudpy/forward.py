@@ -313,7 +313,7 @@ def waveforms_fakequakes(home,project_name,fault_name,rupture_list,GF_list,
                 
 def hf_waveforms(home,project_name,fault_name,rupture_list,GF_list,model_name,run_name,dt,NFFT,G_from_file,
             G_name,rise_time_depths,moho_depth_in_km,source_time_function='dreger',duration=100.0,
-            stf_falloff_rate=4.0,hf_dt=0.02):
+            stf_falloff_rate=4.0,hf_dt=0.02,Pwave=False):
     '''
     Make semistochastic high frequency accelerograms
     '''                        
@@ -335,11 +335,14 @@ def hf_waveforms(home,project_name,fault_name,rupture_list,GF_list,model_name,ru
         epicenter,time_epi=read_fakequakes_hypo_time(home,project_name,rupture_name)
         
         waveforms_N=hfsims.stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,
-                        model_name,rise_time_depths,moho_depth_in_km,hf_dt=hf_dt,total_duration=duration,component='N')
+                        model_name,rise_time_depths,moho_depth_in_km,hf_dt=hf_dt,total_duration=duration,component='N',
+                        Pwave=Pwave)
         waveforms_E=hfsims.stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,
-                        model_name,rise_time_depths,moho_depth_in_km,hf_dt=hf_dt,total_duration=duration,component='E')
+                        model_name,rise_time_depths,moho_depth_in_km,hf_dt=hf_dt,total_duration=duration,component='E',
+                        Pwave=Pwave)
         waveforms_Z=hfsims.stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,
-                        model_name,rise_time_depths,moho_depth_in_km,hf_dt=hf_dt,total_duration=duration,component='Z')
+                        model_name,rise_time_depths,moho_depth_in_km,hf_dt=hf_dt,total_duration=duration,component='Z',
+                        Pwave=Pwave)
         
         #Write output
         write_fakequakes_hf_waveforms(home,project_name,rupture_name,waveforms_N,waveforms_E,waveforms_Z)   
@@ -1249,7 +1252,7 @@ def split_subfault(subfault_list):
 
 ###########                Tools and trinkets                      #############
     
-def get_mu(structure,zs,return_beta=False):
+def get_mu(structure,zs,return_speeds=False):
     '''
     Look in structure model and compute rigidity given a source depth
     
@@ -1274,15 +1277,17 @@ def get_mu(structure,zs,return_beta=False):
             imu=imu-1#It's int he half-space
         mu=((1000*structure[imu,1])**2)*structure[imu,3]*1000
         beta=1000*structure[imu,1]
+        alpha=1000*structure[imu,2]
         #print "Rigidity at z="+str(zs)+' is, mu = '+str(mu/1e9)+'GPa'
     else: #Model is a halfspace
         mu=((1000*structure[0,1])**2)*structure[0,3]*1000
         beta=1000*structure[0,1]
+        alpha=1000*structure[0,2]
     
-    if return_beta==False:
+    if return_speeds==False:
         return mu
     else: 
-        return mu,beta
+        return mu,alpha,beta
         
         
 def get_Q(structure,zs,perturb=0.0001):

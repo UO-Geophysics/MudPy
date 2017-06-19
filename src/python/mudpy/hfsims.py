@@ -1,6 +1,6 @@
 def stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,model_name,
         rise_time_depths,moho_depth_in_km,total_duration=100,hf_dt=0.01,stress_parameter=50e5,
-        kappa=0.04,Qexp=0.6,component='N'): 
+        kappa=0.04,Qexp=0.6,component='N',Pwave=False): 
     '''
     Run stochastic HF sims
     '''
@@ -11,6 +11,7 @@ def stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,model_
     from obspy.taup import taup_create,TauPyModel
     from mudpy.forward import get_mu
     from obspy import Stream,Trace
+    from matplotlib import pyplot as plt
     
     #initalize  output object
     st=Stream()
@@ -63,7 +64,7 @@ def stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,model_
     small_event_M0 = 50*dl**3*1e21
     
     #Tau=p perturbation
-    tau_perturb=0.001
+    tau_perturb=0.1
     
     #Loop over stations
     for ksta in range(len(lonlat)):
@@ -89,9 +90,9 @@ def stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,model_
                 azimuth,baz,dist=g.inv(lon_source,lat_source,lonlat[ksta,0],lonlat[ksta,1])
                 dist_in_degs=kilometer2degrees(dist/1000.)
                 
-                #Get rho and beta at subfault depth
+                #Get rho, alpha, beta at subfault depth
                 zs=fault[kfault,3]
-                mu,beta=get_mu(structure,zs,return_beta=True)
+                mu,alpha,beta=get_mu(structure,zs,return_speeds=True)
                 rho=mu/beta**2
                 
                 #Get radiation scale factor
@@ -104,12 +105,13 @@ def stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,model_
                 elif component=='Z':
                     partition=1/2**0.5 #this is addhoc right now, needs to be verified/adjsuted
                 
-                avg_radiation=1.0
                 rho=rho/1000 #to g/cm**3
                 beta=(beta/1000)*1e5 #to cm/s
+                alpha=(alpha/1000)*1e5
                 
                 #Verified this produces same value as in GP
-                C=(2*partition*avg_radiation)/(4*pi*(rho)*(beta**3))
+                CS=(2*partition)/(4*pi*(rho)*(beta**3))
+                CP=(2*partition)/(4*pi*(rho)*(alpha**3))
                 
                 #Get local subfault rupture speed
                 beta=beta/100 #to m/s
@@ -144,23 +146,80 @@ def stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,model_
                 Ppaths=velmod.get_ray_paths(zs,dist_in_degs,phase_list=['P','p'])
                 
                 #Get ray paths for all direct S arrivals
-                Spaths=velmod.get_ray_paths(zs,dist_in_degs,phase_list=['S','s'])
+                try:
+                    Spaths=velmod.get_ray_paths(zs,dist_in_degs,phase_list=['S','s'])
+                except:
+                    Spaths=velmod.get_ray_paths(zs+tau_perturb,dist_in_degs,phase_list=['S','s'])
                 
+                #if kfault==24:
+                #    Spaths.plot(plot_type='cartesian')
                 #Get direct s path and moho reflection
+                mohoS=None
                 directS=Spaths[0]
+                directP=Ppaths[0]
+                #print len(Spaths)
                 if len(Spaths)==1: #only direct S
-                    mohoS=None
+                    pass
                 else:
-                    turn_depth=zeros(len(Spaths)-1) #turning depth of other non-direct rays
-                    for k in range(1,len(Spaths)):
-                        turn_depth[k-1]=Spaths[k].path['depth'].max()
-                    #If there's a ray that turns within 2km of Moho, callt hat guy the Moho reflection
-                    deltaz=abs(turn_depth-moho_depth_in_km)
-                    i=argmin(deltaz)
-                    if deltaz[i]<2: #Yes, this is a moho reflection
-                        mohoS=Spaths[i+1]
-                        
-                #Build path term for directS
+                    #turn_depth=zeros(len(Spaths)-1) #turning depth of other non-direct rays
+                    #for k in range(1,len(Spaths)):
+                    #    turn_depth[k-1]=Spaths[k].path['depth'].max()
+                    ##If there's a ray that turns within 2km of Moho, callt hat guy the Moho reflection
+                    #deltaz=abs(turn_depth-moho_depth_in_km)
+                    #i=argmin(deltaz)
+                    #if deltaz[i]<2: #Yes, this is a moho reflection
+                    #    mohoS=Spaths[i+1]
+                    #else:
+                    #    mohoS=None
+                    mohoS=Spaths[-1]
+                     
+ 
+                #######         Build Direct P ray           ######
+                if Pwave==True:
+                    take_off_angle_P=directP.takeoff_angle
+                    
+                    #Get attenuation due to geometrical spreading (from the path length)
+                    path_length_P=get_path_length(directP,zs,dist_in_degs)
+                    path_length_P=path_length_P*100 #to cm
+                    
+                    #Get effect of intrinsic aptimeenuation for that ray (path integrated)
+                    Q_P=get_attenuation(f,structure,directS,Qexp,Qtype='P')
+                    
+                    #Build the entire path term
+                    G_P=(I*Q_P)/path_length_P
+    
+                    #Get conically averaged radiation pattern terms
+                    if component=='Z':
+                        RP_vert=conically_avg_P_radiation_pattern(strike,dip,rake,azimuth,take_off_angle_P)
+                        RP_vert=abs(RP_vert)
+                        #And finally multiply everything together to get the subfault amplitude spectrum
+                        AP=CP*S*G_P*P*RP_vert   
+                    else:
+                        RP=conically_avg_P_radiation_pattern(strike,dip,rake,azimuth,take_off_angle_P)
+                        RP=abs(RP)
+                        #And finally multiply everything together to get the subfault amplitude spectrum
+                        fudge=0.05  #Relative amplitude of P wave on horizontals correct value?
+                        AP=CP*S*G_P*P*RP*fudge            
+    
+                    #Generate windowed time series
+                    duration=1./fc_subfault+0.063*(dist/1000)
+                    w=windowed_gaussian(duration,hf_dt,window_type='saragoni_hart')
+                    
+                    #Go to frequency domain, apply amplitude spectrum and ifft for final time series
+                    hf_seis_P=apply_spectrum(w,AP,f,hf_dt)
+                    
+                    #What time after OT should this time series start at?
+                    time_insert=directP.path['time'][-1]+onset_times[kfault]
+                    i=argmin(abs(t-time_insert))
+                    j=i+len(hf_seis_P)
+                    
+                    #Add seismogram
+                    hf[i:j]=hf[i:j]+hf_seis_P                    
+                                               
+                                                                      
+                                                                                                                    
+                              
+                #######         Build Direct S ray           ######
                 take_off_angle_S=directS.takeoff_angle
                 
                 #Get attenuation due to geometrical spreading (from the path length)
@@ -177,12 +236,12 @@ def stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,model_
                 if component=='Z':
                     RP_vert=conically_avg_vert_radiation_pattern(strike,dip,rake,azimuth,take_off_angle_S)
                     #And finally multiply everything together to get the subfault amplitude spectrum
-                    A=C*S*G_S*P*RP_vert   
+                    AS=CS*S*G_S*P*RP_vert   
                 else:
                     RP=conically_avg_radiation_pattern(strike,dip,rake,azimuth,take_off_angle_S,component_angle)
                     RP=abs(RP)
                     #And finally multiply everything together to get the subfault amplitude spectrum
-                    A=C*S*G_S*P*RP                
+                    AS=CS*S*G_S*P*RP                
 
                 #Generate windowed time series
                 duration=1./fc_subfault+0.063*(dist/1000)
@@ -190,17 +249,68 @@ def stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,model_
                 #w=windowed_gaussian(3*duration,hf_dt,window_type='cua',ptime=Ppaths[0].path['time'][-1],stime=Spaths[0].path['time'][-1])
                 
                 #Go to frequency domain, apply amplitude spectrum and ifft for final time series
-                hf_seis=apply_spectrum(w,A,f,hf_dt)
+                hf_seis_S=apply_spectrum(w,AS,f,hf_dt)
                 
                 #What time after OT should this time series start at?
-                time_insert=Spaths[0].path['time'][-1]+onset_times[kfault]
+                time_insert=directS.path['time'][-1]+onset_times[kfault]
                 #print 'ts = '+str(time_insert)+' , Td = '+str(duration)
                 #time_insert=Ppaths[0].path['time'][-1]
                 i=argmin(abs(t-time_insert))
-                j=i+len(hf_seis)
+                j=i+len(hf_seis_S)
                 
                 #Add seismogram
-                hf[i:j]=hf[i:j]+hf_seis
+                hf[i:j]=hf[i:j]+hf_seis_S
+                
+                
+                #######         Build Moho reflected S ray           ######
+    #            if mohoS==None:
+    #                pass
+    #            else:
+    #                if kfault%100==0:
+    #                    print '... ... building Moho reflected S wave'
+    #                take_off_angle_mS=mohoS.takeoff_angle
+    #                
+    #                #Get attenuation due to geometrical spreading (from the path length)
+    #                path_length_mS=get_path_length(mohoS,zs,dist_in_degs)
+    #                path_length_mS=path_length_mS*100 #to cm
+    #                
+    #                #Get effect of intrinsic aptimeenuation for that ray (path integrated)
+    #                Q_mS=get_attenuation(f,structure,mohoS,Qexp)
+    #                
+    #                #Build the entire path term
+    #                G_mS=(I*Q_mS)/path_length_mS
+    #
+    #                #Get conically averaged radiation pattern terms
+    #                if component=='Z':
+    #                    RP_vert=conically_avg_vert_radiation_pattern(strike,dip,rake,azimuth,take_off_angle_mS)
+    #                    #And finally multiply everything together to get the subfault amplitude spectrum
+    #                    A=C*S*G_mS*P*RP_vert   
+    #                else:
+    #                    RP=conically_avg_radiation_pattern(strike,dip,rake,azimuth,take_off_angle_mS,component_angle)
+    #                    RP=abs(RP)
+    #                    #And finally multiply everything together to get the subfault amplitude spectrum
+    #                    A=C*S*G_mS*P*RP                
+    #
+    #                #Generate windowed time series
+    #                duration=1./fc_subfault+0.063*(dist/1000)
+    #                w=windowed_gaussian(duration,hf_dt,window_type='saragoni_hart')
+    #                #w=windowed_gaussian(3*duration,hf_dt,window_type='cua',ptime=Ppaths[0].path['time'][-1],stime=Spaths[0].path['time'][-1])
+    #                
+    #                #Go to frequency domain, apply amplitude spectrum and ifft for final time series
+    #                hf_seis=apply_spectrum(w,A,f,hf_dt)
+    #                
+    #                #What time after OT should this time series start at?
+    #                time_insert=mohoS.path['time'][-1]+onset_times[kfault]
+    #                #print 'ts = '+str(time_insert)+' , Td = '+str(duration)
+    #                #time_insert=Ppaths[0].path['time'][-1]
+    #                i=argmin(abs(t-time_insert))
+    #                j=i+len(hf_seis)
+    #                
+    #                #Add seismogram
+    #                hf[i:j]=hf[i:j]+hf_seis
+    #                
+    #                #Done, reset
+    #                mohoS=None
                 
         #Done add to trace and stream
         tr.data=hf/100 #convert to m/s**2
@@ -311,7 +421,7 @@ def get_path_length(ray,zs,dist_in_degs):
     return path_length
     
 
-def get_attenuation(f,structure,ray,Qexp):
+def get_attenuation(f,structure,ray,Qexp,Qtype='S'):
     '''
     Get effect of intrinsic aptimeenuation along the ray path
     '''
@@ -331,7 +441,10 @@ def get_attenuation(f,structure,ray,Qexp):
         Qp[k],Qs[k]=get_Q(structure,depth[k])
         
     #Get the travel tiem weighted sum
-    weightedQ=sum(time_in_layer/Qs)
+    if Qtype=='S':
+        weightedQ=sum(time_in_layer/Qs)
+    else:
+        weightedQ=sum(time_in_layer/Qp)
 
     
     #get frequency dependence
@@ -593,7 +706,56 @@ def conically_avg_radiation_pattern(strike,dip,rake,azimuth,take_off_angle,
     
     return rad_pattern
     
+
     
+        
+def conically_avg_P_radiation_pattern(strike,dip,rake,azimuth,take_off_angle,
+                                    angle_range=45,Nrandom=1000):
+    '''
+    Get conically averaged radiation pattern, this is meant for horizontal 
+    channels
+    '''
+    from numpy.random import rand
+    from numpy import sin,cos,deg2rad,sign
+    
+    #Sample randomly over angle_range
+    st=strike+angle_range*(rand(Nrandom)-0.5)
+    di=dip+angle_range*(rand(Nrandom)-0.5)
+    ra=rake+angle_range*(rand(Nrandom)-0.5)
+    az=azimuth+angle_range*(rand(Nrandom)-0.5)
+    to=take_off_angle+angle_range*(rand(Nrandom)-0.5)
+ 
+    #Get theoretical radiation pattern 
+    P_theor,SV_theor,SH_theor=radiation_pattern(strike,dip,rake,azimuth,take_off_angle)    
+ 
+    #Get values of radiation pattern at specified angles
+    P,SV,SH=radiation_pattern(st,di,ra,az,to)   
+ 
+    #Projection angles to radians
+    azimuth=deg2rad(azimuth)
+    
+    #Project SV and SH components onto component angle
+    rad_pattern_theor = P_theor
+    rad_pattern = P
+    
+    #Square and sum
+    rad_pattern=sum(rad_pattern**2)
+    
+    #Geometric mean
+    rad_pattern=(rad_pattern/Nrandom)**0.5
+    
+    #What was polarity of theoretical rad. pattern?
+    polarity=sign(rad_pattern_theor)
+    
+    #Apply
+    rad_pattern=rad_pattern*polarity
+    
+    return rad_pattern            
+                
+                    
+                        
+                            
+                                    
 def conically_avg_vert_radiation_pattern(strike,dip,rake,azimuth,take_off_angle,
                                     angle_range=40,Nrandom=1000):
     '''
