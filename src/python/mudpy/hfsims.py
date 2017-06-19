@@ -120,7 +120,8 @@ def stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,model_
                 dip_factor=get_dip_factor(fault[kfault,5])
                 
                 #Subfault corner frequency
-                fc_subfault=(2.1*vr)/(dip_factor*pi*dl)
+                c0=2.0 #GP2015 value
+                fc_subfault=(c0*vr)/(dip_factor*pi*dl)
                 
                 #get subfault source spectrum
                 #S=((relative_subfault_M0[kfault]*M0/N)*f**2)/(1+fc_scale*(f/fc_subfault)**2)
