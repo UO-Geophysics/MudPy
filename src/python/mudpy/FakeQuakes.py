@@ -533,12 +533,13 @@ def select_faults(whole_fault,Dstrike,Ddip,target_Mw,buffer_factor,num_modes,sca
 
     
         
-def get_rise_times(M0,slip,fault_array,rise_time_depths):
+def get_rise_times(M0,slip,fault_array,rise_time_depths,rise_time_std=0.5):
     '''
     Calculate individual subfault rise times
     '''     
     
-    from numpy import diff,ones,where
+    from numpy import diff,ones,where,exp
+    from numpy.random import randn
     
     #Moment to dyne-cm (Because old seismologists...)
     M0=M0*1e7
@@ -561,8 +562,12 @@ def get_rise_times(M0,slip,fault_array,rise_time_depths):
     #Now determine the scaling constant k
     k=(len(slip)*tau_average)/(sum(alpha*slip**0.5))
     
+    #Stochastic perturbations
+    rand_num=randn(len(slip))
+    perturbations=exp(rise_time_std*rand_num)
+    
     #And on to the actual subfault rise times
-    rise_times=alpha*k*slip**0.5
+    rise_times=perturbations*alpha*k*slip**0.5
     
     return rise_times
     
@@ -570,14 +575,15 @@ def get_rise_times(M0,slip,fault_array,rise_time_depths):
 
     
     
-def get_rupture_onset(home,project_name,slip,fault_array,model_name,hypocenter,rise_time_depths,M0):
+def get_rupture_onset(home,project_name,slip,fault_array,model_name,hypocenter,
+        rise_time_depths,M0,sigma_rise_time=0.2):
     '''
     Using a custom built tvel file ray trace from hypocenter to determine rupture
     onset times
     '''
         
-    from numpy import genfromtxt,zeros,arctan2,sin,r_,where,log10,isnan,argmin,setxor1d
-    from numpy .random import rand
+    from numpy import genfromtxt,zeros,arctan2,sin,r_,where,log10,isnan,argmin,setxor1d,exp
+    from numpy .random import rand,randn
     from obspy.geodetics import gps2dist_azimuth
     
     #Load velocity model
@@ -661,13 +667,20 @@ def get_rupture_onset(home,project_name,slip,fault_array,model_name,hypocenter,r
         ray_times=length_ray/(vel[:,1]*rupture_multiplier)
         t_onset[kfault]=ray_times.sum()   
         
-    #Now perturb onset times according to Graves-Pitarka eq 5 and 6
-    delta_t=((M0*1e7)**(1./3))*1.8e-9
+    #Now perturb onset times according to Graves-Pitarka eq 5 and 6 (assumes 1:1 corelation with slip)
+    delta_t0=((M0*1e7)**(1./3))*1.8e-9
+    
+    #GP 2015 extra perturbation to destroy the 1:1 correlation with slip
+    rand_numb=randn()
+    delta_t=delta_t0*exp(sigma_rise_time*rand_numb)
+    
+    #Now apply total perturbation
     slip_average=slip.mean()
     i=where(slip>0.05*slip_average)[0]
     perturbation=(log10(slip)-log10(slip_average))/(log10(slip.max())-log10(slip_average))
     t_onset_final=t_onset.copy()
     t_onset_final[i]=t_onset[i]-delta_t*perturbation[i]
+    
     #Check for negative times
     i=where(t_onset_final<0)[0]
     t_onset_final[i]=t_onset[i]
