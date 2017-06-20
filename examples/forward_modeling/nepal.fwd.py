@@ -21,9 +21,9 @@ run_name='fwd'
 #####              What-do-you-want-to-do flags, 1=do, 0=leave be          #####
 
 init=0 #Initalize project
-make_green=1 #Compute GFs
+make_green=0 #Compute GFs
 make_synthetics=0 #Compute synthetics for a given model at given stations
-solve=0 # =1 solves forward problem or runs inverse calculation, =0 does nothing
+solve=1 # =1 solves forward problem or runs inverse calculation, =0 does nothing
 ###############################################################################
 
 ###############            Green function parameters               #############
@@ -35,7 +35,7 @@ model_name='avouac.mod'   #Velocity model
 rupture_name='nepal.rupt'   #Rupture model, not needed for inversion
 fault_name='nepal.fault'    #Fault geometry
 station_file='nepal.sta'   #Station distribution
-GF_list='nepal.gflist'#What GFs are to be computed for each station
+GF_list='gps.gflist'#What GFs are to be computed for each station
 NFFT=512 ; dt=0.2  #Time parameters
 dk=0.2 ; pmin=0 ; pmax=1 ; kmax=10   #fk integration parameters
 custom_stf=None
