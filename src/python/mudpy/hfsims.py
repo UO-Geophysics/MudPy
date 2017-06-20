@@ -117,7 +117,7 @@ def stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,model_
                 beta=beta/100 #to m/s
                 vr=get_local_rupture_speed(zs,beta,rise_time_depths)
                 vr=vr/1000 #to km/s
-                dip_factor=get_dip_factor(fault[kfault,5])
+                dip_factor=get_dip_factor(fault[kfault,5],fault[kfault,8],fault[kfault,9])
                 
                 #Subfault corner frequency
                 c0=2.0 #GP2015 value
@@ -338,15 +338,27 @@ def get_local_rupture_speed(zs,beta,rise_time_depths):
     return vr
 
 
-def get_dip_factor(dip):
-    if dip<45:
-        dip_factor=0.82
-    elif dip>60:
-        dip_factor=1.0
+def get_dip_factor(dip,ss,ds):
+    '''
+    This now uses GP2015
+    '''
+    
+    from numpy import arctan2,rad2deg
+    
+    if dip>45:
+        FD=1-(dip-45)/45.
     else:
-        m=(0.18/15.)
-        b=1.0-60*m
-        dip_factor=m*dip+b
+        FD=1
+    
+    rake=rad2deg(arctan2(ds,ss))
+    
+    if (rake>0 and rake <180):
+        FR=1-(rake-90)/90.
+    else:
+        FR=0
+        
+    dip_factor=1./(1+FD*FR*0.1)
+
     return dip_factor                    
                                                                                                                         
 

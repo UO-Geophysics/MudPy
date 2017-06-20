@@ -533,41 +533,70 @@ def select_faults(whole_fault,Dstrike,Ddip,target_Mw,buffer_factor,num_modes,sca
 
     
         
-def get_rise_times(M0,slip,fault_array,rise_time_depths,rise_time_std=0.5):
+def get_rise_times(M0,slip,fault_array,rise_time_depths,stoc_rake,rise_time_std=0.5):
     '''
     Calculate individual subfault rise times
     '''     
     
     from numpy import diff,ones,where,exp
     from numpy.random import randn
+    from numpy import arctan2,rad2deg,zeros
+    
     
     #Moment to dyne-cm (Because old seismologists...)
     M0=M0*1e7
     
     #Determine average rise time based on total moment of the event (Graves,Pitarka, 2010, eq. 8)
-    #tau_average=0.82*1.6*1e-9*M0**(1./3) #This is what Graves and Pitarka use
-    tau_average=2.0*1e-9*M0**(1./3)  #This is the original from Sommerville 1999 SRL, page 74
+    #tau_average=1.6*1e-9*M0**(1./3) #This is what Graves and Pitarka use in GP 2010
+    tau_average=1.45*1e-9*M0**(1./3) #This is GP2015
+    #tau_average=2.0*1e-9*M0**(1./3)  #This is the original from Sommerville 1999 SRL, page 74
     
     #Determine slope and intercept of k-scaling line
     slope=1./(rise_time_depths[0]-rise_time_depths[1])
     intercept=1-slope*rise_time_depths[1]
     
-    #For each depth determine the value of alpha
-    alpha=ones(len(fault_array))
+    #Get rakes
+    rake=stoc_rake.copy()
+    i=where(rake<0)[0]
+    rake[i]=360+rake[i]
+    rake=rake.mean()
+    
+    #Apply GP 2015 FR value
+    if (rake>0 and rake<180):
+        FR=1-(rake-90)/90.
+    else:
+        FR=0
+
+    #GP 2015 FD value
+    dip=fault_array[:,5]
+    dip=dip.mean()
+    if dip >45:
+        FD=1-(dip-45)/45.
+    else:
+        FD=1
+    
+    #GP 2015 alpha_t 
+    alpha=1./(1+FD*FR*0.1)
+    
+    #rescale average rise time
+    tau_average=tau_average*alpha
+        
+    #For each depth determine the value of depth scaling (this is for GP2010 eq.7)
+    depth_scale=ones(len(fault_array))
     ishallow=where(fault_array[:,3]<=rise_time_depths[0])[0]
-    alpha[ishallow]=2
+    depth_scale[ishallow]=2
     itransition=where((fault_array[:,3]>rise_time_depths[0]) & (fault_array[:,3]<rise_time_depths[1]))[0]
-    alpha[itransition]=slope*fault_array[itransition,3]+intercept
+    depth_scale[itransition]=slope*fault_array[itransition,3]+intercept
     
     #Now determine the scaling constant k
-    k=(len(slip)*tau_average)/(sum(alpha*slip**0.5))
+    k=(len(slip)*tau_average)/(sum(depth_scale*slip**0.5))
     
     #Stochastic perturbations
     rand_num=randn(len(slip))
     perturbations=exp(rise_time_std*rand_num)
     
     #And on to the actual subfault rise times
-    rise_times=perturbations*alpha*k*slip**0.5
+    rise_times=perturbations*depth_scale*k*(slip**0.5)
     
     return rise_times
     
@@ -831,7 +860,7 @@ def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
             fault_out[ifaults,9]=slip*sin(deg2rad(stoc_rake))
             
             #Calculate and scale rise times
-            rise_times=get_rise_times(M0,slip,fault_array,rise_time_depths)
+            rise_times=get_rise_times(M0,slip,fault_array,rise_time_depths,stoc_rake)
             
             #Place rise_times in output variable
             fault_out[:,7]=0
