@@ -257,7 +257,7 @@ def waveforms_matrix(home,project_name,fault_name,rupture_name,station_file,GF_l
         
 def waveforms_fakequakes(home,project_name,fault_name,rupture_list,GF_list,
                 model_name,run_name,dt,NFFT,G_from_file,G_name,source_time_function='dreger',
-                stf_falloff_rate=4.0):
+                stf_falloff_rate=4.0,rupture_name=None,epicenter=None,time_epi=None):
     '''
     To supplant waveforms_matrix() it needs to include resmapling and all that jazz...
     
@@ -281,28 +281,41 @@ def waveforms_fakequakes(home,project_name,fault_name,rupture_list,GF_list,
     OUT:
         Nothing
     '''
-    from numpy import genfromtxt
+    from numpy import genfromtxt,array
     import datetime
     
     print 'Solving for kinematic problem(s)'
     #Time for log file
     now=datetime.datetime.now()
     now=now.strftime('%b-%d-%H%M')
+    
     #load source names
-    all_sources=genfromtxt(home+project_name+'/data/'+rupture_list,dtype='S')
+    if rupture_list==None:
+        #all_sources=array([home+project_name+'/forward_models/'+rupture_name])   
+        all_sources=array([rupture_name])  
+    else:
+        all_sources=genfromtxt(home+project_name+'/data/'+rupture_list,dtype='S')
+    
     #Load all synthetics
     print '... loading all synthetics into memory'
     Nss,Ess,Zss,Nds,Eds,Zds=load_fakequakes_synthetics(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name)
     print '... ... done'
+    
     #Now loop over rupture models
     for ksource in range(len(all_sources)):
         print '... solving for source '+str(ksource)+' of '+str(len(all_sources))
         rupture_name=all_sources[ksource]
         print rupture_name
-        #Get epicentral time
-        epicenter,time_epi=read_fakequakes_hypo_time(home,project_name,rupture_name)
+        
+        if rupture_list!=None:
+            #Get epicentral time
+            epicenter,time_epi=read_fakequakes_hypo_time(home,project_name,rupture_name)
+            forward=False
+        else:
+            forward=True #This controls where we look for the rupture file
+        
         # Put in matrix
-        m,G=get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_name,time_epi,GF_list,epicenter,NFFT,source_time_function,stf_falloff_rate)
+        m,G=get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_name,time_epi,GF_list,epicenter,NFFT,source_time_function,stf_falloff_rate,forward=forward)
         # Solve
         waveforms=G.dot(m)
         #Write output
@@ -538,7 +551,8 @@ def load_fakequakes_synthetics(home,project_name,fault_name,model_name,GF_list,G
 
 
 
-def get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_name,time_epi,GF_list,epicenter,NFFT,source_time_function,stf_falloff_rate):
+def get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_name,time_epi,GF_list,epicenter,NFFT,
+                source_time_function,stf_falloff_rate,forward=False):
     '''
     Assemble Green functions matrix. If requested will parse all available synthetics on file and build the matrix.
     Otherwise, if it exists, it will be loaded from file 
@@ -564,7 +578,11 @@ def get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_nam
     
     from numpy import genfromtxt,loadtxt,convolve,where,zeros,arange,unique
 
-    source=loadtxt(home+project_name+'/output/ruptures/'+rupture_name,ndmin=2)
+
+    if forward==True:
+        source=loadtxt(home+project_name+'/forward_models/'+rupture_name,ndmin=2)
+    else:
+        source=loadtxt(home+project_name+'/output/ruptures/'+rupture_name,ndmin=2)
     rise_times=source[:,7]
     rupture_onset=source[:,12]
     
