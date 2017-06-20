@@ -60,6 +60,11 @@ def run_parallel_green(home,project_name,station_file,model_name,dt,NFFT,static,
             subfault_folder=home+project_name+'/GFs/tsunami/'+model_name+'_'+depth+'.sub'+subfault
         elif static==1:
             subfault_folder=home+project_name+'/GFs/static/'
+        
+        #Check if subfault folder exists, if not create it
+        if os.path.exists(subfault_folder+'/')==False:
+            os.makedirs(subfault_folder+'/')
+        
         #Copy velocity model file
         copy(home+project_name+'/structure/'+model_name,subfault_folder+'/'+model_name)
         #Move to work folder
