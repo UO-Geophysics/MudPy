@@ -36,7 +36,7 @@ rupture_name='nepal.rupt'   #Rupture model, not needed for inversion
 fault_name='nepal.fault'    #Fault geometry
 station_file='nepal.sta'   #Station distribution
 GF_list='gps.gflist'#What GFs are to be computed for each station
-G_from_file=True
+G_from_file=False
 G_name='nepal'
 NFFT=512 ; dt=0.2  #Time parameters
 dk=0.2 ; pmin=0 ; pmax=1 ; kmax=10   #fk integration parameters

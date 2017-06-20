@@ -40,7 +40,7 @@ def stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,model_
     g=Geod(ellps='WGS84')
     
     #Create taup velocity model object, paste on top of iaspei91
-    taup_create.build_taup_model(home+project_name+'/structure/bbp_norcal.tvel',output_folder=home+project_name+'/structure/')
+    #taup_create.build_taup_model(home+project_name+'/structure/bbp_norcal.tvel',output_folder=home+project_name+'/structure/')
     velmod=TauPyModel(model=home+project_name+'/structure/bbp_norcal',verbose=True)
     
     #Moments
@@ -96,22 +96,19 @@ def stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,model_
                 rho=mu/beta**2
                 
                 #Get radiation scale factor
+                Spartition=1/2**0.5
                 if component=='N' :
-                    partition=1/2**0.5
                     component_angle=0
-                if component=='E':
-                    partition=1/2**0.5
+                elif component=='E':
                     component_angle=90
-                elif component=='Z':
-                    partition=1/2**0.5 #this is addhoc right now, needs to be verified/adjsuted
                 
                 rho=rho/1000 #to g/cm**3
                 beta=(beta/1000)*1e5 #to cm/s
                 alpha=(alpha/1000)*1e5
                 
                 #Verified this produces same value as in GP
-                CS=(2*partition)/(4*pi*(rho)*(beta**3))
-                CP=(2*partition)/(4*pi*(rho)*(alpha**3))
+                CS=(2*Spartition)/(4*pi*(rho)*(beta**3))
+                CP=2/(4*pi*(rho)*(alpha**3))
                 
                 #Get local subfault rupture speed
                 beta=beta/100 #to m/s
@@ -151,9 +148,7 @@ def stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,model_
                     Spaths=velmod.get_ray_paths(zs,dist_in_degs,phase_list=['S','s'])
                 except:
                     Spaths=velmod.get_ray_paths(zs+tau_perturb,dist_in_degs,phase_list=['S','s'])
-                
-                #if kfault==24:
-                #    Spaths.plot(plot_type='cartesian')
+
                 #Get direct s path and moho reflection
                 mohoS=None
                 directS=Spaths[0]
@@ -190,20 +185,24 @@ def stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,model_
                     G_P=(I*Q_P)/path_length_P
     
                     #Get conically averaged radiation pattern terms
+                    RP=conically_avg_P_radiation_pattern(strike,dip,rake,azimuth,take_off_angle_P)
+                    RP=abs(RP)
+                       
+                    #Get partition of Pwave into Z and N,E components 
+                    incidence_angle=directP.incident_angle
+                    Npartition,Epartition,Zpartition=get_P_wave_partition(incidence_angle,azimuth)
                     if component=='Z':
-                        RP_vert=conically_avg_P_radiation_pattern(strike,dip,rake,azimuth,take_off_angle_P)
-                        RP_vert=abs(RP_vert)
-                        #And finally multiply everything together to get the subfault amplitude spectrum
-                        AP=CP*S*G_P*P*RP_vert   
+                       Ppartition=Zpartition 
+                    elif component=='N':
+                        Ppartition=Npartition
                     else:
-                        RP=conically_avg_P_radiation_pattern(strike,dip,rake,azimuth,take_off_angle_P)
-                        RP=abs(RP)
-                        #And finally multiply everything together to get the subfault amplitude spectrum
-                        fudge=0.12  #Relative amplitude of P wave on horizontals correct value?
-                        AP=CP*S*G_P*P*RP*fudge            
+                        Ppartition=Epartition
+                        
+                    #And finally multiply everything together to get the subfault amplitude spectrum
+                    AP=CP*S*G_P*P*RP*Ppartition           
     
                     #Generate windowed time series
-                    duration=1./fc_subfault+0.063*(dist/1000)
+                    duration=1./fc_subfault+0.09*(dist/1000)
                     w=windowed_gaussian(duration,hf_dt,window_type='saragoni_hart')
                     
                     #Go to frequency domain, apply amplitude spectrum and ifft for final time series
@@ -861,3 +860,24 @@ def radiation_pattern(strike,dip,rake,azimuth,take_off_angle):
     SH = CR*CD*CT*SS + CR*SD*ST*(CS**2-SS**2) + SR*(CD**2-SD**2)*CT*CS - SR*SD*CD*ST*2*SS*CS  
 
     return P,SV,SH
+    
+    
+    
+def get_P_wave_partition(incidence_angle,azimuth):
+    '''
+    Get partition of P-wave into horizontal and vertical components
+    '''
+    
+    from numpy import sin,cos,deg2rad
+    
+    #Split into horizontal and vertical
+    Zpartition=abs(cos(deg2rad(incidence_angle)))
+    Hpartition=abs(sin(deg2rad(incidence_angle)))
+    
+    #Split horizontal into N and E
+    Npartition=abs(Hpartition*cos(deg2rad(azimuth)))
+    Epartition=abs(Hpartition*sin(deg2rad(azimuth)))
+    
+    return Npartition, Epartition, Zpartition
+    
+    
