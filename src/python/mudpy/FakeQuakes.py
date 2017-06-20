@@ -810,9 +810,12 @@ def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
                 M0=sum(slip*fault_out[ifaults,10]*fault_out[ifaults,11]*mu[ifaults])
                 Mw=(2./3)*(log10(M0)-9.1)
             
+            #Get stochastic rake vector
+            stoc_rake=get_stochastic_rake(rake,len(slip))
+            
             #Place slip values in output variable
-            fault_out[ifaults,8]=slip*cos(deg2rad(rake))
-            fault_out[ifaults,9]=slip*sin(deg2rad(rake))
+            fault_out[ifaults,8]=slip*cos(deg2rad(stoc_rake))
+            fault_out[ifaults,9]=slip*sin(deg2rad(stoc_rake))
             
             #Calculate and scale rise times
             rise_times=get_rise_times(M0,slip,fault_array,rise_time_depths)
@@ -869,3 +872,28 @@ def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
     f.write(ruptures_list)
     f.close()
     
+
+
+
+def get_stochastic_rake(rake,Nsamples,sigma_rake=10,max_variation=45):
+    '''
+    Get stochastic rake
+    '''
+    
+    from numpy.random import randn
+    from numpy import where
+    
+    #Limits
+    max_rake=rake+max_variation
+    min_rake=rake-max_variation
+    
+    #Get stochastic rake
+    stoc_rake=sigma_rake * randn(Nsamples) + rake
+    
+    #make sure we don't exceed the limits
+    i=where(stoc_rake>max_rake)[0]
+    stoc_rake[i]=max_rake
+    i=where(stoc_rake<min_rake)[0]
+    stoc_rake[i]=min_rake
+    
+    return stoc_rake
