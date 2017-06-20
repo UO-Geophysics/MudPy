@@ -199,7 +199,7 @@ def stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,model_
                         RP=conically_avg_P_radiation_pattern(strike,dip,rake,azimuth,take_off_angle_P)
                         RP=abs(RP)
                         #And finally multiply everything together to get the subfault amplitude spectrum
-                        fudge=0.05  #Relative amplitude of P wave on horizontals correct value?
+                        fudge=0.12  #Relative amplitude of P wave on horizontals correct value?
                         AP=CP*S*G_P*P*RP*fudge            
     
                     #Generate windowed time series
