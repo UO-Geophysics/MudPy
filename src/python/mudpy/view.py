@@ -77,7 +77,7 @@ pqlx_dict={'blue': (( 0.  ,  1.  ,  1.  ),
             
 
 
-def quick_model(rupt):
+def quick_model(rupt,s=5):
     '''
     Quick and dirty plot of a .rupt file. Shows map view of slip
     
@@ -114,7 +114,7 @@ def quick_model(rupt):
     x,y=slip2geo(ss,ds,strike)
     #Plot
     plt.figure()
-    plt.scatter(lon,lat,marker='o',c=slip,s=250,cmap=whitejet)
+    plt.scatter(lon,lat,marker='o',c=slip,s=s,cmap=whitejet)
     plt.ylabel('Latitude')
     plt.xlabel('Longitude')
     cb=plt.colorbar()

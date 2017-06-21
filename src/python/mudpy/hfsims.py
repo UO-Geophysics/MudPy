@@ -1,8 +1,10 @@
 def stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,model_name,
-        rise_time_depths,moho_depth_in_km,total_duration=100,hf_dt=0.01,stress_parameter=50e5,
+        rise_time_depths,moho_depth_in_km,total_duration=100,hf_dt=0.01,stress_parameter=50,
         kappa=0.04,Qexp=0.6,component='N',Pwave=False): 
     '''
     Run stochastic HF sims
+    
+    stress parameter is in bars
     '''
     
     from numpy import genfromtxt,pi,logspace,log10,mean,where,exp,arange,zeros,argmin,rad2deg,arctan2
@@ -57,11 +59,12 @@ def stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,model_
     dl=dl/1000 # to km
     
     # Frankel 95 scaling of corner frequency #verified this looks the same in GP
+    # Right now this applies the same factor to all faults
     # Move inside the loop with right dl????
-    fc_scale=(M0)/(N*50*dl**3*1e21) #Frankel scaling
+    fc_scale=(M0)/(N*stress_parameter*dl**3*1e21) #Frankel scaling
     
     #Move this inisde loop?
-    small_event_M0 = 50*dl**3*1e21
+    small_event_M0 = stress_parameter*dl**3*1e21
     
     #Tau=p perturbation
     tau_perturb=0.1

@@ -533,7 +533,7 @@ def select_faults(whole_fault,Dstrike,Ddip,target_Mw,buffer_factor,num_modes,sca
 
     
         
-def get_rise_times(M0,slip,fault_array,rise_time_depths,stoc_rake,rise_time_std=0.5):
+def get_rise_times(M0,slip,fault_array,rise_time_depths,stoc_rake,rise_time_std=0.1):
     '''
     Calculate individual subfault rise times
     '''     
@@ -597,6 +597,7 @@ def get_rise_times(M0,slip,fault_array,rise_time_depths,stoc_rake,rise_time_std=
     
     #And on to the actual subfault rise times
     rise_times=perturbations*depth_scale*k*(slip**0.5)
+    #rise_times=depth_scale*k*(slip**0.5)
     
     return rise_times
     
