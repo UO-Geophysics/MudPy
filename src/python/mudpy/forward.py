@@ -1829,27 +1829,28 @@ def makefault(fout,strike,dip,nstrike,dx_dip,dx_strike,epicenter,num_updip,num_d
     ytemp=y0.copy()
     ztemp=z0.copy()
     #Get delta h and delta z for up/ddx_dip=1own dip projection
-    dh=dx_dip*cos(deg2rad(dip))
-    dz=dx_dip*sin(deg2rad(dip))
-    #Project updip lines
-    for k in range(num_updip):
-        xtemp=xtemp+dh*cos(deg2rad(proj_angle))
-        ytemp=ytemp+dh*sin(deg2rad(proj_angle))
-        ztemp=ztemp-dz
-        x=r_[x,xtemp]
-        y=r_[y,ytemp]
-        z=r_[z,ztemp]
-    #Now downdip lines
-    xtemp=x0.copy()
-    ytemp=y0.copy()
-    ztemp=z0.copy()
-    for k in range(num_downdip):
-        xtemp=xtemp-dh*cos(deg2rad(proj_angle))
-        ytemp=ytemp-dh*sin(deg2rad(proj_angle))
-        ztemp=ztemp+dz
-        x=r_[x,xtemp]
-        y=r_[y,ytemp]
-        z=r_[z,ztemp]
+    if num_downdip>0 and num_updip>0:
+        dh=dx_dip*cos(deg2rad(dip))
+        dz=dx_dip*sin(deg2rad(dip))
+        #Project updip lines
+        for k in range(num_updip):
+            xtemp=xtemp+dh*cos(deg2rad(proj_angle))
+            ytemp=ytemp+dh*sin(deg2rad(proj_angle))
+            ztemp=ztemp-dz
+            x=r_[x,xtemp]
+            y=r_[y,ytemp]
+            z=r_[z,ztemp]
+        #Now downdip lines
+        xtemp=x0.copy()
+        ytemp=y0.copy()
+        ztemp=z0.copy()
+        for k in range(num_downdip):
+            xtemp=xtemp-dh*cos(deg2rad(proj_angle))
+            ytemp=ytemp-dh*sin(deg2rad(proj_angle))
+            ztemp=ztemp+dz
+            x=r_[x,xtemp]
+            y=r_[y,ytemp]
+            z=r_[z,ztemp]
     #Now use pyproj to dead reckon anf get lat/lon coordinates of subfaults
     g = pyproj.Geod(ellps='WGS84')
     #first get azimuths of all points, go by quadrant

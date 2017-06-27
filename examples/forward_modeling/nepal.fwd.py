@@ -21,9 +21,9 @@ run_name='fwd'
 #####              What-do-you-want-to-do flags, 1=do, 0=leave be          #####
 
 init=0 #Initalize project
-make_green=1 #Compute GFs
-make_synthetics=1 #Compute synthetics for a given model at given stations
-solve=0 # =1 solves forward problem or runs inverse calculation, =0 does nothing
+make_green=0 #Compute GFs
+make_synthetics=0 #Compute synthetics for a given model at given stations
+solve=1 # =1 solves forward problem or runs inverse calculation, =0 does nothing
 ###############################################################################
 
 ###############            Green function parameters               #############
@@ -47,7 +47,7 @@ custom_stf=None
 time_epi=UTCDateTime('2015-04-25T06:11:26')
 epicenter=array([84.708,28.147,15]) 
 resample=None #Resample synthetics to this rate (in Hz)
-integrate=1 #=0 produces velocities, =1 makes displacements
+integrate=0 #=0 produces velocities, =1 makes displacements
 beta=0 #Rake offset, usually a good idea to keep at zero
 num_windows=1
 rupture_speed=3.0  #Only necessary if onset times are not identified in rupt file
@@ -86,6 +86,9 @@ if solve==1:
                 stf_falloff_rate=4.0,rupture_name=rupture_name,epicenter=epicenter,time_epi=time_epi)
     if static==1: #Forward problem (coseismics)
         forward.coseismics_matrix(home,project_name,rupture_name,station_file,G_from_file,G_name)
+        
+        
+
     
     
     
