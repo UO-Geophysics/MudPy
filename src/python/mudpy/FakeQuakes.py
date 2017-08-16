@@ -736,19 +736,94 @@ def get_centroid(fault):
     centroid_z=sum(fault[:,3]*moment)/moment.sum()
 
     return centroid_lon,centroid_lat,centroid_z             
+
                                                 
+def get_stochastic_rake(rake,Nsamples,sigma_rake=10,max_variation=45):
+    '''
+    Get stochastic rake
+    '''
+    
+    from numpy.random import randn
+    from numpy import where
+    
+    #Limits
+    max_rake=rake+max_variation
+    min_rake=rake-max_variation
+    
+    #Get stochastic rake
+    stoc_rake=sigma_rake * randn(Nsamples) + rake
+    
+    #make sure we don't exceed the limits
+    i=where(stoc_rake>max_rake)[0]
+    stoc_rake[i]=max_rake
+    i=where(stoc_rake<min_rake)[0]
+    stoc_rake[i]=min_rake
+    
+    return stoc_rake                                                                                                
+   
+def write_all_event_summary(home,project_name,run_name):
+    '''
+    Write a sumamry file with Mw, max slip, rise_time,onset time for all events
+    '''
+    
+    from glob import glob
+    from string import replace
+    from numpy import array,genfromtxt,sqrt,zeros,savetxt
+    
+    #How many events?
+    ruptures=glob(home+project_name+'/output/ruptures/*.rupt')
+    logs=glob(home+project_name+'/output/ruptures/*.log')
+    
+    #where does this go?
+    fout=home+project_name+'/output/ruptures/_kin_summary.txt'
+    out=zeros((len(logs),7))
+    
+    for k in range(len(logs)):
+        
+        print k
+        
+        #Get info about fault
+        f=open(logs[k],'r')
+        loop_go=True
+        while loop_go:
+            line=f.readline()
+            if 'Hypocenter (lon,lat,z[km])' in line:                
+                s=replace(line.split(':')[-1],'(','')
+                s=replace(s,')','')
+                hypo=array(s.split(',')).astype('float')
+                loop_go=False       
+            if 'Actual magnitude' in line:
+                Mw=float(line.split(':')[-1].split(' ')[-1])  
+        f.close()        
+        
+        #Get peak quantities
+        f=genfromtxt(ruptures[k])
+        peak_slip=max(sqrt(f[:,8]**2+f[:,9]**2))
+        peak_rise=max(f[:,7])
+        peak_onset=max(f[:,12])
+        
+        out[k,0:3]=hypo
+        out[k,3]=Mw
+        out[k,4]=peak_slip
+        out[k,5]=peak_rise
+        out[k,6]=peak_onset
+        
+    savetxt(fout,out,fmt='%8.2f')
+                                                                                                                                                                                                    
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
     
 def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
         load_distances,distances_name,UTM_zone,target_Mw,model_name,hurst,Ldip,
         Lstrike,num_modes,Nrealizations,rake,buffer_factor,rise_time_depths,time_epi,
         max_slip,source_time_function,lognormal,slip_standard_deviation,scaling_law,
-        force_magnitude=False,force_area=False):
+        force_magnitude=False,force_area=False,mean_slip_name=None,hypocenter=None,
+        slip_tol=1e-2,force_hypocenter=False):
     
     '''
     Depending on user selected flags parse the work out to different functions
     '''
     
-    from numpy import load,save,genfromtxt,log10,cos,sin,deg2rad,savetxt,zeros,sqrt
+    from numpy import load,save,genfromtxt,log10,cos,sin,deg2rad,savetxt,zeros,sqrt,where
     from string import rjust
     from time import gmtime, strftime
 
@@ -808,7 +883,15 @@ def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
                     Ld=Ldip
                 
                 #Get the mean uniform slip for the target magnitude
-                mean_slip,mu=get_mean_slip(target_Mw[kmag],fault_array,vel_mod)
+                if mean_slip_name==None:
+                    mean_slip,mu=get_mean_slip(target_Mw[kmag],fault_array,vel_mod)
+                else:
+                    foo,mu=get_mean_slip(target_Mw[kmag],fault_array,vel_mod)
+                    mean_fault=genfromtxt(mean_slip_name)
+                    mean_slip=(mean_fault[:,8]**2+mean_fault[:,9]**2)**0.5
+                    #Make sure mean_slip has no zero slip faults
+                    izero=where(mean_slip==0)[0]
+                    mean_slip[izero]=slip_tol
                 
                 #Get correlation matrix
                 C=vonKarman_correlation(Dstrike_selected,Ddip_selected,Ls,Ld,hurst)
@@ -868,7 +951,9 @@ def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
             fault_out[ifaults,7]=rise_times
             
             #Calculate rupture onset times
-            hypocenter=whole_fault[hypo_fault,1:4]
+            if force_hypocenter==False: #Use random hypo, otehrwise force hypo to user specified
+                hypocenter=whole_fault[hypo_fault,1:4]
+
             t_onset=get_rupture_onset(home,project_name,slip,fault_array,model_name,hypocenter,rise_time_depths,M0)
             fault_out[:,12]=0
             fault_out[ifaults,12]=t_onset
@@ -915,28 +1000,3 @@ def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
     f.write(ruptures_list)
     f.close()
     
-
-
-
-def get_stochastic_rake(rake,Nsamples,sigma_rake=10,max_variation=45):
-    '''
-    Get stochastic rake
-    '''
-    
-    from numpy.random import randn
-    from numpy import where
-    
-    #Limits
-    max_rake=rake+max_variation
-    min_rake=rake-max_variation
-    
-    #Get stochastic rake
-    stoc_rake=sigma_rake * randn(Nsamples) + rake
-    
-    #make sure we don't exceed the limits
-    i=where(stoc_rake>max_rake)[0]
-    stoc_rake[i]=max_rake
-    i=where(stoc_rake<min_rake)[0]
-    stoc_rake[i]=min_rake
-    
-    return stoc_rake

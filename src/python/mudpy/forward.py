@@ -257,7 +257,8 @@ def waveforms_matrix(home,project_name,fault_name,rupture_name,station_file,GF_l
         
 def waveforms_fakequakes(home,project_name,fault_name,rupture_list,GF_list,
                 model_name,run_name,dt,NFFT,G_from_file,G_name,source_time_function='dreger',
-                stf_falloff_rate=4.0,rupture_name=None,epicenter=None,time_epi=None):
+                stf_falloff_rate=4.0,rupture_name=None,epicenter=None,time_epi=None,
+                hot_start=0):
     '''
     To supplant waveforms_matrix() it needs to include resmapling and all that jazz...
     
@@ -302,7 +303,7 @@ def waveforms_fakequakes(home,project_name,fault_name,rupture_list,GF_list,
     print '... ... done'
     
     #Now loop over rupture models
-    for ksource in range(len(all_sources)):
+    for ksource in range(hot_start,len(all_sources)):
         print '... solving for source '+str(ksource)+' of '+str(len(all_sources))
         rupture_name=all_sources[ksource]
         print rupture_name
@@ -326,7 +327,8 @@ def waveforms_fakequakes(home,project_name,fault_name,rupture_list,GF_list,
                 
 def hf_waveforms(home,project_name,fault_name,rupture_list,GF_list,model_name,run_name,dt,NFFT,G_from_file,
             G_name,rise_time_depths,moho_depth_in_km,source_time_function='dreger',duration=100.0,
-            stf_falloff_rate=4.0,hf_dt=0.02,Pwave=False):
+            stf_falloff_rate=4.0,hf_dt=0.02,Pwave=False,hot_start=0,stress_parameter=50,
+            high_stress_depth=1e4):
     '''
     Make semistochastic high frequency accelerograms
     '''                        
@@ -338,10 +340,14 @@ def hf_waveforms(home,project_name,fault_name,rupture_list,GF_list,model_name,ru
     all_sources=genfromtxt(home+project_name+'/data/'+rupture_list,dtype='S')
 
     #Now loop over rupture models
-    for ksource in range(len(all_sources)):
+    Nsources=all_sources.size
+    for ksource in range(hot_start,Nsources):
         
-        print '... solving HF waveforms for source '+str(ksource)+' of '+str(len(all_sources))
-        rupture_name=all_sources[ksource]
+        print '... solving HF waveforms for source '+str(ksource)+' of '+str(Nsources)
+        if Nsources>1:
+            rupture_name=all_sources[ksource]
+        else:
+            rupture_name=str(all_sources)
         print rupture_name
         
         #Get epicentral time
@@ -349,13 +355,13 @@ def hf_waveforms(home,project_name,fault_name,rupture_list,GF_list,model_name,ru
         
         waveforms_N=hfsims.stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,
                         model_name,rise_time_depths,moho_depth_in_km,hf_dt=hf_dt,total_duration=duration,component='N',
-                        Pwave=Pwave)
+                        Pwave=Pwave,stress_parameter=stress_parameter,high_stress_depth=high_stress_depth)
         waveforms_E=hfsims.stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,
                         model_name,rise_time_depths,moho_depth_in_km,hf_dt=hf_dt,total_duration=duration,component='E',
-                        Pwave=Pwave)
+                        Pwave=Pwave,stress_parameter=stress_parameter,high_stress_depth=high_stress_depth)
         waveforms_Z=hfsims.stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,
                         model_name,rise_time_depths,moho_depth_in_km,hf_dt=hf_dt,total_duration=duration,component='Z',
-                        Pwave=Pwave)
+                        Pwave=Pwave,stress_parameter=stress_parameter,high_stress_depth=high_stress_depth)
         
         #Write output
         write_fakequakes_hf_waveforms(home,project_name,rupture_name,waveforms_N,waveforms_E,waveforms_Z)   
@@ -580,9 +586,9 @@ def get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_nam
 
 
     if forward==True:
-        source=loadtxt(home+project_name+'/forward_models/'+rupture_name,ndmin=2)
+        source=genfromtxt(home+project_name+'/forward_models/'+rupture_name)
     else:
-        source=loadtxt(home+project_name+'/output/ruptures/'+rupture_name,ndmin=2)
+        source=genfromtxt(home+project_name+'/output/ruptures/'+rupture_name)
     rise_times=source[:,7]
     rupture_onset=source[:,12]
     
@@ -605,7 +611,9 @@ def get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_nam
     matrix_pos=0 #tracks where in matrix synths are placed
     read_start=0  #Which trace to start reading from
     for ksta in range(Nsta):
+
         for ksource in range(len(i_non_zero)):
+
             #Get synthetics
             nss=Nss[read_start+i_non_zero[ksource]].copy()
             ess=Ess[read_start+i_non_zero[ksource]].copy()

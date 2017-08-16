@@ -1,19 +1,25 @@
 def stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,model_name,
         rise_time_depths,moho_depth_in_km,total_duration=100,hf_dt=0.01,stress_parameter=50,
-        kappa=0.04,Qexp=0.6,component='N',Pwave=False): 
+        kappa=0.04,Qexp=0.6,component='N',Pwave=False,high_stress_depth=1e4): 
     '''
     Run stochastic HF sims
     
     stress parameter is in bars
     '''
     
-    from numpy import genfromtxt,pi,logspace,log10,mean,where,exp,arange,zeros,argmin,rad2deg,arctan2
+    from numpy import genfromtxt,pi,logspace,log10,mean,where,exp,arange,zeros,argmin,rad2deg,arctan2,real
     from pyproj import Geod
     from obspy.geodetics import kilometer2degrees
-    from obspy.taup import taup_create,TauPyModel
+    from obspy.taup import TauPyModel
     from mudpy.forward import get_mu
     from obspy import Stream,Trace
-    from matplotlib import pyplot as plt
+    from sys import stdout
+    import warnings
+
+    print 'stress is '+str(stress_parameter)
+
+    #I don't condone it but this cleans up the warnings
+    warnings.filterwarnings("ignore")
     
     #initalize  output object
     st=Stream()
@@ -43,7 +49,7 @@ def stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,model_
     
     #Create taup velocity model object, paste on top of iaspei91
     #taup_create.build_taup_model(home+project_name+'/structure/bbp_norcal.tvel',output_folder=home+project_name+'/structure/')
-    velmod=TauPyModel(model=home+project_name+'/structure/bbp_norcal',verbose=True)
+    velmod=TauPyModel(model=home+project_name+'/structure/maule',verbose=True)
     
     #Moments
     slip=(fault[:,8]**2+fault[:,9]**2)**0.5
@@ -58,16 +64,12 @@ def stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,model_
     dl=mean((fault[:,10]+fault[:,11])/2) #perdominant length scale
     dl=dl/1000 # to km
     
-    # Frankel 95 scaling of corner frequency #verified this looks the same in GP
-    # Right now this applies the same factor to all faults
-    # Move inside the loop with right dl????
-    fc_scale=(M0)/(N*stress_parameter*dl**3*1e21) #Frankel scaling
-    
-    #Move this inisde loop?
-    small_event_M0 = stress_parameter*dl**3*1e21
-    
     #Tau=p perturbation
     tau_perturb=0.1
+    
+    #Deep faults receive a higher stress
+    stress_multiplier=3
+        
     
     #Loop over stations
     for ksta in range(len(lonlat)):
@@ -84,14 +86,66 @@ def stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,model_
         #Loop over subfaults
         for kfault in range(len(fault)):
             
+            #Print status to screen            
+            if kfault % 150 == 0:
+                if kfault==0:
+                    stdout.write('      [')
+                    stdout.flush()
+                stdout.write('.')
+                stdout.flush()
+            if kfault==len(fault)-1:
+                stdout.write(']\n')
+                stdout.flush()                
+            
             #Include only subfaults with non-zero slip
             if subfault_M0[kfault]>0:
-            
+                
                 #Get subfault to station distance
                 lon_source=fault[kfault,1]
                 lat_source=fault[kfault,2]
                 azimuth,baz,dist=g.inv(lon_source,lat_source,lonlat[ksta,0],lonlat[ksta,1])
                 dist_in_degs=kilometer2degrees(dist/1000.)
+                
+                #Source depth?
+                z_source=fault[kfault,3]
+                
+                #No change
+                stress=stress_parameter
+                
+                #Is subfault in an SMGA?
+                radius_in_km=15.0
+                smga_center_lon=-69.709200
+                smga_center_lat=-19.683600
+                in_smga=is_subfault_in_smga(lon_source,lat_source,smga_center_lon,smga_center_lat,radius_in_km)
+                
+                ##Apply multiplier?
+                if in_smga==True:
+                    stress=stress_parameter*stress_multiplier
+                    print "%.4f,%.4f is in SMGA" % (smga_center_lon,smga_center_lat)
+                else:
+                    stress=stress_parameter
+                
+                #Apply multiplier?
+                #if slip[kfault]>7.5:
+                #    stress=stress_parameter*stress_multiplier
+                ##elif lon_source>-72.057 and lon_source<-71.2 and lat_source>-30.28:
+                ##    stress=stress_parameter*stress_multiplier
+                #else:
+                #    stress=stress_parameter
+                    
+                #Apply multiplier?
+                #if z_source>high_stress_depth:
+                #    stress=stress_parameter*stress_multiplier
+                #else:
+                #    stress=stress_parameter
+                
+                # Frankel 95 scaling of corner frequency #verified this looks the same in GP
+                # Right now this applies the same factor to all faults
+                fc_scale=(M0)/(N*stress*dl**3*1e21) #Frankel scaling
+                small_event_M0 = stress*dl**3*1e21
+                
+            
+
                 
                 #Get rho, alpha, beta at subfault depth
                 zs=fault[kfault,3]
@@ -151,6 +205,30 @@ def stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,model_
                     Spaths=velmod.get_ray_paths(zs,dist_in_degs,phase_list=['S','s'])
                 except:
                     Spaths=velmod.get_ray_paths(zs+tau_perturb,dist_in_degs,phase_list=['S','s'])
+                    
+                #sometimes there's no S, weird I know. Check twice.
+                if len(Spaths)==0:
+                    Spaths=velmod.get_ray_paths(zs+tau_perturb,dist_in_degs,phase_list=['S','s'])
+                if len(Spaths)==0:
+                    Spaths=velmod.get_ray_paths(zs+5*tau_perturb,dist_in_degs,phase_list=['S','s'])   
+                if len(Spaths)==0:
+                    Spaths=velmod.get_ray_paths(zs-5*tau_perturb,dist_in_degs,phase_list=['S','s'])
+                if len(Spaths)==0:
+                    Spaths=velmod.get_ray_paths(zs+5*tau_perturb,dist_in_degs,phase_list=['S','s'])  
+                if len(Spaths)==0:
+                    Spaths=velmod.get_ray_paths(zs-10*tau_perturb,dist_in_degs,phase_list=['S','s'])
+                if len(Spaths)==0:
+                    Spaths=velmod.get_ray_paths(zs+10*tau_perturb,dist_in_degs,phase_list=['S','s']) 
+                if len(Spaths)==0:
+                    Spaths=velmod.get_ray_paths(zs-50*tau_perturb,dist_in_degs,phase_list=['S','s'])
+                if len(Spaths)==0:
+                    Spaths=velmod.get_ray_paths(zs+50*tau_perturb,dist_in_degs,phase_list=['S','s']) 
+                if len(Spaths)==0:
+                    Spaths=velmod.get_ray_paths(zs-75*tau_perturb,dist_in_degs,phase_list=['S','s'])
+                if len(Spaths)==0:
+                    Spaths=velmod.get_ray_paths(zs+75*tau_perturb,dist_in_degs,phase_list=['S','s']) 
+                if len(Spaths)==0:
+                    print 'ERROR: I give up, no direct S in spite of multiple attempts at subfault '+str(kfault)
 
                 #Get direct s path and moho reflection
                 mohoS=None
@@ -216,8 +294,17 @@ def stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,model_
                     i=argmin(abs(t-time_insert))
                     j=i+len(hf_seis_P)
                     
-                    #Add seismogram
-                    hf[i:j]=hf[i:j]+hf_seis_P                    
+                    #Check seismogram doesn't go past last sample
+                    if i<len(hf)-1: #if i (the beginning of the seimogram) is less than the length
+                        if j>len(hf): #seismogram goes past total_duration length, trim it
+                            len_paste=len(hf)-i
+                            j=len(hf)
+                            #Add seismogram
+                            hf[i:j]=hf[i:j]+real(hf_seis_P[0:len_paste])
+                        else: #Lengths are fine
+                            hf[i:j]=hf[i:j]+real(hf_seis_P)      
+                    else: #Seismogram starts after end of available space
+                        pass         
                                                
                                                                       
                                                                                                                     
@@ -261,8 +348,18 @@ def stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,model_
                 i=argmin(abs(t-time_insert))
                 j=i+len(hf_seis_S)
                 
-                #Add seismogram
-                hf[i:j]=hf[i:j]+hf_seis_S
+                
+                #Check seismogram doesn't go past last sample
+                if i<len(hf)-1: #if i (the beginning of the seimogram) is less than the length
+                    if j>len(hf): #seismogram goes past total_duration length, trim it
+                        len_paste=len(hf)-i
+                        j=len(hf)
+                        #Add seismogram
+                        hf[i:j]=hf[i:j]+real(hf_seis_S[0:len_paste])
+                    else: #Lengths are fine
+                        hf[i:j]=hf[i:j]+real(hf_seis_S)
+                else: #Beginning of seismogram is past end of available space
+                    pass
                 
                 
                 #######         Build Moho reflected S ray           ######
@@ -883,4 +980,22 @@ def get_P_wave_partition(incidence_angle,azimuth):
     
     return Npartition, Epartition, Zpartition
     
+ 
+def is_subfault_in_smga(subfault_lon,subfault_lat,smga_center_lon,smga_center_lat,radius_in_km):
+    '''
+    Decide whether subfault is inside a defined strong motion generating area SMGA
+    '''
     
+    from pyproj import Geod
+    
+    p=Geod(ellps='WGS84')
+    
+    az,baz,d=p.inv(subfault_lon,subfault_lat,smga_center_lon,smga_center_lat)
+    d=d/1000.
+    
+    if d<radius_in_km:
+        subfault_in_smga=True
+    else:
+        subfault_in_smga=False
+        
+    return subfault_in_smga   

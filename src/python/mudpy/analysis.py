@@ -552,4 +552,73 @@ def pgd_slope_difference(home,project_name,rupture_list):
         
     return Mw,slope_theory,slope_observed
         
+  
+def dump_picks(event_log,vel_model,gf_list,out_file):
+    '''  
+    Dump P and S picks to a file
+    '''
     
+    from obspy.taup import TauPyModel
+    from obspy.geodetics.base import gps2dist_azimuth
+    from obspy.geodetics import locations2degrees
+    from numpy import genfromtxt,zeros,array,ones
+    from string import replace
+    
+    
+    #Read station locations
+    sta=genfromtxt(gf_list,usecols=0,dtype='S')
+    lonlat=genfromtxt(gf_list,usecols=[1,2])
+    
+    #Load velocity model for ray tracing
+    velmod = TauPyModel(vel_model)
+    
+    # Get hypocenter
+    f=open(event_log,'r')
+    loop_go=True
+    while loop_go:
+        line=f.readline()
+        if 'Hypocenter (lon,lat,z[km])' in line:
+            s=replace(line.split(':')[-1],'(','')
+            s=replace(s,')','')
+            hypo=array(s.split(',')).astype('float')
+            loop_go=False
+
+    #compute station to hypo distances
+    d=zeros(len(lonlat))
+    for k in range(len(lonlat)):
+        d[k],az,baz=gps2dist_azimuth(lonlat[k,1],lonlat[k,0],hypo[1],hypo[0])
+        d[k]=d[k]/1000
+        
+
+    f=open(out_file,'w')
+    f.write('# sta,lon,lat,ptime(s),stime(s)\n')
+    
+    for k in range(len(sta)):
+        
+        
+        # Ray trace
+        deg=locations2degrees(hypo[1],hypo[0],lonlat[k,1],lonlat[k,0])
+        try:
+            arrivals = velmod.get_travel_times(source_depth_in_km=hypo[2],distance_in_degree=deg,phase_list=['P','Pn','S','Sn','p','s'])
+        except:
+            arrivals = velmod.get_travel_times(source_depth_in_km=hypo[2]-1.056,distance_in_degree=deg,phase_list=['P','Pn','S','Sn','p','s'])
+
+        ptime=1e6
+        stime=1e6
+            
+        #Determine P and S arrivals
+        for kphase in range(len(arrivals)):
+            if 'P' == arrivals[kphase].name or 'p' == arrivals[kphase].name or 'Pn' == arrivals[kphase].name:
+                if arrivals[kphase].time<ptime:
+                    ptime=arrivals[kphase].time
+            if 'S' == arrivals[kphase].name or 's' == arrivals[kphase].name or 'Sn' == arrivals[kphase].name:
+                if arrivals[kphase].time<stime:
+                    stime=arrivals[kphase].time
+            
+        lon=lonlat[k,0]
+        lat=lonlat[k,1] 
+        station=sta[k]       
+        line='%s\t%.4f\t%.4f\t%10.4f\t%10.4f\n' % (station,lon,lat,ptime,stime)
+        f.write(line)
+        
+    f.close()

@@ -76,6 +76,12 @@ pqlx_dict={'blue': (( 0.  ,  1.  ,  1.  ),
             ( 1.  ,  1.  ,  1.  ))}
             
 
+font = {'family' : 'normal',
+        'weight' : 'normal',
+        'size'   : 16}
+
+matplotlib.rc('font', **font)
+
 
 def quick_model(rupt,s=5):
     '''
@@ -413,7 +419,7 @@ def plot_insar(home,project_name,GF_list,(los_min,los_max)):
     plt.show()
 
 
-def tile_slip(rupt,nstrike,ndip,(slip_bounds),geographic=False,epicenter=0,epicenter_line=0,thresh=0):
+def tile_slip(rupt,nstrike,ndip,(slip_bounds),geographic=False,epicenter=0,epicenter_line=0,thresh=0,xlims=[-100,100],ylims=[-100,100],fig_size=(10, 3)):
     '''
     Detailed plot of a forward model or inversion result file
     
@@ -495,9 +501,11 @@ def tile_slip(rupt,nstrike,ndip,(slip_bounds),geographic=False,epicenter=0,epice
         for k in range(len(lat)):
             out=gps2DistAzimuth(epicenter[1],epicenter[0],lat[k],lon[k])
             if lat[k]<epicenter[1]: #It's to the south
-                along_strike[k]=-out[0]/1000
-            else:
+                #along_strike[k]=-out[0]/1000
                 along_strike[k]=out[0]/1000
+            else:
+                #along_strike[k]=out[0]/1000
+                along_strike[k]=-out[0]/1000
         #Now tile
         along_strike=tile(along_strike,ndip)
         #Process the aftershocks
@@ -505,7 +513,8 @@ def tile_slip(rupt,nstrike,ndip,(slip_bounds),geographic=False,epicenter=0,epice
         for k in range(len(lat_afters)):
             out=gps2DistAzimuth(epicenter[1],epicenter[0],lat_afters[k],lon_afters[k])
             if lat_afters[k]<epicenter[1]: #It's to the south
-                along_strike_afters[k]=-out[0]/1000
+                #along_strike_afters[k]=-out[0]/1000
+                along_strike_afters[k]=out[0]/1000
             else:
                 along_strike_afters[k]=out[0]/1000
     #Get indices for plot
@@ -533,15 +542,15 @@ def tile_slip(rupt,nstrike,ndip,(slip_bounds),geographic=False,epicenter=0,epice
     else:
         rakess=rakess*slip
         rakeds=rakeds*slip
-        plt.figure(num=None, figsize=(13, 3.5), dpi=80)
+        plt.figure(num=None, figsize=fig_size, dpi=80)
         plt.scatter(along_strike,depth,marker='s',linewidth=0.5,edgecolor='#CCCCCC',c=slip,s=250,cmap=whitejet,vmin=slip_min,vmax=slip_max)
         #plt.scatter(along_strike,depth,marker='s',linewidth=0.5,edgecolor='#CCCCCC',c=slip,s=250,cmap=plt.cm.magma_r,vmin=slip_min,vmax=slip_max)
         cb=plt.colorbar()
         #plt.scatter(along_strike_afters,depth_afters,marker='.',c='#404040',s=35)
-        plt.ylabel('Depth (km)')
-        plt.xlabel('Along-strike distance (km)')
-        plt.xlim(along_strike.min()-5,along_strike.max()+5)
-        plt.ylim(depth.min()-5,depth.max()+5)         
+        plt.ylabel('Depth (km)',fontsize=14)
+        plt.xlabel('Along-strike distance (km)',fontsize=14)
+        plt.xlim(xlims)
+        plt.ylim(ylims)         
         plt.scatter(0,-epicenter[2],marker='*',edgecolor='k',facecolor='#00FF00',s=350,linewidth=2)
         for k in range(len(along_strike)):
             scale_slip=slip[k]/slip.max()
