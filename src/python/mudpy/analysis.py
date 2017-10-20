@@ -354,8 +354,8 @@ class MT:
     def compute_DC(self):
         #Bst fitting double couple
         from numpy import zeros,diag
-        if self.mt_style is 'rtp':
-            self.flip()
+        #if self.mt_style is 'rtp':
+        #    self.flip()
         self.eigen()
         eig1=self.eig_val[0]
         eig3=self.eig_val[2]

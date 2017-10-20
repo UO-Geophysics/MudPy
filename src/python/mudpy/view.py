@@ -489,9 +489,11 @@ def tile_slip(rupt,nstrike,ndip,(slip_bounds),geographic=False,epicenter=0,epice
     slip_min=slip_bounds[0]
     slip_max=slip_bounds[1]
     #Aftershocks
-    lon_afters=genfromtxt('/Users/dmelgar/Lefkada2015/afters/aftershocks_NOA_reloc.txt',usecols=4)
-    lat_afters=genfromtxt('/Users/dmelgar/Lefkada2015/afters/aftershocks_NOA_reloc.txt',usecols=3)
-    depth_afters=-genfromtxt('/Users/dmelgar/Lefkada2015/afters/aftershocks_NOA_reloc.txt',usecols=5)
+    af=genfromtxt('/Users/dmelgar/Chiapas2017/afters/afters_10days_close2fault.txt')
+    lon_afters=af[:,0]
+    lat_afters=af[:,1]
+    depth_afters=af[:,2]
+    print af
     if geographic==True: #Get geographic coordinates to compute along strike and along dip distance
         lon=f[(epicenter_line-1)*nstrike:epicenter_line*nstrike,1] #Only compute line at the epicenter depth
         lat=f[(epicenter_line-1)*nstrike:epicenter_line*nstrike,2]    
@@ -516,7 +518,7 @@ def tile_slip(rupt,nstrike,ndip,(slip_bounds),geographic=False,epicenter=0,epice
                 #along_strike_afters[k]=-out[0]/1000
                 along_strike_afters[k]=out[0]/1000
             else:
-                along_strike_afters[k]=out[0]/1000
+                along_strike_afters[k]=-out[0]/1000
     #Get indices for plot
     istrike=zeros(nstrike*ndip)
     idip=zeros(nstrike*ndip)
@@ -535,7 +537,7 @@ def tile_slip(rupt,nstrike,ndip,(slip_bounds),geographic=False,epicenter=0,epice
         plt.xlabel('Along-strike index')
         plt.xlim(istrike.min()-1,istrike.max()+1)
         plt.ylim(idip.min()-1,idip.max()+1)
-        plt.quiver(istrike,idip,rakess,rakeds,color='green',width=0.005,scale=60.0)
+        #plt.quiver(istrike,idip,rakess,rakeds,color='green',width=0.005,scale=60.0)
         plt.axis('equal')
         plt.grid()    
         plt.title(rupt)
@@ -543,22 +545,23 @@ def tile_slip(rupt,nstrike,ndip,(slip_bounds),geographic=False,epicenter=0,epice
         rakess=rakess*slip
         rakeds=rakeds*slip
         plt.figure(num=None, figsize=fig_size, dpi=80)
-        plt.scatter(along_strike,depth,marker='s',linewidth=0.5,edgecolor='#CCCCCC',c=slip,s=250,cmap=whitejet,vmin=slip_min,vmax=slip_max)
+        #plt.scatter(along_strike,depth,marker='s',linewidth=0.5,edgecolor='#CCCCCC',c=slip,s=250,cmap=whitejet,vmin=slip_min,vmax=slip_max)
+        plt.scatter(along_strike,depth,marker='s',linewidth=0.5,edgecolor='#CCCCCC',c=slip,s=250,cmap=plt.cm.bone_r,vmin=slip_min,vmax=slip_max)
         #plt.scatter(along_strike,depth,marker='s',linewidth=0.5,edgecolor='#CCCCCC',c=slip,s=250,cmap=plt.cm.magma_r,vmin=slip_min,vmax=slip_max)
         cb=plt.colorbar()
-        #plt.scatter(along_strike_afters,depth_afters,marker='.',c='#404040',s=35)
+        #plt.scatter(along_strike_afters,depth_afters,marker='s',edgecolor='k',s=15,linewidth=0.5,facecolor='#483D8B')
         plt.ylabel('Depth (km)',fontsize=14)
         plt.xlabel('Along-strike distance (km)',fontsize=14)
         plt.xlim(xlims)
         plt.ylim(ylims)         
-        plt.scatter(0,-epicenter[2],marker='*',edgecolor='k',facecolor='#00FF00',s=350,linewidth=2)
+        plt.scatter(0,-epicenter[2],marker='*',edgecolor='k',facecolor='w',s=350,linewidth=2)
         for k in range(len(along_strike)):
             scale_slip=slip[k]/slip.max()
-            plt.quiver(along_strike[k],depth[k],rakess[k]/sqrt(rakess[k]**2+rakeds[k]**2),rakeds[k]/sqrt(rakess[k]**2+rakeds[k]**2),color='green',width=0.002,scale=50/scale_slip)
-    #plt.annotate('North',xy=(28,0),fontsize=16)
-    #plt.annotate('South',xy=(-36,0),fontsize=16)
+            #plt.quiver(along_strike[k],depth[k],rakess[k]/sqrt(rakess[k]**2+rakeds[k]**2),rakeds[k]/sqrt(rakess[k]**2+rakeds[k]**2),color='green',width=0.002,scale=50/scale_slip)
+    #plt.annotate('B',xy=(-160,-4),fontsize=16,annotation_clip=False)
+    #plt.annotate("B'",xy=(75,-4),fontsize=16,annotation_clip=False)
     cb.set_label('Slip (m)')
-    plt.subplots_adjust(left=0.15, bottom=0.15, right=0.92, top=0.92, wspace=0, hspace=0)
+    plt.subplots_adjust(left=0.15, bottom=0.25, right=0.92, top=0.90, wspace=0, hspace=0)
     plt.show()
 
 
@@ -1549,18 +1552,23 @@ def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpas
         n=read(datapath+sta[i[k]]+'.'+datasuffix+'.n')
         e=read(datapath+sta[i[k]]+'.'+datasuffix+'.e')
         u=read(datapath+sta[i[k]]+'.'+datasuffix+'.u')
+        ns=read(synthpath+run_name+'.'+run_number+'.'+sta[i[k]]+'.'+synthsuffix+'.n.sac')
+        es=read(synthpath+run_name+'.'+run_number+'.'+sta[i[k]]+'.'+synthsuffix+'.e.sac')
+        us=read(synthpath+run_name+'.'+run_number+'.'+sta[i[k]]+'.'+synthsuffix+'.u.sac')
         if lowpass!=None:
+            print 'Lowpassing'
             fsample=1./e[0].stats.delta
             e[0].data=lfilter(e[0].data,lowpass,fsample,2)
             n[0].data=lfilter(n[0].data,lowpass,fsample,2)
             u[0].data=lfilter(u[0].data,lowpass,fsample,2)
+            es[0].data=lfilter(es[0].data,lowpass,fsample,2)
+            ns[0].data=lfilter(ns[0].data,lowpass,fsample,2)
+            us[0].data=lfilter(us[0].data,lowpass,fsample,2)
         if decimate!=None:
             n[0]=stdecimate(n[0],decimate)
             e[0]=stdecimate(e[0],decimate)
             u[0]=stdecimate(u[0],decimate)
-        ns=read(synthpath+run_name+'.'+run_number+'.'+sta[i[k]]+'.'+synthsuffix+'.n.sac')
-        es=read(synthpath+run_name+'.'+run_number+'.'+sta[i[k]]+'.'+synthsuffix+'.e.sac')
-        us=read(synthpath+run_name+'.'+run_number+'.'+sta[i[k]]+'.'+synthsuffix+'.u.sac')
+
         if scale!=None:
             n[0].data=n[0].data/scale
             ns[0].data=ns[0].data/scale
@@ -1677,9 +1685,11 @@ def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpas
             #xticklabel=['','100','','200','','300'] #Maule preferred
             #xticklabel=['','','40','','80','','120','','160',''] #Iquique preferred
             #xticklabel=['','10','','30','','50',''] #Nepal preferred
-            #xticklabel=['','5','','15','','25','','35',''] #Lefkada preferred
+            #xticklabel=['','5','','15','','25','','35',''] #Lefkada prevferred
             #xticklabel=['','5','','15','','25',''] #Amatrice preferred
-            xticklabel=['','10','','30','','50','','70',''] #Melinka preferred
+            #xticklabel=['','10','','30','','50','','70',''] #Melinka preferred
+            #xticklabel=['','10','','30','','50','','70',''] #Tehuantepec preferred
+            #xticklabel=axn.xaxis.get_ticklabels()
         if k==len(i)-1 and nsta>1: #Last plot
             axe.set_xlabel('Time (s)')
             axn.xaxis.set_ticklabels(xticklabel)
@@ -1691,7 +1701,7 @@ def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpas
     #plt.subplots_adjust(left=0.2, bottom=0.05, right=0.8, top=0.95, wspace=0, hspace=0)
     plt.subplots_adjust(left=0.2, bottom=0.15, right=0.8, top=0.85, wspace=0, hspace=0)
 
-def static_synthetics(home,project_name,run_name,run_number,gflist,qscale):
+def static_synthetics(home,project_name,run_name,run_number,gflist,qscale,xl=None,yl=None):
     '''
     Plot synthetics vs real data
     
@@ -1723,7 +1733,7 @@ def static_synthetics(home,project_name,run_name,run_number,gflist,qscale):
     es=zeros(len(i))
     us=zeros(len(i))
     for k in range(len(i)):
-        neu=genfromtxt(datapath+sta[i[k]]+'.static.neu')
+        neu=genfromtxt(datapath+sta[i[k]]+'.neu')
         #neu=genfromtxt(datapath+sta[i[k]]+'.static.neu')
         n[k]=neu[0] ; e[k]=neu[1] ; u[k]=neu[2]
         neus=genfromtxt(synthpath+run_name+'.'+run_number+'.'+sta[i[k]]+'.static.neu')
@@ -1740,8 +1750,10 @@ def static_synthetics(home,project_name,run_name,run_number,gflist,qscale):
     plt.title('Horizontals')
     #for k in range(len(i)):
     #    plt.annotate(sta[i[k]],xy=(lon[k],lat[k]))
-    plt.xlim([lon.min()-lonadjust,lon.max()+lonadjust])
-    plt.ylim([lat.min()-latadjust,lat.max()+latadjust])
+    #plt.xlim([lon.min()-lonadjust,lon.max()+lonadjust])
+    #plt.ylim([lat.min()-latadjust,lat.max()+latadjust])
+    plt.xlim(xl)
+    plt.ylim(yl)
     plt.subplot(122)
     plt.quiver(lon,lat,zeros(len(u)),u,color='k',scale=qscale)
     plt.quiver(lon,lat,zeros(len(us)),us,color='r',scale=qscale)
@@ -1749,8 +1761,10 @@ def static_synthetics(home,project_name,run_name,run_number,gflist,qscale):
     plt.title('Verticals')
     #for k in range(len(i)):
     #    plt.annotate(sta[i[k]],xy=(lon[k],lat[k]))
-    plt.xlim([lon.min()-lonadjust,lon.max()+lonadjust])
-    plt.ylim([lat.min()-latadjust,lat.max()+latadjust])
+    #plt.xlim([lon.min()-lonadjust,lon.max()+lonadjust])
+    #plt.ylim([lat.min()-latadjust,lat.max()+latadjust])
+    plt.xlim(xl)
+    plt.ylim(yl)
     #plt.legend('Data','Synth')
     plt.suptitle('Statics for run '+project_name+': '+run_name+'.'+run_number)
     
@@ -1915,7 +1929,8 @@ def tsunami_synthetics(home,project_name,run_name,run_number,gflist,t_lim,sort,s
     nsta=len(i)
     fig, axarr = plt.subplots(nsta,1)  
     for k in range(len(i)):
-        tsun=read(datapath+sta[i[k]]+'.tsun')
+        #tsun=read(datapath+sta[i[k]]+'.tsun')
+        tsun=read(datapath+sta[i[k]]+'.sac')
         tsun_synth=read(synthpath+run_name+'.'+run_number+'.'+sta[i[k]]+'.tsun')
         #Make plot
         ax=axarr[k]
@@ -1957,6 +1972,7 @@ def tsunami_synthetics(home,project_name,run_name,run_number,gflist,t_lim,sort,s
             #axe.xaxis.set_ticks(xtick)
             #axu.xaxis.set_ticks(xtick)
     plt.subplots_adjust(left=0.2, bottom=0.15, right=0.8, top=0.85, wspace=0, hspace=0)
+    plt.show()
                 
 
 def ABIC(home,project_name,run_name):

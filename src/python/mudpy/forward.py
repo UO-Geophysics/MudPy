@@ -410,10 +410,14 @@ def match_filter(home,project_name,fault_name,rupture_list,GF_list,
     
     #read ruptures
     ruptures=genfromtxt(home+project_name+'/data/'+rupture_list,dtype='S')
+    Nruptures=ruptures.size
     
-    for krup in range(len(ruptures)):
+    for krup in range(Nruptures):
         
-        rupture_name=ruptures[krup]
+        if Nruptures>1:
+            rupture_name=ruptures[krup]
+        else:
+            rupture_name=str(ruptures)
         rupture=rupture_name.replace('.rupt','')
         directory=home+project_name+'/output/waveforms/'+rupture+'/'
         
@@ -1639,7 +1643,7 @@ def highpass(data,fcorner,fsample,order,zerophase=True):
     
 
     
-def inv2coulomb(rupt,epicenter,fout):
+def inv2coulomb(rupt,epicenter,fout,zeroslip=False,offset=0):
     '''
     Convert .inv file to Coulomb-ready .inp file
     
@@ -1652,43 +1656,53 @@ def inv2coulomb(rupt,epicenter,fout):
     #Read fault
     f=genfromtxt(rupt)
     #Get total slip by identifying unique fault numbers
-    u=unique(f[:,0])
-    ss=zeros(len(u))
-    ds=zeros(len(u))
-    all_ss=f[:,8]
-    all_ds=f[:,9]
-    for k in range(len(u)):
-        i=where(u[k]==f[:,0])
-        ss[k]=all_ss[i].sum()
-        ds[k]=all_ds[i].sum()
-    #Sum them
-    slip=(ss**2+ds**2)**0.5
-    #Get rake
-    rake=ssds2rake(ss,ds)
+    if zeroslip==False: # Get actaul slip
+        u=unique(f[:,0])
+        ss=zeros(len(u))
+        ds=zeros(len(u))
+        all_ss=f[:,8]
+        all_ds=f[:,9]
+        for k in range(len(u)):
+            i=where(u[k]==f[:,0])
+            ss[k]=all_ss[i].sum()
+            ds[k]=all_ds[i].sum()
+        #Sum them
+        slip=(ss**2+ds**2)**0.5
+        #Get rake
+        rake=ssds2rake(ss,ds)
+        Nfaults=len(u)
+        #Get width and length to get coordiantes of top corners and strike,dip
+        width=f[:,10]/1000
+        length=f[:,11]/1000
+    else: #Make zero slip receiver faults
+        slip=zeros(len(f))
+        ss=zeros(len(f))
+        ds=zeros(len(f))
+        Nfaults=len(f)
+        width=f[:,8]/1000
+        length=f[:,9]/1000
     #Convert coordinate subfault centers to local cartesian
     g = pyproj.Geod(ellps='WGS84') # Use WGS84 ellipsoid.
-    x=zeros(len(u))
-    y=zeros(len(u))
-    for k in range(len(u)):
+    x=zeros(Nfaults)
+    y=zeros(Nfaults)
+    for k in range(Nfaults):
         baz,az,d=pyproj.Geod.inv(g,f[k,1],f[k,2],epicenter[0],epicenter[1])
         x[k]=(d/1000)*sin(deg2rad(az))
         y[k]=(d/1000)*cos(deg2rad(az))
-    #Get width and length to get coordiantes of top corners and strike,dip
-    width=f[:,10]/1000
-    length=f[:,11]/1000
+
     strike=f[:,4]
     dip=f[:,5]
     depth=f[:,3]
-    top_mid_x=zeros(len(u))
-    top_mid_y=zeros(len(u))
+    top_mid_x=zeros(Nfaults)
+    top_mid_y=zeros(Nfaults)
     top_direction=strike-90 #This is the angle that points towards the top edge of the fault
-    xstart=zeros(len(u))
-    ystart=zeros(len(u))
-    xfin=zeros(len(u))
-    yfin=zeros(len(u))
-    ztop=zeros(len(u))
-    zbot=zeros(len(u))
-    for k in range(len(u)):
+    xstart=zeros(Nfaults)
+    ystart=zeros(Nfaults)
+    xfin=zeros(Nfaults)
+    yfin=zeros(Nfaults)
+    ztop=zeros(Nfaults)
+    zbot=zeros(Nfaults)
+    for k in range(Nfaults):
         top_mid_x[k]=x[k]+((width[k]/2)*cos(deg2rad(dip[k])))*sin(deg2rad(top_direction[k]))
         top_mid_y[k]=y[k]+((width[k]/2)*cos(deg2rad(dip[k])))*cos(deg2rad(top_direction[k]))
         xstart[k]=top_mid_x[k]+(width[k]/2)*sin(deg2rad(strike[k]-180))
@@ -1699,9 +1713,9 @@ def inv2coulomb(rupt,epicenter,fout):
         zbot[k]=depth[k]+(length[k]/2)*sin(deg2rad(dip[k]))
     #Write to file and then manually add the ehaders and footers by copy pasting from some NEIC file (LAZY!)
     f=open(fout,'w')
-    for k in range(len(u)):
+    for k in range(Nfaults):
         #out='1   %10.4f %10.4f %10.4f %10.4f 100 %10.4f %10.4f %10.4f %10.4f %10.4f %i\n' % (xstart[k],ystart[k],xfin[k],yfin[k],rake[k],slip[k],dip[k],ztop[k],zbot[k],k)
-        out='1\t%.4f\t%.4f\t%.4f\t%.4f\t100\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%d\n' % (xstart[k],ystart[k],xfin[k],yfin[k],-ss[k],ds[k],dip[k],ztop[k],zbot[k],k+1)
+        out='1\t%.4f\t%.4f\t%.4f\t%.4f\t100\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%d\n' % (xstart[k],ystart[k],xfin[k],yfin[k],-ss[k],ds[k],dip[k],ztop[k],zbot[k],k+1+offset)
         f.write(out)
     f.close()
     
@@ -2132,6 +2146,7 @@ def usgs2fault(usgs_model,out_file):
     
     out=c_[no,lon,lat,z,st,dip,tri,rt,H,W]
     savetxt(out_file,out,fmt='%d\t%10.4f\t%10.4f\t%8.4f\t%6.1f\t%6.1f\t%.1f\t%.1f\t%.1f\t%.1f')
+    
     
 def usgs2rupt(usgs_model,out_file):
     '''

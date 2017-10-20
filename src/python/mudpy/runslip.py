@@ -588,7 +588,7 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
     '''
     from mudpy import inverse as inv
     from mudpy.forward import get_mu_and_area
-    from numpy import zeros,dot,array,squeeze,expand_dims,empty,tile,eye,ones,arange,load
+    from numpy import zeros,dot,array,squeeze,expand_dims,empty,tile,eye,ones,arange,load,size
     from numpy.linalg import lstsq
     from scipy.sparse import csr_matrix as sparse
     from scipy.optimize import nnls
@@ -600,7 +600,7 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
     t1=datetime.now()
     #Get data vector
     if data_vector==None:
-        d=inv.getdata(home,project_name,GF_list,decimate,bandpass=None)
+        d=inv.getdata(home,project_name,GF_list,decimate,bandpass=bandpass)
     else:
         d=load(data_vector) 
     #Get GFs
@@ -631,7 +631,7 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
         K=(G.T).dot(G)
     #Get regularization matrices (set to 0 matrix if not needed)
     static=False #Is it jsut a static inversion?
-    if reg_spatial!=None:
+    if size(reg_spatial)>1:
         if Ltype==2: #Laplacian smoothing
             Ls=inv.getLs(home,project_name,fault_name,nfaults,num_windows,bounds)
         elif Ltype==0: #Tikhonov smoothing
@@ -656,7 +656,7 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
         Ls=zeros(K.shape)
         reg_spatial=array([0.])
         Ninversion=1
-    if reg_temporal!=None:
+    if size(reg_temporal)>1:
         Lt=inv.getLt(home,project_name,fault_name,num_windows)
         Ninversion=len(reg_temporal)*Ninversion
     else:

@@ -113,17 +113,17 @@ def stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,model_
                 stress=stress_parameter
                 
                 #Is subfault in an SMGA?
-                radius_in_km=15.0
-                smga_center_lon=-69.709200
-                smga_center_lat=-19.683600
-                in_smga=is_subfault_in_smga(lon_source,lat_source,smga_center_lon,smga_center_lat,radius_in_km)
-                
-                ##Apply multiplier?
-                if in_smga==True:
-                    stress=stress_parameter*stress_multiplier
-                    print "%.4f,%.4f is in SMGA" % (smga_center_lon,smga_center_lat)
-                else:
-                    stress=stress_parameter
+                #radius_in_km=15.0
+                #smga_center_lon=-69.709200
+                #smga_center_lat=-19.683600
+                #in_smga=is_subfault_in_smga(lon_source,lat_source,smga_center_lon,smga_center_lat,radius_in_km)
+                #
+                ###Apply multiplier?
+                #if in_smga==True:
+                #    stress=stress_parameter*stress_multiplier
+                #    print "%.4f,%.4f is in SMGA, stress is %d" % (lon_source,lat_source,stress)
+                #else:
+                #    stress=stress_parameter
                 
                 #Apply multiplier?
                 #if slip[kfault]>7.5:

@@ -256,7 +256,7 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tsunami,td
     OUT:
         G: Partially assembled GF with all synthetics from a particular data type
     '''
-    from numpy import genfromtxt,loadtxt,zeros,array,inf
+    from numpy import genfromtxt,loadtxt,zeros,array,inf,size
     from string import rjust
     from obspy import read,Stream,Trace
     from mudpy.forward import tshift
@@ -361,6 +361,16 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tsunami,td
             else:
                 BP=bandpass[1]
             tsunami=False
+
+    #Tsunami and requires bandpassing?
+    if gftype.lower()=='disp' or gftype.lower()=='vel':  #Full waveforms
+        if gftype.lower()=='disp':
+            vord='disp'
+            if bandpass == None:
+                BP=None
+            else:
+                BP=bandpass[0]
+
         if first_window==True: #Read in GFs from file
             ktrace=0
             for ksta in range(Nsta):
@@ -397,6 +407,8 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tsunami,td
                             print '... station '+staname[ksta]
                         fsample=1./Ess[ktrace].stats.delta
                         if len(BP)>1 and BP[1]==inf: #A high pass filter has been requested
+                            if kfault==0:
+                                print '.... highpass'
                             Ess[ktrace].data=hfilt(Ess[ktrace].data,BP[0],fsample,2)
                             Nss[ktrace].data=hfilt(Nss[ktrace].data,BP[0],fsample,2)
                             Zss[ktrace].data=hfilt(Zss[ktrace].data,BP[0],fsample,2)
@@ -404,12 +416,14 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tsunami,td
                             Nds[ktrace].data=hfilt(Nds[ktrace].data,BP[0],fsample,2)
                             Zds[ktrace].data=hfilt(Zds[ktrace].data,BP[0],fsample,2)                        
                         else: #A low pass or bandpass filter has been requested
-                            Ess[ktrace].data=lfilt(Ess[ktrace].data,BP,fsample,2)
-                            Nss[ktrace].data=lfilt(Nss[ktrace].data,BP,fsample,2)
-                            Zss[ktrace].data=lfilt(Zss[ktrace].data,BP,fsample,2)
-                            Eds[ktrace].data=lfilt(Eds[ktrace].data,BP,fsample,2)
-                            Nds[ktrace].data=lfilt(Nds[ktrace].data,BP,fsample,2)
-                            Zds[ktrace].data=lfilt(Zds[ktrace].data,BP,fsample,2)
+                            if kfault==0:
+                                print '.... lowpass'
+                            Ess[ktrace].data=lfilt(Ess[ktrace].data,BP[0],fsample,2)
+                            Nss[ktrace].data=lfilt(Nss[ktrace].data,BP[0],fsample,2)
+                            Zss[ktrace].data=lfilt(Zss[ktrace].data,BP[0],fsample,2)
+                            Eds[ktrace].data=lfilt(Eds[ktrace].data,BP[0],fsample,2)
+                            Nds[ktrace].data=lfilt(Nds[ktrace].data,BP[0],fsample,2)
+                            Zds[ktrace].data=lfilt(Zds[ktrace].data,BP[0],fsample,2)
                         #bandpass=None
                     
                     ### HAAAAAACCCCKKKK!!!!
@@ -537,8 +551,12 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tsunami,td
                         DS+=read(syn_path+staname[ksta]+'.ds.tsun')
                     
                     #Band pass filter data
-                    BP=bandpass[2]
-                    if BP!=None:
+                    if bandpass == None:
+                        BP=None
+                    else:
+                        BP=bandpass[2]
+                    
+                    if size(BP)>1:
                         if kfault==0:
                             print 'Bandpassing on frequency band:'
                             print '... '+str(BP)
@@ -627,6 +645,12 @@ def getdata(home,project_name,GF_list,decimate,bandpass,quiet=False):
     GF=genfromtxt(gf_file,usecols=[3,4,5,6,7],skip_header=1,dtype='f8')
     GFfiles=genfromtxt(gf_file,usecols=[8,9,10,11,12],dtype='S')  
     stations=genfromtxt(gf_file,usecols=0,dtype='S')  
+    
+    #Parse out filtering pass bands
+    displacement_bandpass=bandpass[0]
+    velocity_bandpass=bandpass[1]
+    tsunami_bandpass=bandpass[2]
+    
     #Read one column at a time
     kgf=0 #Static field
     dstatic=array([])
@@ -639,6 +663,7 @@ def getdata(home,project_name,GF_list,decimate,bandpass,quiet=False):
         e=dtemp[1]
         u=dtemp[2]
         dstatic=append(dstatic,r_[n,e,u])
+    
     #Displacements
     kgf=1
     ddisp=array([])
@@ -649,11 +674,11 @@ def getdata(home,project_name,GF_list,decimate,bandpass,quiet=False):
         n=read(GFfiles[i[ksta],kgf]+'.n')
         e=read(GFfiles[i[ksta],kgf]+'.e')
         u=read(GFfiles[i[ksta],kgf]+'.u')
-        if bandpass!=None: #Apply low pass filter to data
+        if displacement_bandpass is not None: #Apply low pass filter to data
             fsample=1./n[0].stats.delta
-            n[0].data=lfilt(n[0].data,bandpass,fsample,8)
-            e[0].data=lfilt(e[0].data,bandpass,fsample,8)
-            u[0].data=lfilt(u[0].data,bandpass,fsample,8)
+            n[0].data=lfilt(n[0].data,displacement_bandpass,fsample,8)
+            e[0].data=lfilt(e[0].data,displacement_bandpass,fsample,8)
+            u[0].data=lfilt(u[0].data,displacement_bandpass,fsample,8)
         #Decimate
         if decimate!=None:
             n[0]=stdecimate(n[0],decimate)
@@ -665,6 +690,7 @@ def getdata(home,project_name,GF_list,decimate,bandpass,quiet=False):
         n[0].stats.starttime=round_time(n[0].stats.starttime,dt)
         u[0].stats.starttime=round_time(u[0].stats.starttime,dt)
         ddisp=append(ddisp,r_[n[0].data,e[0].data,u[0].data])
+    
     #Velocities
     kgf=2
     dvel=array([])
@@ -675,11 +701,11 @@ def getdata(home,project_name,GF_list,decimate,bandpass,quiet=False):
         n=read(GFfiles[i[ksta],kgf]+'.n')
         e=read(GFfiles[i[ksta],kgf]+'.e')
         u=read(GFfiles[i[ksta],kgf]+'.u')
-        if bandpass!=None: #Apply low pass filter to data
+        if velocity_bandpass is not None: #Apply low pass filter to data
             fsample=1./n[0].stats.delta
-            n[0].data=lfilt(n[0].data,bandpass,fsample,8)
-            e[0].data=lfilt(e[0].data,bandpass,fsample,8)
-            u[0].data=lfilt(u[0].data,bandpass,fsample,8)
+            n[0].data=lfilt(n[0].data,velocity_bandpass,fsample,8)
+            e[0].data=lfilt(e[0].data,velocity_bandpass,fsample,8)
+            u[0].data=lfilt(u[0].data,velocity_bandpass,fsample,8)
         #Decimate
         if decimate!=None:
             n[0]=stdecimate(n[0],decimate)
@@ -691,6 +717,7 @@ def getdata(home,project_name,GF_list,decimate,bandpass,quiet=False):
         n[0].stats.starttime=round_time(n[0].stats.starttime,dt)
         u[0].stats.starttime=round_time(u[0].stats.starttime,dt)
         dvel=append(dvel,r_[n[0].data,e[0].data,u[0].data])
+    
     #Tsunami
     kgf=3
     dtsun=array([])
@@ -699,7 +726,12 @@ def getdata(home,project_name,GF_list,decimate,bandpass,quiet=False):
         if quiet==False:  
             print 'Assembling tsunami waveforms from '+stations[i[ksta]]+' into data vector.'
         tsun=read(GFfiles[i[ksta],kgf])
+        if tsunami_bandpass is not None: #Apply low pass filter to data
+            fsample=1./tsun[0].stats.delta
+            tsun[0].data=lfilt(tsun[0].data,tsunami_bandpass,fsample,4)
+            
         dtsun=append(dtsun,tsun)
+    
     #InSAR LOS
     kgf=4
     dlos=array([])  
@@ -826,7 +858,7 @@ def get_data_weights(home,project_name,GF_list,d,decimate):
     print 'Computing data weights...'
     #Read gf file and decide what needs tog et loaded
     gf_file=home+project_name+'/data/station_info/'+GF_list
-    GF=genfromtxt(gf_file,usecols=[3,4,5,6,7,8],skip_header=1,dtype='f8')
+    GF=genfromtxt(gf_file,usecols=[3,4,5,6,7],dtype='f8')
     GFfiles=genfromtxt(gf_file,usecols=[8,9,10,11,12],dtype='S')
     weights=genfromtxt(gf_file,usecols=range(13,28),dtype='f')
     #Initalize
@@ -1896,6 +1928,7 @@ def make_tgf_dtopo(home,project_name,model_name,tgf_file,coast_file,fault_name,
     f=genfromtxt(home+project_name+'/data/model_info/'+fault_name)
     #Where is the data
     green_dir=home+project_name+'/GFs/tsunami/'
+    #green_dir=home+project_name+'/GFs/dynamic/'
     #Define time deltas
     td_max=datetime.timedelta(seconds=maxt)
     td=datetime.timedelta(seconds=tsun_dt)
@@ -1903,6 +1936,7 @@ def make_tgf_dtopo(home,project_name,model_name,tgf_file,coast_file,fault_name,
     tmax=time_epi+td_max
     Nt=(tmax-time_epi)/tsun_dt
     #Read topo/bathy derivative fileksub=0
+    #if topo_dx_file!=None
     bathy_dx=Dataset(topo_dx_file,'r')
     zdx=bathy_dx.variables['z'][:]
     bathy_dy=Dataset(topo_dy_file,'r')
@@ -2059,11 +2093,12 @@ def tsunami_gf(home,project_name,model_name,fault_name,hot_start):
     green_dir=home+project_name+'/GFs/tsunami/'  
     for ksub in range(hot_start,len(f)):
         print '... working on subfault '+str(ksub)+' of '+str(len(f))
+        
         #Depth string
         zs=f[ksub,3]        
         strdepth='%.4f' % zs
         #subfault number
-        sub=rjust(str(ksub+1),4,'0')
+        sub=rjust(str(int(f[ksub,0])),4,'0')
         #Subfault dir
         subdir=green_dir+model_name+'_'+strdepth+'.sub'+sub+'/'
         #Make dirs, one for DS one for SS
@@ -2117,7 +2152,7 @@ def tsunami2sac(home,project_name,model_name,fault_name,tlims,dt,time_epi,hot_st
     #Load fault file
     f=genfromtxt(home+project_name+'/data/model_info/'+fault_name)
     #Load gauge correspondences
-    gaugesGC=genfromtxt(home+project_name+'/data/station_info/gauges.dict',usecols=0)  #This is what they are called in GeoClaw
+    gaugesGC=genfromtxt(home+project_name+'/data/station_info/gauges.dict',usecols=0,dtype='S')  #This is what they are called in GeoClaw
     gauges=genfromtxt(home+project_name+'/data/station_info/gauges.dict',usecols=3,dtype='S')   #their actual name
     #Where is the data
     green_dir=home+project_name+'/GFs/tsunami/'  
@@ -2126,18 +2161,18 @@ def tsunami2sac(home,project_name,model_name,fault_name,tlims,dt,time_epi,hot_st
         zs=f[ksub,3]        
         strdepth='%.4f' % zs
         #subfault number
-        sub=rjust(str(ksub+1),4,'0')
+        sub=rjust(str(int(f[ksub,0])),4,'0')
         #Subfault dir
         subdir=green_dir+model_name+'_'+strdepth+'.sub'+sub+'/'
         print '... working on  '+subdir
         for kgauge in range(gauges.size):
             #Read gauge.fort file
             if gauges.size<2:
-                dsfile=subdir+'_DS/_output/gauge%s.txt' % (rjust(str(int(gaugesGC)),5,'0'))
-                ssfile=subdir+'_SS/_output/gauge%s.txt' % (rjust(str(int(gaugesGC)),5,'0'))
+                dsfile=subdir+'_DS/_output/gauge%s.txt' % (gaugesGC[kgauge])
+                ssfile=subdir+'_SS/_output/gauge%s.txt' % (gaugesGC[kgauge])
             else:
-                dsfile=subdir+'_DS/_output/gauge%s.txt' % (rjust(str(int(gaugesGC[kgauge])),5,'0'))
-                ssfile=subdir+'_SS/_output/gauge%s.txt' % (rjust(str(int(gaugesGC[kgauge])),5,'0'))
+                dsfile=subdir+'_DS/_output/gauge%s.txt' % (gaugesGC[kgauge])
+                ssfile=subdir+'_SS/_output/gauge%s.txt' % (gaugesGC[kgauge])
             gds=genfromtxt(dsfile)
             gss=genfromtxt(ssfile)
             
