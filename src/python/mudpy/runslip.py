@@ -246,7 +246,7 @@ def make_parallel_green(home,project_name,station_file,fault_name,model_name,dt,
 
 #Now make synthetics for source/station pairs
 def make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,tsunami,beta,
-                    hot_start,time_epi,impulse=False,okada=False,mu=45e9):
+                    hot_start,time_epi,impulse=False,okada=False,mu=45e9,insar=False):
     '''
     This routine will take the impulse response (GFs) and pass it into the routine that will
     convovle them with the source time function according to each subfaults strike and dip.
@@ -286,7 +286,7 @@ def make_synthetics(home,project_name,station_file,fault_name,model_name,integra
         print 'ksource = ' + str(k)
         subfault=rjust(str(k+1),4,'0')
         log=green.run_syn(home,project_name,source[k,:],station_file,green_path,model_name,integrate,static,tsunami,
-                subfault,time_epi,beta,impulse,okada,mu)
+                subfault,time_epi,beta,impulse,okada,mu,insar=insar)
         f=open(logpath+'make_synth.'+now+'.log','a')
         f.write(log)
         f.close()
@@ -494,7 +494,8 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
                     integrate=0
                     static=1
                     tsunami=False
-                    make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,tsunami,beta,hot_start,time_epi,impulse)
+                    insar=True
+                    make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,tsunami,beta,hot_start,time_epi,impulse,insar=insar)
         else: #Paralell processing
             station_file='temp.sta'
             #Decide which synthetics are required

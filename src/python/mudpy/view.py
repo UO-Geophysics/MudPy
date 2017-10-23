@@ -545,8 +545,8 @@ def tile_slip(rupt,nstrike,ndip,(slip_bounds),geographic=False,epicenter=0,epice
         rakess=rakess*slip
         rakeds=rakeds*slip
         plt.figure(num=None, figsize=fig_size, dpi=80)
-        #plt.scatter(along_strike,depth,marker='s',linewidth=0.5,edgecolor='#CCCCCC',c=slip,s=250,cmap=whitejet,vmin=slip_min,vmax=slip_max)
-        plt.scatter(along_strike,depth,marker='s',linewidth=0.5,edgecolor='#CCCCCC',c=slip,s=250,cmap=plt.cm.bone_r,vmin=slip_min,vmax=slip_max)
+        plt.scatter(along_strike,depth,marker='s',linewidth=0.5,edgecolor='#CCCCCC',c=slip,s=250,cmap=whitejet,vmin=slip_min,vmax=slip_max)
+        #plt.scatter(along_strike,depth,marker='s',linewidth=0.5,edgecolor='#CCCCCC',c=slip,s=250,cmap=plt.cm.bone_r,vmin=slip_min,vmax=slip_max)
         #plt.scatter(along_strike,depth,marker='s',linewidth=0.5,edgecolor='#CCCCCC',c=slip,s=250,cmap=plt.cm.magma_r,vmin=slip_min,vmax=slip_max)
         cb=plt.colorbar()
         #plt.scatter(along_strike_afters,depth_afters,marker='s',edgecolor='k',s=15,linewidth=0.5,facecolor='#483D8B')

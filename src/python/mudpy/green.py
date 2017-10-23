@@ -55,7 +55,7 @@ def run_green(source,station_file,model_name,dt,NFFT,static,dk,pmin,pmax,kmax):
     
     
 def run_syn(home,project_name,source,station_file,green_path,model_name,integrate,static,tsunami,
-        subfault,time_epi,beta,impulse=False,okada=False,okada_mu=45e9):
+        subfault,time_epi,beta,impulse=False,okada=False,okada_mu=45e9,insar=False):
     '''
     Use green functions and compute synthetics at stations for a single source
     and multiple stations. This code makes an external system call to syn.c first it
@@ -277,7 +277,14 @@ def run_syn(home,project_name,source,station_file,green_path,model_name,integrat
             os.chdir(green_path+'static/') #Move to appropriate dir
             if okada==False:
                 diststr='%.1f' % d[k] #Need current distance in string form for external call
-                green_file=model_name+".static."+strdepth+".sub"+subfault #Output dir
+                
+                
+                if insar==True:
+                    green_file=model_name+".static."+strdepth+".sub"+subfault+'.insar' #Output dir
+                else: #GPS
+                    green_file=model_name+".static."+strdepth+".sub"+subfault+'.gps' #Output dir
+                
+                
                 print green_file
                 log=log+green_file+'\n' #Append to log
                 statics=loadtxt(green_file) #Load GFs
