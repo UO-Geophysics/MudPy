@@ -2354,7 +2354,7 @@ def source_time_function(rupt,epicenter,dt=0.001,t_total=500,stf_type='dreger',p
         plt.plot(t,Mrate,color='k',lw=0.1)
         plt.grid()
         plt.xlabel('Time(s)')
-        plt.ylabel('Moment Rate ('+r'$\times 10^{'+str(int(exp))+r'}$Nm/s)')
+        #plt.ylabel('Moment Rate ('+r'$\times 10^{'+str(int(exp))+r'}$Nm/s)')
         plt.subplots_adjust(left=0.3, bottom=0.3, right=0.7, top=0.7, wspace=0, hspace=0)
     return t,Mrate  
     

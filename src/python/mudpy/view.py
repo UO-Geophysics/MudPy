@@ -8,6 +8,7 @@ inversion results
 
 import matplotlib
 from matplotlib import cm
+from mudpy.gmttools import gmtColormap
 
 #Create default colormap for slip inversions
 #cdict = {'red': ((0., 1, 1),
@@ -49,6 +50,8 @@ cdict = {'red': ((0., 1, 1),
                   (0.65, 0, 0),
                   (1, 0, 0))}
 whitejet = matplotlib.colors.LinearSegmentedColormap('whitejet',cdict,256)
+
+whitejet=gmtColormap(u'/Users/dmelgar/code/python/cpt/color_linear.cpt')
 
 pqlx_dict={'blue': (( 0.  ,  1.  ,  1.  ),
             ( 0.1,  1.  ,  1.  ),
@@ -503,11 +506,11 @@ def tile_slip(rupt,nstrike,ndip,(slip_bounds),geographic=False,epicenter=0,epice
         for k in range(len(lat)):
             out=gps2DistAzimuth(epicenter[1],epicenter[0],lat[k],lon[k])
             if lat[k]<epicenter[1]: #It's to the south
-                #along_strike[k]=-out[0]/1000
-                along_strike[k]=out[0]/1000
-            else:
-                #along_strike[k]=out[0]/1000
                 along_strike[k]=-out[0]/1000
+                #along_strike[k]=out[0]/1000
+            else:
+                along_strike[k]=out[0]/1000
+                #along_strike[k]=-out[0]/1000
         #Now tile
         along_strike=tile(along_strike,ndip)
         #Process the aftershocks
@@ -559,8 +562,10 @@ def tile_slip(rupt,nstrike,ndip,(slip_bounds),geographic=False,epicenter=0,epice
             scale_slip=slip[k]/slip.max()
             #plt.quiver(along_strike[k],depth[k],rakess[k]/sqrt(rakess[k]**2+rakeds[k]**2),rakeds[k]/sqrt(rakess[k]**2+rakeds[k]**2),color='green',width=0.002,scale=50/scale_slip)
     #plt.annotate('B',xy=(-160,-4),fontsize=16,annotation_clip=False)
-    #plt.annotate("B'",xy=(75,-4),fontsize=16,annotation_clip=False)
+    #plt.annotate("B'",xy=(55,-4),fontsize=16,annotation_clip=False)
     cb.set_label('Slip (m)')
+    cb.set_label('CV')
+    cb.set_label('Std. Dev. (m)')
     plt.subplots_adjust(left=0.15, bottom=0.25, right=0.92, top=0.90, wspace=0, hspace=0)
     plt.show()
 
@@ -1341,7 +1346,7 @@ def tslice(rupt,out,dt,cumul):
 
 def plot_data(home,project_name,gflist,vord,decimate,lowpass,t_lim,sort,scale,k_or_g):
     '''
-    Plot synthetics vs real data
+    Plot ( vs real data
     
     gflist: The GF control fiel that decides what to plot/not plot
     datapath
@@ -1510,7 +1515,7 @@ def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpas
     datapath
     '''
     from obspy import read
-    from numpy import genfromtxt,where,argsort
+    from numpy import genfromtxt,where,argsort,zeros
     import matplotlib.pyplot as plt
     import matplotlib
     from mudpy.green import stdecimate 
@@ -1555,6 +1560,14 @@ def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpas
         ns=read(synthpath+run_name+'.'+run_number+'.'+sta[i[k]]+'.'+synthsuffix+'.n.sac')
         es=read(synthpath+run_name+'.'+run_number+'.'+sta[i[k]]+'.'+synthsuffix+'.e.sac')
         us=read(synthpath+run_name+'.'+run_number+'.'+sta[i[k]]+'.'+synthsuffix+'.u.sac')
+        
+        #Zero out a stations
+        if sta[i[k]]=="NILT":
+            n[0].data=zeros(len(n[0].data))
+            e[0].data=zeros(len(e[0].data))
+            ns[0].data=zeros(len(ns[0].data))
+            es[0].data=zeros(len(es[0].data))
+        
         if lowpass!=None:
             print 'Lowpassing'
             fsample=1./e[0].stats.delta
@@ -1585,6 +1598,7 @@ def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpas
             axn=axarr[0]
             axe=axarr[1]
             axu=axarr[2]
+        
         axn.plot(n[0].times(),n[0].data,'k',ns[0].times(),ns[0].data,'r')
         axn.grid(which='both')
         axe.plot(e[0].times(),e[0].data,'k',es[0].times(),es[0].data,'r')
@@ -1615,33 +1629,33 @@ def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpas
         sign=1.
         if abs(min(n[0].data))>max(n[0].data):
             sign=-1. 
-        nmax='%.3f' % (sign*max(abs(n[0].data)))
+        nmax='%.2f' % (sign*max(abs(n[0].data)))
         sign=1.
         if abs(min(ns[0].data))>max(ns[0].data):
             sign=-1. 
-        nsmax='%.3f' % (sign*max(abs(ns[0].data)))
+        nsmax='%.2f' % (sign*max(abs(ns[0].data)))
         sign=1.
         nlims=axn.get_ylim()
         nrange=nlims[1]-nlims[0]
         
         if abs(min(e[0].data))>max(e[0].data):
             sign=-1.         
-        emax='%.3f' % (sign*max(abs(e[0].data)))
+        emax='%.2f' % (sign*max(abs(e[0].data)))
         sign=1.
         if abs(min(es[0].data))>max(es[0].data):
             sign=-1. 
-        esmax='%.3f' % (sign*max(abs(es[0].data)))
+        esmax='%.2f' % (sign*max(abs(es[0].data)))
         sign=1.
         elims=axe.get_ylim()
         erange=elims[1]-elims[0]
         
         if abs(min(u[0].data))>max(u[0].data):
             sign=-1. 
-        umax='%.3f' % (sign*max(abs(u[0].data)))
+        umax='%.2f' % (sign*max(abs(u[0].data)))
         sign=1.
         if abs(min(us[0].data))>max(us[0].data):
             sign=-1 
-        usmax='%.3f' % (sign*max(abs(us[0].data)))
+        usmax='%.2f' % (sign*max(abs(us[0].data)))
         sign=1.
         ulims=axu.get_ylim()
         urange=ulims[1]-ulims[0]
@@ -1652,19 +1666,20 @@ def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpas
         #axn.annotate(nsmax,xy=(t_lim[1]-0.3*trange,nlims[0]+0.7*nrange),fontsize=12,color='red')
         #axe.annotate(esmax,xy=(t_lim[1]-0.3*trange,elims[0]+0.7*erange),fontsize=12,color='red')
         #axu.annotate(usmax,xy=(t_lim[1]-0.3*trange,ulims[0]+0.7*urange),fontsize=12,color='red')
-        axn.annotate(nmax,xy=(t_lim[1]-0.25*trange,nlims[0]+0.02*nrange),fontsize=12)
-        axe.annotate(emax,xy=(t_lim[1]-0.25*trange,elims[0]+0.02*erange),fontsize=12)
-        axu.annotate(umax,xy=(t_lim[1]-0.25*trange,ulims[0]+0.02*urange),fontsize=12)
-        axn.annotate(nsmax,xy=(t_lim[1]-0.25*trange,nlims[0]+0.7*nrange),fontsize=12,color='red')
-        axe.annotate(esmax,xy=(t_lim[1]-0.25*trange,elims[0]+0.7*erange),fontsize=12,color='red')
-        axu.annotate(usmax,xy=(t_lim[1]-0.25*trange,ulims[0]+0.7*urange),fontsize=12,color='red')
+        axn.annotate(nmax,xy=(t_lim[1]-0.25*trange,nlims[0]+0.02*nrange),fontsize=10)
+        axe.annotate(emax,xy=(t_lim[1]-0.25*trange,elims[0]+0.02*erange),fontsize=10)
+        axu.annotate(umax,xy=(t_lim[1]-0.25*trange,ulims[0]+0.02*urange),fontsize=10)
+        axn.annotate(nsmax,xy=(t_lim[1]-0.25*trange,nlims[0]+0.7*nrange),fontsize=10,color='red')
+        axe.annotate(esmax,xy=(t_lim[1]-0.25*trange,elims[0]+0.7*erange),fontsize=10,color='red')
+        axu.annotate(usmax,xy=(t_lim[1]-0.25*trange,ulims[0]+0.7*urange),fontsize=10,color='red')
         #Station name
-        axn.set_ylabel(sta[i[k]],rotation=90)
+        #axn.set_ylabel(sta[i[k]],rotation=90)
+        axn.set_ylabel(sta[i[k]],rotation=0,labelpad=20)
         if k==0:
             if vord.lower()=='d':
-                axn.set_title('North (m)')
-                axe.set_title('East (m)')
-                axu.set_title('Up (m)')
+                axn.set_title('North (cm)')
+                axe.set_title('East (cm)')
+                axu.set_title('Up (cm)')
             else:
                 axn.set_title('North (m/s)')
                 axe.set_title('East (m/s)')
@@ -1692,9 +1707,9 @@ def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpas
             #xticklabel=axn.xaxis.get_ticklabels()
         if k==len(i)-1 and nsta>1: #Last plot
             axe.set_xlabel('Time (s)')
-            axn.xaxis.set_ticklabels(xticklabel)
-            axe.xaxis.set_ticklabels(xticklabel)
-            axu.xaxis.set_ticklabels(xticklabel)
+            #axn.xaxis.set_ticklabels(xticklabel)
+            #axe.xaxis.set_ticklabels(xticklabel)
+            #axu.xaxis.set_ticklabels(xticklabel)
             #axn.xaxis.set_ticks(xtick)
             #axe.xaxis.set_ticks(xtick)
             #axu.xaxis.set_ticks(xtick)

@@ -38,6 +38,8 @@ def run_green(source,station_file,model_name,dt,NFFT,static,dk,pmin,pmax,kmax):
         p=subprocess.Popen(command,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
         out,err=p.communicate() 
     else: #Compute only statics
+        
+        
         command=split("fk.pl -M"+model_name+"/"+depth+"/f -N1 "+diststr)
         print "fk.pl -M"+model_name+"/"+depth+"/f -N1 "+diststr
         p=subprocess.Popen(command,stdout=open('staticgf','w'),stderr=subprocess.PIPE)

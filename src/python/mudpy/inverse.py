@@ -400,7 +400,7 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tsunami,td
                         Nds+=read(syn_path+staname[ksta]+'.'+nfault+'.DS.'+vord+'.n')
                         Zds+=read(syn_path+staname[ksta]+'.'+nfault+'.DS.'+vord+'.z')
                     #Perform operations that need to only happen once (filtering and decimation)
-                    if BP!=None:# or ksta==1: #Apply filter to GFs
+                    if any(BP!=None):# or ksta==1: #Apply filter to GFs
                         if kfault==0:
                             print 'Bandpassing on frequency band:'
                             print '... '+str(BP)
@@ -418,12 +418,18 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tsunami,td
                         else: #A low pass or bandpass filter has been requested
                             if kfault==0:
                                 print '.... lowpass'
-                            Ess[ktrace].data=lfilt(Ess[ktrace].data,BP[0],fsample,2)
-                            Nss[ktrace].data=lfilt(Nss[ktrace].data,BP[0],fsample,2)
-                            Zss[ktrace].data=lfilt(Zss[ktrace].data,BP[0],fsample,2)
-                            Eds[ktrace].data=lfilt(Eds[ktrace].data,BP[0],fsample,2)
-                            Nds[ktrace].data=lfilt(Nds[ktrace].data,BP[0],fsample,2)
-                            Zds[ktrace].data=lfilt(Zds[ktrace].data,BP[0],fsample,2)
+                            #Ess[ktrace].data=lfilt(Ess[ktrace].data,BP[0],fsample,2)
+                            #Nss[ktrace].data=lfilt(Nss[ktrace].data,BP[0],fsample,2)
+                            #Zss[ktrace].data=lfilt(Zss[ktrace].data,BP[0],fsample,2)
+                            #Eds[ktrace].data=lfilt(Eds[ktrace].data,BP[0],fsample,2)
+                            #Nds[ktrace].data=lfilt(Nds[ktrace].data,BP[0],fsample,2)
+                            #Zds[ktrace].data=lfilt(Zds[ktrace].data,BP[0],fsample,2)
+                            Ess[ktrace].data=lfilt(Ess[ktrace].data,BP,fsample,2)
+                            Nss[ktrace].data=lfilt(Nss[ktrace].data,BP,fsample,2)
+                            Zss[ktrace].data=lfilt(Zss[ktrace].data,BP,fsample,2)
+                            Eds[ktrace].data=lfilt(Eds[ktrace].data,BP,fsample,2)
+                            Nds[ktrace].data=lfilt(Nds[ktrace].data,BP,fsample,2)
+                            Zds[ktrace].data=lfilt(Zds[ktrace].data,BP,fsample,2)
                         #bandpass=None
                     
                     ### HAAAAAACCCCKKKK!!!!
@@ -676,9 +682,9 @@ def getdata(home,project_name,GF_list,decimate,bandpass,quiet=False):
         u=read(GFfiles[i[ksta],kgf]+'.u')
         if displacement_bandpass is not None: #Apply low pass filter to data
             fsample=1./n[0].stats.delta
-            n[0].data=lfilt(n[0].data,displacement_bandpass,fsample,8)
-            e[0].data=lfilt(e[0].data,displacement_bandpass,fsample,8)
-            u[0].data=lfilt(u[0].data,displacement_bandpass,fsample,8)
+            n[0].data=lfilt(n[0].data,displacement_bandpass,fsample,2)
+            e[0].data=lfilt(e[0].data,displacement_bandpass,fsample,2)
+            u[0].data=lfilt(u[0].data,displacement_bandpass,fsample,2)
         #Decimate
         if decimate!=None:
             n[0]=stdecimate(n[0],decimate)
@@ -703,9 +709,9 @@ def getdata(home,project_name,GF_list,decimate,bandpass,quiet=False):
         u=read(GFfiles[i[ksta],kgf]+'.u')
         if velocity_bandpass is not None: #Apply low pass filter to data
             fsample=1./n[0].stats.delta
-            n[0].data=lfilt(n[0].data,velocity_bandpass,fsample,8)
-            e[0].data=lfilt(e[0].data,velocity_bandpass,fsample,8)
-            u[0].data=lfilt(u[0].data,velocity_bandpass,fsample,8)
+            n[0].data=lfilt(n[0].data,velocity_bandpass,fsample,2)
+            e[0].data=lfilt(e[0].data,velocity_bandpass,fsample,2)
+            u[0].data=lfilt(u[0].data,velocity_bandpass,fsample,2)
         #Decimate
         if decimate!=None:
             n[0]=stdecimate(n[0],decimate)
@@ -728,7 +734,7 @@ def getdata(home,project_name,GF_list,decimate,bandpass,quiet=False):
         tsun=read(GFfiles[i[ksta],kgf])
         if tsunami_bandpass is not None: #Apply low pass filter to data
             fsample=1./tsun[0].stats.delta
-            tsun[0].data=lfilt(tsun[0].data,tsunami_bandpass,fsample,4)
+            tsun[0].data=lfilt(tsun[0].data,tsunami_bandpass,fsample,2)
             
         dtsun=append(dtsun,tsun)
     
@@ -2256,7 +2262,7 @@ def interp_and_resample(st,dt,time_epi):
     return stout
     
     
-def data_norms(home,project_name,GF_list,decimate=None):
+def data_norms(home,project_name,GF_list,decimate=None,bandpass=[None,None,None]):
     '''
     Read each data type and extract it's norm, this is used to inform the
     weighting scheme
@@ -2267,7 +2273,7 @@ def data_norms(home,project_name,GF_list,decimate=None):
     from obspy import read
     
     #Read data vector
-    d=getdata(home,project_name,GF_list,decimate,bandpass=None)
+    d=getdata(home,project_name,GF_list,decimate,bandpass=bandpass)
     #Figure out which indices belong to which data type
     gf_file=home+project_name+'/data/station_info/'+GF_list
     #Read station flags
