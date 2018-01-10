@@ -2216,7 +2216,7 @@ def static2kineamtic(rupt,epicenter,vr,fout):
 
 
 
-def mudpy2srf(rupt,log_file,stf_dt=0.1,stf_type='triangle',Ndip=None,time_pad=5.0,minSTFpoints=16):
+def mudpy2srf(rupt,log_file,stf_dt=0.1,stf_type='triangle',Ndip=None,time_pad=5.0,minSTFpoints=16,integrate=False):
     '''
     Convert a mudpy .rupt or .inv file to SRF version 2 format
     
@@ -2230,6 +2230,7 @@ def mudpy2srf(rupt,log_file,stf_dt=0.1,stf_type='triangle',Ndip=None,time_pad=5.
     from pyproj import Geod
     from string import replace
     from os import path
+    from scipy.integrate import cumtrapz
     
     #Define paths to output files
     folder=path.dirname(rupt)
@@ -2348,7 +2349,6 @@ def mudpy2srf(rupt,log_file,stf_dt=0.1,stf_type='triangle',Ndip=None,time_pad=5.
     # Note mudpy works in mks SRF is cgs so must convert accordingly
     minNTstf=99999
     for kfault in range(len(f)):
-        print kfault
         zero_slip=False
         #Get values for "Headers" for this subfault
         lon=f[kfault,1]
@@ -2410,8 +2410,19 @@ def mudpy2srf(rupt,log_file,stf_dt=0.1,stf_type='triangle',Ndip=None,time_pad=5.
         #Write the subfault headers
         fout.write('  %.6f  %.6f  %.5e  %.2f  %.2f  %.5e  %.4f  %.4e  %.4e  %.4e\n' % (lon,lat,depth,strike,dip,area,tinit,stf_dt,vs,density))
         fout.write('  %.2f  %.4f  %d  0  0  0  0\n' % (rake,slip,NTstf))
+            
         
         if zero_slip==False:
+            #Integrate to slip instead of slip rate?
+            if integrate==True:
+                t=arange(0,len(stf)*stf_dt,stf_dt)
+                if len(t)>len(stf):
+                    t=t[0:-1]
+                print t.shape
+                print stf.shape
+                stf_integrated=cumtrapz(stf,t,initial=0)
+                stf=stf_integrated
+            
             #Write stf 6 values per line
             for kstf in range(NTstf):
                 if kstf==0:
