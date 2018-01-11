@@ -2127,7 +2127,7 @@ def make_grid(lon_min,lon_max,lat_min,lat_max,delta_lon,delta_lat,out_file):
     f.close()
         
     
-def usgs2fault(usgs_model,out_file):
+def usgs2fault(usgs_model,out_file,Dx,Dy):
     '''
     Convert USGS finite fault to .fault
     '''
@@ -2140,8 +2140,8 @@ def usgs2fault(usgs_model,out_file):
     dip=genfromtxt(usgs_model,usecols=6)
     
     no=arange(1,len(lon)+1)
-    H=15e3*ones(len(lon))
-    W=20e3*ones(len(lon))
+    H=Dx*ones(len(lon))
+    W=Dy*ones(len(lon))
     tri=0.5*ones(len(lon))
     rt=20*ones(len(lon))
     
@@ -2149,7 +2149,7 @@ def usgs2fault(usgs_model,out_file):
     savetxt(out_file,out,fmt='%d\t%10.4f\t%10.4f\t%8.4f\t%6.1f\t%6.1f\t%.1f\t%.1f\t%.1f\t%.1f')
     
     
-def usgs2rupt(usgs_model,out_file):
+def usgs2rupt(usgs_model,out_file,Dx,Dy):
     '''
     Convert USGS finite fault to .fault
     '''
@@ -2167,8 +2167,8 @@ def usgs2rupt(usgs_model,out_file):
     ds=(slip/100)*sin(deg2rad(rake))
     
     no=arange(1,len(lon)+1)
-    H=15e3*ones(len(lon))
-    W=20e3*ones(len(lon))
+    H=Dx*ones(len(lon))
+    W=Dy*ones(len(lon))
     tri=0.5*ones(len(lon))
     rt=20*ones(len(lon))
     time=zeros(len(lon))
@@ -2213,6 +2213,86 @@ def static2kineamtic(rupt,epicenter,vr,fout):
     source[:,12]=tdelay
     fmtout='%6i\t%.4f\t%.4f\t%8.4f\t%.2f\t%.2f\t%.2f\t%.2f\t%12.4e\t%12.4e%10.1f\t%10.1f\t%8.4f\t%.4e'
     savetxt(fout,source,fmtout,header='No,lon,lat,z(km),strike,dip,rise,dura,ss-slip(m),ds-slip(m),ss_len(m),ds_len(m),rupt_time(s),rigidity(Pa)')
+
+
+
+def mudpy2sw4source(rupt,time_offset=0.0):
+    '''
+    Convert a mudpy rupt file to source type statememnts used by SW4 .in files
+    '''
+    
+    
+    from numpy import genfromtxt,sqrt,arctan2,rad2deg,array,pi
+    from string import replace
+    from os import path
+    from obspy.imaging.scripts import mopad
+
+    
+    #Read mudpy file
+    f=genfromtxt(rupt)
+
+    #Define paths to output files
+    folder=path.dirname(rupt)
+    basename=path.basename(rupt)
+    basename=replace(basename,'rupt','sw4source')
+    fout=open(folder+'/'+basename,'w')
+    
+    #loop over subfaults
+    for kfault in range(len(f)):
+        
+        zero_slip=False
+        
+        #Get subfault parameters
+        lon=f[kfault,1]
+        lat=f[kfault,2]
+        depth=f[kfault,3]*1000 #in m for sw4
+        strike=f[kfault,4]
+        dip=f[kfault,5]
+        area=f[kfault,10]*f[kfault,11] #in meters, cause this isn't dumb SRF
+        tinit=f[kfault,12]+time_offset
+        rake=rad2deg(arctan2(f[kfault,9],f[kfault,8]))
+        slip=sqrt(f[kfault,8]**2+f[kfault,9]**2)
+        rise_time=f[kfault,7]
+        rigidity=f[kfault,13]
+
+        #If subfault has zero rise time or zero slip
+        zero_slip=False
+        if slip==0:
+            zero_slip=True
+            print 'Zero slip at '+str(kfault)
+        elif rise_time==0:
+            slip=0
+            zero_slip=True
+            print 'Zero rise time at '+str(kfault)     
+            
+        #make rake be -180 to 180
+        if rake>180:
+            rake=rake-360
+            
+        #Make moment tensor for subfault (this is unit MT)
+        MT=mopad.MomentTensor([strike,dip,rake])
+        MT=array(MT.get_M())
+        
+        #Multiply by moment, remember M0=norm(MT)/sqrt(2)
+        moment=rigidity*slip*area
+        MT=MT*moment
+        
+        #Only write it if the things has non-zero moment
+        if zero_slip==False:
+            mxx=MT[0,0]
+            mxy=MT[0,1]
+            mxz=MT[0,2]
+            myy=MT[1,1]
+            myz=MT[1,2]
+            mzz=MT[2,2]
+            freq=(2*pi)/rise_time
+            # source lat=38.1035 lon=-120.8610 z=10000 mxx=-.0677e21 mxy=0.3149e21 mxz=0.2529e21 myy=-0.7636e21 myz=-0.5946e21 mzz=0.8313e21 type=Liu t0=3 freq=1
+            line='source lat=%.6f lon=%.6f z=%.1f mxx=%.5e mxy=%.5e mxz=%.5e myy=%.5e myz=%.5e mzz=%.5e type=Liu t0=%.3f freq=%.3f\n' % (lat,lon,depth,mxx,mxy,mxz,myy,myz,mzz,tinit,freq)
+            fout.write(line)
+            
+    fout.close()
+            
+
 
 
 
