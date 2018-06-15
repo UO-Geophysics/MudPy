@@ -1895,6 +1895,156 @@ def record_section(home,project_name,GF_list,rupture,factor=10):
     
     
     
+def make_rgb_image(home,project_name,GF_list,rupture,factor=10,tlims=[0,300],saturation=None,lower_bound=None):
+    '''
+    Plot RGB image
+    '''
+    
+    from obspy.geodetics.base import gps2dist_azimuth
+    from numpy import genfromtxt,array,ones,zeros,argsort,where,log10
+    from matplotlib import pyplot as plt
+    from string import replace
+    from obspy import read
+    from obspy.taup import TauPyModel
+    from obspy.geodetics import locations2degrees
+    from matplotlib.ticker import MultipleLocator, FormatStrFormatter
+    
+    xmajorLocator = MultipleLocator(50)
+    xminorLocator = MultipleLocator(10)
+    ymajorLocator = MultipleLocator(200)
+    yminorLocator = MultipleLocator(50)
+    
+    # Read summary file
+    sta=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=0,dtype='S')
+    lon=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=[1])
+    lat=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=[2])
+    event_log=home+project_name+'/output/ruptures/'+rupture+'.log'
+    
+    #sort stations
+    i=argsort(lat)
+    lat=lat[i]
+    lon=lon[i]
+    sta=sta[i]
+    
+    #Load velocity model for ray tracing
+    velmod = TauPyModel(model="/Users/dmelgar/FakeQuakes/Cascadia/structure/cascadia")
+    
+    # Get hypocenter
+    f=open(event_log,'r')
+    loop_go=True
+    while loop_go:
+        line=f.readline()
+        if 'Actual magnitude' in line:
+            Mw=float(line.split()[-1])
+        if 'Hypocenter (lon,lat,z[km])' in line:
+            s=replace(line.split(':')[-1],'(','')
+            s=replace(s,')','')
+            hypo=array(s.split(',')).astype('float')
+            loop_go=False
+
+    #compute station to hypo distances
+    d=zeros(len(lon))
+    for k in range(len(lon)):
+        d[k],az,baz=gps2dist_azimuth(lat[k],lon[k],hypo[1],hypo[0])
+        d[k]=d[k]/1000
+        if lat[k]<hypo[1]: #station is south
+            d[k]=-d[k]
+          
+    # sort by distance to hypo  
+    i=argsort(d)
+    lat=lat[i]
+    lon=lon[i]
+    sta=sta[i]    
+ 
+    ptime=1e6*ones(len(sta))
+    stime=1e6*ones(len(sta))
+    pgd_east=0
+    pgd_north=0
+    pgd_up=0
+    for k in range(len(sta)):
+
+        e=read(home+project_name+'/output/waveforms/'+rupture+'/'+sta[k]+'.LYE.sac')
+        n=read(home+project_name+'/output/waveforms/'+rupture+'/'+sta[k]+'.LYN.sac')
+        z=read(home+project_name+'/output/waveforms/'+rupture+'/'+sta[k]+'.LYZ.sac')            
+        
+        # Beware this will not work if plotting based on sign
+        if saturation!=None:
+            i=where(abs(n[0].data)>saturation)[0]
+            n[0].data[i]=saturation
+            i=where(abs(e[0].data)>saturation)[0]
+            e[0].data[i]=saturation
+            i=where(abs(z[0].data)>saturation)[0]
+            z[0].data[i]=saturation
+            
+        if lower_bound!=None:
+            i=where(abs(n[0].data)<lower_bound)[0]
+            n[0].data[i]=lower_bound
+            i=where(abs(e[0].data)<lower_bound)[0]
+            e[0].data[i]=lower_bound
+            i=where(abs(z[0].data)<lower_bound)[0]
+            z[0].data[i]=lower_bound
+
+        if max(abs(n[0].data))>pgd_north:
+            pgd_north=max(abs(n[0].data))
+        if max(abs(e[0].data))>pgd_east:
+            pgd_east=max(abs(e[0].data))
+        if max(abs(z[0].data))>pgd_up:
+            pgd_up=max(abs(z[0].data))
+        
+        if k==0:
+            N=n.copy()
+            E=e.copy()
+            Z=z.copy()
+        else:
+            N+=n
+            E+=e
+            Z+=z
+        
+        #Get ray arrivals
+        deg=locations2degrees(hypo[1],hypo[0],lon[k],lon[k])
+    
+    #Reshape
+    RGB=zeros((len(sta),N[0].stats.npts,3))
+    for k in range(len(sta)):
+        
+        #normalize and scale
+        #n=abs(N[k].data)/pgd_north
+        #e=abs(E[k].data)/pgd_east
+        #z=abs(Z[k].data)/pgd_up
+        
+        n=log10(abs(N[k].data))-log10(lower_bound)
+        e=log10(abs(E[k].data))-log10(lower_bound)
+        z=log10(abs(Z[k].data))-log10(lower_bound)
+        n=n/n.max()
+        e=e/e.max()
+        z=z/z.max()
+        
+
+        
+        RGB[k,:,0]=abs(n-1)
+        RGB[k,:,1]=abs(e-1)
+        RGB[k,:,2]=abs(z-1)
+        
+        #RGB[:,k,0]=(n/2.)+0.5
+        #RGB[:,k,1]=(e/2.)+0.5
+        #RGB[:,k,2]=(z/2.)+0.5
+    
+        
+ 
+    plt.figure()
+    plt.imshow(RGB,aspect='auto',origin='lower')
+    plt.xlim(tlims)
+    plt.xlabel('Time (s)')
+    plt.ylabel('Station No.')
+    plt.title(rupture+', Mw = '+str(round(Mw,2)),fontsize=14)
+    plt.show()
+    
+    
+    
+    
+    
+    
+    
 def statics_map(summary_file,scale,xl,yl,vertscale=400):
     '''
     Plot statics
@@ -2356,6 +2506,7 @@ def source_time_function(rupt,epicenter,dt=0.001,t_total=500,stf_type='dreger',p
         plt.xlabel('Time(s)')
         #plt.ylabel('Moment Rate ('+r'$\times 10^{'+str(int(exp))+r'}$Nm/s)')
         plt.subplots_adjust(left=0.3, bottom=0.3, right=0.7, top=0.7, wspace=0, hspace=0)
+        plt.show()
     return t,Mrate  
     
          

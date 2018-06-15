@@ -362,7 +362,7 @@ def plot_resp_spec(home,project_name,run_name,GF_list,fault_name,rupt,frequency_
                
     plt.show()
     
-def calc_rjb(slon,slat,ruptfile):
+def calc_rjb(slon,slat,rupt):
     '''
     Short function to calculate nearest epicentral distance to fault trace 
     (with rupture on it) for one station and the rupture file
@@ -373,27 +373,30 @@ def calc_rjb(slon,slat,ruptfile):
     
     Christine J. Ruhl, August 2016
     '''
-    from numpy import genfromtxt
+    from numpy import genfromtxt,array
     from pyproj import Geod
     from matplotlib import mlab
     
     # set projection
     g=Geod(ellps='WGS84')    
     # get fault patches that actually have rupture on them using rise times != 0 in column 8 in ruptfile    
-    flon=genfromtxt(ruptfile,usecols=1,dtype='float')
-    flat=genfromtxt(ruptfile,usecols=2,dtype='float')
-    frisetime=genfromtxt(ruptfile,usecols=10,dtype='float')
+    flon=rupt[:,1]
+    flat=rupt[:,2]
+    frisetime=rupt[:,10]
     
     ind=mlab.find(frisetime)
     flon=flon[ind]
     flat=flat[ind]
     frisetime=frisetime[ind]
-    
-    d=[]
-    for i in range(len(flon)):
-        az,baz,dist=g.inv(flon[i],flat[i],slon,slat)
-        d.append(dist/1000)
-    Rjb=min(d)
+
+    Rjb=[]
+    for ksta in range(len(slon)):        
+        d=[]
+        for ksource in range(len(flon)):
+            az,baz,dist=g.inv(flon[ksource],flat[ksource],slon[ksta],slat[ksta])
+            d.append(dist/1000)
+        Rjb.append(min(d))
+    Rjb=array(Rjb)
     return Rjb
 
 

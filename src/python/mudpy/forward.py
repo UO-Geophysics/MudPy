@@ -2127,7 +2127,7 @@ def make_grid(lon_min,lon_max,lat_min,lat_max,delta_lon,delta_lat,out_file):
     f.close()
         
     
-def usgs2fault(usgs_model,out_file,Dx,Dy):
+def usgs2fault(usgs_model,out_file,Dx,Dy,rise_time):
     '''
     Convert USGS finite fault to .fault
     '''
@@ -2143,7 +2143,7 @@ def usgs2fault(usgs_model,out_file,Dx,Dy):
     H=Dx*ones(len(lon))
     W=Dy*ones(len(lon))
     tri=0.5*ones(len(lon))
-    rt=20*ones(len(lon))
+    rt=rise_time*ones(len(lon))
     
     out=c_[no,lon,lat,z,st,dip,tri,rt,H,W]
     savetxt(out_file,out,fmt='%d\t%10.4f\t%10.4f\t%8.4f\t%6.1f\t%6.1f\t%.1f\t%.1f\t%.1f\t%.1f')
@@ -2277,7 +2277,7 @@ def mudpy2sw4source(rupt,time_offset=0.0):
         moment=rigidity*slip*area
         MT=MT*moment
         
-        #Only write it if the things has non-zero moment
+        #Only write it if the thing has non-zero moment
         if zero_slip==False:
             mxx=MT[0,0]
             mxy=MT[0,1]

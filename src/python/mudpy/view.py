@@ -506,11 +506,11 @@ def tile_slip(rupt,nstrike,ndip,(slip_bounds),geographic=False,epicenter=0,epice
         for k in range(len(lat)):
             out=gps2DistAzimuth(epicenter[1],epicenter[0],lat[k],lon[k])
             if lat[k]<epicenter[1]: #It's to the south
-                along_strike[k]=-out[0]/1000
-                #along_strike[k]=out[0]/1000
-            else:
-                along_strike[k]=out[0]/1000
                 #along_strike[k]=-out[0]/1000
+                along_strike[k]=out[0]/1000
+            else:
+                #along_strike[k]=out[0]/1000
+                along_strike[k]=-out[0]/1000
         #Now tile
         along_strike=tile(along_strike,ndip)
         #Process the aftershocks
@@ -564,8 +564,8 @@ def tile_slip(rupt,nstrike,ndip,(slip_bounds),geographic=False,epicenter=0,epice
     #plt.annotate('B',xy=(-160,-4),fontsize=16,annotation_clip=False)
     #plt.annotate("B'",xy=(55,-4),fontsize=16,annotation_clip=False)
     cb.set_label('Slip (m)')
-    cb.set_label('CV')
-    cb.set_label('Std. Dev. (m)')
+    #cb.set_label('CV')
+    #cb.set_label('Std. Dev. (m)')
     plt.subplots_adjust(left=0.15, bottom=0.25, right=0.92, top=0.90, wspace=0, hspace=0)
     plt.show()
 
@@ -1704,7 +1704,7 @@ def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpas
             #xticklabel=['','5','','15','','25',''] #Amatrice preferred
             #xticklabel=['','10','','30','','50','','70',''] #Melinka preferred
             #xticklabel=['','10','','30','','50','','70',''] #Tehuantepec preferred
-            #xticklabel=axn.xaxis.get_ticklabels()
+            xticklabel=axn.xaxis.get_ticklabels()
         if k==len(i)-1 and nsta>1: #Last plot
             axe.set_xlabel('Time (s)')
             #axn.xaxis.set_ticklabels(xticklabel)
@@ -1715,6 +1715,7 @@ def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpas
             #axu.xaxis.set_ticks(xtick)
     #plt.subplots_adjust(left=0.2, bottom=0.05, right=0.8, top=0.95, wspace=0, hspace=0)
     plt.subplots_adjust(left=0.2, bottom=0.15, right=0.8, top=0.85, wspace=0, hspace=0)
+    plt.show()
 
 def static_synthetics(home,project_name,run_name,run_number,gflist,qscale,xl=None,yl=None):
     '''
@@ -2459,7 +2460,7 @@ def dtopo_slices(dtopo_file,fault_file,out):
         plt.close("all")
         
 
-def plot_grd(grdfile,zlims,cmap,flip_lon=False,return_data=False):
+def plot_grd(grdfile,zlims,cmap,flip_lon=False,return_data=False,z_variable=None):
     '''
     Quick plot of any GMT grd file, this will only work for NETCDF4 files, 
     i.e. if you use GMT5. If you are outdated and use NETCDF3 you can edit this
@@ -2472,14 +2473,19 @@ def plot_grd(grdfile,zlims,cmap,flip_lon=False,return_data=False):
     import matplotlib.pyplot as plt
 
     grd = Dataset(grdfile, 'r', format='NETCDF4')
-    try:
-        x=grd.variables['x'][:]
-        y=grd.variables['y'][:]
-        z=grd.variables['z'][:]
-    except:
-        x=grd.variables['lon'][:]
-        y=grd.variables['lat'][:]
-        z=grd.variables['z'][:]
+    if z_variable==None:
+        try:
+            x=grd.variables['x'][:]
+            y=grd.variables['y'][:]
+            z=grd.variables['z'][:]
+        except:
+            x=grd.variables['lon'][:]
+            y=grd.variables['lat'][:]
+            z=grd.variables['z'][:]
+    else:
+            x=grd.variables['lon'][:]
+            y=grd.variables['lat'][:]
+            z=grd.variables[z_variable][:]
     if flip_lon:
         x=x-360
     X,Y=meshgrid(x,y)

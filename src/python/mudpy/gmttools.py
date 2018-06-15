@@ -366,8 +366,99 @@ def make_fakequakes_sliprate_slice(rupt,nstrike,ndip,epicenter,outpath,run_name,
         savetxt(fname, c_[lon,lat,depth,sliprate],fmt='%.6f\t%.6f\t%.4f\t%.6f')
     print 'Maximum slip rate was '+str(maxsr)+'m/s'   
        
+       
         
-          
+            
+def make_usgs_sliprate_slice(rupt,outpath,tmax,dt):
+    '''
+    '''
+    from numpy import zeros,where,arange,interp,c_,savetxt,cos,pi,roll,isnan
+    from mudpy.forward import build_source_time_function
+    from string import rjust
+    from scipy.integrate import trapz
+    
+    f,segment_out,segment_data_out = read_neic_param(rupt)
+    nfault=len(f)
+
+    #coordinates
+    lon=f[:,1]
+    lat=f[:,0]
+    depth=f[:,2]
+
+    #Get slips
+    total_slip=f[:,3]/100 #to meters  
+    
+    #Get rise times
+    tup=f[:,8]
+    tdown=f[:,9]
+    
+    #Get rupture times for subfault windows
+    trup=f[:,7]
+    
+    #get subfault moments
+    moment=f[:,10]/1e7
+
+    #Output time vector
+    t=arange(0,tmax,dt)
+    
+    #Loop over subfaults
+    for kfault in range(nfault):
+        if kfault%10==0:
+            print '... working on subfault '+str(kfault)+' of '+str(nfault)
+        
+        #Add it up
+        slip=total_slip[kfault]
+        
+        #Build local sliprate function
+        s1=(1./(tup[kfault]+tdown[kfault]))*(1-cos((pi*t)/tup[kfault]))
+        i=where(t>tup[kfault])[0]
+        s1[i]=0
+        s2=(1./(tup[kfault]+tdown[kfault]))*(1+cos((pi*(t-tup[kfault]))/tdown[kfault]))
+        i=where(t<=tup[kfault])[0]
+        s2[i]=0 
+        i=where(t>tup[kfault]+tdown[kfault])[0]
+        s2[i]=0
+        #add the two 
+        s=s1+s2
+        #shift to right onset time
+        dN=int(trup[kfault]/dt)
+        s=roll(s,dN)
+        #rescale to the correct slip
+        area=trapz(s,t)
+        scale=slip/area
+        s=s*scale
+
+        if kfault==0: #Intialize outout vectors
+            S=zeros((len(t),nfault))
+            T=zeros((len(t),nfault))
+        
+        
+        #place in output vector
+        S[:,kfault]=s
+        T[:,kfault]=t
+        
+    #Now look through time slices
+    maxsr=0
+    print 'Writing files...'
+    for ktime in range(len(t)):
+
+        sliprate=S[ktime,:]
+        i=where(isnan(sliprate)==True)[0]
+        sliprate[i]=0
+        maxsr=max(maxsr,sliprate.max())
+        fname=outpath+rjust(str(ktime),4,'0')+'.sliprate'
+        print sliprate.max()
+        savetxt(fname, c_[lon,lat,depth,sliprate],fmt='%.6f\t%.6f\t%.4f\t%.6f')
+    print 'Maximum slip rate was '+str(maxsr)+'m/s'    
+    
+    #also output total slip
+    out=c_[lon,lat,total_slip]   
+    fname=outpath+'_total_slip.txt'
+    savetxt(fname, out,fmt='%.6f\t%.6f\t%.4f')     
+                    
+                        
+                            
+                                    
 def make_slip_slice(rupt,nstrike,ndip,epicenter,out,tmax,dt):
     '''
     '''
@@ -567,7 +658,70 @@ def make_shakemap_slice(home,project_name,run_name,time_epi,GF_list,dt,tmax):
     print 'Max velocity was '+str(maxv)+'m/s'
         
 
+
     
+def read_neic_param(fault_file):
+    '''
+    Parse the param text format
+    '''
+    
+    
+    from numpy import r_,c_,array,expand_dims
+    
+    f=open(fault_file)
+    #get number of segments
+    line=f.readline()
+    
+    fault_out=array([])
+    segment_out=[]
+    segment_data_out=[]
+    kread=0
+    while True:
+        
+        #read fault segment header
+        line=f.readline()
+        if line=='':
+            break
+        Dx=float(line.split()[6].replace('km',''))*1000
+        Dy=float(line.split()[10].replace('km',''))*1000
+        Nsubfaults=int(line.split()[4])*int(line.split()[8])
+        
+        #Read fault segment boundary information
+        line=f.readline() #skip two lines
+        line=f.readline()
+        for k in range(5):
+            line=f.readline()
+            if k==0:
+                segment=expand_dims(array(line.split()).astype('float'),0)
+            else:
+                segment=r_[segment,expand_dims(array(line.split()).astype('float'),0)]
+        #Append segment boundary
+        segment_out.append(segment)
+        line=f.readline() #skip a line
+        
+        #read segment subfault data
+        for k in range(Nsubfaults):
+            line=f.readline()
+            
+            if kread==0:
+                fault_out=c_[expand_dims(array(line.split()).astype('float'),0),Dx,Dy]
+            else:
+                fault_out=r_[fault_out,c_[expand_dims(array(line.split()).astype('float'),0),Dx,Dy]]   
+            kread+=1
+            #Save segment data
+            if k==0:
+                segment_data=expand_dims(array(line.split()).astype('float'),0)
+            else:
+                segment_data=r_[segment_data,expand_dims(array(line.split()).astype('float'),0)]  
+        #Append
+        segment_data_out.append(segment_data)
+            
+        #Done
+        if line=='':
+            break
+    
+    return fault_out,segment_out,segment_data_out        
+                
 
 
 
