@@ -653,19 +653,36 @@ def get_rupture_onset(home,project_name,slip,fault_array,model_name,hypocenter,
     # Convert from thickness to depth to bottom of layer
     depth_to_top=r_[0,vel[:,0].cumsum()[0:-1]]
     
+#    #Get rupture speed shear-wave multipliers
+#    rupture_multiplier=zeros(len(vel))
+#    # Shallow 
+#    i=where(depth_to_top<=rise_time_depths[0])[0]
+#    rupture_multiplier[i]=0.56
+#    # Deep 
+#    i=where(depth_to_top>=rise_time_depths[1])[0]
+#    rupture_multiplier[i]=0.8
+#    # Transition 
+#    i=where((depth_to_top<rise_time_depths[1]) & (depth_to_top>rise_time_depths[0]))[0]
+#    slope=(0.8-0.56)/(rise_time_depths[1]-rise_time_depths[0])
+#    intercept=0.8-slope*rise_time_depths[1]
+#    rupture_multiplier[i]=slope*depth_to_top[i]+intercept
+    
+    
     #Get rupture speed shear-wave multipliers
     rupture_multiplier=zeros(len(vel))
     # Shallow 
     i=where(depth_to_top<=rise_time_depths[0])[0]
-    rupture_multiplier[i]=0.56
+    rupture_multiplier[i]=0.49
     # Deep 
     i=where(depth_to_top>=rise_time_depths[1])[0]
-    rupture_multiplier[i]=0.8
+    rupture_multiplier[i]=0.7
     # Transition 
     i=where((depth_to_top<rise_time_depths[1]) & (depth_to_top>rise_time_depths[0]))[0]
-    slope=(0.8-0.56)/(rise_time_depths[1]-rise_time_depths[0])
-    intercept=0.8-slope*rise_time_depths[1]
+    slope=(0.7-0.49)/(rise_time_depths[1]-rise_time_depths[0])
+    intercept=0.7-slope*rise_time_depths[1]
     rupture_multiplier[i]=slope*depth_to_top[i]+intercept
+    
+    
     
     #Perturb depths of the hypocenter so that faults at the same depth are not zero onset
     delta=0.00001
@@ -857,6 +874,7 @@ def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
     from numpy import load,save,genfromtxt,log10,cos,sin,deg2rad,savetxt,zeros,sqrt,where
     from string import rjust
     from time import gmtime, strftime
+    from numpy.random import shuffle
 
     
     #Should I calculate or load the distances?
@@ -974,6 +992,12 @@ def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
             #Place slip values in output variable
             fault_out[ifaults,8]=slip*cos(deg2rad(stoc_rake))
             fault_out[ifaults,9]=slip*sin(deg2rad(stoc_rake))
+            
+            #Move hypocenter to somewhere with a susbtantial fraction of peak slip
+            slip_fraction=0.25
+            islip=where(slip>slip.max()*slip_fraction)[0]
+            shuffle(islip) #randomize
+            hypo_fault=ifaults[islip[0]] #select first from randomized vector
             
             #Calculate and scale rise times
             rise_times=get_rise_times(M0,slip,fault_array,rise_time_depths,stoc_rake)

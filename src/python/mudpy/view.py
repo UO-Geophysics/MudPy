@@ -51,7 +51,7 @@ cdict = {'red': ((0., 1, 1),
                   (1, 0, 0))}
 whitejet = matplotlib.colors.LinearSegmentedColormap('whitejet',cdict,256)
 
-whitejet=gmtColormap(u'/Users/dmelgar/code/python/cpt/color_linear.cpt')
+#whitejet=gmtColormap(u'/Users/dmelgarm/code/python/cpt/color_linear.cpt')
 
 pqlx_dict={'blue': (( 0.  ,  1.  ,  1.  ),
             ( 0.1,  1.  ,  1.  ),
