@@ -456,7 +456,7 @@ def select_faults(whole_fault,Dstrike,Ddip,target_Mw,buffer_factor,num_modes,sca
             length_std=0.18/2
             length=10**normal(length_mean,length_std)
             width_mean=-1.86+0.46*target_Mw
-            width_std=0.17
+            width_std=0.17/2
             width=10**normal(width_mean,width_std)
         elif scaling_law.upper()=='S':
             length_mean=-2.69+0.64*target_Mw
@@ -484,17 +484,17 @@ def select_faults(whole_fault,Dstrike,Ddip,target_Mw,buffer_factor,num_modes,sca
     
     #Work on strike first
     strike_bounds=array([0,length/2])
-    #strike_bounds=array([-length/2,length/2])
-    #if strike_bounds[0]<dstrike_min:#Length is outside domain
-    #    strike_bounds[1]=strike_bounds[1]+abs(dstrike_min-strike_bounds[0])
-    #    strike_bounds[0]=dstrike_min
-    #if strike_bounds[1]>dstrike_max:#Length is outside domain
-    #    strike_bounds[0]=strike_bounds[0]-abs(dstrike_max-strike_bounds[1])
-    #    strike_bounds[1]=dstrike_max
+#    strike_bounds=array([-length/2,length/2])
+#    if strike_bounds[0]<dstrike_min:#Length is outside domain
+#        strike_bounds[1]=strike_bounds[1]+abs(dstrike_min-strike_bounds[0])
+#        strike_bounds[0]=dstrike_min
+#    if strike_bounds[1]>dstrike_max:#Length is outside domain
+#        strike_bounds[0]=strike_bounds[0]-abs(dstrike_max-strike_bounds[1])
+#        strike_bounds[1]=dstrike_max
         
     #Now get dip ranges
     dip_bounds=array([0,width/2])
-    #dip_bounds=array([-width/2,width/2])
+#    dip_bounds=array([-width/2,width/2])
     #if dip_bounds[0]<ddip_min:#Length is outside domain
     #    dip_bounds[1]=dip_bounds[1]+abs(ddip_min-dip_bounds[0])
     #    dip_bounds[0]=ddip_min
@@ -547,19 +547,11 @@ def select_faults(whole_fault,Dstrike,Ddip,target_Mw,buffer_factor,num_modes,sca
                 
     #From the selected faults determine the actual along strike length (Leff) and down-dip width (Weff)
     #Check it doesn't exceed physically permissible thresholds
-    if strike_bounds[0]<dstrike_min:
-        strike_bounds[0]=dstrike_min
-    if strike_bounds[1]>dstrike_max:
-        strike_bounds[1]=dstrike_max   
-    Lmax=abs(diff(strike_bounds))[0]
-    if dip_bounds[0]<ddip_min:
-        dip_bounds[0]=ddip_min
-    if dip_bounds[1]>ddip_max:
-        dip_bounds[1]=ddip_max     
-    Wmax=abs(diff(dip_bounds))[0]
+    Lmax=Dstrike[selected_faults,:][:,selected_faults].max()    
+    Wmax=Ddip[selected_faults,:][:,selected_faults].max()
     #Convert to effective length/width
     Leff=0.85*Lmax
-    Weff=0.77*Wmax
+    Weff=0.85*Wmax
     return selected_faults,hypo_fault,Lmax,Wmax,Leff,Weff
 
     
@@ -922,13 +914,11 @@ def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
                 if Lstrike=='auto': #Use scaling
                     #Ls=10**(-2.43+0.49*target_Mw)
                     Ls=2.0+(1./3)*Leff
-                    #Ls=2.0+(1./3)*Lmax
                 else:
                     Ls=Lstrike
                 if Ldip=='auto': #Use scaling
                     #Ld=10**(-1.79+0.38*target_Mw)
-                    #Ld=1.0+(1./3)*Weff
-                    Ld=1.0+(1./3)*Wmax
+                    Ld=1.0+(1./3)*Weff
                 else:
                     Ld=Ldip
                 
