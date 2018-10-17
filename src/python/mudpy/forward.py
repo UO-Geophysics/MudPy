@@ -586,7 +586,7 @@ def get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_nam
         G: Fully assembled GF matrix
     '''
     
-    from numpy import genfromtxt,loadtxt,convolve,where,zeros,arange,unique
+    from numpy import genfromtxt,loadtxt,convolve,where,zeros,arange,unique,save
 
 
     if forward==True:
@@ -615,7 +615,7 @@ def get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_nam
     matrix_pos=0 #tracks where in matrix synths are placed
     read_start=0  #Which trace to start reading from
     for ksta in range(Nsta):
-        print ksta
+        print('... working on station '+str(ksta)+' of '+str(Nsta))
         
         for ksource in range(len(i_non_zero)):
 
@@ -638,6 +638,7 @@ def get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_nam
                 rise=2.*dt
             total_time=NFFT*dt
             t_stf,stf=build_source_time_function(rise,dt,total_time,stf_type=source_time_function,dreger_falloff_rate=stf_falloff_rate)
+
             nss.data=convolve(nss.data,stf)[0:NFFT]
             ess.data=convolve(ess.data,stf)[0:NFFT]
             zss.data=convolve(zss.data,stf)[0:NFFT]
@@ -651,6 +652,7 @@ def get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_nam
             G[matrix_pos+NFFT:matrix_pos+2*NFFT,2*ksource+1]=eds.data
             G[matrix_pos+2*NFFT:matrix_pos+3*NFFT,2*ksource]=zss.data
             G[matrix_pos+2*NFFT:matrix_pos+3*NFFT,2*ksource+1]=zds.data
+            
         matrix_pos+=3*NFFT
         read_start+=Nfaults
         #Get slip model vector
