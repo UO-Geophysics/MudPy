@@ -729,7 +729,7 @@ def one_event_pgd_scaling(home,project_name,run_name,run_number,reference='centr
     ax.set_yscale('log')
     ax.set_xscale('log')
     # Plot reference line
-    dref=logspace(0,3,50)
+    dref=logspace(0,3.3,50)
     A=coeffs[0]
     B=coeffs[1]
     C=coeffs[2]
@@ -1753,8 +1753,8 @@ def record_section(home,project_name,GF_list,rupture,factor=10):
     from obspy.geodetics import locations2degrees
     from matplotlib.ticker import MultipleLocator, FormatStrFormatter
     
-    xmajorLocator = MultipleLocator(50)
-    xminorLocator = MultipleLocator(10)
+    xmajorLocator = MultipleLocator(100)
+    xminorLocator = MultipleLocator(20)
     ymajorLocator = MultipleLocator(200)
     yminorLocator = MultipleLocator(50)
     
@@ -1764,7 +1764,8 @@ def record_section(home,project_name,GF_list,rupture,factor=10):
     event_log=home+project_name+'/output/ruptures/'+rupture+'.log'
     
     #Load velocity model for ray tracing
-    velmod = TauPyModel(model="/Users/dmelgar/FakeQuakes/Cascadia/structure/cascadia")
+#    velmod = TauPyModel(model="/Users/dmelgarm/FakeQuakes/Cascadia/structure/cascadia")
+    velmod = TauPyModel(model="PREM")
     
     # Get hypocenter
     f=open(event_log,'r')

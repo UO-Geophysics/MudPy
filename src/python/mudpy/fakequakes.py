@@ -434,7 +434,8 @@ def rectify_slip(slip_unrectified,percent_reject=10):
 
 
 def select_faults(whole_fault,Dstrike,Ddip,target_Mw,buffer_factor,num_modes,scaling_law,
-    force_area,no_shallow_epi=True,hypo_depth=10,param_norm=(0.0451,0.1681),param_expon=(0, 0.1305)):
+    force_area,no_shallow_epi=True,hypo_depth=10,param_norm=(0.0451,0.1681),param_expon=(0, 0.1305),
+    no_random=False,subfault_hypocenter=None):
     '''
     Select a random fault to be the hypocenter then based on scaling laws and a 
     target magnitude select only faults within the expected area plus some 
@@ -450,7 +451,19 @@ def select_faults(whole_fault,Dstrike,Ddip,target_Mw,buffer_factor,num_modes,sca
     if force_area==True: #Use entire fault model
         length=1e10
         width=1e10
-    else: #Use scaling laws from Blaser et al 2010
+    
+    if no_random==True: #Use the Blasser medain L and W
+        if scaling_law.upper()=='T':
+            length=10**(-2.37+0.57*target_Mw)
+            width=10**(-1.86+0.46*target_Mw)
+        elif scaling_law.upper()=='S':
+            length_mean=10**(-2.69+0.64*target_Mw)
+            width_mean=10**(-1.12+0.3*target_Mw) 
+        elif scaling_law.upper()=='N':
+            length_mean=10**(-1.91+0.52*target_Mw)
+            width_mean=10**(-1.2+0.36*target_Mw)
+    
+    if force_area==False and no_random==False: #Use scaling laws from Blaser et al 2010
         if scaling_law.upper()=='T':
             length_mean=-2.37+0.57*target_Mw
             length_std=0.18/2
@@ -474,8 +487,11 @@ def select_faults(whole_fault,Dstrike,Ddip,target_Mw,buffer_factor,num_modes,sca
             width=10**normal(width_mean,width_std)           
     
     #Select random subfault as center of the locus of L and W
-    hypo_fault=randint(0,len(whole_fault)-1)
-
+    if subfault_hypocenter==None: 
+        hypo_fault=randint(0,len(whole_fault)-1)
+    else: #get subfault closest to hypo
+        hypo_fault=subfault_hypocenter
+        
     #Get max/min distances from hypocenter to all faults
     dstrike_max=Dstrike[:,hypo_fault].max()
     dstrike_min=Dstrike[:,hypo_fault].min()
@@ -811,8 +827,8 @@ def write_all_event_summary(home,project_name,run_name):
     from numpy import array,genfromtxt,sqrt,zeros,savetxt
     
     #How many events?
-    ruptures=glob(home+project_name+'/output/ruptures/*.rupt')
-    logs=glob(home+project_name+'/output/ruptures/*.log')
+    ruptures=sorted(glob(home+project_name+'/output/ruptures/*.rupt'))
+    logs=sorted(glob(home+project_name+'/output/ruptures/*.log'))
     
     #where does this go?
     fout=home+project_name+'/output/ruptures/_kin_summary.txt'
@@ -857,7 +873,7 @@ def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
         Lstrike,num_modes,Nrealizations,rake,buffer_factor,rise_time_depths,time_epi,
         max_slip,source_time_function,lognormal,slip_standard_deviation,scaling_law,
         force_magnitude=False,force_area=False,mean_slip_name=None,hypocenter=None,
-        slip_tol=1e-2,force_hypocenter=False):
+        slip_tol=1e-2,force_hypocenter=False,no_random=False,shypo=None):
     
     '''
     Depending on user selected flags parse the work out to different functions
@@ -905,7 +921,7 @@ def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
             while success==False:
                 #Select only a subset of the faults based on magnitude scaling
                 current_target_Mw=target_Mw[kmag]
-                ifaults,hypo_fault,Lmax,Wmax,Leff,Weff=select_faults(whole_fault,Dstrike,Ddip,current_target_Mw,buffer_factor,num_modes,scaling_law,force_area,no_shallow_epi=False)
+                ifaults,hypo_fault,Lmax,Wmax,Leff,Weff=select_faults(whole_fault,Dstrike,Ddip,current_target_Mw,buffer_factor,num_modes,scaling_law,force_area,no_shallow_epi=False,no_random=no_random,subfault_hypocenter=shypo)
                 fault_array=whole_fault[ifaults,:]
                 Dstrike_selected=Dstrike[ifaults,:][:,ifaults]
                 Ddip_selected=Ddip[ifaults,:][:,ifaults]
