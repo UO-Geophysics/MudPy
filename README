@@ -2,8 +2,8 @@ MULTI-DATA SOURCE MODELING AND INVERSION TOOLKIT
 
 MudPy v.1.0
 Diego Melgar
-Seismological Laboratory
-University of California Berkeley
+Department of Earth Sciences
+University of Oregon
 
 A code to run forward models of dislocation sources as well as invert for them 
 with multiple geophysical data types:
@@ -26,6 +26,8 @@ INVERSION of a static point source
 INVERSION of static slip distributions
 INVERSION of kinematic point sources
 INVERSION of kinematic slip distributions
+
+STOCHASTIC SLIP MODEL generation
 
 There are simple examples on the wiki but unfortunately not a whole lot of documentation since I'm still working on this although the 
 code is thoroughly commented.
