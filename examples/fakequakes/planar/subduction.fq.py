@@ -3,7 +3,7 @@ Fakequakes runs with a simple planar geometry
 '''
 
 
-from mudpy import fakequakes,runslip,forward,viewFQ
+from mudpy import fakequakes,runslip,forward
 import numpy as np
 from obspy.core import UTCDateTime
 
@@ -16,7 +16,7 @@ run_name='subduction'
 
 
 ##############             What do you want to do??           ##################
-init=0
+init=1
 make_ruptures=0
 make_GFs=0
 make_synthetics=0
