@@ -1,7 +1,7 @@
 # Planar subduction geometry
 # NOTES: 
 #   (i)  the depths are positive downwards
-#   (ii) the rt column has no effect (it is used only in slip inversion)
+#   (ii) the typ rt columns have no effect (they are used only in slip inversion)
 #
 # No.  lon       lat          z    strike    dip    typ rt  length  width  
 #     (deg)      (deg)       (km)  (deg)    (deg)             (m)    (m)
