@@ -22,7 +22,7 @@ make_GFs=0
 make_synthetics=0
 make_waveforms=0
 # Things that only need to be done once
-load_distances=0
+load_distances=1
 G_from_file=0
 ###############################################################################
 
