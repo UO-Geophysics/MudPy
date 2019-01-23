@@ -17,7 +17,7 @@ run_name='subduction'
 
 ##############             What do you want to do??           ##################
 init=0
-make_ruptures=0
+make_ruptures=1
 make_GFs=0
 make_synthetics=0
 make_waveforms=0
@@ -28,7 +28,8 @@ G_from_file=0
 
 
 #############                 Run-time parameters            ##################
-ncpus=8
+
+ncpus=8 #only useful for waveform syntehsis
 
 model_name='bbp_norcal.mod'   # Velocity model
 fault_name='subduction.fault'    # Fault geometry
@@ -58,7 +59,7 @@ rake=90.0
 force_magnitude=True
 time_epi=UTCDateTime('2016-09-07T14:42:26')
 hypocenter=[0.8301,0.01,27.67]
-force_hypocenter=True
+force_hypocenter=False
 
 # Kinematic parameters
 source_time_function='dreger' # options are 'triangle' or 'cosine' or 'dreger'
