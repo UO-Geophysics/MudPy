@@ -1704,10 +1704,10 @@ def rotatedPercentiles(accelA, accelB, angles, percentiles=[50]):
             0 : rotated['angle'][0],
             100 : rotated['angle'][-1],
             }
-    orientations = [orientationMap.get(p, np.nan) for p in percentiles]
+    orientations = [orientationMap.get(p, np.nan) for p in percentiles] 
 
     return np.array(
-            zip(values, orientations),
+            zip(values, orientations), 
             dtype=[('value', '<f8'), ('orientation', '<f8')])
             
 def rotateTimeSeries(foo, bar, angle):

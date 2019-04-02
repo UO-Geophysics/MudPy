@@ -694,6 +694,7 @@ def write_fakequakes_waveforms(home,project_name,rupture_name,waveforms,GF_list,
         n=Stream(Trace())
         n[0].stats.starttime=time_epi
         n[0].stats.delta=dt
+        n[0].stats.station=sta[ksta]
         # Copy to the other components
         e=n.copy()
         z=n.copy()

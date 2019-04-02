@@ -81,6 +81,7 @@ def stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,model_
         tr.stats.station=sta[ksta]
         tr.stats.delta=hf_dt
         tr.stats.starttime=time_epi
+        
         hf=zeros(len(t))
         
         #Loop over subfaults
