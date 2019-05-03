@@ -323,7 +323,82 @@ def waveforms_fakequakes(home,project_name,fault_name,rupture_list,GF_list,
         write_fakequakes_waveforms(home,project_name,rupture_name,waveforms,GF_list,NFFT,time_epi,dt)
         
 
+def run_hf_waveforms(home,project_name,fault_name,rupture_list,GF_list,model_name,run_name,dt,NFFT,G_from_file,
+            G_name,rise_time_depths,moho_depth_in_km,ncpus,source_time_function='dreger',duration=100.0,
+            stf_falloff_rate=4.0,hf_dt=0.02,Pwave=False,hot_start=0,stress_parameter=50,
+            high_stress_depth=1e4):
+    '''
+    Make semistochastic high frequency accelerograms
+    '''
+    from numpy import genfromtxt
+    from mudpy import hfsims
+    all_sources=genfromtxt(home+project_name+'/data/'+rupture_list,dtype='S')
+    #Now loop over rupture models
+    Nsources=all_sources.size
+    for ksource in range(hot_start,Nsources):        
+        print '... solving HF waveforms for source '+str(ksource)+' of '+str(Nsources)
+        if Nsources>1:
+            rupture_name=all_sources[ksource]
+        else:
+            rupture_name=str(all_sources)
         
+        #Get station info from GF_list
+        sta=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=[0],dtype='S')
+        lonlat=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=[1,2])
+        sta_lon=lonlat[:,0]
+        sta_lat=lonlat[:,1]
+        
+        comp=['N','E','Z']  #components to loop through
+        
+        #Now loop over stations
+        for ksta in range(len(sta)):
+            #Now loop over components N,E,Z
+            for kcomp in range(len(comp)):
+                #HF_sims stochastic simulation for single station, component
+                if ncpus>1:
+                    make_parallel_hfsims(home,project_name,rupture_name,ncpus,sta[ksta],sta_lon[ksta],sta_lat[ksta],
+                        comp[kcomp],model_name,rise_time_depths[0],rise_time_depths[1],moho_depth_in_km,total_duration=duration,hf_dt=hf_dt,
+                        Pwave=Pwave,stress_parameter=stress_parameter,high_stress_depth=high_stress_depth)
+                    #Combine the separate MPI outputs into one full waveform
+                    write_parallel_hfsims(home,project_name,rupture_name,sta[ksta],comp[kcomp],remove=True)
+                else:
+                    hf_waveform=hfsims.stochastic_simulation(home,project_name,rupture_name,sta[ksta],sta_lon[ksta],sta_lat[ksta],
+                        comp[kcomp],model_name,rise_time_depths,moho_depth_in_km,total_duration=duration,hf_dt=hf_dt,
+                        Pwave=Pwave,stress_parameter=stress_parameter,high_stress_depth=high_stress_depth)
+                    #Write to file
+                    write_fakequakes_hf_waveforms_one_by_one(home,project_name,rupture_name,hf_waveform,comp[kcomp])
+
+def make_parallel_hfsims(home,project_name,rupture_name,ncpus,sta,sta_lon,sta_lat,component,model_name,rise_time_depths0,rise_time_depths1,moho_depth_in_km,total_duration,hf_dt,Pwave,stress_parameter,kappa=0.04,Qexp=0.6,high_stress_depth=30):
+    '''
+    Set up for MPI calculation of HF stochastics
+    '''
+    from numpy import savetxt,arange,genfromtxt,where
+    from os import environ
+    import subprocess
+    from shlex import split
+    
+    #Calculate the necessary full-fault parameters before splitting up the faults over your ncpus
+    rupture=home+project_name+'/output/ruptures/'+rupture_name
+    fault=genfromtxt(rupture)
+    slip=(fault[:,8]**2+fault[:,9]**2)**0.5
+    subfault_M0=slip*fault[:,10]*fault[:,11]*fault[:,13]
+    subfault_M0=subfault_M0*1e7 #to dyne-cm
+    M0=subfault_M0.sum()
+    i=where(slip>0)[0]
+    N=len(i)
+    #Split rupture file into ncpu rupture files
+    for k in range(ncpus):
+        i=arange(k,len(fault),ncpus)
+        mpi_source=fault[i,:]
+        fmt='%d\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6E'
+        savetxt(home+project_name+'/output/ruptures/mpi_rupt.'+str(k)+'.'+rupture_name,mpi_source,fmt=fmt)
+    #Make mpi system call
+    print "MPI: Starting Stochastic High Frequency Simulation on ", ncpus, "CPUs"
+    mud_source=environ['MUD']+'/src/python/mudpy/'
+    mpi='mpiexec -n '+str(ncpus)+' python '+mud_source+'hfsims_parallel.py run_parallel_hfsims '+home+' '+project_name+' '+rupture_name+' '+str(N)+' '+str(M0)+' '+sta+' '+str(sta_lon)+' '+str(sta_lat)+' '+model_name+' '+str(rise_time_depths0)+' '+str(rise_time_depths1)+' '+str(moho_depth_in_km)+' '+component+' '+str(total_duration)+' '+str(hf_dt)+' '+str(stress_parameter)+' '+str(kappa)+' '+str(Qexp)+' '+str(Pwave)+' '+str(high_stress_depth)
+    mpi=split(mpi)
+    p=subprocess.Popen(mpi)
+    p.communicate()
                 
 def hf_waveforms(home,project_name,fault_name,rupture_list,GF_list,model_name,run_name,dt,NFFT,G_from_file,
             G_name,rise_time_depths,moho_depth_in_km,source_time_function='dreger',duration=100.0,
@@ -333,7 +408,7 @@ def hf_waveforms(home,project_name,fault_name,rupture_list,GF_list,model_name,ru
     Make semistochastic high frequency accelerograms
     '''                        
     from numpy import genfromtxt
-    import datetime
+    #import datetime
     from mudpy import hfsims
     
     #load list of source names
@@ -353,20 +428,71 @@ def hf_waveforms(home,project_name,fault_name,rupture_list,GF_list,model_name,ru
         #Get epicentral time
         epicenter,time_epi=read_fakequakes_hypo_time(home,project_name,rupture_name)
         
-        waveforms_N=hfsims.stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,
-                        model_name,rise_time_depths,moho_depth_in_km,hf_dt=hf_dt,total_duration=duration,component='N',
-                        Pwave=Pwave,stress_parameter=stress_parameter,high_stress_depth=high_stress_depth)
-        waveforms_E=hfsims.stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,
-                        model_name,rise_time_depths,moho_depth_in_km,hf_dt=hf_dt,total_duration=duration,component='E',
-                        Pwave=Pwave,stress_parameter=stress_parameter,high_stress_depth=high_stress_depth)
-        waveforms_Z=hfsims.stochastic_simulation(home,project_name,rupture_name,GF_list,time_epi,
-                        model_name,rise_time_depths,moho_depth_in_km,hf_dt=hf_dt,total_duration=duration,component='Z',
-                        Pwave=Pwave,stress_parameter=stress_parameter,high_stress_depth=high_stress_depth)
+        #Get station info from GF_list
+        sta=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=[0],dtype='S')
+        lonlat=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=[1,2])
         
-        #Write output
-        write_fakequakes_hf_waveforms(home,project_name,rupture_name,waveforms_N,waveforms_E,waveforms_Z)   
+        comp=['N','E','Z']  #components to loop through
+        
+        #Now loop over stations
+        for ksta in range(len(sta)):
+            #Now loop over components N,E,Z
+            for kcomp in range(len(comp)):
+                #HF_sims stochastic simulation for single station, component
+                hf_waveform=hfsims.stochastic_simulation(home,project_name,rupture_name,sta[ksta],lonlat[ksta,:],time_epi,
+                        model_name,rise_time_depths,moho_depth_in_km,hf_dt=hf_dt,total_duration=duration,component=comp[kcomp],
+                        Pwave=Pwave,stress_parameter=stress_parameter,high_stress_depth=high_stress_depth)
+                #Write to file
+                write_fakequakes_hf_waveforms_one_by_one(home,project_name,rupture_name,hf_waveform,comp[kcomp])
     
+def write_parallel_hfsims(home,project_name,rupture_name,station,component,remove=False):
+    '''
+    Combine outputs from parallel hfsims into one complete waveform.
+    Delete the parallel hfsims outputs when complete.
+    '''
+    from glob import glob
+    from obspy import read
+    import os
+    rupture=rupture_name.split('.')[0]+'.'+rupture_name.split('.')[1]
+    parallel_waveforms=glob(home+project_name+'/output/waveforms/'+rupture+'/'+station+'.HN'+component+'.???.sac')
+    #print "Number of MPI outputs: " + str(len(parallel_waveforms))
+    if len(parallel_waveforms)==0:
+        print "No waveforms at this location to add in"
+    else:
+        for r in range(len(parallel_waveforms)):
+            #print parallel_waveforms[r]
+            st=read(parallel_waveforms[r])
+            if r==0:
+                #stdout.write('      [.'); stdout.flush()
+                complete_waveform=st.copy()
+            else:
+                #stdout.write('.'); stdout.flush()
+                complete_waveform[0].data=complete_waveform[0].data+st[0].data
+        complete_waveform.write(home+project_name+'/output/waveforms/'+rupture+'/'+station+'.HN'+component+'.mpi.sac',format='SAC')
+        if remove==True:
+            for r in range(len(parallel_waveforms)):
+                os.remove(parallel_waveforms[r])
+        else:
+            print "Keeping all parallel output files because you didn't tell me to delete them"
                        
+def write_fakequakes_hf_waveforms_one_by_one(home,project_name,rupture_name,hf_trace,component):
+    '''
+    write HF waveforms to file as they are created, station by station, component by component
+    '''
+
+    from os import path,makedirs
+    
+    #Where am I writing to?
+    rupture=rupture_name.split('.')[0]+'.'+rupture_name.split('.')[1]
+    directory=home+project_name+'/output/waveforms/'+rupture+'/'
+    
+    #Check if dir exists if not then create it
+    if not path.exists(directory):
+        makedirs(directory)   
+        
+    sta=hf_trace.stats.station
+    hf_trace.write(directory+sta+'.HN'+component+'.sac',format='SAC')
+
 
 def write_fakequakes_hf_waveforms(home,project_name,rupture_name,n,e,z):
     '''
@@ -377,7 +503,7 @@ def write_fakequakes_hf_waveforms(home,project_name,rupture_name,n,e,z):
     from numpy import genfromtxt,squeeze,sqrt
     from obspy import Stream,Trace
     
-    #Where am I writting to?
+    #Where am I writing to?
     rupture=rupture_name.split('.')[0]+'.'+rupture_name.split('.')[1]
     directory=home+project_name+'/output/waveforms/'+rupture+'/'
     
@@ -429,9 +555,14 @@ def match_filter(home,project_name,fault_name,rupture_list,GF_list,
         for ksta in range(len(sta)):
             
             #Read HF accelerograms
-            hf_n=read(directory+sta[ksta]+'.HNN.sac')
-            hf_e=read(directory+sta[ksta]+'.HNE.sac')
-            hf_z=read(directory+sta[ksta]+'.HNZ.sac')
+            try:
+                hf_n=read(directory+sta[ksta]+'.HNN.sac')
+                hf_e=read(directory+sta[ksta]+'.HNE.sac')
+                hf_z=read(directory+sta[ksta]+'.HNZ.sac')
+            except:
+                hf_n=read(directory+sta[ksta]+'.HNN.mpi.sac')
+                hf_e=read(directory+sta[ksta]+'.HNE.mpi.sac')
+                hf_z=read(directory+sta[ksta]+'.HNZ.mpi.sac')
         
             #Read LF displacements
             lf_n=read(directory+sta[ksta]+'.LYN.sac')
@@ -485,11 +616,11 @@ def match_filter(home,project_name,fault_name,rupture_list,GF_list,
             hf_z[0].trim(starttime=time_epi,endtime=tend)
             
             #Add together for final waveform
-            bb_n=lf_n.copy()
+            bb_n=hf_n.copy()
             bb_n[0].data=lf_n[0].data+hf_n[0].data
-            bb_e=lf_e.copy()
+            bb_e=hf_e.copy()
             bb_e[0].data=lf_e[0].data+hf_e[0].data
-            bb_z=lf_z.copy()
+            bb_z=hf_z.copy()
             bb_z[0].data=lf_z[0].data+hf_z[0].data
             
             #Write to file
@@ -695,6 +826,8 @@ def write_fakequakes_waveforms(home,project_name,rupture_name,waveforms,GF_list,
         n[0].stats.starttime=time_epi
         n[0].stats.delta=dt
         n[0].stats.station=sta[ksta]
+#        n[0].stats.latitude=lat[ksta]  #these don't appear to save properly in SAC format anyway
+#        n[0].stats.longitude=lon[ksta]
         # Copy to the other components
         e=n.copy()
         z=n.copy()

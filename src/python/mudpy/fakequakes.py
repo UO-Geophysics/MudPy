@@ -769,13 +769,19 @@ def get_rupture_onset(home,project_name,slip,fault_array,model_name,hypocenter,
     
     #Now apply total perturbation
     slip_average=slip.mean()
-    i=where(slip>0.05*slip_average)[0]
+    i=where(slip>0.05*slip_average)[0] #perturbation is applied only to subfaults with significant slip
     perturbation=(log10(slip)-log10(slip_average))/(log10(slip.max())-log10(slip_average))
     t_onset_final=t_onset.copy()
     t_onset_final[i]=t_onset[i]-delta_t*perturbation[i]
     
     #Check for negative times
     i=where(t_onset_final<0)[0]
+    t_onset_final[i]=t_onset[i]
+    #Reassign subfaults within the "nucleation zone" to be their original, unperturbed onsets    
+    #nu=some-relation-to-M0
+    i=where(t_onset<5.5)[0]
+    t_nucleation_edge=max(t_onset[i])
+    t_onset_final=t_onset_final+t_nucleation_edge
     t_onset_final[i]=t_onset[i]
     #Check for nan times
     i=where(isnan(t_onset_final)==True)[0]
