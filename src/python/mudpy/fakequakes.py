@@ -376,17 +376,24 @@ def get_eigen(C):
     return eigenvals,V
     
     
-def make_KL_slip(fault,num_modes,eigenvals,V,mean_slip,max_slip,lognormal=True,maxiter=5):
+def make_KL_slip(fault,num_modes,eigenvals,V,mean_slip,max_slip,lognormal=True,maxiter=5,seed=12345):
     '''
     Make slip map using num_modes
     '''
     from numpy import sqrt,exp
     from numpy.random import randn
+    from numpy.random import seed as random_seed
     
     iterations=0
     success=False
+    
+
+    
     while True:
         #Generate random numbers
+            #Is there a seed?
+        if seed != None:
+            random_seed(seed)
         if len(fault)>num_modes:
             z = randn(num_modes) 
         else: #if fewer faults than requested modes then use all modes
@@ -930,11 +937,15 @@ def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
                 if Lstrike=='auto': #Use scaling
                     #Ls=10**(-2.43+0.49*target_Mw)
                     Ls=2.0+(1./3)*Leff
+                elif Lstrike=='Mel2019':
+                    Ls=12.3+0.38*Leff
                 else:
                     Ls=Lstrike
                 if Ldip=='auto': #Use scaling
                     #Ld=10**(-1.79+0.38*target_Mw)
                     Ld=1.0+(1./3)*Weff
+                elif Ldip=='Mel2019':
+                    Ld=5.4+0.41*Weff
                 else:
                     Ld=Ldip
                 
@@ -961,7 +972,8 @@ def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
                     #Generate fake slip pattern
                     rejected=True
                     while rejected==True:
-                        slip_unrectified,success=make_KL_slip(fault_array,num_modes,eigenvals,V,mean_slip,max_slip,lognormal=False)
+#                        slip_unrectified,success=make_KL_slip(fault_array,num_modes,eigenvals,V,mean_slip,max_slip,lognormal=False,seed=kfault)
+                        slip_unrectified,success=make_KL_slip(fault_array,num_modes,eigenvals,V,mean_slip,max_slip,lognormal=False,seed=None)
                         slip,rejected,percent_negative=rectify_slip(slip_unrectified,percent_reject=13)
                         if rejected==True:
                             print '... ... ... negative slip threshold exceeeded with %d%% negative slip. Recomputing...' % (percent_negative)
@@ -971,7 +983,8 @@ def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
                     #Get eigen values and eigenvectors
                     eigenvals,V=get_eigen(C_log)
                     #Generate fake slip pattern
-                    slip,success=make_KL_slip(fault_array,num_modes,eigenvals,V,mean_slip_log,max_slip,lognormal=True)
+#                    slip,success=make_KL_slip(fault_array,num_modes,eigenvals,V,mean_slip_log,max_slip,lognormal=True,seed=kfault)
+                    slip,success=make_KL_slip(fault_array,num_modes,eigenvals,V,mean_slip_log,max_slip,lognormal=True,seed=None)
             
             #Slip pattern sucessfully made, moving on.
             #Rigidities
