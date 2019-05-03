@@ -19,6 +19,7 @@ def run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,
     from mudpy import hfsims
     from obspy import Stream,Trace
     from sys import stdout
+    from os import path,makedirs
     import warnings
 
     rank=int(rank)
@@ -455,8 +456,10 @@ def run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,
     #Add station location, event location, and first P-wave arrival time to SAC header
     tr.stats.update({'sac':{'stlo':sta_lon,'stla':sta_lat,'evlo':epicenter[0],'evla':epicenter[1],'evdp':epicenter[2],'dist':dist_in_km,'az':az,'baz':backaz,'mag':Mw}}) #,'idep':"ACC (m/s^2)" not sure why idep won't work
     
-    #Write out to file    
+    #Write out to file 
     rupture=rupture_name.split('.')[0]+'.'+rupture_name.split('.')[1]
+    if not path.exists(home+project_name+'/output/waveforms/'+rupture+'/'):
+        makedirs(home+project_name+'/output/waveforms/'+rupture+'/')
     if rank < 10:
         tr.write(home+project_name+'/output/waveforms/'+rupture+'/'+sta+'.HN'+component+'.00'+str(rank)+'.sac',format='SAC')
     elif rank < 100:
