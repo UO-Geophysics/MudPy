@@ -88,7 +88,7 @@ def run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,
     
     #Create taup velocity model object, paste on top of iaspei91
     #taup_create.build_taup_model(home+project_name+'/structure/bbp_norcal.tvel',output_folder=home+project_name+'/structure/')
-    velmod=TauPyModel(model=home+project_name+'/structure/maule',verbose=True)
+    velmod=TauPyModel(model=home+project_name+'/structure/iquique',verbose=True)
     #Get epicentral time
     epicenter,time_epi=read_fakequakes_hypo_time(home,project_name,rupture_name)
     
