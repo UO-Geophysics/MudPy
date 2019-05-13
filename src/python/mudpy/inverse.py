@@ -1327,8 +1327,6 @@ def gdims(datafiles,nfaults,decimate):
         n=read(datafiles[k]+'.n')
         u=read(datafiles[k]+'.u')
         if e[0].stats.npts==n[0].stats.npts==u[0].stats.npts:
-            if decimate!=None:
-                e[0]=stdecimate(e[0],decimate)
             npts+=e[0].stats.npts
         else:
             print str(e[0].stats.npts)+' pts in east component'

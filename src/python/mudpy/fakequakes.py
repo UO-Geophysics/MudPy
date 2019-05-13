@@ -594,8 +594,9 @@ def get_rise_times(M0,slip,fault_array,rise_time_depths,stoc_rake,rise_time_std=
     
     #Determine average rise time based on total moment of the event (Graves,Pitarka, 2010, eq. 8)
     #tau_average=1.6*1e-9*M0**(1./3) #This is what Graves and Pitarka use in GP 2010
-    tau_average=1.45*1e-9*M0**(1./3) #This is GP2015
+    #tau_average=1.45*1e-9*M0**(1./3) #This is GP2015
     #tau_average=2.0*1e-9*M0**(1./3)  #This is the original from Sommerville 1999 SRL, page 74
+    tau_average=4.226*1e-8*M0**(0.293) #This is  Melgar & Hayes 2017
     
     #Determine slope and intercept of k-scaling line
     slope=1./(rise_time_depths[0]-rise_time_depths[1])
@@ -944,14 +945,14 @@ def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
                     #Ls=10**(-2.43+0.49*target_Mw)
                     Ls=2.0+(1./3)*Leff
                 elif Lstrike=='Mel2019':
-                    Ls=12.3+0.38*Leff
+                    Ls=17.7+0.34*Leff
                 else:
                     Ls=Lstrike
                 if Ldip=='auto': #Use scaling
                     #Ld=10**(-1.79+0.38*target_Mw)
                     Ld=1.0+(1./3)*Weff
                 elif Ldip=='Mel2019':
-                    Ld=5.4+0.41*Weff
+                    Ld=6.8+0.4*Weff
                 else:
                     Ld=Ldip
                 
