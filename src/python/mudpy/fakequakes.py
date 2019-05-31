@@ -133,6 +133,9 @@ def subfault_distances_3D(home,project_name,fault_name,slab_name,projection_zone
         #What's the average dip of the fault model?? 
         dip=fault[:,5].mean()
         
+        #What's the average strike of the fault model?? 
+        strike=fault[:,4].mean()
+        
         #Instantiate projection object
         g = Geod(ellps='WGS84') 
         
@@ -156,7 +159,14 @@ def subfault_distances_3D(home,project_name,fault_name,slab_name,projection_zone
                     lon_target=fault[j,1]
                     lat_target=fault[j,2]
                     az,baz,dist=g.inv(lon_origin,lat_origin,lon_target,lat_target)
+                    
+                    #straight line distance
                     delta_strike=dist/1000
+                    #define projection angel as azimuth minus average strike
+                    alpha=az-strike
+                    #Project distance
+                    delta_strike=abs(delta_strike*cos(deg2rad(alpha)))
+                    
                     #Down dip is jsut depth difference / avg dip of model
                     z_origin=fault[i,3]
                     z_target=fault[j,3]
@@ -441,8 +451,8 @@ def rectify_slip(slip_unrectified,percent_reject=10):
 
 
 def select_faults(whole_fault,Dstrike,Ddip,target_Mw,buffer_factor,num_modes,scaling_law,
-    force_area,no_shallow_epi=True,hypo_depth=10,param_norm=(0.0451,0.1681),param_expon=(0, 0.1305),
-    no_random=False,subfault_hypocenter=None):
+    force_area,no_shallow_epi=True,hypo_depth=10,param_norm=(0.0451,0.1681),no_random=False,
+    subfault_hypocenter=None,use_hypo_fraction=False):
     '''
     Select a random fault to be the hypocenter then based on scaling laws and a 
     target magnitude select only faults within the expected area plus some 
@@ -450,7 +460,7 @@ def select_faults(whole_fault,Dstrike,Ddip,target_Mw,buffer_factor,num_modes,sca
     '''
     
     from numpy.random import randint,normal
-    from numpy import array,where,diff
+    from numpy import array,where,diff,argmin
     from scipy.stats import norm,expon
     
     
@@ -498,6 +508,9 @@ def select_faults(whole_fault,Dstrike,Ddip,target_Mw,buffer_factor,num_modes,sca
         hypo_fault=randint(0,len(whole_fault)-1)
     else: #get subfault closest to hypo
         hypo_fault=subfault_hypocenter
+        
+    #so which subfault ended up being the middle?
+    center_subfault=hypo_fault
         
     #Get max/min distances from hypocenter to all faults
     dstrike_max=Dstrike[:,hypo_fault].max()
@@ -548,24 +561,43 @@ def select_faults(whole_fault,Dstrike,Ddip,target_Mw,buffer_factor,num_modes,sca
     ############
     
     
-    ## This code block is for selecting the hypocenter based on probability
-    ## of strike fraction and dip fraction, randomly generate it and find closest 
-    ## Ds and Dd
-    #strike_fraction=expon.rvs(param_expon[0],param_expon[1])
-    #if strike_fraction>0.5:
-    #    strike_fraction=0.5
-    #    
-    #hypo_found=False
-    #i=randint(0,len(selected_faults)-1)
-    #hypo_fault=selected_faults[i]
-    #if no_shallow_epi==True:
-    #    while hypo_found==False:
-    #        if whole_fault[hypo_fault,3]<hypo_depth:
-    #            print '... ... ... hypocenter is km too shallow at %dkm, recalculating...' %(whole_fault[hypo_fault,3])
-    #            i=randint(0,len(selected_faults)-1)
-    #            hypo_fault=selected_faults[i]
-    #        else:
-    #            hypo_found=True
+    
+    
+    # This code block is for selecting the hypocenter based on probability
+    # of strike fraction and dip fraction, randomly generate it and find closest 
+    # Ds and Dd
+   
+    #get distances from everyone to "center subfault"
+    Ds=Dstrike[center_subfault,selected_faults]
+    Dd=Ddip[selected_faults,center_subfault]
+    
+    
+    #Along dip parameters
+    mu= -0.117
+    sigma=0.18
+    #along strike parameters
+    lamb = 6.211
+    
+    if use_hypo_fraction == True:
+        
+        while True:
+            dip_fraction=norm.rvs(mu,sigma)
+            if dip_fraction<0.5 and dip_fraction>-0.5:
+                break
+        
+        while True:
+            strike_fraction=expon.rvs(0,1/lamb)
+            if strike_fraction<0.5:
+                break
+            
+        # go from fractions to distances
+        dip_distance=Dd.max()*dip_fraction
+        strike_distance=Ds.max()*strike_fraction
+            
+        #where is the fualt that is this distance fromt he middle?
+        hypo_fault=argmin(abs(Ds-abs(strike_distance))+abs(Dd-abs(dip_distance)))            
+        hypo_fault=whole_fault[ihypo]
+
     #############
                 
     #From the selected faults determine the actual along strike length (Leff) and down-dip width (Weff)
