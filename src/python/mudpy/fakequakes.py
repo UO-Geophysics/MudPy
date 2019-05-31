@@ -1066,11 +1066,11 @@ def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
             fault_out[ifaults,8]=slip*cos(deg2rad(stoc_rake))
             fault_out[ifaults,9]=slip*sin(deg2rad(stoc_rake))
             
-            #Move hypocenter to somewhere with a susbtantial fraction of peak slip
-            slip_fraction=0.25
-            islip=where(slip>slip.max()*slip_fraction)[0]
-            shuffle(islip) #randomize
-            hypo_fault=ifaults[islip[0]] #select first from randomized vector
+#            #Move hypocenter to somewhere with a susbtantial fraction of peak slip
+#            slip_fraction=0.25
+#            islip=where(slip>slip.max()*slip_fraction)[0]
+#            shuffle(islip) #randomize
+#            hypo_fault=ifaults[islip[0]] #select first from randomized vector
             
             #Calculate and scale rise times
             rise_times=get_rise_times(M0,slip,fault_array,rise_time_depths,stoc_rake)
