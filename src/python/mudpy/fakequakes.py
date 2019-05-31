@@ -452,7 +452,7 @@ def rectify_slip(slip_unrectified,percent_reject=10):
 
 def select_faults(whole_fault,Dstrike,Ddip,target_Mw,buffer_factor,num_modes,scaling_law,
     force_area,no_shallow_epi=True,hypo_depth=10,param_norm=(0.0451,0.1681),no_random=False,
-    subfault_hypocenter=None,use_hypo_fraction=False):
+    subfault_hypocenter=None,use_hypo_fraction=True):
     '''
     Select a random fault to be the hypocenter then based on scaling laws and a 
     target magnitude select only faults within the expected area plus some 
@@ -566,19 +566,32 @@ def select_faults(whole_fault,Dstrike,Ddip,target_Mw,buffer_factor,num_modes,sca
     # This code block is for selecting the hypocenter based on probability
     # of strike fraction and dip fraction, randomly generate it and find closest 
     # Ds and Dd
-   
-    #get distances from everyone to "center subfault"
-    Ds=Dstrike[center_subfault,selected_faults]
-    Dd=Ddip[selected_faults,center_subfault]
-    
-    
-    #Along dip parameters
-    mu= -0.117
-    sigma=0.18
-    #along strike parameters
-    lamb = 6.211
     
     if use_hypo_fraction == True:
+        
+        #Need to find "center" of the selected faults. To do this look for the subfault
+        #witht he lowest combined maximum along strike and along dip distance to all
+        #other faults
+        
+        Dsmin=Dstrike[selected_faults,:] ; Dsmin=Dsmin[:,selected_faults]
+        Ddmin=Ddip[selected_faults,:] ; Ddmin=Ddmin[:,selected_faults]
+        
+        min_dist=Dsmin.max(axis=1) + Ddmin.max(axis=1)
+        imin=argmin(min_dist)
+        center_subfault=selected_faults[imin]
+        
+        #get distances from everyone to "center subfault"
+        Ds=Dstrike[center_subfault,selected_faults]
+        Dd=Ddip[selected_faults,center_subfault]
+        
+        
+        #Along dip parameters (normal distr)
+        mu= -0.117
+        sigma=0.18
+        #along strike parameters (expon distr)
+        lamb = 6.211
+        
+        
         
         while True:
             dip_fraction=norm.rvs(mu,sigma)
@@ -590,13 +603,15 @@ def select_faults(whole_fault,Dstrike,Ddip,target_Mw,buffer_factor,num_modes,sca
             if strike_fraction<0.5:
                 break
             
-        # go from fractions to distances
-        dip_distance=Dd.max()*dip_fraction
-        strike_distance=Ds.max()*strike_fraction
+        # go from fractions to distances, *2 is necessary to use the whole 
+        # distance range since the PDF int he Melgar&Hayes paper only goes to 
+        # a fraction value of 0.5
+        dip_distance=abs(Dd.max()*dip_fraction*2)
+        strike_distance=abs(Ds.max()*strike_fraction*2)
             
-        #where is the fualt that is this distance fromt he middle?
-        hypo_fault=argmin(abs(Ds-abs(strike_distance))+abs(Dd-abs(dip_distance)))            
-        hypo_fault=whole_fault[ihypo]
+        #where is the fualt that is this distance from the middle?
+        hypo_fault=argmin(abs(Ds-abs(strike_distance))+abs(Dd-abs(dip_distance)))      
+        hypo_fault=selected_faults[hypo_fault]
 
     #############
                 
@@ -919,7 +934,7 @@ def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
         Lstrike,num_modes,Nrealizations,rake,buffer_factor,rise_time_depths,time_epi,
         max_slip,source_time_function,lognormal,slip_standard_deviation,scaling_law,
         force_magnitude=False,force_area=False,mean_slip_name=None,hypocenter=None,
-        slip_tol=1e-2,force_hypocenter=False,no_random=False,shypo=None):
+        slip_tol=1e-2,force_hypocenter=False,no_random=False,shypo=None,use_hypo_fraction=True):
     
     '''
     Depending on user selected flags parse the work out to different functions
@@ -967,7 +982,7 @@ def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
             while success==False:
                 #Select only a subset of the faults based on magnitude scaling
                 current_target_Mw=target_Mw[kmag]
-                ifaults,hypo_fault,Lmax,Wmax,Leff,Weff=select_faults(whole_fault,Dstrike,Ddip,current_target_Mw,buffer_factor,num_modes,scaling_law,force_area,no_shallow_epi=False,no_random=no_random,subfault_hypocenter=shypo)
+                ifaults,hypo_fault,Lmax,Wmax,Leff,Weff=select_faults(whole_fault,Dstrike,Ddip,current_target_Mw,buffer_factor,num_modes,scaling_law,force_area,no_shallow_epi=False,no_random=no_random,subfault_hypocenter=shypo,use_hypo_fraction=use_hypo_fraction)
                 fault_array=whole_fault[ifaults,:]
                 Dstrike_selected=Dstrike[ifaults,:][:,ifaults]
                 Ddip_selected=Ddip[ifaults,:][:,ifaults]
