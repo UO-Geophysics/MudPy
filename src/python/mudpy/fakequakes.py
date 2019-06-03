@@ -474,11 +474,11 @@ def select_faults(whole_fault,Dstrike,Ddip,target_Mw,buffer_factor,num_modes,sca
             length=10**(-2.37+0.57*target_Mw)
             width=10**(-1.86+0.46*target_Mw)
         elif scaling_law.upper()=='S':
-            length_mean=10**(-2.69+0.64*target_Mw)
-            width_mean=10**(-1.12+0.3*target_Mw) 
+            length=10**(-2.69+0.64*target_Mw)
+            width=10**(-1.12+0.3*target_Mw) 
         elif scaling_law.upper()=='N':
-            length_mean=10**(-1.91+0.52*target_Mw)
-            width_mean=10**(-1.2+0.36*target_Mw)
+            length=10**(-1.91+0.52*target_Mw)
+            width=10**(-1.2+0.36*target_Mw)
     
     if force_area==False and no_random==False: #Use scaling laws from Blaser et al 2010
         if scaling_law.upper()=='T':
@@ -700,7 +700,7 @@ def get_rise_times(M0,slip,fault_array,rise_time_depths,stoc_rake,rise_time_std=
     
     
 def get_rupture_onset(home,project_name,slip,fault_array,model_name,hypocenter,
-        rise_time_depths,M0,sigma_rise_time=0.2):
+        rise_time_depths,M0,sigma_rise_time=0.2,shear_wave_fraction=0.7):
     '''
     Using a custom built tvel file ray trace from hypocenter to determine rupture
     onset times
@@ -709,6 +709,7 @@ def get_rupture_onset(home,project_name,slip,fault_array,model_name,hypocenter,
     from numpy import genfromtxt,zeros,arctan2,sin,r_,where,log10,isnan,argmin,setxor1d,exp
     from numpy .random import rand,randn
     from obspy.geodetics import gps2dist_azimuth
+
     
     #Load velocity model
     vel=genfromtxt(home+project_name+'/structure/'+model_name)
@@ -738,11 +739,11 @@ def get_rupture_onset(home,project_name,slip,fault_array,model_name,hypocenter,
     rupture_multiplier[i]=0.49
     # Deep 
     i=where(depth_to_top>=rise_time_depths[1])[0]
-    rupture_multiplier[i]=0.7
+    rupture_multiplier[i]=shear_wave_fraction
     # Transition 
     i=where((depth_to_top<rise_time_depths[1]) & (depth_to_top>rise_time_depths[0]))[0]
-    slope=(0.7-0.49)/(rise_time_depths[1]-rise_time_depths[0])
-    intercept=0.7-slope*rise_time_depths[1]
+    slope=(shear_wave_fraction-0.49)/(rise_time_depths[1]-rise_time_depths[0])
+    intercept=shear_wave_fraction-slope*rise_time_depths[1]
     rupture_multiplier[i]=slope*depth_to_top[i]+intercept
     
     
@@ -934,7 +935,8 @@ def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
         Lstrike,num_modes,Nrealizations,rake,buffer_factor,rise_time_depths,time_epi,
         max_slip,source_time_function,lognormal,slip_standard_deviation,scaling_law,
         force_magnitude=False,force_area=False,mean_slip_name=None,hypocenter=None,
-        slip_tol=1e-2,force_hypocenter=False,no_random=False,shypo=None,use_hypo_fraction=True):
+        slip_tol=1e-2,force_hypocenter=False,no_random=False,shypo=None,use_hypo_fraction=True,
+        shear_wave_fraction=0.7):
     
     '''
     Depending on user selected flags parse the work out to different functions
@@ -1083,7 +1085,8 @@ def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
             if force_hypocenter==False: #Use random hypo, otehrwise force hypo to user specified
                 hypocenter=whole_fault[hypo_fault,1:4]
 
-            t_onset=get_rupture_onset(home,project_name,slip,fault_array,model_name,hypocenter,rise_time_depths,M0)
+            t_onset=get_rupture_onset(home,project_name,slip,fault_array,model_name,hypocenter,
+                                      rise_time_depths,M0,shear_wave_fraction)
             fault_out[:,12]=0
             fault_out[ifaults,12]=t_onset
             
