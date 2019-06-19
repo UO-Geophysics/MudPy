@@ -503,4 +503,4 @@ if __name__ == '__main__':
         high_stress_depth=int(sys.argv[21])
         run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,component,model_name,rise_time_depths0,rise_time_depths1,moho_depth_in_km,total_duration,hf_dt,stress_parameter,kappa,Qexp,Pwave,high_stress_depth,rank,size)
     else:
-        print "ERROR: You're not allowed to run '+sys.argv[1]+' from the shell or it does not exist"
+        print "ERROR: You're not allowed to run "+sys.argv[1]+" from the shell or it does not exist"
