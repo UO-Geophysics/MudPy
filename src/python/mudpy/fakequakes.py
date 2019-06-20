@@ -982,8 +982,8 @@ def generate_ruptures_parallel(home,project_name,run_name,fault_name,slab_name,
     if (Nrealizations_parallel*ncpus > Nrealizations):
         print "Extra CPUS-- have " + str(Nrealizations_parallel*ncpus-Nrealizations) + " free ruptures!!"
     velmod_file=home+project_name+'/structure/iquique'
-    for r in range(ncpus):
-        copyfile(velmod_file+'.npz', velmod_file+str(r)+'.npz')
+#    for r in range(ncpus):
+#        copyfile(velmod_file+'.npz', velmod_file+str(r)+'.npz')
     rise_time_depths0=rise_time_depths[0]
     rise_time_depths1=rise_time_depths[1]
     tMw=target_Mw[0]

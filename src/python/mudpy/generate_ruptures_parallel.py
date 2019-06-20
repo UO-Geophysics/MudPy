@@ -31,7 +31,7 @@ def run_parallel_generate_ruptures(home,project_name,run_name,fault_name,slab_na
     # Fix input formats
     rank=int(rank)
     size=int(size)
-    velmod=TauPyModel(model=velmod_file+str(rank),verbose=True)
+    velmod=TauPyModel(model=velmod_file,verbose=True)
     time_epi=UTCDateTime(time_epi)
     rise_time_depths=[rise_time_depths0,rise_time_depths1]
     hypocenter=[hypocenter_lon,hypocenter_lat,hypocenter_dep]
