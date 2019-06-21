@@ -9,8 +9,9 @@ Created on Tue Jun 18 10:45:24 2019
 def run_parallel_generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
         load_distances,distances_name,UTM_zone,tMw,model_name,hurst,Ldip,Lstrike,
         num_modes,Nrealizations,rake,buffer_factor,rise_time_depths0,rise_time_depths1,time_epi,max_slip,
-        source_time_function,lognormal,ncpus,velmod_file,slip_standard_deviation,scaling_law,force_magnitude,
-        force_area,mean_slip_name,hypocenter_lon,hypocenter_lat,hypocenter_dep,slip_tol,force_hypocenter,no_random,shypo,rank,size):
+        source_time_function,lognormal,slip_standard_deviation,scaling_law,ncpus,velmod_file,force_magnitude,
+        force_area,mean_slip_name,hypocenter_lon,hypocenter_lat,hypocenter_dep,slip_tol,force_hypocenter,
+        no_random,shypo,use_hypo_fraction,shear_wave_fraction,rank,size):
     
     '''
     Depending on user selected flags parse the work out to different functions
@@ -267,25 +268,25 @@ if __name__ == '__main__':
         max_slip=float(sys.argv[23])
         source_time_function=sys.argv[24]
         lognormal=sys.argv[25]
-        ncpus=int(sys.argv[26])
-        velmod_file=sys.argv[27]
         if lognormal=='True':
             lognormal=True
         elif lognormal=='False':
             lognormal=False
-        slip_standard_deviation=float(sys.argv[28])
-        scaling_law=sys.argv[29]
-        mean_slip_name=sys.argv[30]
-        force_magnitude=sys.argv[31]
+        slip_standard_deviation=float(sys.argv[26])
+        scaling_law=sys.argv[27]        
+        ncpus=int(sys.argv[28])
+        velmod_file=sys.argv[29]
+        force_magnitude=sys.argv[30]
         if force_magnitude=='True':
             force_magnitude=True
         elif force_magnitude=='False':
             force_magnitude=False
-        force_area=sys.argv[32]
+        force_area=sys.argv[31]
         if force_area=='True':
             force_area=True
         elif force_area=='False':
             force_area=False
+        mean_slip_name=sys.argv[32]
         hypocenter_lon=float(sys.argv[33])
         hypocenter_lat=float(sys.argv[34])
         hypocenter_dep=float(sys.argv[35])
@@ -303,10 +304,17 @@ if __name__ == '__main__':
         shypo=sys.argv[39]
         if shypo=='None':
             shypo=None
+        use_hypo_fraction=sys.argv[40]
+        if use_hypo_fraction=='True':
+            use_hypo_fraction=True
+        if use_hypo_fraction=='False':
+            use_hypo_fraction=False
+        shear_wave_fraction=float(sys.argv[41])
         run_parallel_generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
         load_distances,distances_name,UTM_zone,tMw,model_name,hurst,Ldip,Lstrike,
         num_modes,Nrealizations,rake,buffer_factor,rise_time_depths0,rise_time_depths1,time_epi,max_slip,
-        source_time_function,lognormal,ncpus,velmod_file,slip_standard_deviation,scaling_law,force_magnitude,
-        force_area,mean_slip_name,hypocenter_lon,hypocenter_lat,hypocenter_dep,slip_tol,force_hypocenter,no_random,shypo,rank,size)
+        source_time_function,lognormal,slip_standard_deviation,scaling_law,ncpus,velmod_file,force_magnitude,
+        force_area,mean_slip_name,hypocenter_lon,hypocenter_lat,hypocenter_dep,slip_tol,force_hypocenter,
+        no_random,shypo,use_hypo_fraction,shear_wave_fraction,rank,size)
     else:
         print "ERROR: You're not allowed to run "+sys.argv[1]+" from the shell or it does not exist"

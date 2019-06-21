@@ -323,7 +323,7 @@ def waveforms_fakequakes(home,project_name,fault_name,rupture_list,GF_list,
         write_fakequakes_waveforms(home,project_name,rupture_name,waveforms,GF_list,NFFT,time_epi,dt)
         
 
-def run_hf_waveforms(home,project_name,fault_name,rupture_list,GF_list,model_name,run_name,dt,NFFT,G_from_file,
+def hf_waveforms(home,project_name,fault_name,rupture_list,GF_list,model_name,run_name,dt,NFFT,G_from_file,
             G_name,rise_time_depths,moho_depth_in_km,ncpus,source_time_function='dreger',duration=100.0,
             stf_falloff_rate=4.0,hf_dt=0.02,Pwave=False,hot_start=0,stress_parameter=50,
             high_stress_depth=1e4):
@@ -400,7 +400,7 @@ def make_parallel_hfsims(home,project_name,rupture_name,ncpus,sta,sta_lon,sta_la
     p=subprocess.Popen(mpi)
     p.communicate()
                 
-def hf_waveforms(home,project_name,fault_name,rupture_list,GF_list,model_name,run_name,dt,NFFT,G_from_file,
+def run_hf_waveforms(home,project_name,fault_name,rupture_list,GF_list,model_name,run_name,dt,NFFT,G_from_file,
             G_name,rise_time_depths,moho_depth_in_km,source_time_function='dreger',duration=100.0,
             stf_falloff_rate=4.0,hf_dt=0.02,Pwave=False,hot_start=0,stress_parameter=50,
             high_stress_depth=1e4):

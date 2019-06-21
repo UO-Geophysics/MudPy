@@ -12,7 +12,7 @@ from numpy import array
 
 ########                            GLOBALS                             ########
 
-home='/Users/dmelgar/Slip_inv/'
+home='/Users/dmelgarm/Slip_inv/'
 project_name='Nepal_forward_test'
 run_name='fwd'
 ################################################################################
@@ -21,13 +21,13 @@ run_name='fwd'
 #####              What-do-you-want-to-do flags, 1=do, 0=leave be          #####
 
 init=0 #Initalize project
-make_green=0 #Compute GFs
-make_synthetics=0 #Compute synthetics for a given model at given stations
-solve=1 # =1 solves forward problem or runs inverse calculation, =0 does nothing
+make_green=1 #Compute GFs
+make_synthetics=1 #Compute synthetics for a given model at given stations
+solve=0 # =1 solves forward problem or runs inverse calculation, =0 does nothing
 ###############################################################################
 
 ###############            Green function parameters               #############
-ncpus=4
+ncpus=1
 hot_start=0  #Start at a certain subfault number
 static=0  #=1 computes static GFs only, =0 computes the complete waveform
 tsunami=None
