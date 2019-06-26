@@ -835,9 +835,7 @@ def get_rupture_onset(home,project_name,slip,fault_array,model_name,hypocenter,
         D,az,baz=gps2dist_azimuth(hypocenter[1],hypocenter[0],fault_array[kfault,2],fault_array[kfault,1])
         D=D/1000
         D_deg=kilometer2degrees(D)
-        #print "Distance in degrees: " + str(D_deg)
-        #print "Hypocenter: " + str(hypocenter[2][0])
-        Ppaths=velmod.get_ray_paths(hypocenter[2][0],D_deg,phase_list=['P','p'])
+        Ppaths=velmod.get_ray_paths(hypocenter[2],D_deg,phase_list=['P','p'])
         Ptime=Ppaths[0].time
         attempt=1
         while (t_onset_final[kfault] < Ptime) & (attempt < 500):
@@ -960,6 +958,109 @@ def write_all_event_summary(home,project_name,run_name):
         
     savetxt(fout,out,fmt='%8.2f')
     
+    
+    
+def build_TauPyModel(home,project_name,vel_mod_file,background_model='PREM'):
+    '''
+    This function will take the structure from the .mod file
+    and paste it on top of a pre computed mantle structure such as PREM.
+    This assumes that the .mod file provided by the user ends with a 0 thickness 
+    layer on the MANTLE side of the Moho
+    '''
+    
+    from numpy import genfromtxt
+    from os import environ,path
+    from obspy.taup import taup_create, TauPyModel
+    
+    #mudpy source folder
+    
+    #load user specified .mod infromation
+    structure = genfromtxt(vel_mod_file)
+    
+    #load background velocity structure
+    if background_model=='PREM':
+        
+        bg_model_file=environ['MUD']+'/src/aux/prem.nd'
+        
+        #Q values
+        Qkappa=1300
+        Qmu=600
+        
+        #Write new _nd file one line at a time
+        nd_name=path.basename(vel_mod_file).split('.')[0]
+        nd_name=nd_name+'.nd'
+        f=open(home+project_name+'/structure/'+nd_name,'w')
+        
+        #initalize
+        ztop=0
+        
+        for k in range(len(structure)-1):
+            
+            #Variables for writing to file
+            zbot=ztop+structure[k,0]
+            vp=structure[k,2]
+            vs=structure[k,1]
+            rho=structure[k,3]
+            
+            # Write to the file
+            line1=('%8.2f\t%8.5f   %7.5f   %7.5f\t%6.1f     %5.1f\n' % (ztop,vp,vs,rho,Qkappa,Qmu))
+            line2=('%8.2f\t%8.5f   %7.5f   %7.5f\t%6.1f     %5.1f\n' % (zbot,vp,vs,rho,Qkappa,Qmu))
+            f.write(line1)
+            f.write(line2)
+            
+            #update
+            ztop=zbot
+
+        
+        #now read PREM file libe by libne and find appropriate depth tos tart isnerting
+        fprem=open(bg_model_file,'r')
+        found_depth=False
+        
+        while True:
+            
+            line=fprem.readline()
+            
+            if line=='': #End of file
+                break
+            
+            if found_depth==False:
+                #Check that it's not a keyword line like 'mantle'
+                if len(line.split())>1:
+                    
+                    #not a keyword, waht depth are we at?
+                    current_depth=float(line.split()[0])
+                    
+                    if current_depth > zbot: #PREM depth alrger than .mod file last line
+                        found_depth=True
+                        f.write('mantle\n')
+                    
+            #Ok you have found the depth write it to file
+            if found_depth == True:
+                f.write(line)
+                
+        
+        fprem.close()
+        f.close()
+
+        # make TauPy npz
+        taup_in=home+project_name+'/structure/'+nd_name
+        taup_out=home+project_name+'/structure/'
+        taup_create.build_taup_model(taup_in,output_folder=taup_out)
+        
+        #load tauPy model and return object
+        print(taup_out+nd_name.split('.')[0])
+        tauPy_model = TauPyModel(model=taup_out+nd_name.split('.')[0])
+        
+    else: #To be done later (ha)
+        print('ERROR: That background velocity model does not exist')
+        
+    
+    
+    
+    
+    
+    
+    
 
 def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
 		load_distances,distances_name,UTM_zone,target_Mw,model_name,hurst,Ldip,
@@ -971,33 +1072,43 @@ def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
     '''
     Set up rupture generation-- use ncpus if available
     '''
-    velmod_file=home+project_name+'/structure/iquique' ### HARDCODED!
+    
+    #Need to make tauPy file
+    vel_mod_file=home+project_name+'/structure/'+model_name
+    #Get TauPyModel
+    velmod=build_TauPyModel(home,project_name,vel_mod_file,background_model='PREM')
+
     if ncpus>1:
         run_generate_ruptures_parallel(home,project_name,run_name,fault_name,slab_name,mesh_name,
         load_distances,distances_name,UTM_zone,target_Mw,model_name,hurst,Ldip,
         Lstrike,num_modes,Nrealizations,rake,buffer_factor,rise_time_depths,time_epi,
-        max_slip,source_time_function,lognormal,slip_standard_deviation,scaling_law,ncpus,velmod_file,
+        max_slip,source_time_function,lognormal,slip_standard_deviation,scaling_law,ncpus,
         force_magnitude,force_area,mean_slip_name,hypocenter,slip_tol,force_hypocenter,
         no_random,shypo,use_hypo_fraction,shear_wave_fraction)
     else:
         run_generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
         load_distances,distances_name,UTM_zone,target_Mw,model_name,hurst,Ldip,
         Lstrike,num_modes,Nrealizations,rake,buffer_factor,rise_time_depths,time_epi,
-        max_slip,source_time_function,lognormal,slip_standard_deviation,scaling_law,velmod_file,
+        max_slip,source_time_function,lognormal,slip_standard_deviation,scaling_law,
         force_magnitude,force_area,mean_slip_name,hypocenter,slip_tol,force_hypocenter,
         no_random,shypo,use_hypo_fraction,shear_wave_fraction)
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
+                
+
+
+
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
 def run_generate_ruptures_parallel(home,project_name,run_name,fault_name,slab_name,mesh_name,
         load_distances,distances_name,UTM_zone,target_Mw,model_name,hurst,Ldip,
         Lstrike,num_modes,Nrealizations,rake,buffer_factor,rise_time_depths,time_epi,
-        max_slip,source_time_function,lognormal,slip_standard_deviation,scaling_law,ncpus,velmod_file,
+        max_slip,source_time_function,lognormal,slip_standard_deviation,scaling_law,ncpus,
         force_magnitude,force_area,mean_slip_name,hypocenter,slip_tol,force_hypocenter,
         no_random,shypo,use_hypo_fraction,shear_wave_fraction):
-    from numpy import savetxt,arange,genfromtxt,where,ceil
+    
+    from numpy import ceil
     from os import environ
-    from shutil import copyfile
     import subprocess
     from shlex import split
+    
     #calculate number of realizations per CPU:
     Nrealizations_parallel=int(ceil(float(Nrealizations)/float(ncpus)))
     if (Nrealizations_parallel*ncpus > Nrealizations):
@@ -1011,7 +1122,7 @@ def run_generate_ruptures_parallel(home,project_name,run_name,fault_name,slab_na
     #Make mpi system call
     print "MPI: Starting " + str(Nrealizations_parallel*ncpus) + " FakeQuakes Rupture Generations on ", ncpus, "CPUs"
     mud_source=environ['MUD']+'/src/python/mudpy/'
-    mpi='mpiexec -n '+str(ncpus)+' python '+mud_source+'generate_ruptures_parallel.py run_parallel_generate_ruptures '+home+' '+project_name+' '+run_name+' '+fault_name+' '+str(slab_name)+' '+str(mesh_name)+' '+str(load_distances)+' '+distances_name+' '+UTM_zone+' '+str(tMw)+' '+model_name+' '+str(hurst)+' '+Ldip+' '+Lstrike+' '+str(num_modes)+' '+str(Nrealizations_parallel)+' '+str(rake)+' '+str(buffer_factor)+' '+str(rise_time_depths0)+' '+str(rise_time_depths1)+' '+str(time_epi)+' '+str(max_slip)+' '+source_time_function+' '+str(lognormal)+' '+str(slip_standard_deviation)+' '+scaling_law+' '+str(ncpus)+' '+velmod_file+' '+str(force_magnitude)+' '+str(force_area)+' '+str(mean_slip_name)+' '+str(hypocenter[0])+' '+str(hypocenter[1])+' '+str(hypocenter[2])+' '+str(slip_tol)+' '+str(force_hypocenter)+' '+str(no_random)+' '+str(shypo)+' '+str(use_hypo_fraction)+' '+str(shear_wave_fraction)
+    mpi='mpiexec -n '+str(ncpus)+' python '+mud_source+'generate_ruptures_parallel.py run_parallel_generate_ruptures '+home+' '+project_name+' '+run_name+' '+fault_name+' '+str(slab_name)+' '+str(mesh_name)+' '+str(load_distances)+' '+distances_name+' '+UTM_zone+' '+str(tMw)+' '+model_name+' '+str(hurst)+' '+Ldip+' '+Lstrike+' '+str(num_modes)+' '+str(Nrealizations_parallel)+' '+str(rake)+' '+str(buffer_factor)+' '+str(rise_time_depths0)+' '+str(rise_time_depths1)+' '+str(time_epi)+' '+str(max_slip)+' '+source_time_function+' '+str(lognormal)+' '+str(slip_standard_deviation)+' '+scaling_law+' '+str(ncpus)+' '+str(force_magnitude)+' '+str(force_area)+' '+str(mean_slip_name)+' '+str(hypocenter[0])+' '+str(hypocenter[1])+' '+str(hypocenter[2])+' '+str(slip_tol)+' '+str(force_hypocenter)+' '+str(no_random)+' '+str(shypo)+' '+str(use_hypo_fraction)+' '+str(shear_wave_fraction)
     mpi=split(mpi)
     p=subprocess.Popen(mpi)
     p.communicate()
@@ -1020,7 +1131,7 @@ def run_generate_ruptures_parallel(home,project_name,run_name,fault_name,slab_na
 def run_generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
         load_distances,distances_name,UTM_zone,target_Mw,model_name,hurst,Ldip,
         Lstrike,num_modes,Nrealizations,rake,buffer_factor,rise_time_depths,time_epi,
-        max_slip,source_time_function,lognormal,slip_standard_deviation,scaling_law,velmod_file,
+        max_slip,source_time_function,lognormal,slip_standard_deviation,scaling_law,
         force_magnitude,force_area,mean_slip_name,hypocenter,slip_tol,force_hypocenter,
         no_random,shypo,use_hypo_fraction,shear_wave_fraction):
     
@@ -1028,11 +1139,11 @@ def run_generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_n
     Depending on user selected flags parse the work out to different functions
     '''
     
-    from numpy import load,save,genfromtxt,log10,cos,sin,deg2rad,savetxt,zeros,sqrt,where
+    from numpy import load,save,genfromtxt,log10,cos,sin,deg2rad,savetxt,zeros,where
     from string import rjust
     from time import gmtime, strftime
-    from numpy.random import shuffle
     from obspy.taup import TauPyModel
+
 
     #Should I calculate or load the distances?
     if load_distances==1:  
@@ -1048,8 +1159,11 @@ def run_generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_n
     whole_fault=genfromtxt(home+project_name+'/data/model_info/'+fault_name)
     
     #Get structure model
-    vel_mod=home+project_name+'/structure/'+model_name
-    velmod=TauPyModel(model=velmod_file,verbose=True)
+    vel_mod_file=home+project_name+'/structure/'+model_name
+    
+    #Get TauPyModel
+    velmod = TauPyModel(model=home+project_name+'/structure/'+model_name.split('.')[0])
+
 
     #Now loop over the number of realizations
     ruptures_list=''
@@ -1080,23 +1194,23 @@ def run_generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_n
                 if Lstrike=='auto': #Use scaling
                     #Ls=10**(-2.43+0.49*target_Mw)
                     Ls=2.0+(1./3)*Leff
-                elif Lstrike=='Mel2019':
+                elif Lstrike=='MH2019':
                     Ls=17.7+0.34*Leff
                 else:
                     Ls=Lstrike
                 if Ldip=='auto': #Use scaling
                     #Ld=10**(-1.79+0.38*target_Mw)
                     Ld=1.0+(1./3)*Weff
-                elif Ldip=='Mel2019':
+                elif Ldip=='MH2019':
                     Ld=6.8+0.4*Weff
                 else:
                     Ld=Ldip
                 
                 #Get the mean uniform slip for the target magnitude
                 if mean_slip_name==None:
-                    mean_slip,mu=get_mean_slip(target_Mw[kmag],fault_array,vel_mod)
+                    mean_slip,mu=get_mean_slip(target_Mw[kmag],fault_array,vel_mod_file)
                 else:
-                    foo,mu=get_mean_slip(target_Mw[kmag],fault_array,vel_mod)
+                    foo,mu=get_mean_slip(target_Mw[kmag],fault_array,vel_mod_file)
                     mean_fault=genfromtxt(mean_slip_name)
                     mean_slip=(mean_fault[:,8]**2+mean_fault[:,9]**2)**0.5
                     #Make sure mean_slip has no zero slip faults
@@ -1109,7 +1223,7 @@ def run_generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_n
                 # Lognormal or not?
                 if lognormal==False:
                     #Get covariance matrix
-                    C_nonlog=get_covariance(mean_slip,C,target_Mw[kmag],fault_array,vel_mod,slip_standard_deviation) 
+                    C_nonlog=get_covariance(mean_slip,C,target_Mw[kmag],fault_array,vel_mod_file,slip_standard_deviation) 
                     #Get eigen values and eigenvectors
                     eigenvals,V=get_eigen(C_nonlog)
                     #Generate fake slip pattern
@@ -1122,7 +1236,7 @@ def run_generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_n
                             print '... ... ... negative slip threshold exceeeded with %d%% negative slip. Recomputing...' % (percent_negative)
                 else:
                     #Get lognormal values
-                    C_log,mean_slip_log=get_lognormal(mean_slip,C,target_Mw[kmag],fault_array,vel_mod,slip_standard_deviation)               
+                    C_log,mean_slip_log=get_lognormal(mean_slip,C,target_Mw[kmag],fault_array,vel_mod_file,slip_standard_deviation)               
                     #Get eigen values and eigenvectors
                     eigenvals,V=get_eigen(C_log)
                     #Generate fake slip pattern
@@ -1131,7 +1245,7 @@ def run_generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_n
             
             #Slip pattern sucessfully made, moving on.
             #Rigidities
-            foo,mu=get_mean_slip(target_Mw[kmag],whole_fault,vel_mod)
+            foo,mu=get_mean_slip(target_Mw[kmag],whole_fault,vel_mod_file)
             fault_out[:,13]=mu
             
             #Calculate moment and magnitude of fake slip pattern

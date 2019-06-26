@@ -9,7 +9,7 @@ Created on Tue Jun 18 10:45:24 2019
 def run_parallel_generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
         load_distances,distances_name,UTM_zone,tMw,model_name,hurst,Ldip,Lstrike,
         num_modes,Nrealizations,rake,buffer_factor,rise_time_depths0,rise_time_depths1,time_epi,max_slip,
-        source_time_function,lognormal,slip_standard_deviation,scaling_law,ncpus,velmod_file,force_magnitude,
+        source_time_function,lognormal,slip_standard_deviation,scaling_law,ncpus,force_magnitude,
         force_area,mean_slip_name,hypocenter_lon,hypocenter_lat,hypocenter_dep,slip_tol,force_hypocenter,
         no_random,shypo,use_hypo_fraction,shear_wave_fraction,rank,size):
     
@@ -17,7 +17,7 @@ def run_parallel_generate_ruptures(home,project_name,run_name,fault_name,slab_na
     Depending on user selected flags parse the work out to different functions
     '''
     
-    from numpy import load,save,genfromtxt,log10,cos,sin,deg2rad,savetxt,zeros,sqrt,where
+    from numpy import load,save,genfromtxt,log10,cos,sin,deg2rad,savetxt,zeros,where
     from string import rjust
     from time import gmtime, strftime
     from numpy.random import shuffle
@@ -32,7 +32,6 @@ def run_parallel_generate_ruptures(home,project_name,run_name,fault_name,slab_na
     # Fix input formats
     rank=int(rank)
     size=int(size)
-    velmod=TauPyModel(model=velmod_file,verbose=True)
     time_epi=UTCDateTime(time_epi)
     rise_time_depths=[rise_time_depths0,rise_time_depths1]
     hypocenter=[hypocenter_lon,hypocenter_lat,hypocenter_dep]
@@ -55,7 +54,10 @@ def run_parallel_generate_ruptures(home,project_name,run_name,fault_name,slab_na
     whole_fault=genfromtxt(home+project_name+'/data/model_info/'+fault_name)
     
     #Get structure model
-    vel_mod=home+project_name+'/structure/'+model_name
+    vel_mod_file=home+project_name+'/structure/'+model_name
+    
+    #Get TauPyModel
+    velmod = TauPyModel(model=home+project_name+'/structure/'+model_name.split('.')[0])
 
     #Now loop over the number of realizations
     ruptures_list=''
@@ -89,23 +91,23 @@ def run_parallel_generate_ruptures(home,project_name,run_name,fault_name,slab_na
                 if Lstrike=='auto': #Use scaling
                     #Ls=10**(-2.43+0.49*target_Mw)
                     Ls=2.0+(1./3)*Leff
-                elif Lstrike=='Mel2019':
+                elif Lstrike=='MH2019':
                     Ls=17.7+0.34*Leff
                 else:
                     Ls=Lstrike
                 if Ldip=='auto': #Use scaling
                     #Ld=10**(-1.79+0.38*target_Mw)
                     Ld=1.0+(1./3)*Weff
-                elif Ldip=='Mel2019':
+                elif Ldip=='MH2019':
                     Ld=6.8+0.4*Weff
                 else:
                     Ld=Ldip
                 
                 #Get the mean uniform slip for the target magnitude
                 if mean_slip_name==None:
-                    mean_slip,mu=fakequakes.get_mean_slip(target_Mw[kmag],fault_array,vel_mod)
+                    mean_slip,mu=fakequakes.get_mean_slip(target_Mw[kmag],fault_array,vel_mod_file)
                 else:
-                    foo,mu=fakequakes.get_mean_slip(target_Mw[kmag],fault_array,vel_mod)
+                    foo,mu=fakequakes.get_mean_slip(target_Mw[kmag],fault_array,vel_mod_file)
                     mean_fault=genfromtxt(mean_slip_name)
                     mean_slip=(mean_fault[:,8]**2+mean_fault[:,9]**2)**0.5
                     #Make sure mean_slip has no zero slip faults
@@ -118,7 +120,7 @@ def run_parallel_generate_ruptures(home,project_name,run_name,fault_name,slab_na
                 # Lognormal or not?
                 if lognormal==False:
                     #Get covariance matrix
-                    C_nonlog=fakequakes.get_covariance(mean_slip,C,target_Mw[kmag],fault_array,vel_mod,slip_standard_deviation) 
+                    C_nonlog=fakequakes.get_covariance(mean_slip,C,target_Mw[kmag],fault_array,vel_mod_file,slip_standard_deviation) 
                     #Get eigen values and eigenvectors
                     eigenvals,V=fakequakes.get_eigen(C_nonlog)
                     #Generate fake slip pattern
@@ -131,7 +133,7 @@ def run_parallel_generate_ruptures(home,project_name,run_name,fault_name,slab_na
                             print '... ... ... negative slip threshold exceeeded with %d%% negative slip. Recomputing...' % (percent_negative)
                 else:
                     #Get lognormal values
-                    C_log,mean_slip_log=fakequakes.get_lognormal(mean_slip,C,target_Mw[kmag],fault_array,vel_mod,slip_standard_deviation)               
+                    C_log,mean_slip_log=fakequakes.get_lognormal(mean_slip,C,target_Mw[kmag],fault_array,vel_mod_file,slip_standard_deviation)               
                     #Get eigen values and eigenvectors
                     eigenvals,V=fakequakes.get_eigen(C_log)
                     #Generate fake slip pattern
@@ -140,7 +142,7 @@ def run_parallel_generate_ruptures(home,project_name,run_name,fault_name,slab_na
             
             #Slip pattern sucessfully made, moving on.
             #Rigidities
-            foo,mu=fakequakes.get_mean_slip(target_Mw[kmag],whole_fault,vel_mod)
+            foo,mu=fakequakes.get_mean_slip(target_Mw[kmag],whole_fault,vel_mod_file)
             fault_out[:,13]=mu
             
             #Calculate moment and magnitude of fake slip pattern
@@ -275,45 +277,47 @@ if __name__ == '__main__':
         slip_standard_deviation=float(sys.argv[26])
         scaling_law=sys.argv[27]        
         ncpus=int(sys.argv[28])
-        velmod_file=sys.argv[29]
-        force_magnitude=sys.argv[30]
+#        velmod_file=sys.argv[29]
+        force_magnitude=sys.argv[29]
         if force_magnitude=='True':
             force_magnitude=True
         elif force_magnitude=='False':
             force_magnitude=False
-        force_area=sys.argv[31]
+        force_area=sys.argv[30]
         if force_area=='True':
             force_area=True
         elif force_area=='False':
             force_area=False
-        mean_slip_name=sys.argv[32]
-        hypocenter_lon=float(sys.argv[33])
-        hypocenter_lat=float(sys.argv[34])
-        hypocenter_dep=float(sys.argv[35])
-        slip_tol=float(sys.argv[36])
-        force_hypocenter=sys.argv[37]
+        mean_slip_name=sys.argv[31]
+        if mean_slip_name == 'None':
+            mean_slip_name=None
+        hypocenter_lon=float(sys.argv[32])
+        hypocenter_lat=float(sys.argv[33])
+        hypocenter_dep=float(sys.argv[34])
+        slip_tol=float(sys.argv[35])
+        force_hypocenter=sys.argv[36]
         if force_hypocenter=='True':
             force_hypocenter=True
         elif force_hypocenter=='False':
             force_hypocenter=False
-        no_random=sys.argv[38]
+        no_random=sys.argv[37]
         if no_random=='True':
             no_random=True
         elif no_random=='False':
             no_random=False
-        shypo=sys.argv[39]
+        shypo=sys.argv[38]
         if shypo=='None':
             shypo=None
-        use_hypo_fraction=sys.argv[40]
+        use_hypo_fraction=sys.argv[39]
         if use_hypo_fraction=='True':
             use_hypo_fraction=True
         if use_hypo_fraction=='False':
             use_hypo_fraction=False
-        shear_wave_fraction=float(sys.argv[41])
+        shear_wave_fraction=float(sys.argv[40])
         run_parallel_generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
         load_distances,distances_name,UTM_zone,tMw,model_name,hurst,Ldip,Lstrike,
         num_modes,Nrealizations,rake,buffer_factor,rise_time_depths0,rise_time_depths1,time_epi,max_slip,
-        source_time_function,lognormal,slip_standard_deviation,scaling_law,ncpus,velmod_file,force_magnitude,
+        source_time_function,lognormal,slip_standard_deviation,scaling_law,ncpus,force_magnitude,
         force_area,mean_slip_name,hypocenter_lon,hypocenter_lat,hypocenter_dep,slip_tol,force_hypocenter,
         no_random,shypo,use_hypo_fraction,shear_wave_fraction,rank,size)
     else:
