@@ -700,7 +700,7 @@ def get_rise_times(M0,slip,fault_array,rise_time_depths,stoc_rake,rise_time_std=
     
     
 def get_rupture_onset(home,project_name,slip,fault_array,model_name,hypocenter,
-        rise_time_depths,M0,sigma_rise_time=0.2,shear_wave_fraction=0.7):
+        rise_time_depths,M0,velmod,sigma_rise_time=0.2,shear_wave_fraction=0.7):
     '''
     Using a custom built tvel file ray trace from hypocenter to determine rupture
     onset times
@@ -708,8 +708,11 @@ def get_rupture_onset(home,project_name,slip,fault_array,model_name,hypocenter,
         
     from numpy import genfromtxt,zeros,arctan2,sin,r_,where,log10,isnan,argmin,setxor1d,exp
     from numpy .random import rand,randn
-    from obspy.geodetics import gps2dist_azimuth
+    from obspy.geodetics import gps2dist_azimuth, kilometer2degrees
+    import warnings
 
+    #I don't condone it but this cleans up the warnings
+    warnings.filterwarnings("ignore")
     
     #Load velocity model
     vel=genfromtxt(home+project_name+'/structure/'+model_name)
@@ -826,12 +829,41 @@ def get_rupture_onset(home,project_name,slip,fault_array,model_name,hypocenter,
     #Check for negative times
     i=where(t_onset_final<0)[0]
     t_onset_final[i]=t_onset[i]
+    
+    #Check for subfaults that would create P-waves arriving *earlier* than those from hypocenter, and redo those stochastic perturbations until they're all > hypo P-wave time
+    for kfault in range(len(slip)):
+        D,az,baz=gps2dist_azimuth(hypocenter[1],hypocenter[0],fault_array[kfault,2],fault_array[kfault,1])
+        D=D/1000
+        D_deg=kilometer2degrees(D)
+        #print "Distance in degrees: " + str(D_deg)
+        #print "Hypocenter: " + str(hypocenter[2][0])
+        Ppaths=velmod.get_ray_paths(hypocenter[2][0],D_deg,phase_list=['P','p'])
+        Ptime=Ppaths[0].time
+        attempt=1
+        while (t_onset_final[kfault] < Ptime) & (attempt < 500):
+            #if attempt == 1:
+                #print "Trying at subfault " + str(kfault)
+            #print ".....kfault " + str(kfault) + " is too early... recalculating!"
+            rand_numb=randn()
+            delta_t=delta_t0*exp(sigma_rise_time*rand_numb*(1./attempt))
+            perturbation=(log10(slip[kfault])-log10(slip_average))/(log10(slip.max())-log10(slip_average))
+            t_onset_final[kfault]=t_onset[kfault]-delta_t*perturbation
+            attempt+=1
+            if attempt == 500:
+                t_onset_final[kfault]=t_onset[kfault]
+                #print "...Failed at subfault " + str(kfault)
+            #GP 2015 extra perturbation to destroy the 1:1 correlation with slip
+            t_onset_final[kfault]=t_onset[kfault]
+
+    #Ensure hypocenter onset time is zero
+    t_onset_final[i_hypo]=0
+
     #Reassign subfaults within the "nucleation zone" to be their original, unperturbed onsets    
     #nu=some-relation-to-M0
-    i=where(t_onset<5.5)[0]
-    t_nucleation_edge=max(t_onset[i])
-    t_onset_final=t_onset_final+t_nucleation_edge
-    t_onset_final[i]=t_onset[i]
+#    i=where(t_onset<5.5)[0]
+#    t_nucleation_edge=max(t_onset[i])
+#    t_onset_final=t_onset_final+t_nucleation_edge
+#    t_onset_final[i]=t_onset[i]
     #Check for nan times
     i=where(isnan(t_onset_final)==True)[0]
     t_onset_final[i]=0
@@ -927,16 +959,70 @@ def write_all_event_summary(home,project_name,run_name):
         out[k,6]=peak_onset
         
     savetxt(fout,out,fmt='%8.2f')
-                                                                                                                                                                                                    
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
     
+
 def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
+		load_distances,distances_name,UTM_zone,target_Mw,model_name,hurst,Ldip,
+		Lstrike,num_modes,Nrealizations,rake,buffer_factor,rise_time_depths,time_epi,
+		max_slip,source_time_function,lognormal,slip_standard_deviation,scaling_law,ncpus,
+		force_magnitude=False,force_area=False,mean_slip_name=None,hypocenter=None,
+		slip_tol=1e-2,force_hypocenter=False,no_random=False,shypo=None,use_hypo_fraction=True,
+		shear_wave_fraction=0.7):
+    '''
+    Set up rupture generation-- use ncpus if available
+    '''
+    velmod_file=home+project_name+'/structure/iquique' ### HARDCODED!
+    if ncpus>1:
+        run_generate_ruptures_parallel(home,project_name,run_name,fault_name,slab_name,mesh_name,
         load_distances,distances_name,UTM_zone,target_Mw,model_name,hurst,Ldip,
         Lstrike,num_modes,Nrealizations,rake,buffer_factor,rise_time_depths,time_epi,
-        max_slip,source_time_function,lognormal,slip_standard_deviation,scaling_law,
-        force_magnitude=False,force_area=False,mean_slip_name=None,hypocenter=None,
-        slip_tol=1e-2,force_hypocenter=False,no_random=False,shypo=None,use_hypo_fraction=True,
-        shear_wave_fraction=0.7):
+        max_slip,source_time_function,lognormal,slip_standard_deviation,scaling_law,ncpus,velmod_file,
+        force_magnitude,force_area,mean_slip_name,hypocenter,slip_tol,force_hypocenter,
+        no_random,shypo,use_hypo_fraction,shear_wave_fraction)
+    else:
+        run_generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
+        load_distances,distances_name,UTM_zone,target_Mw,model_name,hurst,Ldip,
+        Lstrike,num_modes,Nrealizations,rake,buffer_factor,rise_time_depths,time_epi,
+        max_slip,source_time_function,lognormal,slip_standard_deviation,scaling_law,velmod_file,
+        force_magnitude,force_area,mean_slip_name,hypocenter,slip_tol,force_hypocenter,
+        no_random,shypo,use_hypo_fraction,shear_wave_fraction)
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
+def run_generate_ruptures_parallel(home,project_name,run_name,fault_name,slab_name,mesh_name,
+        load_distances,distances_name,UTM_zone,target_Mw,model_name,hurst,Ldip,
+        Lstrike,num_modes,Nrealizations,rake,buffer_factor,rise_time_depths,time_epi,
+        max_slip,source_time_function,lognormal,slip_standard_deviation,scaling_law,ncpus,velmod_file,
+        force_magnitude,force_area,mean_slip_name,hypocenter,slip_tol,force_hypocenter,
+        no_random,shypo,use_hypo_fraction,shear_wave_fraction):
+    from numpy import savetxt,arange,genfromtxt,where,ceil
+    from os import environ
+    from shutil import copyfile
+    import subprocess
+    from shlex import split
+    #calculate number of realizations per CPU:
+    Nrealizations_parallel=int(ceil(float(Nrealizations)/float(ncpus)))
+    if (Nrealizations_parallel*ncpus > Nrealizations):
+        print "Extra CPUS-- have " + str(Nrealizations_parallel*ncpus-Nrealizations) + " free ruptures!!"
+    rise_time_depths0=rise_time_depths[0]
+    rise_time_depths1=rise_time_depths[1]
+    tMw=target_Mw[0]
+    for r in range(len(target_Mw)-1):
+        #tMw.append(target_Mw[r])
+        tMw=str(tMw)+','+str(target_Mw[r+1])
+    #Make mpi system call
+    print "MPI: Starting " + str(Nrealizations_parallel*ncpus) + " FakeQuakes Rupture Generations on ", ncpus, "CPUs"
+    mud_source=environ['MUD']+'/src/python/mudpy/'
+    mpi='mpiexec -n '+str(ncpus)+' python '+mud_source+'generate_ruptures_parallel.py run_parallel_generate_ruptures '+home+' '+project_name+' '+run_name+' '+fault_name+' '+str(slab_name)+' '+str(mesh_name)+' '+str(load_distances)+' '+distances_name+' '+UTM_zone+' '+str(tMw)+' '+model_name+' '+str(hurst)+' '+Ldip+' '+Lstrike+' '+str(num_modes)+' '+str(Nrealizations_parallel)+' '+str(rake)+' '+str(buffer_factor)+' '+str(rise_time_depths0)+' '+str(rise_time_depths1)+' '+str(time_epi)+' '+str(max_slip)+' '+source_time_function+' '+str(lognormal)+' '+str(slip_standard_deviation)+' '+scaling_law+' '+str(ncpus)+' '+velmod_file+' '+str(force_magnitude)+' '+str(force_area)+' '+str(mean_slip_name)+' '+str(hypocenter[0])+' '+str(hypocenter[1])+' '+str(hypocenter[2])+' '+str(slip_tol)+' '+str(force_hypocenter)+' '+str(no_random)+' '+str(shypo)+' '+str(use_hypo_fraction)+' '+str(shear_wave_fraction)
+    mpi=split(mpi)
+    p=subprocess.Popen(mpi)
+    p.communicate()
+
+    
+def run_generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
+        load_distances,distances_name,UTM_zone,target_Mw,model_name,hurst,Ldip,
+        Lstrike,num_modes,Nrealizations,rake,buffer_factor,rise_time_depths,time_epi,
+        max_slip,source_time_function,lognormal,slip_standard_deviation,scaling_law,velmod_file,
+        force_magnitude,force_area,mean_slip_name,hypocenter,slip_tol,force_hypocenter,
+        no_random,shypo,use_hypo_fraction,shear_wave_fraction):
     
     '''
     Depending on user selected flags parse the work out to different functions
@@ -946,8 +1032,8 @@ def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
     from string import rjust
     from time import gmtime, strftime
     from numpy.random import shuffle
+    from obspy.taup import TauPyModel
 
-    
     #Should I calculate or load the distances?
     if load_distances==1:  
         Dstrike=load(home+project_name+'/data/distances/'+distances_name+'.strike.npy')
@@ -963,6 +1049,7 @@ def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
     
     #Get structure model
     vel_mod=home+project_name+'/structure/'+model_name
+    velmod=TauPyModel(model=velmod_file,verbose=True)
 
     #Now loop over the number of realizations
     ruptures_list=''
@@ -971,7 +1058,7 @@ def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
     for kmag in range(len(target_Mw)):
         print '... Calculating ruptures for target magnitude Mw = '+str(target_Mw[kmag])
         for kfault in range(Nrealizations):
-            if kfault%10==0:
+            if kfault%1==0:
                 print '... ... working on rupture '+str(kfault)+' of '+str(Nrealizations)
             
             #Prepare output
@@ -1086,7 +1173,7 @@ def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
                 hypocenter=whole_fault[hypo_fault,1:4]
 
             t_onset=get_rupture_onset(home,project_name,slip,fault_array,model_name,hypocenter,
-                                      rise_time_depths,M0,shear_wave_fraction)
+                                      rise_time_depths,M0,velmod,shear_wave_fraction)
             fault_out[:,12]=0
             fault_out[ifaults,12]=t_onset
             

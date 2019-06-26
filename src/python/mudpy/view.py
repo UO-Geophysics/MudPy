@@ -1678,9 +1678,9 @@ def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpas
         axn.set_ylabel(sta[i[k]],rotation=0,labelpad=20)
         if k==0:
             if vord.lower()=='d':
-                axn.set_title('North (cm)')
-                axe.set_title('East (cm)')
-                axu.set_title('Up (cm)')
+                axn.set_title('North (m)')
+                axe.set_title('East (m)')
+                axu.set_title('Up (m)')
             else:
                 axn.set_title('North (m/s)')
                 axe.set_title('East (m/s)')

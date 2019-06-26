@@ -88,7 +88,7 @@ def run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,
     
     #Create taup velocity model object, paste on top of iaspei91
     #taup_create.build_taup_model(home+project_name+'/structure/bbp_norcal.tvel',output_folder=home+project_name+'/structure/')
-    velmod=TauPyModel(model=home+project_name+'/structure/maule',verbose=True)
+    velmod=TauPyModel(model=home+project_name+'/structure/iquique',verbose=True)
     #Get epicentral time
     epicenter,time_epi=read_fakequakes_hypo_time(home,project_name,rupture_name)
     
@@ -503,4 +503,4 @@ if __name__ == '__main__':
         high_stress_depth=int(sys.argv[21])
         run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,component,model_name,rise_time_depths0,rise_time_depths1,moho_depth_in_km,total_duration,hf_dt,stress_parameter,kappa,Qexp,Pwave,high_stress_depth,rank,size)
     else:
-        print "ERROR: You're not allowed to run '+sys.argv[1]+' from the shell or it does not exist"
+        print "ERROR: You're not allowed to run "+sys.argv[1]+" from the shell or it does not exist"
