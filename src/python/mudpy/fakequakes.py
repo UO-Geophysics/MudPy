@@ -1047,10 +1047,6 @@ def build_TauPyModel(home,project_name,vel_mod_file,background_model='PREM'):
         taup_out=home+project_name+'/structure/'
         taup_create.build_taup_model(taup_in,output_folder=taup_out)
         
-        #load tauPy model and return object
-        print(taup_out+nd_name.split('.')[0])
-        tauPy_model = TauPyModel(model=taup_out+nd_name.split('.')[0])
-        
     else: #To be done later (ha)
         print('ERROR: That background velocity model does not exist')
         
