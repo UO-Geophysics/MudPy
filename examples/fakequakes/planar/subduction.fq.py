@@ -20,19 +20,19 @@ init=0
 make_ruptures=1
 make_GFs=0
 make_synthetics=0
-make_waveforms=0
+make_waveforms=1
 # Things that only need to be done once
 load_distances=1
-G_from_file=0
+G_from_file=1
 ###############################################################################
 
 
 #############                 Run-time parameters            ##################
 
-ncpus=4 #only useful for waveform syntehsis
+ncpus=8 #only useful for waveform syntehsis
 
 model_name='cascadia.mod'   # Velocity model
-fault_name='subduction.fault'    # Fault geometry
+fault_name='subduction_lowres.fault'    # Fault geometry
 slab_name=None   # Slab 1.0 Ascii file (only used for 3D fault)
 mesh_name=None    # GMSH output file (only used for 3D fault)
 distances_name='planar_subduction' # Name of distance matrix
@@ -43,7 +43,7 @@ scaling_law='T' # T for thrust, S for strike-slip, N for normal
 
 #slip parameters
 Nrealizations=5 # Number of fake ruptures to generate per magnitude bin
-target_Mw=np.arange(7.5,8.5,0.1) # Of what approximate magnitudes
+target_Mw=np.arange(7.5,8.4,0.1) # Of what approximate magnitudes
 max_slip=60 #Maximum slip (m) allowed in the model
 
 # Correlation function parameters
@@ -73,11 +73,11 @@ buffer_factor=0.5   # idon't think this does anything anymore, remove?
 shear_wave_fraction = 0.8  #Fraction of shear wave speed to use as mean rupture velocity
 
 #Station information (only used when syntehsizing waveforms)
-GF_list='stations.gflist'
+GF_list='coastal_gps.gflist'
 G_name='GFs'
 
 # Displacement and velocity waveform parameters
-NFFT=1024 ; dt=1.0
+NFFT=128 ; dt=1.0
 
 #fk-parameters
 dk=0.1 ; pmin=0 ; pmax=1 ; kmax=20

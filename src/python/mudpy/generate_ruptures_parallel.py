@@ -60,7 +60,6 @@ def run_parallel_generate_ruptures(home,project_name,run_name,fault_name,slab_na
     velmod = TauPyModel(model=home+project_name+'/structure/'+model_name.split('.')[0])
 
     #Now loop over the number of realizations
-    ruptures_list=''
     realization=0
     if rank==0:
         print 'Generating rupture scenarios'
@@ -220,14 +219,8 @@ def run_parallel_generate_ruptures(home,project_name,run_name,fault_name,slab_na
             f.write('Source time function type: %s' % source_time_function)
             f.close()
             
-            #Append to list
-            ruptures_list=ruptures_list+run_name+'.'+run_number+'.rupt\n'
-            
             realization+=1
-    #Write ruptures_list file
-    f=open(home+project_name+'/data/ruptures.list','w')
-    f.write(ruptures_list)
-    f.close()
+
 
 
 #If main entry point

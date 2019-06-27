@@ -1058,6 +1058,37 @@ def build_TauPyModel(home,project_name,vel_mod_file,background_model='PREM'):
     
     
     
+def write_rupt_list(home,project_name,run_name,target_Mw,Nrealizations,ncpus):
+    '''
+    Writes ruptures.list file, note this does not check whether all ruptures
+    were succesfully generated, it simply assumes that there were len(target_Mw)
+    x Nrealizations ruptures made
+    '''
+   
+    from string import rjust
+    from numpy import ceil
+    
+    f=open(home+project_name+'/data/ruptures.list','w')
+    
+    #Check number of realizations based on ncpus
+    if ncpus==1: #serial
+        Nruptures = Nrealizations * len(target_Mw)
+        
+    else:
+        #calculate number of realizations per CPU:
+        Nrealizations_parallel=int(ceil(float(Nrealizations)/float(ncpus)))
+        Nruptures = (Nrealizations_parallel*ncpus) * len(target_Mw)
+    
+    for krup in range(Nruptures):
+    
+        run_number = rjust(str(krup),6,'0')
+        rupture = run_name+'.'+run_number+'.rupt\n'
+        f.write(rupture)            
+
+    f.close()
+
+    
+    
     
     
     
@@ -1073,10 +1104,20 @@ def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
     Set up rupture generation-- use ncpus if available
     '''
     
+    
+    #Things that need to be done before deciding whether to ship the work off to the 
+    #parallel or serial functions
+    
     #Need to make tauPy file
     vel_mod_file=home+project_name+'/structure/'+model_name
     #Get TauPyModel
-    velmod=build_TauPyModel(home,project_name,vel_mod_file,background_model='PREM')
+    build_TauPyModel(home,project_name,vel_mod_file,background_model='PREM')
+
+    #Write ruptures.list file
+    write_rupt_list(home,project_name,run_name,target_Mw,Nrealizations,ncpus)
+    
+    
+    #now decide where the work should go to
 
     if ncpus>1:
         run_generate_ruptures_parallel(home,project_name,run_name,fault_name,slab_name,mesh_name,
@@ -1128,6 +1169,8 @@ def run_generate_ruptures_parallel(home,project_name,run_name,fault_name,slab_na
     p.communicate()
 
     
+    
+    
 def run_generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
         load_distances,distances_name,UTM_zone,target_Mw,model_name,hurst,Ldip,
         Lstrike,num_modes,Nrealizations,rake,buffer_factor,rise_time_depths,time_epi,
@@ -1166,7 +1209,6 @@ def run_generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_n
 
 
     #Now loop over the number of realizations
-    ruptures_list=''
     realization=0
     print 'Generating rupture scenarios'
     for kmag in range(len(target_Mw)):
@@ -1323,13 +1365,7 @@ def run_generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_n
             f.write('Centroid (lon,lat,z[km]): (%.6f,%.6f,%.2f)\n' %(centroid_lon,centroid_lat,centroid_z))
             f.write('Source time function type: %s' % source_time_function)
             f.close()
-            
-            #Append to list
-            ruptures_list=ruptures_list+run_name+'.'+run_number+'.rupt\n'
-            
+                        
             realization+=1
-    #Write ruptures_list file
-    f=open(home+project_name+'/data/ruptures.list','w')
-    f.write(ruptures_list)
-    f.close()
+
     
