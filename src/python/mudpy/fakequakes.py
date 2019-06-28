@@ -759,7 +759,7 @@ def get_rupture_onset(home,project_name,slip,fault_array,model_name,hypocenter,
     #Get faults at same depth that are NOT the hypo
     i_same_as_hypo=setxor1d(i_same_as_hypo,i_hypo)
     #perturb
-    R=rand(1)
+    R=rand(1)[0]
     fault_array[i_hypo,3]=fault_array[i_hypo,3]-delta*R
     hypocenter[2]=hypocenter[2]-delta*R
     R=rand(len(i_same_as_hypo))
