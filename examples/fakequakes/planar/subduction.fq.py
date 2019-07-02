@@ -29,7 +29,7 @@ G_from_file=1
 
 #############                 Run-time parameters            ##################
 
-ncpus=8 #only useful for waveform syntehsis
+ncpus=8 #only useful for waveform synthesis
 
 model_name='cascadia.mod'   # Velocity model
 fault_name='subduction_lowres.fault'    # Fault geometry

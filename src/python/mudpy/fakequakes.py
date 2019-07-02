@@ -96,7 +96,7 @@ def llz2utm(lon,lat,projection_zone='None'):
 def subfault_distances_3D(home,project_name,fault_name,slab_name,projection_zone):
     """
     Estimate the distance between subfaults i and j for every pair in the list
-    fault.subfaults. For a #D fault geometry
+    fault.subfaults. For a 3D fault geometry
 
     :Inputs:
       -  *fault* of MudPy .fault class
@@ -115,7 +115,7 @@ def subfault_distances_3D(home,project_name,fault_name,slab_name,projection_zone
     """
 
     from numpy import sqrt,sin,cos,deg2rad,zeros,meshgrid,linspace,where,c_,unravel_index,sort,diff,genfromtxt,sign,unique
-    from matplotlib.mlab import griddata
+    from scipy.interpolate import griddata
     from matplotlib import pyplot as plt
     from scipy.spatial.distance import cdist
     from pyproj import Geod
@@ -210,7 +210,7 @@ def subfault_distances_3D(home,project_name,fault_name,slab_name,projection_zone
         X=linspace(slab_x.min(),slab_x.max(),ngrid_pts)
         Y=linspace(slab_y.min(),slab_y.max(),ngrid_pts)
         X,Y = meshgrid(X,Y)
-        Z = griddata(slab_x, slab_y, slab_z, X, Y,interp='linear')
+        Z = griddata(c_[slab_x, slab_y], slab_z, (X, Y), method='linear')
         
         # X, Y and Z are matrices with the grid info, now create one contour at each subfault centroid depth
         contour_levels=unique(sort(fault[:,3]))
