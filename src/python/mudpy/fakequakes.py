@@ -212,10 +212,6 @@ def subfault_distances_3D(home,project_name,fault_name,slab_name,projection_zone
         X,Y = meshgrid(X,Y)
         Z = griddata(c_[slab_x, slab_y], slab_z, (X, Y), method='linear')
         
-        # X, Y and Z are matrices with the grid info, now create one contour at each subfault centroid depth
-        contour_levels=unique(sort(fault[:,3]))
-        all_contours=plt.contour(X,Y,Z,levels=contour_levels)
-        
         # x-coordinates for down_dip line
         x_range=slab_x.max()-slab_x.min()
         x_down_dip=linspace(-x_range/2,x_range/2,200)
@@ -230,8 +226,11 @@ def subfault_distances_3D(home,project_name,fault_name,slab_name,projection_zone
             yi = fault_y[i]
             zi = fault_z[i]
             
+            # X, Y and Z are matrices with the grid info, now create one contour at each subfault centroid depth
+            contour=plt.contour(X,Y,Z,levels=fault[i,3])
+            
             #Get contour at depth of current subfault
-            contour=all_contours.collections[i].get_paths()[0].vertices
+            contour=contour.collections[0].get_paths()[0].vertices
             
             # Now find coordinates of point on this contour closest to subfault centroid
             dist=sqrt((xi-contour[:,0])**2+(yi-contour[:,1])**2)
