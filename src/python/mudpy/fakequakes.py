@@ -518,27 +518,30 @@ def select_faults(whole_fault,Dstrike,Ddip,target_Mw,buffer_factor,num_modes,sca
     ddip_min=Ddip[:,hypo_fault].min()
     
     #Work on strike first
-    strike_bounds=array([0,length/2])
-#    strike_bounds=array([-length/2,length/2])
-#    if strike_bounds[0]<dstrike_min:#Length is outside domain
-#        strike_bounds[1]=strike_bounds[1]+abs(dstrike_min-strike_bounds[0])
-#        strike_bounds[0]=dstrike_min
-#    if strike_bounds[1]>dstrike_max:#Length is outside domain
-#        strike_bounds[0]=strike_bounds[0]-abs(dstrike_max-strike_bounds[1])
-#        strike_bounds[1]=dstrike_max
+#    strike_bounds=array([0,length/2])
+    
+    strike_bounds=array([-length/2,length/2])
+    
+    if strike_bounds[0]<dstrike_min:#Length is outside domain
+        strike_bounds[1]=strike_bounds[1]+abs(dstrike_min-strike_bounds[0])
+        strike_bounds[0]=dstrike_min
+    if strike_bounds[1]>dstrike_max:#Length is outside domain
+        strike_bounds[0]=strike_bounds[0]-abs(dstrike_max-strike_bounds[1])
+        strike_bounds[1]=dstrike_max
         
     #Now get dip ranges
-    dip_bounds=array([0,width/2])
-#    dip_bounds=array([-width/2,width/2])
-    #if dip_bounds[0]<ddip_min:#Length is outside domain
-    #    dip_bounds[1]=dip_bounds[1]+abs(ddip_min-dip_bounds[0])
-    #    dip_bounds[0]=ddip_min
-    #if dip_bounds[1]>ddip_max:#Length is outside domain
-    #    dip_bounds[0]=dip_bounds[0]-abs(ddip_max-dip_bounds[1])
-    #    dip_bounds[1]=ddip_max
+#    dip_bounds=array([0,width/2])
+    dip_bounds=array([-width/2,width/2])
     
-    Ds=Dstrike[:,hypo_fault]
-    Dd=Ddip[:,hypo_fault]
+    if dip_bounds[0]<ddip_min:#Length is outside domain
+        dip_bounds[1]=dip_bounds[1]+abs(ddip_min-dip_bounds[0])
+        dip_bounds[0]=ddip_min
+    if dip_bounds[1]>ddip_max:#Length is outside domain
+        dip_bounds[0]=dip_bounds[0]-abs(ddip_max-dip_bounds[1])
+        dip_bounds[1]=ddip_max
+    
+    Ds=Dstrike[hypo_fault,:]
+    Dd=Ddip[hypo_fault,:]
     
     #Now select faults within those distances
     selected_faults=where((Ds>=strike_bounds[0]) & (Ds<=strike_bounds[1]) & (Dd>=dip_bounds[0]) & (Dd<=dip_bounds[1]))[0]
@@ -1222,7 +1225,10 @@ def run_generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_n
             while success==False:
                 #Select only a subset of the faults based on magnitude scaling
                 current_target_Mw=target_Mw[kmag]
-                ifaults,hypo_fault,Lmax,Wmax,Leff,Weff=select_faults(whole_fault,Dstrike,Ddip,current_target_Mw,buffer_factor,num_modes,scaling_law,force_area,no_shallow_epi=False,no_random=no_random,subfault_hypocenter=shypo,use_hypo_fraction=use_hypo_fraction)
+                ifaults,hypo_fault,Lmax,Wmax,Leff,Weff=select_faults(whole_fault,Dstrike,Ddip,current_target_Mw,
+                            buffer_factor,num_modes,scaling_law,force_area,no_shallow_epi=False,
+                            no_random=no_random,subfault_hypocenter=shypo,use_hypo_fraction=use_hypo_fraction)
+                
                 fault_array=whole_fault[ifaults,:]
                 Dstrike_selected=Dstrike[ifaults,:][:,ifaults]
                 Ddip_selected=Ddip[ifaults,:][:,ifaults]
