@@ -171,8 +171,31 @@ def subfault_distances_3D(home,project_name,fault_name,slab_name,projection_zone
                     z_origin=fault[i,3]
                     z_target=fault[j,3]
                     delta_dip=abs(z_origin-z_target)/sin(deg2rad(dip))
-                    Ddip[i,j] = delta_dip
-                    Dstrike[i,j] = delta_strike
+                    
+                    #get the correct signs
+                    if z_origin<z_target:
+                        dip_sign=-1.
+                    else:
+                        dip_sign=1.
+                        
+                        
+                    #Fix azimuth polarity
+                    if az<0:
+                        az+=360
+                        
+                    #Rotate and rectify azimuth
+                    azimuth_rotated=az-strike
+                    if azimuth_rotated<0:
+                        azimuth_rotated+=360
+                    
+                        
+                    if azimuth_rotated >=90 and azimuth_rotated <= 270:
+                        strike_sign = -1.
+                    else:
+                        strike_sign= 1.
+                    
+                    Ddip[i,j] = dip_sign*delta_dip
+                    Dstrike[i,j] = strike_sign*delta_strike
            
                     
     #If there's a slab_model file and you want the onfault complicated to get distances
