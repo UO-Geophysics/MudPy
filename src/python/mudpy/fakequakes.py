@@ -484,9 +484,7 @@ def select_faults(whole_fault,Dstrike,Ddip,target_Mw,buffer_factor,num_modes,sca
     from numpy.random import randint,normal
     from numpy import array,where,argmin,arange
     from scipy.stats import norm,expon
-    
-    print force_area
-    print no_random
+
     
     
     #Select random subfault as center of the locus of L and W
