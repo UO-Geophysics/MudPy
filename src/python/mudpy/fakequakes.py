@@ -482,16 +482,33 @@ def select_faults(whole_fault,Dstrike,Ddip,target_Mw,buffer_factor,num_modes,sca
     '''
     
     from numpy.random import randint,normal
-    from numpy import array,where,diff,argmin
+    from numpy import array,where,diff,argmin,arange
     from scipy.stats import norm,expon
     
+    print force_area
+    print no_random
     
     
-    if force_area==True: #Use entire fault model
-        length=1e10
-        width=1e10
+    #Select random subfault as center of the locus of L and W
+    if subfault_hypocenter==None: 
+        hypo_fault=randint(0,len(whole_fault)-1)
+    else: #get subfault closest to hypo
+        hypo_fault=subfault_hypocenter
     
-    if no_random==True: #Use the Blasser medain L and W
+    
+    if force_area==True: #Use entire fault model  nothing more to do here folks
+        
+        selected_faults =  arange(len(whole_fault))
+        Lmax=Dstrike[selected_faults,:][:,selected_faults].max()    
+        Wmax=Ddip[selected_faults,:][:,selected_faults].max()
+        #Convert to effective length/width
+        Leff=0.85*Lmax
+        Weff=0.85*Wmax
+        
+        return selected_faults,hypo_fault,Lmax,Wmax,Leff,Weff
+        
+    
+    if force_area==False and no_random==True: #Use the Blasser medain L and W
         if scaling_law.upper()=='T':
             length=10**(-2.37+0.57*target_Mw)
             width=10**(-1.86+0.46*target_Mw)
@@ -525,11 +542,9 @@ def select_faults(whole_fault,Dstrike,Ddip,target_Mw,buffer_factor,num_modes,sca
             width_std=0.16
             width=10**normal(width_mean,width_std)           
     
-    #Select random subfault as center of the locus of L and W
-    if subfault_hypocenter==None: 
-        hypo_fault=randint(0,len(whole_fault)-1)
-    else: #get subfault closest to hypo
-        hypo_fault=subfault_hypocenter
+    print length
+    print width
+    
         
     #so which subfault ended up being the middle?
     center_subfault=hypo_fault
