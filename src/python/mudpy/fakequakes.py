@@ -482,7 +482,7 @@ def select_faults(whole_fault,Dstrike,Ddip,target_Mw,buffer_factor,num_modes,sca
     '''
     
     from numpy.random import randint,normal
-    from numpy import array,where,diff,argmin,arange
+    from numpy import array,where,argmin,arange
     from scipy.stats import norm,expon
     
     print force_area
@@ -541,9 +541,6 @@ def select_faults(whole_fault,Dstrike,Ddip,target_Mw,buffer_factor,num_modes,sca
             width_mean=-1.2+0.36*target_Mw
             width_std=0.16
             width=10**normal(width_mean,width_std)           
-    
-    print length
-    print width
     
         
     #so which subfault ended up being the middle?
