@@ -37,7 +37,7 @@ def allpsd(home,project_name,run_name,run_number,GF_list,d_or_s,v_or_d,decimate,
         suffix=synthsuffix
     i=where(gf[:,kgf]==1)[0]
     for k in range(len(i)):
-        print 'Working on '+sta[i[k]]
+        print('Working on '+sta[i[k]])
         if d_or_s.lower()=='d': #Read data
             n=read(path+sta[i[k]]+'.'+suffix+'.n')
             e=read(path+sta[i[k]]+'.'+suffix+'.e')
