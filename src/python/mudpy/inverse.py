@@ -51,11 +51,11 @@ def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epic
         if G_name[-3:]!='npy':
             K_name=K_name+'.npy'
             G_name=G_name+'.npy'
-        print 'Loading G from file '+G_name
+        print('Loading G from file '+G_name)
         G=load(G_name)
         #K=load(K_name)
     else: #assemble G one data type at a time
-        print 'Assembling G from synthetic computations...'
+        print('Assembling G from synthetic computations...')
         #Read in GFlist and decide what to compute
         gf_file=home+project_name+'/data/station_info/'+GF_list
         mini_station=home+project_name+'/data/station_info/tempG.sta'
@@ -108,7 +108,7 @@ def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epic
                 trupt=tile(trise/2,(num_windows,1))
                 trupt=trupt*delay_multiplier
                 for krup in range(num_windows):
-                    print 'Working on window '+str(krup+1)
+                    print('Working on window '+str(krup+1))
                     tdelay=epi2subfault(epicenter,source,rupture_speed,trupt[krup,:])
                     if krup==0: #First rupture speed
                         first_window=True
@@ -143,7 +143,7 @@ def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epic
                 trupt=tile(trise/2,(num_windows,1))
                 trupt=trupt*delay_multiplier
                 for krup in range(num_windows):
-                    print 'Working on window '+str(krup+1)
+                    print('Working on window '+str(krup+1))
                     tdelay=epi2subfault(epicenter,source,rupture_speed,trupt[krup,:])
                     if krup==0: #First rupture speed
                         first_window=True
@@ -176,7 +176,7 @@ def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epic
                 #Decide on delays for each time window (50% overlap)
                 trupt=arange(0,num_windows)*trise/2
                 for krup in range(num_windows):
-                    print 'Working on window '+str(krup+1)
+                    print('Working on window '+str(krup+1))
                     tdelay=epi2subfault(epicenter,source,rupture_speed,trupt[krup])
                     if krup==0: #First rupture speed
                         first_window=True
@@ -227,11 +227,11 @@ def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epic
                     Ginsar_nwin=c_[Ginsar_nwin,Ginsar]
                 Ginsar=Ginsar_nwin.copy()
                 Ginsar_nwin=None #Release memory
-            print Gstatic.shape
-            print Gvel.shape
-            print Ginsar.shape
+            print(Gstatic.shape)
+            print(Gvel.shape)
+            print(Ginsar.shape)
             G=concatenate([g for g in [Gstatic,Gdisp,Gvel,Gtsun,Ginsar] if g.size > 0])
-        print 'Saving GF matrix to '+G_name+' this might take just a second...'
+        print('Saving GF matrix to '+G_name+' this might take just a second...')
         save(G_name,G)
         #save(K_name,K)
     return G
@@ -257,7 +257,6 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tsunami,td
         G: Partially assembled GF with all synthetics from a particular data type
     '''
     from numpy import genfromtxt,loadtxt,zeros,array,inf,size
-    from string import rjust
     from obspy import read,Stream,Trace
     from mudpy.forward import tshift
     from mudpy.forward import lowpass as lfilt
@@ -287,7 +286,7 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tsunami,td
         pass #For disp or vel waveforms G is initalized below
     if gftype.lower()=='static': #Make matrix of static GFs
         for ksta in range(Nsta):
-            print 'Assembling static GFs for station '+staname[ksta]
+            print('Assembling static GFs for station '+staname[ksta])
             #Initalize output variable
             Gtemp=zeros([3,Nfaults*2])
             #Where's the data
@@ -295,8 +294,8 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tsunami,td
             #Loop over subfaults
             for kfault in range(Nfaults):
                 if kfault%10==0:
-                    print '... working on subfault '+str(kfault)+' of '+str(Nfaults)
-                nfault='subfault'+rjust(str(int(source[kfault,0])),4,'0')
+                    print('... working on subfault '+str(kfault)+' of '+str(Nfaults))
+                nfault='subfault'+str(int(source[kfault,0])).rjust(4,'0')
                 coseis_ss=loadtxt(syn_path+staname[ksta]+'.'+nfault+'.SS.static.neu')
                 nss=coseis_ss[0]
                 ess=coseis_ss[1]
@@ -315,7 +314,7 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tsunami,td
         return G   
     if gftype.lower()=='insar': #Make matrix of insar LOS GFs
         for ksta in range(Nsta):
-            print 'Assembling static GFs for station '+staname[ksta]
+            print('Assembling static GFs for station '+staname[ksta])
             #Initalize output variable
             Gtemp=zeros([1,Nfaults*2])
             #Where's the data
@@ -328,8 +327,8 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tsunami,td
             #Loop over subfaults
             for kfault in range(Nfaults):
                 if kfault%10==0:
-                    print '... working on subfault '+str(kfault)+' of '+str(Nfaults)
-                nfault='subfault'+rjust(str(int(source[kfault,0])),4,'0')
+                    print('... working on subfault '+str(kfault)+' of '+str(Nfaults))
+                nfault='subfault'+str(int(source[kfault,0])).rjust(4,'0')
                 coseis_ss=loadtxt(syn_path+staname[ksta]+'.'+nfault+'.SS.static.neu')
                 nss=coseis_ss[0]
                 ess=coseis_ss[1]
@@ -374,11 +373,11 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tsunami,td
         if first_window==True: #Read in GFs from file
             ktrace=0
             for ksta in range(Nsta):
-                print 'Reading green functions for station #'+str(ksta+1)+' of '+str(Nsta)
+                print('Reading green functions for station #'+str(ksta+1)+' of '+str(Nsta))
                 for kfault in range(Nfaults):
                     #Get subfault GF directory
-                    nsub='sub'+rjust(str(int(source[kfault,0])),4,'0')
-                    nfault='subfault'+rjust(str(int(source[kfault,0])),4,'0')
+                    nsub='sub'+str(int(source[kfault,0])).rjust(4,'0')
+                    nfault='subfault'+str(int(source[kfault,0])).rjust(4,'0')
                     strdepth='%.4f' % source[kfault,3]
                     if tsunami==True:
                         syn_path=home+project_name+'/GFs/tsunami/'+model_name+'_'+strdepth+'.'+nsub+'/'
@@ -402,13 +401,13 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tsunami,td
                     #Perform operations that need to only happen once (filtering and decimation)
                     if any(BP!=None):# or ksta==1: #Apply filter to GFs
                         if kfault==0:
-                            print 'Bandpassing on frequency band:'
-                            print '... '+str(BP)
-                            print '... station '+staname[ksta]
+                            print('Bandpassing on frequency band:')
+                            print('... '+str(BP))
+                            print('... station '+staname[ksta])
                         fsample=1./Ess[ktrace].stats.delta
                         if len(BP)>1 and BP[1]==inf: #A high pass filter has been requested
                             if kfault==0:
-                                print '.... highpass'
+                                print('.... highpass')
                             Ess[ktrace].data=hfilt(Ess[ktrace].data,BP[0],fsample,2)
                             Nss[ktrace].data=hfilt(Nss[ktrace].data,BP[0],fsample,2)
                             Zss[ktrace].data=hfilt(Zss[ktrace].data,BP[0],fsample,2)
@@ -417,7 +416,7 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tsunami,td
                             Zds[ktrace].data=hfilt(Zds[ktrace].data,BP[0],fsample,2)                        
                         else: #A low pass or bandpass filter has been requested
                             if kfault==0:
-                                print '.... lowpass'
+                                print('.... lowpass')
                             #Ess[ktrace].data=lfilt(Ess[ktrace].data,BP[0],fsample,2)
                             #Nss[ktrace].data=lfilt(Nss[ktrace].data,BP[0],fsample,2)
                             #Zss[ktrace].data=lfilt(Zss[ktrace].data,BP[0],fsample,2)
@@ -435,8 +434,8 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tsunami,td
                     ### HAAAAAACCCCKKKK!!!!
                     #if vord=='vel': #Apply low pass filter to data (** DIRTY HACK!**)
                     #    if kfault==0:
-                    #        print vord
-                    #        print 'Bandpassing hack on velocity...'
+                    #        print(vord
+                    #        print('Bandpassing hack on velocity...'
                     #    bandpass=[1./20,1./2]
                     #    fsample=1./Ess[0].stats.delta
                     #    Ess[ktrace].data=lfilt(Ess[ktrace].data,bandpass,fsample,2)
@@ -477,10 +476,10 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tsunami,td
                 Udata+=udata            
         #Finished reading, filtering, etc now time shift by rupture time and resmaple to data
         ktrace=0
-        print "Aligning GFs and resampling to data times..."
+        print("Aligning GFs and resampling to data times...")
         for ksta in range(Nsta):
             #Loop over subfaults
-            print '...Working on station #'+str(ksta+1)+' of '+str(Nsta)
+            print('...Working on station #'+str(ksta+1)+' of '+str(Nsta))
             for kfault in range(Nfaults):
                 #Assign current GFs
                 ess=Stream(Trace())
@@ -522,7 +521,7 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tsunami,td
                 if kfault==0: #Initalize Gtemp (different size for each station)
                     #How many points left in the tiem series
                     npts=Edata[ksta].stats.npts
-                    print "... ... "+str(npts)+" data points left over after decimation"
+                    print("... ... "+str(npts)+" data points left over after decimation")
                     Gtemp=zeros([3*npts,Nfaults*2])      
                 #Insert synthetics into Gtemp
                 Gtemp[0:npts,2*kfault]=nss.data
@@ -541,11 +540,11 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tsunami,td
         if first_window==True: #Read in GFs from file
             ktrace=0
             for ksta in range(Nsta):
-                print 'Reading green functions for station #'+str(ksta+1)+' of '+str(Nsta)
+                print('Reading green functions for station #'+str(ksta+1)+' of '+str(Nsta))
                 for kfault in range(Nfaults):
                     #Get subfault GF directory
-                    nsub='sub'+rjust(str(int(source[kfault,0])),4,'0')
-                    nfault='subfault'+rjust(str(int(source[kfault,0])),4,'0')
+                    nsub='sub'+str(int(source[kfault,0])).rjust(4,'0')
+                    nfault='subfault'+str(int(source[kfault,0])).rjust(4,'0')
                     strdepth='%.4f' % source[kfault,3]
                     syn_path=home+project_name+'/GFs/tsunami/'+model_name+'_'+strdepth+'.'+nsub+'/'
                     #Get synthetics
@@ -564,9 +563,9 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tsunami,td
                     
                     if size(BP)>1:
                         if kfault==0:
-                            print 'Bandpassing on frequency band:'
-                            print '... '+str(BP)
-                            print '... station '+staname[ksta]
+                            print('Bandpassing on frequency band:')
+                            print('... '+str(BP))
+                            print('... station '+staname[ksta])
                         fsample=1./SS[ktrace].stats.delta
                         if BP[1]==inf: #A high pass filter has been requested
                             SS[ktrace].data=hfilt(SS[ktrace].data,BP[0],fsample,2)
@@ -587,10 +586,10 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tsunami,td
                 Data+=read(datafiles[ksta])         
         #Finished reading, filtering, etc now time shift by rupture time and resmaple to data
         ktrace=0
-        print "Aligning GFs and resampling to data times..."
+        print("Aligning GFs and resampling to data times...")
         for ksta in range(Nsta):
             #Loop over subfaults
-            print '...Working on station #'+str(ksta+1)+' of '+str(Nsta)
+            print('...Working on station #'+str(ksta+1)+' of '+str(Nsta))
             for kfault in range(Nfaults):
                 #Assign current GFs
                 ss=Stream(Trace())
@@ -612,7 +611,7 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tsunami,td
                 if kfault==0: #Initalize Gtemp (different size for each station)
                     #How many points left in the tiem series
                     npts=Data[ksta].stats.npts
-                    print "... ... "+str(npts)+" data points left over"
+                    print("... ... "+str(npts)+" data points left over")
                     Gtemp=zeros([npts,Nfaults*2])      
                 #Insert synthetics into Gtempview
                 Gtemp[0:npts,2*kfault]=ss.data
@@ -649,8 +648,8 @@ def getdata(home,project_name,GF_list,decimate,bandpass,quiet=False):
     #Read gf file and decide what needs to get loaded
     gf_file=home+project_name+'/data/station_info/'+GF_list
     GF=genfromtxt(gf_file,usecols=[3,4,5,6,7],skip_header=1,dtype='f8')
-    GFfiles=genfromtxt(gf_file,usecols=[8,9,10,11,12],dtype='S')  
-    stations=genfromtxt(gf_file,usecols=0,dtype='S')  
+    GFfiles=genfromtxt(gf_file,usecols=[8,9,10,11,12],dtype='U')  
+    stations=genfromtxt(gf_file,usecols=0,dtype='U')  
     
     #Parse out filtering pass bands
     displacement_bandpass=bandpass[0]
@@ -663,7 +662,7 @@ def getdata(home,project_name,GF_list,decimate,bandpass,quiet=False):
     i=where(GF[:,kgf]==1)[0]
     for ksta in range(len(i)):
         if quiet==False:  
-            print 'Assembling static offsets from '+stations[i[ksta]]+' into data vector.'
+            print('Assembling static offsets from '+stations[i[ksta]]+' into data vector.')
         dtemp=genfromtxt(GFfiles[i[ksta],kgf])
         n=dtemp[0]
         e=dtemp[1]
@@ -676,10 +675,11 @@ def getdata(home,project_name,GF_list,decimate,bandpass,quiet=False):
     i=where(GF[:,kgf]==1)[0]
     for ksta in range(len(i)):
         if quiet==False:  
-            print 'Assembling displacement waveforms from '+stations[i[ksta]]+' into data vector.'
-        n=read(GFfiles[i[ksta],kgf]+'.n')
-        e=read(GFfiles[i[ksta],kgf]+'.e')
-        u=read(GFfiles[i[ksta],kgf]+'.u')
+            print('Assembling displacement waveforms from '+str(stations[i[ksta]])+' into data vector.')
+        print(GFfiles[i[ksta],kgf].decode('UTF-8'))
+        n=read(GFfiles[i[ksta],kgf].decode('UTF-8')+'.n')
+        e=read(GFfiles[i[ksta],kgf].decode('UTF-8')+'.e')
+        u=read(GFfiles[i[ksta],kgf].decode('UTF-8')+'.u')
         if displacement_bandpass is not None: #Apply low pass filter to data
             fsample=1./n[0].stats.delta
             n[0].data=lfilt(n[0].data,displacement_bandpass,fsample,2)
@@ -703,7 +703,7 @@ def getdata(home,project_name,GF_list,decimate,bandpass,quiet=False):
     i=where(GF[:,kgf]==1)[0]
     for ksta in range(len(i)):
         if quiet==False:  
-            print 'Assembling acceleration waveforms from '+stations[i[ksta]]+' into data vector.'
+            print('Assembling acceleration waveforms from '+stations[i[ksta]]+' into data vector.')
         n=read(GFfiles[i[ksta],kgf]+'.n')
         e=read(GFfiles[i[ksta],kgf]+'.e')
         u=read(GFfiles[i[ksta],kgf]+'.u')
@@ -730,7 +730,7 @@ def getdata(home,project_name,GF_list,decimate,bandpass,quiet=False):
     i=where(GF[:,kgf]==1)[0]
     for ksta in range(len(i)):
         if quiet==False:  
-            print 'Assembling tsunami waveforms from '+stations[i[ksta]]+' into data vector.'
+            print('Assembling tsunami waveforms from '+stations[i[ksta]]+' into data vector.')
         tsun=read(GFfiles[i[ksta],kgf])
         if tsunami_bandpass is not None: #Apply low pass filter to data
             fsample=1./tsun[0].stats.delta
@@ -744,7 +744,7 @@ def getdata(home,project_name,GF_list,decimate,bandpass,quiet=False):
     i=where(GF[:,kgf]==1)[0]
     for ksta in range(len(i)):
         if quiet==False:  
-            print 'Assembling InSAR LOS offsets from '+stations[i[ksta]]+' into data vector.'
+            print('Assembling InSAR LOS offsets from '+stations[i[ksta]]+' into data vector.')
         dtemp=genfromtxt(GFfiles[i[ksta],kgf])
         los=dtemp[0]
         dlos=append(dlos,los)          
@@ -787,7 +787,7 @@ def getLs(home,project_name,fault_name,nfaults,num_windows,bounds):
     #Initalize
     L=zeros((2*N,2*N))
     #Which L am I building?
-    print 'Making discrete Laplace operator regularization matrix...'
+    print('Making discrete Laplace operator regularization matrix...')
     for kfault in range(N):#Loop over faults and fill regularization matrix
         stencil,values=laplace_stencil(kfault,nstrike,ndip,bounds)
         #Add strike slip branches of stencil
@@ -825,13 +825,13 @@ def getLt(home,project_name,fault_name,num_windows):
     source=loadtxt(home+project_name+'/data/model_info/'+fault_name,ndmin=2)
     N=len(source) #No. of subfaults
     if num_windows<2: #Duh
-        print 'WARNING temporal regularization is unecessary when only employing 1 time window. Returning zeros.'
+        print('WARNING temporal regularization is unecessary when only employing 1 time window. Returning zeros.')
         Lout=zeros((2*N,2*N))
         return Lout
     #Initalize
     L=eye(2*N*num_windows)
     #Ltest=zeros((N*num_windows,2*N*num_windows))
-    print 'Making first derivative temporal regularization matrix...'
+    print('Making first derivative temporal regularization matrix...')
     #Forward difference indices
     iforward=arange(N*2*(num_windows-1))
     L[iforward,iforward+(2*N)]=-1
@@ -861,7 +861,7 @@ def get_data_weights(home,project_name,GF_list,d,decimate):
     from obspy import read
     from mudpy.green import stdecimate
 
-    print 'Computing data weights...'
+    print('Computing data weights...')
     #Read gf file and decide what needs tog et loaded
     gf_file=home+project_name+'/data/station_info/'+GF_list
     GF=genfromtxt(gf_file,usecols=[3,4,5,6,7],dtype='f8')
@@ -918,7 +918,7 @@ def get_data_weights(home,project_name,GF_list,d,decimate):
         try:
             w[kinsert:kinsert+nsamples]=wu
         except:
-            print 'WARNING: mismatch in data weights length'
+            print('WARNING: mismatch in data weights length')
             w[kinsert:kinsert+nsamples]=wu[:-1]  #I don't know why this happens, wu is the right length but w is too short by one but only for the last station
         kinsert=kinsert+nsamples
     #Tsunami
@@ -966,7 +966,6 @@ def write_model(home,project_name,run_name,fault_name,model_name,rupture_speed,n
     
     from numpy import genfromtxt,loadtxt,arange,zeros,c_,savetxt,r_
     from mudpy.forward import get_mu
-    from string import rjust
    
     #Open model file
     f=genfromtxt(home+project_name+'/data/model_info/'+fault_name)
@@ -997,10 +996,10 @@ def write_model(home,project_name,run_name,fault_name,model_name,rupture_speed,n
         out1=r_[out1,f[:,0:8]]
         out2=r_[out2,f[:,8:10]]
     out=c_[out1,ss,ds,out2,trup,mu]
-    outdir=home+project_name+'/output/inverse_models/models/'+run_name+'.'+rjust(str(num),4,'0')+'.inv'
+    outdir=home+project_name+'/output/inverse_models/models/'+run_name+'.'+str(num).rjust(4,'0')+'.inv'
     #CHANGE this to rupture definition as #No  x            y        z(km)      str     dip      rake       rise    dura     slip    ss_len  ds_len rupt_time
     fmtout='%6i\t%.4f\t%.4f\t%8.4f\t%.2f\t%.2f\t%.2f\t%.2f\t%12.4e\t%12.4e\t%10.1f\t%10.1f\t%8.4f\t%.4e'
-    print '... writing model results to file '+outdir
+    print('... writing model results to file '+outdir)
     savetxt(outdir,out,fmtout,header='No,lon,lat,z(km),strike,dip,rise,dura,ss-slip(m),ds-slip(m),ss_len(m),ds_len(m),rupt_time(s),rigidity(Pa)')
         
     
@@ -1022,11 +1021,10 @@ def write_synthetics(home,project_name,run_name,GF_list,G,sol,ds,num,decimate):
     
     from obspy import read
     from numpy import array,savetxt,where,genfromtxt,squeeze,r_
-    from string import rjust
     from mudpy.green import stdecimate
     
-    print '... computing and saving synthetics...'
-    num=rjust(str(num),4,'0')
+    print('... computing and saving synthetics...')
+    num=str(num).rjust(4,'0')
     #Read gf file and decide what needs to get loaded
     gf_file=home+project_name+'/data/station_info/'+GF_list
     stations=genfromtxt(gf_file,usecols=[0],skip_header=1,dtype='S')
@@ -1140,9 +1138,8 @@ def write_log(home,project_name,run_name,k,rupture_speed,num_windows,lambda_spat
         Nothing
     '''
     
-    from string import rjust
     
-    num=rjust(str(k),4,'0')
+    num=str(k).rjust(4,'0')
     f=open(home+project_name+'/output/inverse_models/models/'+run_name+'.'+num+'.log','w')
     f.write('Project: '+project_name+'\n')
     f.write('Run name: '+run_name+'\n')
@@ -1208,7 +1205,7 @@ def laplace_stencil(ifault,nstrike,ndip,bounds):
     row=ifault/nstrike #Row number corresponding to this subfault
     column=ifault-(nstrike*row)
     if nstrike<4 or ndip<4:
-        print "ERROR: The fault model is too small for Laplacian regualrization. You need a minimum of 4 rows and 4 columns in the model."
+        print("ERROR: The fault model is too small for Laplacian regualrization. You need a minimum of 4 rows and 4 columns in the model.")
         return False,False
     if row==0 and column==0: #Top right corner
         stencil=array([ifault,ifault+1,ifault+nstrike])
@@ -1305,7 +1302,7 @@ def prep_synth(syn,st):
     if dt>=0: #Synthetic ends after data, crop it
         syn.trim(endtime=t2st)
     else: #Syntetic ends before data, throw an error
-        print "ERROR: Synthetic end time is before data end time, recompute longer syntehtics please."
+        print("ERROR: Synthetic end time is before data end time, recompute longer syntehtics please.")
         return 'Error in GF length'
     return syn
         
@@ -1329,10 +1326,10 @@ def gdims(datafiles,nfaults,decimate):
         if e[0].stats.npts==n[0].stats.npts==u[0].stats.npts:
             npts+=e[0].stats.npts
         else:
-            print str(e[0].stats.npts)+' pts in east component'
-            print str(n[0].stats.npts)+' pts in north component'
-            print str(u[0].stats.npts)+' pts in up component'
-            print 'ERROR: The 3 components of data are not the same length'
+            print(str(e[0].stats.npts)+' pts in east component')
+            print(str(n[0].stats.npts)+' pts in north component')
+            print(str(u[0].stats.npts)+' pts in up component')
+            print('ERROR: The 3 components of data are not the same length')
             return 'Error in forming G'
     G=zeros([3*npts,nfaults*2])
     return G 
@@ -1372,7 +1369,9 @@ def mini_station_file(outfile,sta,lon,lat,gffiles):
     '''
     f=open(outfile,'a')
     for k in range(len(sta)):
-        out=sta[k]+'\t'+repr(round(lon[k],6))+'\t'+repr(round(lat[k],6))+'\t'+gffiles[k]+'\n'
+        print(sta[k])
+        print(gffiles[k])
+        out=str(sta[k])+'\t'+repr(round(lon[k],6))+'\t'+repr(round(lat[k],6))+'\t'+str(gffiles[k])+'\n'
         f.write(out)
     f.close()
 
@@ -1471,7 +1470,7 @@ def get_VR(home,project_name,GF_list,sol,d,ds,decimate):
     from obspy import read
     from mudpy.green import stdecimate
     
-    print '... calcualting variance reduction...'
+    print('... calcualting variance reduction...')
     
     #Read gf file and decide what needs to get loaded
     gf_file=home+project_name+'/data/station_info/'+GF_list
@@ -1586,7 +1585,7 @@ def get_ABIC(G,GTG,sol,d,lambda_s,lambda_t,Ls,LsLs,Lt,LtLt):
     M=sol.size
     #Off you go, compute it
     if lambda_t==0: #There is only one contraint (no temporal regularization)
-        print "... Static ABIC requested"
+        print("... Static ABIC requested")
         s=norm(d-G.dot(sol))**2+(lambda_s**2)*norm(Ls.dot(sol))**2
         a1=N*log(s)
         a2=M*log(lambda_s**2)
@@ -1595,7 +1594,7 @@ def get_ABIC(G,GTG,sol,d,lambda_s,lambda_t,Ls,LsLs,Lt,LtLt):
         ABIC=a1-a2+a3
         return ABIC
     else: #There is a double regularization, use Fukahata et al. definition
-        print '... computing 2d-ABIC'
+        print('... computing 2d-ABIC')
         s=(norm(d-G.dot(sol))**2)+((lambda_s**2)*(norm(Ls.dot(sol))**2))+((lambda_t**2)*(norm(Lt.dot(sol))**2))
         a1=N*log(s)
         sq,a2=slogdet((lambda_s**2)*LsLs+(lambda_t**2)*LtLt)
@@ -1778,28 +1777,28 @@ def model_covariance(home,project_name,run_name,run_number,fault_name,G_name,nfa
                 lt=float(line.split('=')[1])
     #Read data variances and make data covariance
     #Dos trike slip and dip slip in different stages
-    print 'Getting data covariance...'
+    print('Getting data covariance...')
     #Cd=data_covariance(gf_file,decimate)
     #Cd=diag(Cd)
     #Cd=diag(1/Cd)
     #Load G
-    print 'Computing for SS model parameters'
-    print 'Getting G...'
+    print('Computing for SS model parameters')
+    print('Getting G...')
     G_name=home+project_name+'/GFs/matrices/'+G_name
-    print 'Loading '+G_name
+    print('Loading '+G_name)
     if G_name[-3:]!='npy':
             G_name=G_name+'.npy'
     G=load(G_name)
     iss=2*arange(G.shape[1]/2)
     ids=2*arange(G.shape[1]/2)+1
     gc.collect()
-    print 'Compressing G...'
+    print('Compressing G...')
     #Get regularization matrices
-    print 'Getting regularization matrices...'
+    print('Getting regularization matrices...')
     Ls=getLs(home,project_name,fault_name,nfaults,num_windows,bounds)
     Lt=getLt(home,project_name,fault_name,num_windows)
     #Read model
-    print 'Reading model'
+    print('Reading model')
     model=outdir+run_name+'.'+run_number+'.inv'
     model=genfromtxt(model,usecols=(8,9))
     m0=zeros((model.size,1))
@@ -1808,28 +1807,28 @@ def model_covariance(home,project_name,run_name,run_number,fault_name,G_name,nfa
     #rotate
     m0=ds2rot(m0,beta)
     #Get data
-    print 'Reading data...'
+    print('Reading data...')
     d=getdata(home,project_name,GF_list,decimate,lowpass)
     #Compute residual
     sm0=norm(d-G.dot(m0))**2+(ls**2)*norm(Ls.dot(m0))**2+(lt**2)*norm(Lt.dot(m0))**2
     #Get sigma
     sigma=sm0/len(d)
     #Compute model covariance
-    print 'Computing model covariance...'
+    print('Computing model covariance...')
     #Cd=csc_matrix(Cd)
     Cm=(G.T).dot(G)+(ls**2)*(Ls.T).dot(Ls)+(lt**2)*(Lt.T).dot(Lt)
-    print 'Inverting G\'G'
+    print('Inverting G\'G')
     Cm=inv(Cm)
     Cm=Cm*sigma
-    print 'Extracting diagonal terms...'
+    print('Extracting diagonal terms...')
     Cm=Cm.diagonal()
     G=None
     #Prep for output
     Cm_name=G_name.split('.npy')[0]+'.cov'
-    print 'Saving to '+Cm_name
+    print('Saving to '+Cm_name)
     save(Cm_name,Cm)
     deltaT=datetime.now()-t0
-    print 'Well that only took '+str(deltaT)
+    print('Well that only took '+str(deltaT))
     
     
     
@@ -1919,7 +1918,6 @@ def make_tgf_dtopo(home,project_name,model_name,tgf_file,coast_file,fault_name,
     import datetime
     from numpy import genfromtxt,zeros,arange,meshgrid,ones,c_,savetxt,argmin,nan,where,mean
     from obspy import read
-    from string import rjust
     from netCDF4 import Dataset
     from scipy.interpolate import griddata
 
@@ -1952,24 +1950,24 @@ def make_tgf_dtopo(home,project_name,model_name,tgf_file,coast_file,fault_name,
     except:
         lonb=bathy_dx.variables['x'][:]
         latb=bathy_dx.variables['y'][:]
-    #print "Correcting longitude"
+    #print("Correcting longitude"
     #lon=360+lon
     #lonb=360+lonb
     loni,lati=meshgrid(lonb,latb)
     #Now apply motion from every subfault
     for ksub in range(hot_start,len(f)): #Loops through subfaults
         if ksub%10==0:
-            print '... working on subfault '+str(ksub)+' of '+str(len(f))
+            print('... working on subfault '+str(ksub)+' of '+str(len(f)))
         #Depth string
         zs=f[ksub,3]
         strdepth='%.4f' % zs
         #subfault number
-        sub=rjust(str(ksub+1),4,'0')
+        sub=str(ksub+1).rjust(4,'0')
         #Subfault dir
         subdir=green_dir+model_name+'_'+strdepth+'.sub'+sub+'/'
         for ksta in range(len(sta)):
             if ksta%500==0:
-                print '... ... working on seafloor grid point '+str(ksta)+' of '+str(len(sta))
+                print('... ... working on seafloor grid point '+str(ksta)+' of '+str(len(sta)))
             eds=read(subdir+staname[ksta]+'.subfault'+sub+'.DS.disp.e')
             nds=read(subdir+staname[ksta]+'.subfault'+sub+'.DS.disp.n')
             uds=read(subdir+staname[ksta]+'.subfault'+sub+'.DS.disp.z')
@@ -2026,14 +2024,14 @@ def make_tgf_dtopo(home,project_name,model_name,tgf_file,coast_file,fault_name,
                         mask[k1,k2]=nan
             imask1,imask2=where(mask==0)#Points tot he right DO apply horiz. effect
         #Now go one epoch at a time, and interpolate all fields
-        print '... interpolating coseismic offsets to a regular grid'
+        print('... interpolating coseismic offsets to a regular grid')
         if instantaneous==True:
             nt_iter=2
         else:
             nt_iter=uSS.shape[0]
         for kt in range(nt_iter):
             if kt%20==0:
-                print '... ... working on time slice '+str(kt)+' of '+str(nt_iter)
+                print('... ... working on time slice '+str(kt)+' of '+str(nt_iter))
             if instantaneous==True and kt==1:
                 
                 nds=griddata((lon,lat),mean(nDS[-average_instantaneous:,:],axis=0),(loni,lati),method='linear',fill_value=0)
@@ -2073,7 +2071,7 @@ def make_tgf_dtopo(home,project_name,model_name,tgf_file,coast_file,fault_name,
                 dtopo_ds[kwrite:kwrite+numel,:]=c_[tvec,xyz_ds]
                 dtopo_ss[kwrite:kwrite+numel,:]=c_[tvec,xyz_ss]
                 kwrite=kwrite+numel
-        print '... writting dtopo files'
+        print('... writting dtopo files')
         savetxt(subdir+'DS.dtopo',dtopo_ds,fmt='%i\t%.6f\t%.6f\t%.4e')
         savetxt(subdir+'SS.dtopo',dtopo_ss,fmt='%i\t%.6f\t%.6f\t%.4e')
              
@@ -2084,7 +2082,6 @@ def tsunami_gf(home,project_name,model_name,fault_name,hot_start):
     Create Geoclaw parameter files and make system call to run simulation
     '''
     from numpy import genfromtxt,r_,arange
-    from string import rjust
     from os import makedirs,chdir
     from shutil import copy
     from shlex import split
@@ -2096,24 +2093,24 @@ def tsunami_gf(home,project_name,model_name,fault_name,hot_start):
     #Where is the data
     green_dir=home+project_name+'/GFs/tsunami/'  
     for ksub in range(hot_start,len(f)):
-        print '... working on subfault '+str(ksub)+' of '+str(len(f))
+        print('... working on subfault '+str(ksub)+' of '+str(len(f)))
         
         #Depth string
         zs=f[ksub,3]        
         strdepth='%.4f' % zs
         #subfault number
-        sub=rjust(str(int(f[ksub,0])),4,'0')
+        sub=str(int(f[ksub,0])).rjust(4,'0')
         #Subfault dir
         subdir=green_dir+model_name+'_'+strdepth+'.sub'+sub+'/'
         #Make dirs, one for DS one for SS
         try:
             makedirs(subdir+'_DS')
         except:
-            print 'Warning: DS directory already exists'
+            print('Warning: DS directory already exists')
         try:
             makedirs(subdir+'_SS')
         except:
-            print 'Warning: SS directory already exists'
+            print('Warning: SS directory already exists')
         #Move setrun.py and makefile into each directory
         copy(home+project_name+'/data/station_info/setrun.py',subdir+'_DS/')
         copy(home+project_name+'/data/station_info/Makefile',subdir+'_DS/')
@@ -2150,7 +2147,6 @@ def tsunami2sac(home,project_name,model_name,fault_name,tlims,dt,time_epi,hot_st
     Create Geoclaw parameter files and make system call to run simulation
     '''
     from numpy import genfromtxt,where,intersect1d,arange,interp,r_
-    from string import rjust
     from obspy import Stream,Trace
     
     #Load fault file
@@ -2165,10 +2161,10 @@ def tsunami2sac(home,project_name,model_name,fault_name,tlims,dt,time_epi,hot_st
         zs=f[ksub,3]        
         strdepth='%.4f' % zs
         #subfault number
-        sub=rjust(str(int(f[ksub,0])),4,'0')
+        sub=str(int(f[ksub,0])).rjust(4,'0')
         #Subfault dir
         subdir=green_dir+model_name+'_'+strdepth+'.sub'+sub+'/'
-        print '... working on  '+subdir
+        print('... working on  '+subdir)
         for kgauge in range(gauges.size):
             #Read gauge.fort file
             if gauges.size<2:
@@ -2289,41 +2285,41 @@ def data_norms(home,project_name,GF_list,decimate=None,bandpass=[None,None,None]
     if len(istatic)>0:
         kend+=len(istatic)*3
         N=norm(d[0:kend])
-        print "||statics|| = "+str(N)
+        print("||statics|| = "+str(N))
     else:
-        print "||statics|| = NaN"
+        print("||statics|| = NaN")
     if len(idisp)>0: #read displacememnt waveforms
         kstart=kend
         for kfile in range(len(idisp)):
             n=read(GFfiles[idisp[kfile],1]+'.n')
             kend+=3*n[0].stats.npts
         N=norm(d[kstart:kend])
-        print "||disp. waveforms|| = "+str(N)
+        print("||disp. waveforms|| = "+str(N))
     else:
-        print "||disp. waveforms|| = NaN"
+        print("||disp. waveforms|| = NaN")
     if len(ivel)>0:
         kstart=kend
         for kfile in range(len(ivel)):
             n=read(GFfiles[ivel[kfile],2]+'.n')
             kend+=3*n[0].stats.npts
         N=norm(d[kstart:kend])
-        print "||vel. waveforms|| = "+str(N)
+        print("||vel. waveforms|| = "+str(N))
     else:
-        print "||vel. waveforms|| = NaN"
+        print("||vel. waveforms|| = NaN")
     if len(itsun)>0:
         kstart=kend
         for kfile in range(len(itsun)):
             tsun=read(GFfiles[itsun[kfile],3])
             kend+=tsun[0].stats.npts
         N=norm(d[kstart:kend])
-        print "||tsunami|| = "+str(N)
+        print("||tsunami|| = "+str(N))
     else:
-        print "||tsunami|| = NaN"
+        print("||tsunami|| = NaN")
     if len(iinsar)>0:
         kstart=kend
         kend+=len(iinsar)
         N=norm(d[kstart:kend])
-        print "||InSAR|| = "+str(N)
+        print("||InSAR|| = "+str(N))
     else:
-        print "||InSAR|| = NaN"
+        print("||InSAR|| = NaN")
     

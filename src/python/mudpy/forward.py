@@ -26,11 +26,10 @@ def waveforms(home,project_name,rupture_name,station_file,model_name,run_name,in
     '''
     from numpy import loadtxt,genfromtxt,allclose,vstack,deg2rad,array,sin,cos
     from obspy import read,Stream
-    from string import rjust
     import datetime
     import gc
     
-    print 'Solving for kinematic problem'
+    print('Solving for kinematic problem')
     #Output where?
     outpath=home+project_name+'/output/forward_models/'
     logpath=home+project_name+'/logs/'
@@ -50,7 +49,7 @@ def waveforms(home,project_name,rupture_name,station_file,model_name,run_name,in
         vord='vel'
     #Loop over stations
     for ksta in range(hot_start,len(staname)):
-        print 'Working on station '+staname[ksta]+' ('+str(ksta+1)+'/'+str(len(staname))+')'
+        print('Working on station '+staname[ksta]+' ('+str(ksta+1)+'/'+str(len(staname))+')')
         #Initalize output
         n=Stream()
         e=Stream()
@@ -60,10 +59,10 @@ def waveforms(home,project_name,rupture_name,station_file,model_name,run_name,in
         try:
             for k in range(source.shape[0]):
                 if k%100==0:
-                    print '... working on parameter '+str(k)+' of '+str(len(source))
+                    print('... working on parameter '+str(k)+' of '+str(len(source)))
                 #Get subfault parameters
-                nfault='subfault'+rjust(str(int(source[k,0])),4,'0')
-                nsub='sub'+rjust(str(int(source[k,0])),4,'0')
+                nfault='subfault'+str(int(source[k,0])).rjust(4,'0')
+                nsub='sub'+str(int(source[k,0])).rjust(4,'0')
                 zs=source[k,3]
                 ss_slip=source[k,8]
                 ds_slip=source[k,9]
@@ -136,7 +135,7 @@ def waveforms(home,project_name,rupture_name,station_file,model_name,run_name,in
             n.write(outpath+run_name+'.'+sta+'.'+vord+'.n',format='SAC')
             z.write(outpath+run_name+'.'+sta+'.'+vord+'.u',format='SAC')
         except:
-            print 'An error coccured, skipping station'
+            print('An error coccured, skipping station')
     f=open(logpath+'waveforms.'+now+'.log','a')
     f.write(log)
     f.close()
@@ -169,14 +168,13 @@ def waveforms_matrix(home,project_name,fault_name,rupture_name,station_file,GF_l
     '''
     from numpy import loadtxt,genfromtxt,allclose,vstack,deg2rad,array,sin,cos,where,zeros,arange
     from obspy import read,Stream,Trace
-    from string import rjust
     import datetime
     import gc
     from mudpy.inverse import getG
     from linecache import getline
     from os import remove
     
-    print 'Solving for kinematic problem'
+    print('Solving for kinematic problem')
     #Output where?
     outpath=home+project_name+'/output/forward_models/'
     logpath=home+project_name+'/logs/'
@@ -206,7 +204,7 @@ def waveforms_matrix(home,project_name,fault_name,rupture_name,station_file,GF_l
     gfsta=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=0,skip_header=1,dtype='S6')
     #Loop over stations
     for ksta in range(hot_start,len(staname)):
-        print 'Working on station '+staname[ksta]+' ('+str(ksta+1)+'/'+str(len(staname))+')'
+        print('Working on station '+staname[ksta]+' ('+str(ksta+1)+'/'+str(len(staname))+')')
         #Initalize output
         n=Stream()
         e=Stream()
@@ -285,7 +283,7 @@ def waveforms_fakequakes(home,project_name,fault_name,rupture_list,GF_list,
     from numpy import genfromtxt,array
     import datetime
     
-    print 'Solving for kinematic problem(s)'
+    print('Solving for kinematic problem(s)')
     #Time for log file
     now=datetime.datetime.now()
     now=now.strftime('%b-%d-%H%M')
@@ -298,15 +296,15 @@ def waveforms_fakequakes(home,project_name,fault_name,rupture_list,GF_list,
         all_sources=genfromtxt(home+project_name+'/data/'+rupture_list,dtype='S')
     
     #Load all synthetics
-    print '... loading all synthetics into memory'
+    print('... loading all synthetics into memory')
     Nss,Ess,Zss,Nds,Eds,Zds=load_fakequakes_synthetics(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name)
-    print '... ... done'
+    print('... ... done')
     
     #Now loop over rupture models
     for ksource in range(hot_start,len(all_sources)):
-        print '... solving for source '+str(ksource)+' of '+str(len(all_sources))
+        print('... solving for source '+str(ksource)+' of '+str(len(all_sources)))
         rupture_name=all_sources[ksource]
-        print rupture_name
+        print(rupture_name)
         
         if rupture_list!=None:
             #Get epicentral time
@@ -336,7 +334,7 @@ def hf_waveforms(home,project_name,fault_name,rupture_list,GF_list,model_name,ru
     #Now loop over rupture models
     Nsources=all_sources.size
     for ksource in range(hot_start,Nsources):        
-        print '... solving HF waveforms for source '+str(ksource)+' of '+str(Nsources)
+        print('... solving HF waveforms for source '+str(ksource)+' of '+str(Nsources))
         if Nsources>1:
             rupture_name=all_sources[ksource]
         else:
@@ -393,7 +391,7 @@ def make_parallel_hfsims(home,project_name,rupture_name,ncpus,sta,sta_lon,sta_la
         fmt='%d\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6E'
         savetxt(home+project_name+'/output/ruptures/mpi_rupt.'+str(k)+'.'+rupture_name,mpi_source,fmt=fmt)
     #Make mpi system call
-    print "MPI: Starting Stochastic High Frequency Simulation on ", ncpus, "CPUs"
+    print("MPI: Starting Stochastic High Frequency Simulation on ", ncpus, "CPUs")
     mud_source=environ['MUD']+'/src/python/mudpy/'
     mpi='mpiexec -n '+str(ncpus)+' python '+mud_source+'hfsims_parallel.py run_parallel_hfsims '+home+' '+project_name+' '+rupture_name+' '+str(N)+' '+str(M0)+' '+sta+' '+str(sta_lon)+' '+str(sta_lat)+' '+model_name+' '+str(rise_time_depths0)+' '+str(rise_time_depths1)+' '+str(moho_depth_in_km)+' '+component+' '+str(total_duration)+' '+str(hf_dt)+' '+str(stress_parameter)+' '+str(kappa)+' '+str(Qexp)+' '+str(Pwave)+' '+str(high_stress_depth)
     mpi=split(mpi)
@@ -418,12 +416,12 @@ def run_hf_waveforms(home,project_name,fault_name,rupture_list,GF_list,model_nam
     Nsources=all_sources.size
     for ksource in range(hot_start,Nsources):
         
-        print '... solving HF waveforms for source '+str(ksource)+' of '+str(Nsources)
+        print('... solving HF waveforms for source '+str(ksource)+' of '+str(Nsources))
         if Nsources>1:
             rupture_name=all_sources[ksource]
         else:
             rupture_name=str(all_sources)
-        print rupture_name
+        print(rupture_name)
         
         #Get epicentral time
         epicenter,time_epi=read_fakequakes_hypo_time(home,project_name,rupture_name)
@@ -457,7 +455,7 @@ def write_parallel_hfsims(home,project_name,rupture_name,station,component,remov
     parallel_waveforms=glob(home+project_name+'/output/waveforms/'+rupture+'/'+station+'.HN'+component+'.???.sac')
     #print "Number of MPI outputs: " + str(len(parallel_waveforms))
     if len(parallel_waveforms)==0:
-        print "No waveforms at this location to add in"
+        print("No waveforms at this location to add in")
     else:
         for r in range(len(parallel_waveforms)):
             #print parallel_waveforms[r]
@@ -473,7 +471,7 @@ def write_parallel_hfsims(home,project_name,rupture_name,station,component,remov
             for r in range(len(parallel_waveforms)):
                 os.remove(parallel_waveforms[r])
         else:
-            print "Keeping all parallel output files because you didn't tell me to delete them"
+            print("Keeping all parallel output files because you didn't tell me to delete them")
                        
 def write_fakequakes_hf_waveforms_one_by_one(home,project_name,rupture_name,hf_trace,component):
     '''
@@ -547,7 +545,7 @@ def match_filter(home,project_name,fault_name,rupture_list,GF_list,
         rupture=rupture_name.replace('.rupt','')
         directory=home+project_name+'/output/waveforms/'+rupture+'/'
         
-        print 'Running matched filter for all stations for rupture '+ rupture_name
+        print('Running matched filter for all stations for rupture '+ rupture_name)
         
         #Get epicentral time
         epicenter,time_epi=read_fakequakes_hypo_time(home,project_name,rupture_name)
@@ -638,7 +636,6 @@ def load_fakequakes_synthetics(home,project_name,fault_name,model_name,GF_list,G
     '''
     from numpy import genfromtxt,loadtxt
     from obspy import read    
-    from string import rjust
 
     vord='disp'
     if G_from_file==True: #load from file
@@ -658,11 +655,11 @@ def load_fakequakes_synthetics(home,project_name,fault_name,model_name,GF_list,G
         Nfaults=source.shape[0] #Number of subfaults
         kindex=0
         for ksta in range(Nsta):
-            print 'Reading green functions for station #'+str(ksta+1)+' of '+str(Nsta)
+            print('Reading green functions for station #'+str(ksta+1)+' of '+str(Nsta))
             for kfault in range(Nfaults):
                 #Get subfault GF directory
-                nsub='sub'+rjust(str(int(source[kfault,0])),4,'0')
-                nfault='subfault'+rjust(str(int(source[kfault,0])),4,'0')
+                nsub='sub'+str(int(source[kfault,0])).rjust(4,'0')
+                nfault='subfault'+str(int(source[kfault,0])).rjust(4,'0')
                 strdepth='%.4f' % source[kfault,3]
                 syn_path=home+project_name+'/GFs/dynamic/'+model_name+'_'+strdepth+'.'+nsub+'/'
                 #Get synthetics
@@ -681,7 +678,7 @@ def load_fakequakes_synthetics(home,project_name,fault_name,model_name,GF_list,G
                     Nds+=read(syn_path+staname[ksta]+'.'+nfault+'.DS.'+vord+'.n')
                     Zds+=read(syn_path+staname[ksta]+'.'+nfault+'.DS.'+vord+'.z')
                 kindex+=1
-        print 'Writting synthetics to miniSEED, hang on this might take a minute or two.'
+        print('Writting synthetics to miniSEED, hang on this might take a minute or two.')
         Ess.write(home+project_name+'/GFs/matrices/'+G_name+'.Ess.'+vord+'.mseed',format='MSEED')
         Nss.write(home+project_name+'/GFs/matrices/'+G_name+'.Nss.'+vord+'.mseed',format='MSEED')
         Zss.write(home+project_name+'/GFs/matrices/'+G_name+'.Zss.'+vord+'.mseed',format='MSEED')
@@ -878,9 +875,8 @@ def coseismics(home,project_name,rupture_name,station_file,hot_start=None):
         Nothing
     '''
     from numpy import loadtxt,genfromtxt,array,savetxt,unique,where
-    from string import rjust
     
-    print 'Solving for static problem'
+    print('Solving for static problem')
     #Output where?
     outpath=home+project_name+'/output/forward_models/'
     #load source
@@ -899,16 +895,16 @@ def coseismics(home,project_name,rupture_name,station_file,hot_start=None):
         e=array([0])
         z=array([0])
         sta=staname[ksta]
-        print 'Working on station '+staname[ksta]+' ('+str(ksta+1)+'/'+str(len(staname))+')'
+        print('Working on station '+staname[ksta]+' ('+str(ksta+1)+'/'+str(len(staname))+')')
         #Loop over sources
         for k in range(len(source_id)):
-            print k
+            print(k)
             #Get subfault parameters
-            nfault='subfault'+rjust(str(int(source_id[k])),4,'0')
+            nfault='subfault'+str(int(source_id[k])).rjust(4,'0')
             ifault=where(source[:,0]==source_id[k])[0]
             ss_slip=source[ifault,8].sum()
             ds_slip=source[ifault,9].sum()
-            print 'ds_slip='+str(ds_slip)
+            print('ds_slip='+str(ds_slip))
             #Where's the data
             syn_path=home+project_name+'/GFs/static/'
             #Get synthetics
@@ -926,19 +922,19 @@ def coseismics(home,project_name,rupture_name,station_file,hot_start=None):
             nds=coseis_ds[0]
             eds=coseis_ds[1]
             zds=coseis_ds[2]
-            print 'zds='+str(zds)
+            print('zds='+str(zds))
             #get rake contribution and moment multiplier
             etotal=ds_slip*eds+ss_slip*ess
             ntotal=ds_slip*nds+ss_slip*nss
             ztotal=ds_slip*zds+ss_slip*zss
-            print 'ztotal='+str(ztotal)
+            print('ztotal='+str(ztotal))
             #Add to previous subfault's results
             e=e+etotal
             n=n+ntotal
             z=z+ztotal
-            print 'n='+str(n)
-            print 'e='+str(e)
-            print 'z='+str(z)
+            print('n='+str(n))
+            print('e='+str(e))
+            print('z='+str(z))
         #Save results
         savetxt(outpath+sta+'.static.neu',(n,e,z))
 
@@ -964,9 +960,8 @@ def coseismics_matrix(home,project_name,rupture_name,station_file,G_from_file,G_
         Nothing
     '''
     from numpy import loadtxt,genfromtxt,array,savetxt,unique,where,zeros,load,save
-    from string import rjust
     
-    print 'Solving for static problem'
+    print('Solving for static problem')
     #Output where?
     outpath=home+project_name+'/output/forward_models/'
     #load source
@@ -981,7 +976,7 @@ def coseismics_matrix(home,project_name,rupture_name,station_file,G_from_file,G_
     for ksta in range(len(staname)):
         for ksource in range(len(source_id)):
             #Get subfault parameters
-            nfault='subfault'+rjust(str(int(source_id[ksource])),4,'0')
+            nfault='subfault'+str(int(source_id[ksource])).rjust(4,'0')
             ifault=where(source[:,0]==source_id[ksource])[0]
             #Combine into model vector
             ss_slip=source[ifault,8].sum()
@@ -995,21 +990,21 @@ def coseismics_matrix(home,project_name,rupture_name,station_file,G_from_file,G_
     if G_from_file==True: #load from file
         if G_name[-3:]!='npy':
             G_name=G_name+'.npy'
-        print 'Loading G from file '+G_name
+        print('Loading G from file '+G_name)
         G=load(G_name)
     else:
     #initalize matrices
         G=zeros((3*len(staname),2*len(source_id)))
-        print '... Assembling GFs matrix'
+        print('... Assembling GFs matrix')
         #Loop over stations
         for ksta in range(len(staname)):
             if ksta % 10 == 0:
-                print '... ... Loading station %i of %i' %(ksta,len(staname))
+                print('... ... Loading station %i of %i' %(ksta,len(staname)))
             sta=staname[ksta]
             #Loop over sources
             for ksource in range(len(source_id)):
                 #Get subfault parameters
-                nfault='subfault'+rjust(str(int(source_id[ksource])),4,'0')
+                nfault='subfault'+str(int(source_id[ksource])).rjust(4,'0')
                 #Where's the synthetic data
                 syn_path=home+project_name+'/GFs/static/'
                 #Get synthetics
@@ -1035,10 +1030,10 @@ def coseismics_matrix(home,project_name,rupture_name,station_file,G_from_file,G_
                 #East
                 G[3*ksta+2,2*ksource]=zss  ;  G[3*ksta+2,2*ksource+1]=zds
         #Save G matrix
-        print 'Saving GF matrix to '+G_name+' this might take just a second...'
+        print('Saving GF matrix to '+G_name+' this might take just a second...')
         save(G_name,G)
     #Now go on to matrix multiply and save solutions
-    print 'Matrix multiplying and saving output...DONE'
+    print('Matrix multiplying and saving output...DONE')
     d=G.dot(m)
     for ksta in range(len(staname)):
         sta=staname[ksta]
@@ -1116,7 +1111,6 @@ def move_seafloor(home,project_name,run_name,topo_dx_file,topo_dy_file,tgf_file,
     import datetime
     from numpy import genfromtxt,zeros,meshgrid,ones,c_,savetxt,delete,where,nan,argmin,arange
     from obspy import read
-    from string import rjust
     from netCDF4 import Dataset
     from scipy.interpolate import griddata
     from mudpy.inverse import interp_and_resample,grd2xyz
@@ -1128,8 +1122,8 @@ def move_seafloor(home,project_name,run_name,topo_dx_file,topo_dy_file,tgf_file,
     stanames=genfromtxt(home+project_name+'/data/station_info/'+tgf_file,usecols=0,dtype='S')
     #lon=360+sta[:,1]
     lon=sta[:,1]
-    print 'correcting longitude'
-    print lon[0]
+    print('correcting longitude')
+    print(lon[0])
     lat=sta[:,2]
     #Get fault file
     #f=genfromtxt(home+project_name+'/data/model_info/'+fault_name)
@@ -1157,7 +1151,7 @@ def move_seafloor(home,project_name,run_name,topo_dx_file,topo_dy_file,tgf_file,
     idelete=[]
     for ksta in range(len(sta)):
         if ksta%500==0:
-            print '... ... working on seafloor grid point '+str(ksta)+' of '+str(len(sta))
+            print('... ... working on seafloor grid point '+str(ksta)+' of '+str(len(sta)))
         try: #If no data then delete
             if static==False: #We're reading waveforms
                 #e=read(data_dir+run_name+'.'+rjust(str(int(sta[ksta,0])),4,'0')+'.disp.e')
@@ -1203,7 +1197,7 @@ def move_seafloor(home,project_name,run_name,topo_dx_file,topo_dy_file,tgf_file,
             kwrite+=1
         except: #Data was missing, delete from lat,lon
             pass
-            print 'No data for station '+str(ksta)+', deleting from coordinates list'
+            print('No data for station '+str(ksta)+', deleting from coordinates list')
             idelete.append(ksta)
     #Clean up missing data
     if len(idelete)!=0:
@@ -1224,14 +1218,14 @@ def move_seafloor(home,project_name,run_name,topo_dx_file,topo_dy_file,tgf_file,
             for k2 in range(loni.shape[1]):
                 ip=argmin(abs(lati[k1,k2]-coast[:,1]))
                 if loni[k1,k2]>coast[ip,0]:#Change this depending on which direction you want effect to be applied
-                    print 'Applying coastal mask'
+                    print('Applying coastal mask')
                     mask[k1,k2]=nan
         imask1,imask2=where(mask==0)#Points tot he right DO apply horiz. effect
-    print '... interpolating coseismic offsets to a regular grid'
+    print('... interpolating coseismic offsets to a regular grid')
     nt_iter=umat.shape[0]
     for kt in range(nt_iter):
         if kt%20==0:
-            print '... ... working on time slice '+str(kt)+' of '+str(nt_iter)
+            print('... ... working on time slice '+str(kt)+' of '+str(nt_iter))
         ninterp=griddata((lon,lat),nmat[kt,:],(loni,lati),method='cubic',fill_value=0)
         einterp=griddata((lon,lat),emat[kt,:],(loni,lati),method='cubic',fill_value=0)
         uinterp=griddata((lon,lat),umat[kt,:],(loni,lati),method='cubic',fill_value=0)
@@ -1239,9 +1233,9 @@ def move_seafloor(home,project_name,run_name,topo_dx_file,topo_dy_file,tgf_file,
         uout=uinterp.copy()
         #Apply effect of topography advection
         if topo_effect==False:
-            print 'WARNING: No topography effect added'
+            print('WARNING: No topography effect added')
         else:
-            print 'Applying topo effect'
+            print('Applying topo effect')
             if coast_file==None: #Apply everywhere
                 uout=uout+zdx*einterp+zdy*ninterp
             else: #Don't apply topo effect on dry land
@@ -1270,9 +1264,9 @@ def move_seafloor(home,project_name,run_name,topo_dx_file,topo_dy_file,tgf_file,
             dtopo[kwrite:kwrite+numel,1:3]=xyz[:,0:2]
             dtopo[kwrite:kwrite+numel,:]=c_[tvec,xyz]
             kwrite=kwrite+numel
-    print '... writting dtopo files'
+    print('... writting dtopo files')
     savetxt(data_dir+outname+'.dtopo',dtopo,fmt='%i\t%.6f\t%.6f\t%.4e')   
-    print 'Output to '+data_dir+outname+'.dtopo' 
+    print('Output to '+data_dir+outname+'.dtopo') 
             
 
 def move_seafloor_okada(mudpy_file,out_file,x,y,refine_factor=None,mu=40e9,return_object=False):
@@ -1574,7 +1568,7 @@ def add_traces(ss,ds,ssmult,dsmult):
     
     #If one stream object is empty set it to zeros, if both are empty then freak out
     if ss.count()==0 and ds.count()==0:
-        print 'FATAL ERROR: can\'t add 2 empty stream objects doofus'
+        print('FATAL ERROR: can\'t add 2 empty stream objects doofus')
         return None
     if ss.count()==0:
         ss=ds.copy()
@@ -1887,7 +1881,7 @@ def coulomb_xy2latlon(f,epicenter,fout):
     la=zeros(len(d))
     for k in range(len(d)):
         if isnan(az[k]): #No azimuth because I'm on the epicenter
-            print 'Point on epicenter'
+            print('Point on epicenter')
             lo[k]=epicenter[0]
             la[k]=epicenter[1]
         else:
@@ -1932,7 +1926,7 @@ def coulomb_disp_xy2latlon(f,epicenter,fout):
     la=zeros(len(d))
     for k in range(len(d)):
         if isnan(az[k]): #No azimuth because I'm on the epicenter
-            print 'Point on epicenter'
+            print('Point on epicenter')
             lo[k]=epicenter[0]
             la[k]=epicenter[1]
         else:
@@ -2031,7 +2025,7 @@ def makefault(fout,strike,dip,nstrike,dx_dip,dx_strike,epicenter,num_updip,num_d
     la=zeros(len(d))
     for k in range(len(d)):
         if isnan(az[k]): #No azimuth because I'm on the epicenter
-            print 'Point on epicenter'
+            print('Point on epicenter')
             lo[k]=epicenter[0]
             la[k]=epicenter[1]
         else:
@@ -2215,7 +2209,7 @@ def padGFs(pad):
     pad=150
     folders=glob('/Users/dmelgar/Slip_inv/Nepal_fwd/GFs/dynamic/*sub*')
     for k in range(len(folders)):
-        print str(k)+' / '+str(len(folders))
+        print(str(k)+' / '+str(len(folders)))
         esubs=glob(folders[k]+'/*vel.e')
         nsubs=glob(folders[k]+'/*vel.n')
         zsubs=glob(folders[k]+'/*vel.z')
@@ -2249,7 +2243,6 @@ def make_grid(lon_min,lon_max,lat_min,lat_max,delta_lon,delta_lat,out_file):
     '''
     
     from numpy import arange
-    from string import rjust
     
     lon=arange(lon_min,lon_max+delta_lon,delta_lon)
     lat=arange(lat_min,lat_max+delta_lat,delta_lat)
@@ -2257,7 +2250,7 @@ def make_grid(lon_min,lon_max,lat_min,lat_max,delta_lon,delta_lat,out_file):
     f=open(out_file,'w')
     for i in range(len(lon)):
         for j in range(len(lat)):
-            out='%s\t%10.4f\t%10.4f\n' %('SF'+rjust(str(k),4,'0'),lon[i],lat[j])
+            out='%s\t%10.4f\t%10.4f\n' %('SF'+str(k).rjust(4,'0'),lon[i],lat[j])
             f.write(out)
             k+=1
     f.close()
@@ -2395,11 +2388,11 @@ def mudpy2sw4source(rupt,time_offset=0.0):
         zero_slip=False
         if slip==0:
             zero_slip=True
-            print 'Zero slip at '+str(kfault)
+            print('Zero slip at '+str(kfault))
         elif rise_time==0:
             slip=0
             zero_slip=True
-            print 'Zero rise time at '+str(kfault)     
+            print('Zero rise time at '+str(kfault))     
             
         #make rake be -180 to 180
         if rake>180:
@@ -2585,11 +2578,11 @@ def mudpy2srf(rupt,log_file,stf_dt=0.1,stf_type='triangle',Ndip=None,time_pad=5.
         #If subfault has zero rise time make it have tiny slip rate
         if slip==0:
             zero_slip=True
-            print 'Zero slip at '+str(kfault)
+            print('Zero slip at '+str(kfault))
         elif rise_time==0:
             slip=0
             zero_slip=True
-            print 'Zero rise time at '+str(kfault)
+            print('Zero rise time at '+str(kfault))
         else:
             tstf,stf=build_source_time_function(rise_time,stf_dt,total_time,stf_type=stf_type,zeta=0.2,scale=True)
             #tstf,stf=build_source_time_function(rise_time,stf_dt,total_time,stf_type='triangle',scale=True)
@@ -2607,7 +2600,7 @@ def mudpy2srf(rupt,log_file,stf_dt=0.1,stf_type='triangle',Ndip=None,time_pad=5.
         #How mant STF points?
         NTstf=len(stf)
         if NTstf<minSTFpoints: #Too short, zero pad
-            print 'Padding short STF...'
+            print('Padding short STF...')
             zeros_pad=zeros(int(minSTFpoints/2))
             stf=r_[zeros_pad,stf,zeros_pad]
             #Change start time of STF, it should now begin time_pad seconds earlier
@@ -2634,8 +2627,8 @@ def mudpy2srf(rupt,log_file,stf_dt=0.1,stf_type='triangle',Ndip=None,time_pad=5.
                 t=arange(0,len(stf)*stf_dt,stf_dt)
                 if len(t)>len(stf):
                     t=t[0:-1]
-                print t.shape
-                print stf.shape
+                print(t.shape)
+                print(stf.shape)
                 stf_integrated=cumtrapz(stf,t,initial=0)
                 stf=stf_integrated
             
@@ -2662,7 +2655,7 @@ def mudpy2srf(rupt,log_file,stf_dt=0.1,stf_type='triangle',Ndip=None,time_pad=5.
 
     
     # And done
-    print 'minNTstf is: '+str(minNTstf)
+    print('minNTstf is: '+str(minNTstf))
     fout.close()
 
 
@@ -2772,7 +2765,7 @@ def build_source_time_function(rise_time,dt,total_time,stf_type='triangle',zeta=
         tau=rise_time/dreger_falloff_rate
         Mdot=(t**zeta)*exp(-t/tau)
     else:
-        print 'ERROR: unrecognized STF type '+stf_type
+        print('ERROR: unrecognized STF type '+stf_type)
         return
     #Area of STF must be equal to dt
     if scale==True:
@@ -2780,7 +2773,7 @@ def build_source_time_function(rise_time,dt,total_time,stf_type='triangle',zeta=
         Mdot=Mdot*(dt/area)
     #Check for errors
     if isnan(Mdot[0])==True:
-        print 'ERROR: woops, STF has nan values!'
+        print('ERROR: woops, STF has nan values!')
         return
         
     #offset origin time
@@ -2811,7 +2804,7 @@ def read_fakequakes_hypo_time(home,project_name,rupture_name):
             time_epi=UTCDateTime(time_epi)
             break
         if line=='':
-            print 'ERROR: No hypocetral time in log file'
+            print('ERROR: No hypocetral time in log file')
             time_epi=''
             break
     return epicenter,time_epi

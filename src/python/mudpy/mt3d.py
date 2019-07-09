@@ -37,7 +37,7 @@ def inversionGFs(home,project_name,GF_list,source_name,model_name,
         i=where(GF[:,2]==1)[0]
         
         if len(i)>0: #Static offset
-            print 'Static GFs requested...'
+            print('Static GFs requested...')
             f=open(home+project_name+'/data/station_info/'+station_file,'w')
             for k in range(len(i)): #Write temp .sta file
                 out=stations[i[k]]+'\t'+repr(GF[i[k],0])+'\t'+repr(GF[i[k],1])+'\n'
@@ -48,7 +48,7 @@ def inversionGFs(home,project_name,GF_list,source_name,model_name,
         
         i=where(GF[:,6]==1)[0]
         if len(i)>0: #InSAR LOS
-            print 'InSAR GFs requested...'
+            print('InSAR GFs requested...')
             f=open(home+project_name+'/data/station_info/'+station_file,'w')
             for k in range(len(i)): #Write temp .sta file
                 out=stations[i[k]]+'\t'+repr(GF[i[k],0])+'\t'+repr(GF[i[k],1])+'\n'
@@ -67,7 +67,7 @@ def inversionGFs(home,project_name,GF_list,source_name,model_name,
         
         i=where(GF[:,2]==1)[0]
         if len(i)>0: #Static offset
-            print 'Static synthetics requested'
+            print('Static synthetics requested')
             #Make dummy station file
             f=open(home+project_name+'/data/station_info/'+station_file,'w')
             for k in range(len(i)):
@@ -79,7 +79,7 @@ def inversionGFs(home,project_name,GF_list,source_name,model_name,
         #Decide which synthetics are required
         i=where(GF[:,6]==1)[0]
         if len(i)>0: # InSAR LOS
-            print 'InSAR synthetics requested'
+            print('InSAR synthetics requested')
             #Make dummy station file
             f=open(home+project_name+'/data/station_info/'+station_file,'w')
             for k in range(len(i)):
@@ -115,7 +115,6 @@ def make_parallel_green(home,project_name,station_file,fault_name,model_name,dt,
     '''
     from numpy import loadtxt,arange,savetxt
     from os import path,makedirs,environ
-    from string import rjust
     from shlex import split
     import subprocess
     
@@ -133,7 +132,7 @@ def make_parallel_green(home,project_name,station_file,fault_name,model_name,dt,
         fmt='%d\t%10.6f\t%10.6f\t%10.6f'
         savetxt(home+project_name+'/data/model_info/mpi_source.'+str(k)+'.fault',mpi_source,fmt=fmt)
     #Make mpi system call
-    print "MPI: Starting GFs computation on", ncpus, "CPUs\n"
+    print("MPI: Starting GFs computation on", ncpus, "CPUs\n")
     mud_source=environ['MUD']+'/src/python/mudpy/'
 
     #Parameters that are not used but neede by function call
@@ -197,7 +196,7 @@ def make_parallel_synthetics(home,project_name,station_file,source_name,model_na
         mt=[0,0,0,0,0,0]
     
     #Make mpi system call
-    print "MPI: Starting synthetics computation on", ncpus, "CPUs\n"
+    print("MPI: Starting synthetics computation on", ncpus, "CPUs\n")
     mud_source=environ['MUD']+'/src/python/mudpy/'
     mpi='mpiexec -n '+str(ncpus)+' python '+mud_source+'parallel.py run_parallel_synthetics_mt3d '+home+' '+project_name+' '+station_file+' '+model_name+' '+str(forceMT)+' '+str(mt[0])+' '+str(mt[1])+' '+str(mt[2])+' '+str(mt[3])+' '+str(mt[4])+' '+str(mt[5])+' '+str(insar)
     mpi=split(mpi)
@@ -344,10 +343,10 @@ def getG(home,project_name,source_name,model_name,GF_list,G_from_file,G_name,for
     
     G_name=home+project_name+'/GFs/matrices/'+G_name
     if G_from_file==True: #load from file
-        print 'Loading G from file '+G_name
+        print('Loading G from file '+G_name)
         G=load(G_name+'.npy')
     else: #assemble G one data type at a time
-        print 'Assembling G from synthetic computations...'
+        print('Assembling G from synthetic computations...')
         #Read in GFlist and decide what to compute
         gf_file=home+project_name+'/data/station_info/'+GF_list
         mini_station=home+project_name+'/data/station_info/tempG.sta'
@@ -393,10 +392,10 @@ def getG(home,project_name,source_name,model_name,GF_list,G_from_file,G_name,for
                 remove(mini_station) #Cleanup  
         
         #Done, concat, save to file, release the memory
-        print Gstatic.shape
-        print Ginsar.shape
+        print(Gstatic.shape)
+        print(Ginsar.shape)
         G=concatenate([g for g in [Gstatic,Ginsar] if g.size > 0])
-        print 'Saving GF matrix to '+G_name+' this might take just a second...'
+        print('Saving GF matrix to '+G_name+' this might take just a second...')
         save(G_name,G)
     return G
 
@@ -420,7 +419,6 @@ def makeG(home,project_name,source_name,model_name,station_file,gftype,forceMT):
     '''
     
     from numpy import genfromtxt,loadtxt,zeros,array,inf,where,unique,argsort,arange
-    from string import rjust
 
     
     #Load fault model
@@ -470,7 +468,7 @@ def makeG(home,project_name,source_name,model_name,station_file,gftype,forceMT):
             
             #Loop over stations
             if ksta%10==0:
-                print '... working on station '+str(ksta)+' of '+str(Nsta)
+                print('... working on station '+str(ksta)+' of '+str(Nsta))
             
             #Initalize output variable
             if forceMT==False:
@@ -534,23 +532,23 @@ def makeG(home,project_name,source_name,model_name,station_file,gftype,forceMT):
     
     elif gftype.lower()=='insar': #Make matrix of insar LOS GFs
         #Load the synthetics files
-        print '... loading Mxx'
+        print('... loading Mxx')
         Mxx=genfromtxt(syn_path+'_Mxx.los')
         Mxx_sta=genfromtxt(syn_path+'_Mxx.los',usecols=0,dtype='S')
         if forceMT==False:
-            print '... loading Mxy'
+            print('... loading Mxy')
             Mxy=genfromtxt(syn_path+'_Mxy.los')
             Mxy_sta=genfromtxt(syn_path+'_Mxy.los',usecols=0,dtype='S')
-            print '... loading Mxz'
+            print('... loading Mxz')
             Mxz=genfromtxt(syn_path+'_Mxz.los')
             Mxz_sta=genfromtxt(syn_path+'_Mxz.los',usecols=0,dtype='S')
-            print '... loading Myy'
+            print('... loading Myy')
             Myy=genfromtxt(syn_path+'_Myy.los')
             Myy_sta=genfromtxt(syn_path+'_Myy.los',usecols=0,dtype='S')
-            print '... loading Myz'
+            print('... loading Myz')
             Myz=genfromtxt(syn_path+'_Myz.los')
             Myz_sta=genfromtxt(syn_path+'_Myz.los',usecols=0,dtype='S')
-            print '... loading Mzz'
+            print('... loading Mzz')
             Mzz=genfromtxt(syn_path+'_Mzz.los')
             Mzz_sta=genfromtxt(syn_path+'_Mzz.los',usecols=0,dtype='S')     
         
@@ -558,7 +556,7 @@ def makeG(home,project_name,source_name,model_name,station_file,gftype,forceMT):
         for ksta in range(Nsta):
             #Loop over stations
             if ksta%10==0:
-                print '... working on station '+str(ksta)+' of '+str(Nsta)
+                print('... working on station '+str(ksta)+' of '+str(Nsta))
             
             #Initalize output variable
             if forceMT==False:
@@ -693,9 +691,7 @@ def write_log(home,project_name,run_name,k,lambda_spatial,
         Nothing
     '''
     
-    from string import rjust
-    
-    num=rjust(str(k),4,'0')
+    num=str(k).rjust(4,'0')
     f=open(home+project_name+'/output/inverse_models/models/'+run_name+'.'+num+'.log','w')
     f.write('Project: '+project_name+'\n')
     f.write('Run name: '+run_name+'\n')
@@ -736,7 +732,6 @@ def write_model(home,project_name,run_name,source_name,model_name,sol,num,forceM
     
     from numpy import genfromtxt,loadtxt,arange,zeros,c_,savetxt,r_,array
     from mudpy.forward import get_mu
-    from string import rjust
     from numpy.linalg import eig
     from mudpy import analysis
    
@@ -794,10 +789,10 @@ def write_model(home,project_name,run_name,source_name,model_name,sol,num,forceM
 
     #Prepare for output
     out=c_[f,mt_xx,mt_xy,mt_xz,mt_yy,mt_yz,mt_zz,strike1,dip1,rake1,strike2,dip2,rake2,M0]
-    outdir=home+project_name+'/output/inverse_models/models/'+run_name+'.'+rjust(str(num),4,'0')+'.inv'
+    outdir=home+project_name+'/output/inverse_models/models/'+run_name+'.'+str(num).rjust(4,'0')+'.inv'
     #CHANGE this to rupture definition as #No  x            y        z(km)      str     dip      rake       rise    dura     slip    ss_len  ds_len rupt_time
     fmtout='%6i\t%11.4f\t%11.4f\t%11.4f\t%13.4e\t%13.4e\t%13.4e\t%13.4e\t%13.4e\t%13.4e\t%7.2f\t%7.2f\t%7.2f\t%7.2f\t%7.2f\t%7.2f\t%13.4e'
-    print '... writing model results to file '+outdir
+    print('... writing model results to file '+outdir)
     savetxt(outdir,out,fmtout,header='No,lon,lat,z(km),Mxx(Nm),Mxy(Nm),Mxz(Nm),Myy(Nm),Myz(Nm),Mzz(Nm),strike1,dip1,rake1,strike2,dip2,rake2,M0(Nm)')
 
 
@@ -827,7 +822,7 @@ def run_inversion(home,project_name,run_name,source_name,model_name,GF_list,G_fr
     
     #Get data weights
     if weight==True:
-        print 'Applying data weights'
+        print('Applying data weights')
         w=inv.get_data_weights(home,project_name,GF_list,d,None)
         W=empty(G.shape)
         W=tile(w,(G.shape[1],1)).T
@@ -840,7 +835,7 @@ def run_inversion(home,project_name,run_name,source_name,model_name,GF_list,G_fr
         w=None
         #Define inversion quantities
         x=WG.transpose().dot(wd)
-        print 'Computing G\'G'
+        print('Computing G\'G')
         K=(WG.T).dot(WG)
         #And cleanup
         W=None
@@ -849,7 +844,7 @@ def run_inversion(home,project_name,run_name,source_name,model_name,GF_list,G_fr
     else:
         #Define inversion quantities if no weightd
         x=G.transpose().dot(d)
-        print 'Computing G\'G'
+        print('Computing G\'G')
         K=(G.T).dot(G)
     
     #Cleanup
@@ -860,7 +855,7 @@ def run_inversion(home,project_name,run_name,source_name,model_name,GF_list,G_fr
         Ls=eye(nsources*6) 
     else:
         Ls=eye(nsources)
-    print 'Nsources: '+str(nsources)
+    print('Nsources: '+str(nsources))
     Ninversion=len(reg_spatial)
 
     #Make L's sparse
@@ -873,8 +868,8 @@ def run_inversion(home,project_name,run_name,source_name,model_name,GF_list,G_fr
 
     #off we go
     dt=datetime.now()-t1
-    print 'Preprocessing wall time was '+str(dt)
-    print '\n--- RUNNING INVERSIONS ---\n'
+    print('Preprocessing wall time was '+str(dt))
+    print('\n--- RUNNING INVERSIONS ---\n')
     ttotal=datetime.now()
     kout=0
     
@@ -882,7 +877,7 @@ def run_inversion(home,project_name,run_name,source_name,model_name,GF_list,G_fr
         
         t1=datetime.now()
         lambda_spatial=reg_spatial[ks]
-        print 'Running inversion '+str(kout+1)+' of '+str(Ninversion)+' at regularization levels: ls ='+repr(lambda_spatial)
+        print('Running inversion '+str(kout+1)+' of '+str(Ninversion)+' at regularization levels: ls ='+repr(lambda_spatial))
         
         Kinv=K+(lambda_spatial**2)*LsLs
         
@@ -912,4 +907,4 @@ def run_inversion(home,project_name,run_name,source_name,model_name,GF_list,G_fr
         kout+=1
         dt1=datetime.now()-t1
         dt2=datetime.now()-ttotal
-        print '... inversion wall time was '+str(dt1)+', total wall time elapsed is '+str(dt2)
+        print('... inversion wall time was '+str(dt1)+', total wall time elapsed is '+str(dt2))

@@ -284,7 +284,7 @@ def plot_resp_spec(home,project_name,run_name,GF_list,fault_name,rupt,frequency_
         subcountR=[0,0,0,0,0,1,1,1,1,1,2,2,2,2,2,3,3,3,3,3,4,4,4,4,4,5,5,5,5,5]
         subcountC=[0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4]
     else:
-        print 'ERROR: Station list too long, shorten to less than or equal to 30!'
+        print('ERROR: Station list too long, shorten to less than or equal to 30!')
     
     fig, axarr = plt.subplots(subR,subC,sharex=False,sharey=False)
     plt.suptitle(run_name+' '+rupt)
@@ -417,7 +417,7 @@ def build_simple_fault(home,faultname,centroid,strike,dip,length,width):
     VR=0.8*3600 # 0.8 times Vs ~ 4 km/s
     
     fault=faultname    
-    print 'working on the '+fault+' fault.'
+    print('working on the '+fault+' fault.')
 
     midlon=centroid[0]
     midlat=centroid[1]
@@ -447,7 +447,7 @@ def build_simple_fault(home,faultname,centroid,strike,dip,length,width):
     num_updip=0
     num_downdip=int(round(width/dipfactor))
     dx_dip=width/num_downdip
-    print dx_dip
+    print(dx_dip)
     hypo=np.array([midlon,midlat,dx_dip/2.])            
     risetime=math.sqrt(dx_strike*dx_strike+dx_dip*dx_dip)/VR
         
@@ -483,7 +483,7 @@ def build_faults_xml(faults,directories,workingdir,ucerf_xmlfile):
     tree = et.ElementTree(file=ucerf_xmlfile)
     root=tree.getroot()
     for i in range(len(faults)):
-        print 'working on the '+faults[i]+' fault...'
+        print('working on the '+faults[i]+' fault...')
         home=workingdir+directories[i]+'/'
         if not os.path.exists(home):
             os.mkdir(home)
@@ -522,7 +522,7 @@ def build_faults_xml(faults,directories,workingdir,ucerf_xmlfile):
                     seccount=seccount+1
                     secids.append([elem.tag])
                     dd.append(float(elem.get('dipDirection')))
-                    print elem.get('dipDirection')
+                    print(elem.get('dipDirection'))
                     dip.append(float(elem.get('aveDip')))
                     sd.append(float(elem.get('aveLowerDepth')))
                     lat.append([])
@@ -548,7 +548,7 @@ def build_faults_xml(faults,directories,workingdir,ucerf_xmlfile):
                             tempdist[j].append(dist/1000)
                             totallength=totallength+dist/1000
                             
-        print 'length = ',totallength 
+        print('length = ',totallength)
         # calculate Mmax from Blaser et al 2010 relationship
         # LOG10 (Length) = a + b x Mw
         a=-2.69
@@ -556,7 +556,7 @@ def build_faults_xml(faults,directories,workingdir,ucerf_xmlfile):
         Mmax=(np.log10(totallength)-a)/b
         if Mmax>8.5:
             Mmax=8.5
-        print 'Mmax =',Mmax
+        print('Mmax =',Mmax)
                                             
         # build subfault sizes based on total length of fault
         if totallength<100:
@@ -597,14 +597,14 @@ def build_faults_xml(faults,directories,workingdir,ucerf_xmlfile):
             if (az<=0):
                 az=360+az
             assdd=az+90 # assumed dip direction
-            #print 'dd: ',dd[j]
+            #print('dd: ',dd[j]
             if assdd>360:
                 assdd=assdd-360
-            #print 'calc dd: ', assdd    
+            #print('calc dd: ', assdd   ) 
                 if abs(assdd-dd[j])>=90:
                     lon[j]=list(reversed(lon[j]))
                     lat[j]=list(reversed(lat[j]))   
-                    #print 'reversed'
+                    #print('reversed'
                 
         for j in range(len(lat)):
             for k in range(len(lat[j])):
@@ -651,7 +651,7 @@ def build_faults_xml(faults,directories,workingdir,ucerf_xmlfile):
                 outfile2.write('%.6f\t%.6f\n' % (f[k,1],f[k,2]))
                 if (k==(len(f)-1)):
                     lastind=f[-1,0]+lastind
-        print lastind,' subfaults'
+        print(lastind,' subfaults')
         outfile.close()
         outfile2.close()
         
@@ -721,7 +721,7 @@ def bssa14(M,Rjb,Vs30,U=0,RS=0,NS=0,SS=1,Z1=None,intensity_measure='SA'):
                         [-2.5865,-2.4874,-2.8176,-2.6854,2.1187,-0.081606,1.0121,6.2,-1.25430,0.12507,0.00000,4.5,1,9.48,0.000000,0.002600,0.000380,-0.7766,771.01,760,0,0.1,-0.0001,-0.00137,1.329,0.809,130.720,250.390,0.058,0.000,225,300,0.5120,0.6340,0.5110,0.2700],
                         [-3.0702,-2.9537,-3.3776,-3.1726,1.8837,-0.15096,1.0651,6.2,-1.32530,0.15183,0.00000,4.5,1,9.66,0.000000,0.003030,0.001490,-0.6558,775.00,760,0,0.1,0.0000,-0.00136,1.183,0.703,130.000,210.000,0.060,0.000,225,300,0.5100,0.6040,0.4870,0.2390]]   
     else:
-        print 'ERROR: Unknown intensity measure'
+        print('ERROR: Unknown intensity measure')
         #return
         
     if intensity_measure.upper()=='SA':
@@ -965,7 +965,7 @@ def bssa14_stdev_one_station(M,Rjb,Vs30,intensity_measure='PGA'):
                         760,0,0.1,0.0000,-0.00136,1.183,0.703,130.000,210.000,0.060,0.000,225,
                         300,0.5100,0.6040,0.4870,0.2390]
     else:
-        print 'ERROR: Unknown intensity measure'
+        print('ERROR: Unknown intensity measure')
         #return
 
     #Assign each coefficient
@@ -1065,7 +1065,7 @@ def bssa14_calc_one_station(M, Rjb, U, RS, NS,intensity_measure):
                         760,0,0.1,0.0000,-0.00136,1.183,0.703,130.000,210.000,0.060,0.000,225,
                         300,0.5100,0.6040,0.4870,0.2390]
     else:
-        print 'ERROR: Unknown intensity measure'
+        print('ERROR: Unknown intensity measure')
         #return
         
     #Assign each coefficient
@@ -1152,7 +1152,7 @@ def bssa14_scalar(M,Rjb,Vs30,U=0,RS=0,NS=0,SS=1,Z1=None,intensity_measure='SA'):
                         760,0,0.1,0.0000,-0.00136,1.183,0.703,130.000,210.000,0.060,0.000,225,
                         300,0.5100,0.6040,0.4870,0.2390]
     else:
-        print 'ERROR: Unknown intensity measure'
+        print('ERROR: Unknown intensity measure')
         #return
         
     #Assign each coefficient
@@ -1285,7 +1285,7 @@ def calc_SA(home,project_name,run_name,GF_list,fault_name,rupture_list='ruptures
         slat=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=2,dtype='float')
         rupt=genfromtxt(home+project_name+'/data/'+rupture_list,usecols=0,dtype='S')
     for j in range(len(rupt)):
-        print 'calculating SA for rupture '+rupt[j].split('.')[1] 
+        print('calculating SA for rupture '+rupt[j].split('.')[1] )
         # open summary file for writing
         # save in home+project_name+'/output/waveforms/_analysis.'+run_name+'.'+rupt[j].split('.')[1]+'.txt'
         if project_name=='Cascadia':
@@ -1334,7 +1334,7 @@ def calc_SA(home,project_name,run_name,GF_list,fault_name,rupture_list='ruptures
             # calculate Rjb
             if project_name=='Cascadia':
                 ruptfile=home+project_name+'/'+run_name+'.'+rupt[j].split('.')[1]+'/_'+run_name+'.'+rupt[j].split('.')[1]+'.rupt'
-                #print ruptfile
+                #print(ruptfile)
             else:
                 ruptfile=home+project_name+'/output/ruptures/'+run_name+'.'+rupt[j].split('.')[1]+'.rupt'
                 
@@ -1350,7 +1350,7 @@ def calc_SA(home,project_name,run_name,GF_list,fault_name,rupture_list='ruptures
             elif slip_type=='RS':
                 sa,std=bssa14_scalar(Mw,Rjb,Vs30,U=0,RS=1,NS=0,SS=0,Z1=None,intensity_measure='SA')       
             
-            # print to summary file in rupture folder
+            # print(to summary file in rupture folder)
             # convert response spectral acceleration to g
             line_out+='%s\t%10.4f\t%10.4f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\n' % (sta[k],slon[k],slat[k],respe[0],respn[0],resp[0][0][0],sa,std,Rjb)
 
@@ -1781,7 +1781,7 @@ def sac2rt_textfile(home,project_name,run_name,time_epi,rupture_list):
     for j in range(len(ruptures)):
         # get rupture number
         rupt=ruptures[j].split('.')[1]
-        print 'writing realtime textfiles for rupture '+rupt
+        print('writing realtime textfiles for rupture '+rupt)
         if project_name=='Cascadia':
             # open summary file for reading
             sumfile=home+project_name+'/'+run_name+'.'+rupt+'/_'+run_name+'.'+rupt+'.offsets'
@@ -1813,7 +1813,7 @@ def sac2rt_textfile(home,project_name,run_name,time_epi,rupture_list):
                 z=read(home+project_name+'/output/waveforms/'+run_name+'.'+rupt+'/'+sta[i]+'.LYZ.sac')
             delta=e[0].stats.starttime-time_epi
             
-            # print adjusted times
+            # print(adjusted times)
             for j in range(len(e[0].data)):
                 file1.write('%.6f %.6f %.6f %.6f %.6f %d %d %d %s\n' % (e[0].times()[j]+delta,
                     lonlat[i][0],lonlat[i][1],e[0].data[j],n[0].data[j],0,0,0,sta[i]))

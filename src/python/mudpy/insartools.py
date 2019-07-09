@@ -12,7 +12,6 @@ def quadtree2mudpy(home,project_name,quadtree_file,gflist_file,prefix):
     '''
     
     from numpy import genfromtxt,c_,savetxt
-    from string import rjust
     from matplotlib import pyplot as plt
     from matplotlib import cm
     
@@ -25,7 +24,7 @@ def quadtree2mudpy(home,project_name,quadtree_file,gflist_file,prefix):
     #Write gflist header
     gflist.write('#station	lat	lon	static	disp	vel	tsun	strain	Static file	 displacement file	 velocity file	tsunami file	strain file	static sigmas(n	e	u)	displacement sigmas(n	e	u)	velocity sigmas(n	e	u)	tsunami sigma	strain sigmas(5 components?)\n')																						
     for k in range(len(insar)):
-        sta=prefix+rjust(str(k),4,'0')
+        sta=prefix+str(k).rjust(4,'0')
         #Now make .los file
         los_c=insar[k,2]
         N=insar[k,4]

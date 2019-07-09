@@ -39,7 +39,7 @@ def stochastic_simulation(home,project_name,rupture_name,sta,sta_lon,sta_lat,com
     '''%(home,project_name,rupture_name,sta,str(sta_lon),str(sta_lat),model_name,str(rise_time_depths),
     str(moho_depth_in_km),str(total_duration),str(hf_dt),str(stress_parameter),
     str(kappa),str(Qexp),str(component),str(Pwave),str(high_stress_depth))
-    print out
+    print(out)
 
 #    rupture=rupture_name.split('.')[0]+'.'+rupture_name.split('.')[1]
 #    log=home+project_name+'/output/waveforms/'+rupture+'/'+sta+'.HN'+component+'.1cpu.log'
@@ -95,7 +95,7 @@ def stochastic_simulation(home,project_name,rupture_name,sta,sta_lon,sta_lat,com
     #Deep faults receive a higher stress
     stress_multiplier=3
          
-    print '... working on '+component+' component semistochastic waveform for station '+sta
+    print('... working on '+component+' component semistochastic waveform for station '+sta)
 
     #initalize output seismogram
     tr=Trace()
@@ -280,7 +280,7 @@ def stochastic_simulation(home,project_name,rupture_name,sta,sta_lon,sta_lat,com
             if len(Spaths)==0:
                 Spaths=velmod.get_ray_paths(zs+75*tau_perturb,dist_in_degs,phase_list=['S','s']) 
             if len(Spaths)==0:
-                print 'ERROR: I give up, no direct S in spite of multiple attempts at subfault '+str(kfault)
+                print('ERROR: I give up, no direct S in spite of multiple attempts at subfault '+str(kfault))
 
             #Get direct s path and moho reflection
             mohoS=None

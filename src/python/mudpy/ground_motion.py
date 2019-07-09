@@ -44,7 +44,7 @@ def ground_motion_fq(ruptfile,Mw,lon_sta,lat_sta,vs30file=None,do_pgv=True,dista
  
     print('Estimating ground motions for '+str(len(slon))+' stations...')
     for i in range(len(slon)):
-        print i
+        print(i)
         pga[i],pga_sigma[i] = rf.bssa14_scalar(Mw,Rjb[i],vs30_calc[i],U=0,RS=1,NS=0,SS=0,Z1=None,intensity_measure='PGA') # pga in g   
     
 

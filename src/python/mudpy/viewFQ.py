@@ -118,7 +118,7 @@ def plot_KLslip(home,project_name,run_name,mesh_name,fudge=0.3):
     faults=glob(home+project_name+'/output/ruptures/*.rupt')
     logs=glob(home+project_name+'/output/ruptures/*.log')
     for kfault in range(len(faults)):
-        print faults[kfault]
+        print(faults[kfault])
         #Read slip info
         fault=genfromtxt(faults[kfault])
         
@@ -1025,7 +1025,7 @@ def pgd_magnitude_misfit(home,project_name,hist=True,rupture_list='ruptures.list
                 loop_go=False       
             if 'Actual magnitude' in line:
                 Mw=float(line.split(':')[-1].split(' ')[-1])
-                print Mw
+                print(Mw)
     
         #compute station to hypo distances
         d=zeros(len(lonlat))
@@ -1611,7 +1611,7 @@ def plot_2_waveforms_2_spectra(home,project_name,run_name,run_number,sta1,sta2,c
     elif component=='Z':
         chan='LYZ'
     else:
-        print 'Unknown channel'
+        print('Unknown channel')
         
     
     st1_triangle=read(home+project_name+'/output/triangle/'+run_name+'.'+run_number+'/'+sta1+'.'+chan+'.sac')
@@ -1815,7 +1815,7 @@ def record_section(home,project_name,GF_list,rupture,factor=10):
         #try: #This is to deal with some weird bug in obspy.TauP
         #    arrivals = velmod.get_travel_times(source_depth_in_km=hypo[2],distance_in_degree=deg,phase_list=['P','Pn','S','Sn','p','s'])
         #except:
-        #    print 'No phases for '+rupture
+        #    print('No phases for '+rupture
         #    plt.close()
         #    return
         
@@ -2154,7 +2154,7 @@ def plot_PGD_all(home,project_name,rupture_list,dist_range=[1,1000],Mw_range=[6,
     dist_plot=array([])
     pgd_plot=array([])
     for krupt in range(len(ruptures)):
-        print 'Reading data from rupture '+ruptures[krupt]
+        print('Reading data from rupture '+ruptures[krupt])
         # Read summary file
         summary_file=home+project_name+'/output/waveforms/'+ruptures[krupt].split('.')[0]+'.'+ruptures[krupt].split('.')[1]+'/_summary.'+ruptures[krupt].split('.')[0]+'.'+ruptures[krupt].split('.')[1]+'.txt'
         lonlat=genfromtxt(summary_file,usecols=[1,2])
@@ -2412,7 +2412,7 @@ def amplitude_all(home,project_name,nbins_ampl=20,nbins_freq=20,ampl_lims=[1e-10
     bin_centers_y=zeros(len(bin_edges_y)-1)
     hit_count=zeros((len(bin_centers_x),len(bin_centers_y)))   
     for krupt in range(len(paths)):
-        print paths[krupt]
+        print(paths[krupt])
         PSDs=glob(paths[krupt]+'/*.npz')
         for kpsd in range(len(PSDs)):
             psd=load(PSDs[kpsd])
@@ -2476,7 +2476,7 @@ def source_time_function(rupt,epicenter,dt=0.001,t_total=500,stf_type='dreger',p
     faults_added=0
     for kfault in range(nfault):
         if kfault%50==0:
-            print 'Working on subfault %d of %d' % (kfault,nfault)
+            print('Working on subfault %d of %d' % (kfault,nfault))
         if rise_time[kfault]>0:
             faults_added+=1
             #get stf

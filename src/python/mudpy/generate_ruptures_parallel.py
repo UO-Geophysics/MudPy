@@ -18,7 +18,6 @@ def run_parallel_generate_ruptures(home,project_name,run_name,fault_name,slab_na
     '''
     
     from numpy import load,save,genfromtxt,log10,cos,sin,deg2rad,savetxt,zeros,where
-    from string import rjust
     from time import gmtime, strftime
     from numpy.random import shuffle
     from mudpy import fakequakes
@@ -62,13 +61,13 @@ def run_parallel_generate_ruptures(home,project_name,run_name,fault_name,slab_na
     #Now loop over the number of realizations
     realization=0
     if rank==0:
-        print 'Generating rupture scenarios'
+        print('Generating rupture scenarios')
     for kmag in range(len(target_Mw)):
         if rank==0:
-            print '... Calculating ruptures for target magnitude Mw = '+str(target_Mw[kmag])
+            print('... Calculating ruptures for target magnitude Mw = '+str(target_Mw[kmag]))
         for kfault in range(Nrealizations):
             if kfault%1==0 and rank==0:
-                print '... ... working on ruptures '+str(ncpus*realization)+' to ' + str(ncpus*(realization+1)-1) + ' of '+str(Nrealizations*size*len(target_Mw))
+                print('... ... working on ruptures '+str(ncpus*realization)+' to ' + str(ncpus*(realization+1)-1) + ' of '+str(Nrealizations*size*len(target_Mw)))
                 #print '... ... working on ruptures '+str(ncpus*realization+rank)+' of '+str(Nrealizations*size-1)
             
             #Prepare output
@@ -129,7 +128,7 @@ def run_parallel_generate_ruptures(home,project_name,run_name,fault_name,slab_na
                         slip_unrectified,success=fakequakes.make_KL_slip(fault_array,num_modes,eigenvals,V,mean_slip,max_slip,lognormal=False,seed=None)
                         slip,rejected,percent_negative=fakequakes.rectify_slip(slip_unrectified,percent_reject=13)
                         if rejected==True:
-                            print '... ... ... negative slip threshold exceeeded with %d%% negative slip. Recomputing...' % (percent_negative)
+                            print('... ... ... negative slip threshold exceeeded with %d%% negative slip. Recomputing...' % (percent_negative))
                 else:
                     #Get lognormal values
                     C_log,mean_slip_log=fakequakes.get_lognormal(mean_slip,C,target_Mw[kmag],fault_array,vel_mod_file,slip_standard_deviation)               
@@ -190,7 +189,7 @@ def run_parallel_generate_ruptures(home,project_name,run_name,fault_name,slab_na
             centroid_lon,centroid_lat,centroid_z=fakequakes.get_centroid(fault_out)
             
             #Write to file
-            run_number=rjust(str(ncpus*realization+rank),6,'0')
+            run_number=str(ncpus*realization+rank).rjust(6,'0')
             outfile=home+project_name+'/output/ruptures/'+run_name+'.'+run_number+'.rupt'
             savetxt(outfile,fault_out,fmt='%d\t%10.6f\t%10.6f\t%8.4f\t%7.2f\t%7.2f\t%4.1f\t%5.2f\t%5.2f\t%5.2f\t%10.2f\t%10.2f\t%5.2f\t%.6e',header='No,lon,lat,z(km),strike,dip,rise,dura,ss-slip(m),ds-slip(m),ss_len(m),ds_len(m),rupt_time(s),rigidity(Pa)')
             
@@ -314,4 +313,4 @@ if __name__ == '__main__':
         force_area,mean_slip_name,hypocenter_lon,hypocenter_lat,hypocenter_dep,slip_tol,force_hypocenter,
         no_random,shypo,use_hypo_fraction,shear_wave_fraction,rank,size)
     else:
-        print "ERROR: You're not allowed to run "+sys.argv[1]+" from the shell or it does not exist"
+        print("ERROR: You're not allowed to run "+sys.argv[1]+" from the shell or it does not exist")

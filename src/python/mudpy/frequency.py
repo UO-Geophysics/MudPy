@@ -85,7 +85,7 @@ def fakequakes_allpsd(home,project_name,run_name):
     paths=glob(home+run_name+'/output/waveforms/'+run_name+'.*')
     for k in range(len(paths)):
         waveforms=glob(paths[k]+'/*.sac')
-        print 'Working on '+paths[k]
+        print('Working on '+paths[k])
         outpath=home+project_name+'/analysis/frequency/'+paths[k].split('/')[-1]
         if not path.exists(outpath):
             makedirs(outpath)
@@ -136,7 +136,7 @@ def allcoherence(home,project_name,run_name,run_number,GF_list,v_or_d,decimate,l
         synthsuffix='vel'
     i=where(gf[:,kgf]==1)[0]
     for k in range(len(i)):
-        print 'Working on '+sta[i[k]]
+        print('Working on '+sta[i[k]])
         #Read data
         n=read(datapath+sta[i[k]]+'.'+datasuffix+'.n')
         e=read(datapath+sta[i[k]]+'.'+datasuffix+'.e')
@@ -184,7 +184,6 @@ def source_spectra(home,project_name,run_name,run_number,rupt,nstrike,ndip):
     from numpy import genfromtxt,unique,zeros,where,arange,savez,mean
     from mudpy.forward import get_source_time_function,add2stf
     import nitime.algorithms as tsa
-    from string import rjust
     
     outpath=home+project_name+'/analysis/frequency/'
     f=genfromtxt(rupt)
@@ -210,7 +209,7 @@ def source_spectra(home,project_name,run_name,run_number,rupt,nstrike,ndip):
     area=f[0:len(unum),10]*f[0:len(unum),11]
     for kfault in range(nfault):
         if kfault%10==0:
-            print '... working on subfault '+str(kfault)+' of '+str(nfault)
+            print('... working on subfault '+str(kfault)+' of '+str(nfault))
         #Get rupture times for subfault windows
         i=where(num==unum[kfault])[0]
         trup=f[i,12]
@@ -234,6 +233,6 @@ def source_spectra(home,project_name,run_name,run_number,rupt,nstrike,ndip):
         #Done now compute spectra of STF
         fsample=1./(t1[1]-t1[0])
         freq, psd, nu = tsa.multi_taper_psd(s,Fs=fsample,adaptive=True,jackknife=False,low_bias=True)
-        outname=run_name+'.'+run_number+'.sub'+rjust(str(kfault),4,'0')+'.stfpsd'
+        outname=run_name+'.'+run_number+'.sub'+str(kfault).rjust(4,'0')+'.stfpsd'
         savez(outpath+outname,freq=freq,psd=psd) 
         

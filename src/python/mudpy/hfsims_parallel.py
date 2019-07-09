@@ -57,7 +57,7 @@ def run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,
         Station = %s
         Component (N,E,Z) = %s
         '''%(rupture_name,sta,component)
-        print out
+        print(out)
         
     #print 'stress is '+str(stress_parameter)
 
@@ -266,7 +266,7 @@ def run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,
             if len(Spaths)==0:
                 Spaths=velmod.get_ray_paths(zs+75*tau_perturb,dist_in_degs,phase_list=['S','s']) 
             if len(Spaths)==0:
-                print 'ERROR: I give up, no direct S in spite of multiple attempts at subfault '+str(kfault)
+                print('ERROR: I give up, no direct S in spite of multiple attempts at subfault '+str(kfault))
 
             #Get direct s path and moho reflection
             mohoS=None
@@ -503,4 +503,4 @@ if __name__ == '__main__':
         high_stress_depth=int(sys.argv[21])
         run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,component,model_name,rise_time_depths0,rise_time_depths1,moho_depth_in_km,total_duration,hf_dt,stress_parameter,kappa,Qexp,Pwave,high_stress_depth,rank,size)
     else:
-        print "ERROR: You're not allowed to run "+sys.argv[1]+" from the shell or it does not exist"
+        print("ERROR: You're not allowed to run "+sys.argv[1]+" from the shell or it does not exist")
