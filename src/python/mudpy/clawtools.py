@@ -23,12 +23,12 @@ def make_dtopo():
         e=n.copy()
         u=n.copy()
         for ksta in range(len(sta)):
-            print ksta
+            print(ksta)
             neu=genfromtxt(f+'output/forward_models/'+str(sta[ksta])+'.static.neu')
             n[ksta]=neu[0]
             e[ksta]=neu[1]
             u[ksta]=neu[2]
-            print neu[2]
+            print(neu[2])
 
 def make_grid(lon1,lon2,lat1,lat2,dlon,dlat,prefix,outfile):
     '''
@@ -41,7 +41,6 @@ def make_grid(lon1,lon2,lat1,lat2,dlon,dlat,prefix,outfile):
     '''
     
     from numpy import arange
-    from string import rjust
     
     lon=arange(lon1,lon2+dlon,dlon)
     lat=arange(lat1,lat2+dlat,dlat)
@@ -52,7 +51,7 @@ def make_grid(lon1,lon2,lat1,lat2,dlon,dlat,prefix,outfile):
     fid=open(outfile,'w')
     for klat in range(len(lat)):
         for klon in range(len(lon)):
-            outsta=prefix+rjust(str(sta[ksta]),4,'0')
+            outsta=prefix+str(sta[ksta]).rjust(4,'0')
             outlon='%.4f' % lon[klon]
             outlat='%.4f' % lat[klat]
             ksta+=1
@@ -66,7 +65,6 @@ def plot_transect(path,N,tsunlims,dlims,dt,xyannot):
     Plot snapshots along a transect
     '''
     from obspy.core.util.geodetics import gps2DistAzimuth
-    from string import rjust
     from numpy import genfromtxt,zeros
     from matplotlib import pyplot as plt
     import matplotlib
@@ -80,7 +78,7 @@ def plot_transect(path,N,tsunlims,dlims,dt,xyannot):
     fig, axarr = plt.subplots(N, 1) 
     for k in range(N):
         time=k*dt
-        trackname='AA.f'+rjust(str(k+1),4,'0')+'.track'
+        trackname='AA.f'+str(k+1).rjust(4,'0')+'.track'
         t=genfromtxt(path+trackname)
         t=t[cut_index:,:]
         lon1=t[trench_index,0]
@@ -103,10 +101,10 @@ def plot_transect(path,N,tsunlims,dlims,dt,xyannot):
         ax.annotate(tstring,xy=xyannot,fontsize=14)
         if k==N-1:
             ax.xaxis.set_label('Distance from trench (km)')
-            print t[0,0]
-            print t[-1,0]
-            print t[0,1]
-            print t[-1,1]
+            print(t[0,0])
+            print(t[-1,0])
+            print(t[0,1])
+            print(t[-1,1])
     plt.subplots_adjust(left=0.2, bottom=0.1, right=0.8, top=0.9, wspace=0, hspace=0)
         
        
@@ -129,7 +127,7 @@ def gauge2sac(gauge_file,dictionary,xyfile,outdir,time_epi,dt):
     #Find unique stations
     gauge_list=unique(gauges[:,0])
     for k in range(len(gauge_list)):
-        print k
+        print(k)
         st=Stream(Trace())
         i=where(gauges[:,0]==gauge_list[k])[0]
         data=gauges[i,6]

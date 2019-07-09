@@ -27,9 +27,9 @@ def init(home,project_name):
             if clob is 'y' or clob is 'Y':
                 rmtree(proj_dir)
             else: #Leave direcory alone
-                print 'Phew, almost shot yourself in the foot there didn\'t you?'
+                print('Phew, almost shot yourself in the foot there didn\'t you?')
         else: #Leave direcory alone
-            print 'Phew, almost shot yourself in the foot there didn\'t you?'
+            print('Phew, almost shot yourself in the foot there didn\'t you?')
     if clob is 'y' or clob is 'Y':
         makedirs(proj_dir)
         #And make the subdirectories
@@ -70,7 +70,7 @@ def rupt2fault(home,project_name,rupture_name):
     '''
     from numpy import loadtxt,savetxt,c_
     
-    print 'Assembling fault file from rupture file'
+    print('Assembling fault file from rupture file')
     rupt=loadtxt(home+project_name+'/forward_models/'+rupture_name,ndmin=2)
     fault=c_[rupt[:,0],rupt[:,1],rupt[:,2],rupt[:,3],rupt[:,4],rupt[:,5],rupt[:,6],rupt[:,7],rupt[:,10],rupt[:,11]]
     savetxt(home+project_name+'/data/model_info/'+rupture_name.split('.')[0]+'.fault', \
@@ -107,7 +107,6 @@ def make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,stat
     from numpy import loadtxt
     from shutil import rmtree,copy
     from os import chdir,path,makedirs,remove
-    from string import rjust
     import datetime
     import gc
     
@@ -133,7 +132,7 @@ def make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,stat
             f.close()
             #Move to correct directory
             strdepth='%.4f' % source[k,3]
-            subfault=rjust(str(int(source[k,0])),4,'0')
+            subfault=str(int(source[k,0])).rjust(4,'0') #subfault=rjust(str(int(source[k,0])),4,'0')
             if static==0 and tsunami==False:
                 #Move results to dynamic GF dir
                 dirs=glob.glob('*.mod_'+strdepth)
@@ -172,9 +171,9 @@ def make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,stat
                 remove('staticgf')     
         #How long was I working for?
         toc=time.time()
-        print 'GFs computed in '+str((toc-tic)/60)+' minutes...'
+        print('GFs computed in '+str((toc-tic)/60)+' minutes...')
     else:
-        print 'GFs not necessary when using an elastic halfspace, exiting make_green'
+        print('GFs not necessary when using an elastic halfspace, exiting make_green')
 
 
 def make_parallel_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,static,tsunami,
@@ -200,7 +199,6 @@ def make_parallel_green(home,project_name,station_file,fault_name,model_name,dt,
     '''
     from numpy import loadtxt,arange,savetxt
     from os import path,makedirs,environ
-    from string import rjust
     from shlex import split
     import subprocess
     
@@ -213,7 +211,7 @@ def make_parallel_green(home,project_name,station_file,fault_name,model_name,dt,
     #Create all output folders
     for k in range(len(source)):
         strdepth='%.4f' % source[k,3]
-        subfault=rjust(str(k+1),4,'0')
+        subfault=str(k+1).rjust(4,'0')
         if static==0 and tsunami==False:
             subfault_folder=green_path+'dynamic/'+model_name+'_'+strdepth+'.sub'+subfault
             if path.exists(subfault_folder)==False:
@@ -231,10 +229,10 @@ def make_parallel_green(home,project_name,station_file,fault_name,model_name,dt,
         fmt='%d\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f'
         savetxt(home+project_name+'/data/model_info/mpi_source.'+str(k)+'.fault',mpi_source,fmt=fmt)
     #Make mpi system call
-    print "MPI: Starting GFs computation on", ncpus, "CPUs\n"
+    print("MPI: Starting GFs computation on", ncpus, "CPUs\n")
     mud_source=environ['MUD']+'/src/python/mudpy/'
     if static==1 and okada==True:
-        print 'Static Okada solution requested, no need to run GFs...'
+        print('Static Okada solution requested, no need to run GFs...')
         pass
     else:
         mpi='mpiexec -n '+str(ncpus)+' python '+mud_source+'parallel.py run_parallel_green '+home+' '+project_name+' '+station_file+' '+model_name+' '+str(dt)+' '+str(NFFT)+' '+str(static)+' '+str(dk)+' '+str(pmin)+' '+str(pmax)+' '+str(kmax)+' '+str(tsunami)+' '+str(insar)
@@ -269,7 +267,6 @@ def make_synthetics(home,project_name,station_file,fault_name,model_name,integra
     from mudpy import green
     import datetime
     from numpy import loadtxt
-    from string import rjust
     import gc
     
     green_path=home+project_name+'/GFs/'
@@ -283,8 +280,8 @@ def make_synthetics(home,project_name,station_file,fault_name,model_name,integra
     source=loadtxt(fault_file,ndmin=2)
     #Now compute synthetics please, one sub fault at a time
     for k in range(hot_start,source.shape[0]):
-        print 'ksource = ' + str(k)
-        subfault=rjust(str(k+1),4,'0')
+        print('ksource = ' + str(k))
+        subfault=str(k+1).rjust(4,'0')
         log=green.run_syn(home,project_name,source[k,:],station_file,green_path,model_name,integrate,static,tsunami,
                 subfault,time_epi,beta,impulse,okada,mu,insar=insar)
         f=open(logpath+'make_synth.'+now+'.log','a')
@@ -336,7 +333,7 @@ def make_parallel_synthetics(home,project_name,station_file,fault_name,model_nam
         fmt='%d\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f'
         savetxt(home+project_name+'/data/model_info/mpi_source.'+str(k)+'.fault',mpi_source,fmt=fmt)
     #Make mpi system call
-    print "MPI: Starting synthetics computation on", ncpus, "CPUs\n"
+    print("MPI: Starting synthetics computation on", ncpus, "CPUs\n")
     mud_source=environ['MUD']+'/src/python/mudpy/'
     mpi='mpiexec -n '+str(ncpus)+' python '+mud_source+'parallel.py run_parallel_synthetics '+home+' '+project_name+' '+station_file+' '+model_name+' '+str(integrate)+' '+str(static)+' '+str(tsunami)+' '+str(time_epi)+' '+str(beta)+' '+str(custom_stf)+' '+str(impulse)+' '+str(insar)+' '+str(okada)+' '+str(mu)
     mpi=split(mpi)
@@ -372,10 +369,10 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
         #decide what GF computation is required for this station
         i=where(GF[:,2]==1)[0]
         if len(i)>0: #Static offset
-            print 'Static GFs requested...'
+            print('Static GFs requested...')
             f=open(home+project_name+'/data/station_info/'+station_file,'w')
             for k in range(len(i)): #Write temp .sta file
-                out=stations[i[k]]+'\t'+repr(GF[i[k],0])+'\t'+repr(GF[i[k],1])+'\n'
+                out=str(stations[i[k]])+'\t'+repr(GF[i[k],0])+'\t'+repr(GF[i[k],1])+'\n'
                 f.write(out)
             f.close()
             static=1
@@ -389,10 +386,10 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
                             hot_start,dk,pmin,pmax,kmax)
         i=where(GF[:,3]==1)[0]
         if len(i)>0 : #displ waveform
-            print 'Displacememnt GFs requested...'
+            print('Displacememnt GFs requested...')
             f=open(home+project_name+'/data/station_info/'+station_file,'w')
             for k in range(len(i)): #Write temp .sta file
-                out=stations[i[k]]+'\t'+repr(GF[i[k],0])+'\t'+repr(GF[i[k],1])+'\n'
+                out=str(stations[i[k]])+'\t'+repr(GF[i[k],0])+'\t'+repr(GF[i[k],1])+'\n'
                 f.write(out)
             f.close()
             static=0
@@ -405,7 +402,7 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
                             hot_start,dk,pmin,pmax,kmax)
         i=where(GF[:,4]==1)[0]
         if len(i)>0 : #vel waveform
-            print 'Velocity GFs requested...'
+            print('Velocity GFs requested...')
             f=open(home+project_name+'/data/station_info/'+station_file,'w')
             for k in range(len(i)): #Write temp .sta file
                 out=stations[i[k]]+'\t'+repr(GF[i[k],0])+'\t'+repr(GF[i[k],1])+'\n'
@@ -420,7 +417,7 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
                 make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,static,tsunami,
                             hot_start,dk,pmin,pmax,kmax)
         if tgf_file!=None: #Tsunami
-            print 'Seafloor displacement GFs requested...'
+            print('Seafloor displacement GFs requested...')
             static=0
             tsunami=True
             station_file=tgf_file
@@ -432,7 +429,7 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
                             hot_start,dk,pmin,pmax,kmax)
         i=where(GF[:,6]==1)[0]
         if len(i)>0: #InSAR LOS
-            print 'InSAR GFs requested...'
+            print('InSAR GFs requested...')
             f=open(home+project_name+'/data/station_info/'+station_file,'w')
             for k in range(len(i)): #Write temp .sta file
                 out=stations[i[k]]+'\t'+repr(GF[i[k],0])+'\t'+repr(GF[i[k],1])+'\n'
@@ -458,7 +455,7 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
                 pass
             for k in range(len(stations)):
                 #Make dummy station file
-                out=stations[k]+'\t'+repr(GF[k,0])+'\t'+repr(GF[k,1])
+                out=str(stations[k])+'\t'+repr(GF[k,0])+'\t'+repr(GF[k,1])
                 f=open(home+project_name+'/data/station_info/'+station_file,'w')
                 f.write(out)
                 f.close()
@@ -501,7 +498,7 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
             #Decide which synthetics are required
             i=where(GF[:,2]==1)[0]
             if len(i)>0: #Static offset
-                print 'Static synthetics requested'
+                print('Static synthetics requested')
                 #Make dummy station file
                 f=open(home+project_name+'/data/station_info/'+station_file,'w')
                 for k in range(len(i)):
@@ -516,11 +513,11 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
             #Decide which synthetics are required
             i=where(GF[:,3]==1)[0]
             if len(i)>0: #dispalcement waveform
-                print 'Displacement synthetics requested'
+                print('Displacement synthetics requested')
                 #Make dummy station file
                 f=open(home+project_name+'/data/station_info/'+station_file,'w')
                 for k in range(len(i)):
-                    out=stations[i[k]]+'\t'+repr(GF[i[k],0])+'\t'+repr(GF[i[k],1])+'\n'
+                    out=str(stations[i[k]])+'\t'+repr(GF[i[k],0])+'\t'+repr(GF[i[k],1])+'\n'
                     f.write(out)
                 f.close()
                 integrate=1
@@ -533,7 +530,7 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
             #Decide which synthetics are required
             i=where(GF[:,4]==1)[0]
             if len(i)>0: #velocity waveform
-                print 'Velocity synthetics requested'
+                print('Velocity synthetics requested')
                 #Make dummy station file
                 f=open(home+project_name+'/data/station_info/'+station_file,'w')
                 for k in range(len(i)):
@@ -550,7 +547,7 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
             #Decide which synthetics are required
             i=where(GF[:,5]==1)[0]
             if len(i)>0: #tsunami waveform
-                print 'Tsunami synthetics requested'
+                print('Tsunami synthetics requested')
                 #Make dummy station file
                 f=open(home+project_name+'/data/station_info/'+station_file,'w')
                 for k in range(len(i)):
@@ -565,7 +562,7 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
             #Decide which synthetics are required
             i=where(GF[:,6]==1)[0]
             if len(i)>0: # InSAR LOS
-                print 'InSAR synthetics requested'
+                print('InSAR synthetics requested')
                 #Make dummy station file
                 f=open(home+project_name+'/data/station_info/'+station_file,'w')
                 for k in range(len(i)):
@@ -610,7 +607,7 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
     gc.collect()
     #Get data weights
     if weight==True:
-        print 'Applying data weights'
+        print('Applying data weights')
         w=inv.get_data_weights(home,project_name,GF_list,d,decimate)
         W=empty(G.shape)
         W=tile(w,(G.shape[1],1)).T
@@ -623,12 +620,12 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
         w=None
         #Define inversion quantities
         x=WG.transpose().dot(wd)
-        print 'Computing G\'G'
+        print('Computing G\'G')
         K=(WG.T).dot(WG)
     else:
         #Define inversion quantities if no weightd
         x=G.transpose().dot(d)
-        print 'Computing G\'G'
+        print('Computing G\'G')
         K=(G.T).dot(G)
     #Get regularization matrices (set to 0 matrix if not needed)
     static=False #Is it jsut a static inversion?
@@ -650,7 +647,7 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
             #Modify inversion quantities
             x=x+Ls.T.dot(target_moment)
         else:
-            print 'ERROR: Unrecognized regularization type requested'
+            print('ERROR: Unrecognized regularization type requested')
             return
         Ninversion=len(reg_spatial)
     else:
@@ -677,8 +674,8 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
     LtLt=LtLt.todense()
     #off we go
     dt=datetime.now()-t1
-    print 'Preprocessing wall time was '+str(dt)
-    print '\n--- RUNNING INVERSIONS ---\n'
+    print('Preprocessing wall time was '+str(dt))
+    print('\n--- RUNNING INVERSIONS ---\n')
     ttotal=datetime.now()
     kout=0
     for kt in range(len(reg_temporal)):
@@ -686,7 +683,7 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
             t1=datetime.now()
             lambda_spatial=reg_spatial[ks]
             lambda_temporal=reg_temporal[kt]
-            print 'Running inversion '+str(kout+1)+' of '+str(Ninversion)+' at regularization levels: ls ='+repr(lambda_spatial)+' , lt = '+repr(lambda_temporal)
+            print('Running inversion '+str(kout+1)+' of '+str(Ninversion)+' at regularization levels: ls ='+repr(lambda_spatial)+' , lt = '+repr(lambda_temporal))
             if static==True: #Only statics inversion no Lt matrix
                 Kinv=K+(lambda_spatial**2)*LsLs
                 Lt=eye(len(K))
@@ -700,12 +697,12 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
                 try:
                     sol,res=nnls(Kinv,x)
                 except:
-                    print '+++ WARNING: No solution found, writting zeros.'
+                    print('+++ WARNING: No solution found, writting zeros.')
                     sol=zeros(G.shape[1])
                 x=expand_dims(x,axis=1)
                 sol=expand_dims(sol,axis=1)
             else:
-                print 'ERROR: Unrecognized solver \''+solver+'\''
+                print('ERROR: Unrecognized solver \''+solver+'\'')
             #Compute synthetics
             ds=dot(G,sol)
             #Get stats
@@ -728,4 +725,4 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
             kout+=1
             dt1=datetime.now()-t1
             dt2=datetime.now()-ttotal
-            print '... inversion wall time was '+str(dt1)+', total wall time elapsed is '+str(dt2)
+            print('... inversion wall time was '+str(dt1)+', total wall time elapsed is '+str(dt2))

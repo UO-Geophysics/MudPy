@@ -25,7 +25,7 @@ def run_green(source,station_file,model_name,dt,NFFT,static,dk,pmin,pmax,kmax):
     from shlex import split
     
     depth='%.4f' % source[3]
-    print("--> Computing GFs for source depth "+str(depth)+"km")
+    print("--> Computing GFs for source depth "+str(depth)+" km")
     #Get station distances to source
     d,az=src2sta(station_file,source)
     #Make distance string for system call
@@ -34,19 +34,19 @@ def run_green(source,station_file,model_name,dt,NFFT,static,dk,pmin,pmax,kmax):
         diststr=diststr+' %.3f' % d[k] #Truncate distance to 3 decimal palces (meters)
     if static==0: #Compute full waveform
         command=split("fk.pl -M"+model_name+"/"+depth+"/f -N"+str(NFFT)+"/"+str(dt)+'/1/'+repr(dk)+' -P'+repr(pmin)+'/'+repr(pmax)+'/'+repr(kmax)+diststr)
-        print "fk.pl -M"+model_name+"/"+depth+"/f -N"+str(NFFT)+"/"+str(dt)+'/1/'+repr(dk)+' -P'+repr(pmin)+'/'+repr(pmax)+'/'+repr(kmax)+diststr
+        print("fk.pl -M"+model_name+"/"+depth+"/f -N"+str(NFFT)+"/"+str(dt)+'/1/'+repr(dk)+' -P'+repr(pmin)+'/'+repr(pmax)+'/'+repr(kmax)+diststr)
+        #print(command)
         p=subprocess.Popen(command,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
-        out,err=p.communicate() 
+        out,err=p.communicate()
     else: #Compute only statics
-        
-        
         command=split("fk.pl -M"+model_name+"/"+depth+"/f -N1 "+diststr)
-        print "fk.pl -M"+model_name+"/"+depth+"/f -N1 "+diststr
+        print("fk.pl -M"+model_name+"/"+depth+"/f -N1 "+diststr)
+        #print(command)
         p=subprocess.Popen(command,stdout=open('staticgf','w'),stderr=subprocess.PIPE)
-        out,err=p.communicate()  
+        out,err=p.communicate()
     #Log output
-    print out
-    print err
+    #print(out)
+    #print(err)
     log=str(out)+str(err)
     return log
     
@@ -82,7 +82,6 @@ def run_syn(home,project_name,source,station_file,green_path,model_name,integrat
     import os
     import subprocess
     from mudpy.forward import get_mu
-    from string import rjust
     from numpy import array,genfromtxt,loadtxt,savetxt,log10,argmin
     from obspy import read
     from shlex import split
@@ -95,7 +94,7 @@ def run_syn(home,project_name,source,station_file,green_path,model_name,integrat
     model_file=home+project_name+'/structure/'+model_name
     structure=loadtxt(model_file,ndmin=2)
     #Parse the soruce information
-    num=rjust(str(int(source[0])),4,'0')
+    num=str(int(source[0])).rjust(4,'0')
     xs=source[1]
     ys=source[2]
     zs=source[3]
@@ -136,26 +135,26 @@ def run_syn(home,project_name,source,station_file,green_path,model_name,integrat
                 #First Stike-Slip GFs
                 commandSS="syn -I -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeSS)+" -D"+str(duration)+ \
                     "/"+str(rise)+" -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".SS.disp.x -G"+green_path+diststr+".grn.0"
-                print commandSS #Output to screen so I know we're underway
+                print(commandSS) #Output to screen so I know we're underway
                 log=log+commandSS+'\n' #Append to log
                 commandSS=split(commandSS) #Split string into lexical components for system call
                 #Now dip slip
                 commandDS="syn -I -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeDS)+" -D"+str(duration)+ \
                     "/"+str(rise)+" -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".DS.disp.x -G"+green_path+diststr+".grn.0"
-                print commandDS
+                print(commandDS)
                 log=log+commandDS+'\n'
                 commandDS=split(commandDS)
             else: #Make vel.
                 #First Stike-Slip GFs
                 commandSS="syn -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeSS)+" -D"+str(duration)+ \
                     "/"+str(rise)+" -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".SS.vel.x -G"+green_path+diststr+".grn.0"
-                print commandSS
+                print(commandSS)
                 log=log+commandSS+'\n'
                 commandSS=split(commandSS)
                 #Now dip slip
                 commandDS="syn -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeDS)+" -D"+str(duration)+ \
                     "/"+str(rise)+" -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".DS.vel.x -G"+green_path+diststr+".grn.0"
-                print commandDS
+                print(commandDS)
                 log=log+commandDS+'\n'
                 commandDS=split(commandDS)
             #Run the strike- and dip-slip commands (make system calls)
@@ -287,7 +286,7 @@ def run_syn(home,project_name,source,station_file,green_path,model_name,integrat
                     green_file=model_name+".static."+strdepth+".sub"+subfault+'.gps' #Output dir
                 
                 
-                print green_file
+                print(green_file)
                 log=log+green_file+'\n' #Append to log
                 statics=loadtxt(green_file) #Load GFs
                 #Print static GFs into a pipe and pass into synthetics command
@@ -304,9 +303,9 @@ def run_syn(home,project_name,source,station_file,green_path,model_name,integrat
                         " -A"+str(az[k])+" -P"
                 commandSS="syn -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeSS)+\
                         " -A"+str(az[k])+" -P"
-                print staname[k]
-                print commandSS
-                print commandDS
+                print(staname[k])
+                print(commandSS)
+                print(commandDS)
                 log=log+staname[k]+'\n'+commandSS+'\n'+commandDS+'\n' #Append to log
                 commandSS=split(commandSS) #Lexical split
                 commandDS=split(commandDS)

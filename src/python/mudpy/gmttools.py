@@ -144,7 +144,6 @@ def make_sliprate_ruptfiles(rupt,nstrike,ndip,epicenter,out,tmax,dt):
     '''
     from numpy import genfromtxt,unique,zeros,where,arange,interp,c_,savetxt
     from mudpy.forward import get_source_time_function,add2stf
-    from string import rjust
     
     f=genfromtxt(rupt)
     num=f[:,0]
@@ -179,7 +178,7 @@ def make_sliprate_ruptfiles(rupt,nstrike,ndip,epicenter,out,tmax,dt):
     #Loop over subfaults
     for kfault in range(nfault):
         if kfault%10==0:
-            print '... working on subfault '+str(kfault)+' of '+str(nfault)
+            print( '... working on subfault '+str(kfault)+' of '+str(nfault))
         #Get rupture times for subfault windows
         i=where(num==unum[kfault])[0]
         trup=f[i,12]
@@ -207,7 +206,7 @@ def make_sliprate_ruptfiles(rupt,nstrike,ndip,epicenter,out,tmax,dt):
     #First retain original rupture information
     ruptout=f[0:len(unum),:]
     ruptout[:,8]=0 #Set SS to 0
-    print 'Writing files...'
+    print( 'Writing files...')
     for ktime in range(len(t)):
         sliprate=zeros(lon.shape)
         for kfault in range(nfault):
@@ -215,11 +214,11 @@ def make_sliprate_ruptfiles(rupt,nstrike,ndip,epicenter,out,tmax,dt):
             sliprate[kfault]=M[i,kfault]/(mu[kfault]*area[kfault])
         ruptout[:,9]=sliprate #Assign slip rate to SS component    
         maxsr=max(maxsr,sliprate.max())
-        fname=out+rjust(str(ktime),4,'0')+'.sliprate'
+        fname=out+str(ktime).rjust(4,'0')+'.sliprate'
         #Write as a rupt file
         fmtout='%6i\t%.4f\t%.4f\t%8.4f\t%.2f\t%.2f\t%.2f\t%.2f\t%12.4e\t%12.4e%10.1f\t%10.1f\t%8.4f\t%.4e'
         savetxt(fname,ruptout,fmtout,header='No,lon,lat,z(km),strike,dip,rise,dura,ss-slip(m),ds-slip(m),ss_len(m),ds_len(m),rupt_time(s),rigidity(Pa)')
-    print 'Maximum slip rate was '+str(maxsr)+'m/s'    
+    print( 'Maximum slip rate was '+str(maxsr)+'m/s')    
     
     
 def make_sliprate_slice(rupt,nstrike,ndip,epicenter,out,tmax,dt):
@@ -227,7 +226,6 @@ def make_sliprate_slice(rupt,nstrike,ndip,epicenter,out,tmax,dt):
     '''
     from numpy import genfromtxt,unique,zeros,where,arange,interp,c_,savetxt
     from mudpy.forward import get_source_time_function,add2stf
-    from string import rjust
     
     f=genfromtxt(rupt)
     num=f[:,0]
@@ -253,7 +251,7 @@ def make_sliprate_slice(rupt,nstrike,ndip,epicenter,out,tmax,dt):
     #Loop over subfaults
     for kfault in range(nfault):
         if kfault%10==0:
-            print '... working on subfault '+str(kfault)+' of '+str(nfault)
+            print( '... working on subfault '+str(kfault)+' of '+str(nfault))
         #Get rupture times for subfault windows
         i=where(num==unum[kfault])[0]
         trup=f[i,12]
@@ -278,16 +276,16 @@ def make_sliprate_slice(rupt,nstrike,ndip,epicenter,out,tmax,dt):
         T[:,kfault]=t
     #Now look through time slices
     maxsr=0
-    print 'Writing files...'
+    print('Writing files...')
     for ktime in range(len(t)):
         sliprate=zeros(lon.shape)
         for kfault in range(nfault):
             i=where(T[:,kfault]==t[ktime])[0]
             sliprate[kfault]=M[i,kfault]/(mu[kfault]*area[kfault])
         maxsr=max(maxsr,sliprate.max())
-        fname=out+rjust(str(ktime),4,'0')+'.sliprate'
+        fname=out+str(ktime).rjust(4,'0')+'.sliprate'
         savetxt(fname, c_[lon,lat,depth,sliprate],fmt='%.6f\t%.6f\t%.4f\t%.6f')
-    print 'Maximum slip rate was '+str(maxsr)+'m/s'
+    print( 'Maximum slip rate was '+str(maxsr)+'m/s')
     
    
     
@@ -297,7 +295,6 @@ def make_fakequakes_sliprate_slice(rupt,nstrike,ndip,epicenter,outpath,run_name,
     '''
     from numpy import genfromtxt,unique,zeros,where,arange,interp,c_,savetxt
     from mudpy.forward import get_source_time_function,add2stf,build_source_time_function
-    from string import rjust
     
     f=genfromtxt(rupt)
     num=f[:,0]
@@ -319,7 +316,7 @@ def make_fakequakes_sliprate_slice(rupt,nstrike,ndip,epicenter,outpath,run_name,
     #Loop over subfaults
     for kfault in range(nfault):
         if kfault%10==0:
-            print '... working on subfault '+str(kfault)+' of '+str(nfault)
+            print( '... working on subfault '+str(kfault)+' of '+str(nfault))
         
         #Get rupture times for subfault windows
         trup=f[kfault,12]
@@ -355,16 +352,16 @@ def make_fakequakes_sliprate_slice(rupt,nstrike,ndip,epicenter,outpath,run_name,
         
     #Now look through time slices
     maxsr=0
-    print 'Writing files...'
+    print( 'Writing files...')
     for ktime in range(len(t)):
         sliprate=zeros(lon.shape)
         for kfault in range(nfault):
             sliprate[kfault]=M[ktime,kfault]/(mu[kfault]*area[kfault])
         maxsr=max(maxsr,sliprate.max())
-        fname=outpath+run_name+'.'+rjust(str(ktime),4,'0')+'.sliprate'
-        print sliprate.max()
+        fname=outpath+run_name+'.'+str(ktime).rjust(4,'0')+'.sliprate'
+        print( sliprate.max())
         savetxt(fname, c_[lon,lat,depth,sliprate],fmt='%.6f\t%.6f\t%.4f\t%.6f')
-    print 'Maximum slip rate was '+str(maxsr)+'m/s'   
+    print( 'Maximum slip rate was '+str(maxsr)+'m/s' )  
        
        
         
@@ -374,7 +371,6 @@ def make_usgs_sliprate_slice(rupt,outpath,tmax,dt):
     '''
     from numpy import zeros,where,arange,interp,c_,savetxt,cos,pi,roll,isnan
     from mudpy.forward import build_source_time_function
-    from string import rjust
     from scipy.integrate import trapz
     
     f,segment_out,segment_data_out = read_neic_param(rupt)
@@ -404,7 +400,7 @@ def make_usgs_sliprate_slice(rupt,outpath,tmax,dt):
     #Loop over subfaults
     for kfault in range(nfault):
         if kfault%10==0:
-            print '... working on subfault '+str(kfault)+' of '+str(nfault)
+            print('... working on subfault '+str(kfault)+' of '+str(nfault))
         
         #Add it up
         slip=total_slip[kfault]
@@ -439,17 +435,17 @@ def make_usgs_sliprate_slice(rupt,outpath,tmax,dt):
         
     #Now look through time slices
     maxsr=0
-    print 'Writing files...'
+    print('Writing files...')
     for ktime in range(len(t)):
 
         sliprate=S[ktime,:]
         i=where(isnan(sliprate)==True)[0]
         sliprate[i]=0
         maxsr=max(maxsr,sliprate.max())
-        fname=outpath+rjust(str(ktime),4,'0')+'.sliprate'
-        print sliprate.max()
+        fname=outpath+str(ktime).rjust(4,'0')+'.sliprate'
+        print(sliprate.max())
         savetxt(fname, c_[lon,lat,depth,sliprate],fmt='%.6f\t%.6f\t%.4f\t%.6f')
-    print 'Maximum slip rate was '+str(maxsr)+'m/s'    
+    print('Maximum slip rate was '+str(maxsr)+'m/s')    
     
     #also output total slip
     out=c_[lon,lat,total_slip]   
@@ -464,7 +460,6 @@ def make_slip_slice(rupt,nstrike,ndip,epicenter,out,tmax,dt):
     '''
     from numpy import genfromtxt,unique,zeros,where,arange,interp,c_,savetxt,intersect1d
     from mudpy.forward import get_source_time_function,add2stf
-    from string import rjust
     from scipy.integrate import trapz
     
     f=genfromtxt(rupt)
@@ -498,10 +493,10 @@ def make_slip_slice(rupt,nstrike,ndip,epicenter,out,tmax,dt):
              idip[k]=i
              k+=1  
     #Loop over subfaults
-    print nfault
+    print(nfault)
     for kfault in range(nfault):
         if kfault%10==0:
-            print '... working on subfault '+str(kfault)+' of '+str(nfault)
+            print('... working on subfault '+str(kfault)+' of '+str(nfault))
         #Get rupture times for subfault windows
         i=where(num==unum[kfault])[0]
         trup=f[i,12]
@@ -528,11 +523,11 @@ def make_slip_slice(rupt,nstrike,ndip,epicenter,out,tmax,dt):
     maxsr=0
     #Now integrate slip
     t=arange(0,tmax+dt*0.1,dt)
-    print t
+    print(t)
     #First retain original rupture information
     ruptout=f[0:len(unum),:]
     ruptout[:,8]=0 #Set SS to 0
-    print 'Writing files...'
+    print('Writing files...')
     for ktime in range(len(t)-1):
         slip=zeros(lon.shape)
         for kfault in range(nfault):
@@ -542,10 +537,10 @@ def make_slip_slice(rupt,nstrike,ndip,epicenter,out,tmax,dt):
             slip[kfault]=trapz(M[i,kfault]/(mu[kfault]*area[kfault]),T[i,kfault])
         ruptout[:,9]=slip #Assign slip to SS component  
         maxsr=max(maxsr,slip.max())
-        fname=out+rjust(str(ktime),4,'0')+'.slip'
+        fname=out+str(ktime).rjust(4,'0')+'.slip'
         fmtout='%6i\t%.4f\t%.4f\t%8.4f\t%.2f\t%.2f\t%.2f\t%.2f\t%12.4e\t%12.4e%10.1f\t%10.1f\t%8.4f\t%.4e'
         savetxt(fname,ruptout,fmtout,header='No,lon,lat,z(km),strike,dip,rise,dura,ss-slip(m),ds-slip(m),ss_len(m),ds_len(m),rupt_time(s),rigidity(Pa)')
-    print 'Maximum slip was '+str(maxsr)+'m'      
+    print('Maximum slip was '+str(maxsr)+'m')      
 
 
 
@@ -623,7 +618,6 @@ def make_shakemap_slice(home,project_name,run_name,time_epi,GF_list,dt,tmax):
     Make xyz files with current ground velocity
     '''
     from numpy import genfromtxt,arange,sqrt,zeros,where,c_,savetxt
-    from string import rjust
     from obspy import read
     from mudpy.forward import lowpass
     
@@ -642,7 +636,7 @@ def make_shakemap_slice(home,project_name,run_name,time_epi,GF_list,dt,tmax):
             h+=n[0].copy()
         h[ksta].data=sqrt(n[0].data**2+e[0].data**2)
         h[ksta].trim(starttime=time_epi)
-        print h[ksta].stats.starttime
+        print(h[ksta].stats.starttime)
     vout=zeros(len(lonlat))
     maxv=0
     for kt in range(len(t)):
@@ -652,10 +646,10 @@ def make_shakemap_slice(home,project_name,run_name,time_epi,GF_list,dt,tmax):
         if vout.max()>maxv:
             maxv=vout.max()
         out=c_[lonlat,vout]
-        num=rjust(str(kt),4,'0')
-        print num
+        num=str(kt).rjust(4,'0')
+        print(num)
         savetxt(home+project_name+'/analysis/shake/'+num+'.shake',out,fmt='%10.6f\t%10.6f\t%10.4f')
-    print 'Max velocity was '+str(maxv)+'m/s'
+    print('Max velocity was '+str(maxv)+'m/s')
         
 
 

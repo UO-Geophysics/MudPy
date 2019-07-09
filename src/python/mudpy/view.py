@@ -496,7 +496,7 @@ def tile_slip(rupt,nstrike,ndip,(slip_bounds),geographic=False,epicenter=0,epice
     lon_afters=af[:,0]
     lat_afters=af[:,1]
     depth_afters=af[:,2]
-    print af
+    print(af)
     if geographic==True: #Get geographic coordinates to compute along strike and along dip distance
         lon=f[(epicenter_line-1)*nstrike:epicenter_line*nstrike,1] #Only compute line at the epicenter depth
         lat=f[(epicenter_line-1)*nstrike:epicenter_line*nstrike,2]    
@@ -647,13 +647,12 @@ def tile_slip_movieframes(home,project_name,sliprate_path,nstrike,ndip,(slip_min
     import matplotlib.pyplot as plt
     from obspy.core.util.geodetics import gps2DistAzimuth
     from glob import glob
-    from string import rjust,ljust
     from matplotlib.mlab import griddata
     
     #Get sliprate files
     files=glob(sliprate_path+'*.sliprate')
     for kframe in range(len(files)):
-        print kframe
+        print(kframe)
         f=genfromtxt(files[kframe])
         slip=f[:,9]
         #Add aftershocks
@@ -702,7 +701,7 @@ def tile_slip_movieframes(home,project_name,sliprate_path,nstrike,ndip,(slip_min
         #Make rupture velocity contours
         theta=linspace(0,2*pi,100)
         t=dt*kframe #Current time
-        print "t="+str(t)
+        print("t="+str(t))
         r15=(1.5*t)*ones(100)
         x15=r15*cos(theta)
         y15=r15*sin(theta)-epicenter[2]
@@ -775,15 +774,15 @@ def tile_slip_movieframes(home,project_name,sliprate_path,nstrike,ndip,(slip_min
         plt.plot(x25,y25,'--',c='grey')
 
         cb.set_label('Slip rate (m/s)')
-        plot_name=home+project_name+'/plots/sliprate.'+rjust(str(kframe),4,'0')+'.png'
-        plt.title('t = '+ljust(str(kframe*dt),4,'0')+'s')
+        plot_name=home+project_name+'/plots/sliprate.'+str(kframe).rjust(4,'0')+'.png'
+        plt.title('t = '+str(kframe*dt).ljust(4,'0')+'s')
         plt.subplots_adjust(left=0.1, bottom=0.15, right=0.9, top=0.9, wspace=0, hspace=0)
         plt.savefig(plot_name)     
         ts=kframe*dt
         if ts==1.0 or ts==2.0 or ts==3.0 or ts==4.0 or ts==5.0 or ts==6.0 or ts==7.0 or ts==8.0:
-            plot_name=home+project_name+'/plots/sliprate.'+rjust(str(kframe),4,'0')+'.pdf'
+            plot_name=home+project_name+'/plots/sliprate.'+str(kframe).rjust(4,'0')+'.pdf'
             plt.savefig(plot_name) 
-            print 'Saved PDF frame'
+            print('Saved PDF frame')
         plt.close("all")
     
         
@@ -801,14 +800,13 @@ def panel_tile_slip(home,project_name,sliprate_path,nstrike,ndip,(slip_min,slip_
     import matplotlib.pyplot as plt
     from obspy.core.util.geodetics import gps2DistAzimuth
     from glob import glob
-    from string import rjust,ljust
     from matplotlib.mlab import griddata
     from matplotlib import colorbar
     
     #Get sliprate files
     files=[]
     for k in range(len(nframes)):
-        frame=rjust(str(nframes[k]),4,'0')
+        frame=str(nframes[k]).rjust(4,'0')
         files.append(sliprate_path+frame+'.slip')
     #Now intialize figure
     fig, axarr = plt.subplots(5, 2,figsize=(8,4))
@@ -817,7 +815,7 @@ def panel_tile_slip(home,project_name,sliprate_path,nstrike,ndip,(slip_min,slip_
     #loop through frames
     for kframe in range(len(files)):
         ax=axarr[kframe] #current axis
-        print kframe
+        print(kframe)
         f=genfromtxt(files[kframe])
         slip=f[:,9]
         #Add aftershocks
@@ -866,7 +864,7 @@ def panel_tile_slip(home,project_name,sliprate_path,nstrike,ndip,(slip_min,slip_
         #Make rupture velocity contours
         theta=linspace(0,2*pi,100)
         t=1.0*(kframe+1) #Current time
-        print "t="+str(t)
+        print("t="+str(t))
         r15=(1.5*t)*ones(100)
         x15=r15*cos(theta)
         y15=r15*sin(theta)-epicenter[2]
@@ -1026,7 +1024,7 @@ def tile_moment(rupt,epicenter,nstrike,ndip,covfile,beta=0,(vfast,vslow)=(0,0),s
     Mout=[]
     for kfault in range(nfault):
         if kfault%10==0:
-            print '... working on subfault '+str(kfault)+' of '+str(nfault)
+            print('... working on subfault '+str(kfault)+' of '+str(nfault))
         #Get rupture times for subfault windows
         i=where(num==unum[kfault])[0]
         trup=f[i,12]
@@ -1109,7 +1107,7 @@ def tile_moment(rupt,epicenter,nstrike,ndip,covfile,beta=0,(vfast,vslow)=(0,0),s
         cbar_ax = fig.add_axes([0.91, 0.15, 0.01, 0.7])
         cb=fig.colorbar(im2, cax=cbar_ax)
         cb.set_label('Reference rupture velocity (km/s)')
-    print 'Maximum moment was '+str(Mmax)+'N-m'
+    print('Maximum moment was '+str(Mmax)+'N-m')
     return tout,Mout
 
 
@@ -1140,7 +1138,7 @@ def source_time_function(rupt,epicenter,plot=True):
     #Loop over subfaults
     for kfault in range(nfault):
         if kfault%10==0:
-            print '... working on subfault '+str(kfault)+' of '+str(nfault)
+            print('... working on subfault '+str(kfault)+' of '+str(nfault))
         #Get rupture times for subfault windows
         i=where(num==unum[kfault])[0]
         trup=f[i,12]
@@ -1255,7 +1253,6 @@ def tslice(rupt,out,dt,cumul):
     
     from numpy import genfromtxt,unique,where,zeros,arange,intersect1d,trapz
     import matplotlib.pyplot as plt
-    from string import rjust
     
     delta_t=0.05
     f=genfromtxt(rupt)
@@ -1279,7 +1276,7 @@ def tslice(rupt,out,dt,cumul):
     #Determine time series fo each triangle
     t=arange(0,trupt.max()+trise[0],delta_t)
     for kslice in range(len(tslice-2)):
-        print str(kslice)+'/'+str(len(tslice)-1)
+        print(str(kslice)+'/'+str(len(tslice)-1))
         #And initalize slice vectors
         ss_slice=zeros(len(f))
         ds_slice=zeros(len(f))
@@ -1337,11 +1334,11 @@ def tslice(rupt,out,dt,cumul):
         if cumul==0:
             cb.set_label('Slip (m)')
             plt.title('t = '+str(tslice[kslice])+'s to '+str(tslice[kslice+1])+'s') 
-            plt.savefig(out+rjust(str(kslice),4,'0')+'.kin_slice.png')
+            plt.savefig(out+str(kslice).rjust(4,'0')+'.kin_slice.png')
         else:
             cb.set_label('Cumulative Slip (m)')
             plt.title('t = '+str(tslice[kslice+1])+'s')
-            plt.savefig(out+rjust(str(kslice),4,'0')+'.kin_cumulative.png')
+            plt.savefig(out+str(kslice).rjust(4,'0')+'.kin_cumulative.png')
         plt.close("all")
     
 
@@ -1570,7 +1567,7 @@ def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpas
             es[0].data=zeros(len(es[0].data))
         
         if lowpass!=None:
-            print 'Lowpassing'
+            print('Lowpassing')
             fsample=1./e[0].stats.delta
             e[0].data=lfilter(e[0].data,lowpass,fsample,2)
             n[0].data=lfilter(n[0].data,lowpass,fsample,2)
@@ -2008,7 +2005,7 @@ def ABIC(home,project_name,run_name):
     logs=glob(outdir+'*'+run_name+'.????.log')
     ABIC=zeros(len(logs))
     ls=zeros(len(logs))
-    print 'Gathering statistics for '+str(len(logs))+' inversions...'
+    print('Gathering statistics for '+str(len(logs))+' inversions...')
     for k in range(len(logs)):
         with open(logs[k]) as f:
             for line in f:
@@ -2028,8 +2025,8 @@ def ABIC(home,project_name,run_name):
     pl.annotate(r'$\lambda$'+'='+str(ls[imin]),xy=(ls[imin],ABIC[imin]),xytext=(ls[imin],ABIC[imin]-0.05*(max(ABIC)-ABIC[imin])))
     pl.title('Run Name: '+run_name)
     pl.savefig(plotdir+run_name+'.ABIC.png')
-    print 'ABIC is minimized at inversion '+logs[imin]
-    print '... lambda = '+repr(ls[imin])
+    print('ABIC is minimized at inversion '+logs[imin])
+    print('... lambda = '+repr(ls[imin]))
     pl.show()
     
 def ABIC2D(home,project_name,run_name,(ABICmin,ABICmax)):
@@ -2056,7 +2053,7 @@ def ABIC2D(home,project_name,run_name,(ABICmin,ABICmax)):
     ABIC=zeros(len(logs))
     ls=zeros(len(logs))
     lt=zeros(len(logs))
-    print 'Gathering statistics for '+str(len(logs))+' inversions...'
+    print('Gathering statistics for '+str(len(logs))+' inversions...')
     for k in range(len(logs)):
         with open(logs[k]) as f:
             for line in f:
@@ -2084,8 +2081,8 @@ def ABIC2D(home,project_name,run_name,(ABICmin,ABICmax)):
     plt.scatter(ls[imin],lt[imin],marker='*',color='r',s=125)
     plt.title(r'$\lambda_s^{min} = $%.4e , $\lambda_t^{min} = $%.4e' % (10**ls[imin],10**lt[imin]))
     plt.show()
-    print 'ABIC is minimized at inversion '+logs[imin]
-    print '... ls = '+repr(10**ls[imin])+' , lt = '+repr(10**lt[imin])
+    print('ABIC is minimized at inversion '+logs[imin])
+    print('... ls = '+repr(10**ls[imin])+' , lt = '+repr(10**lt[imin]))
         
     
 def coherence(home,project_name,run_name,run_number,GF_list,vord,sort,f_lims):
@@ -2347,7 +2344,6 @@ def stf_spectra(home,project_name,rupt,flims,dlims,normalize=True,stacks=None):
     import matplotlib.colors as colors
     import matplotlib.cm as cmx
     from numpy import load,genfromtxt,unique,arange,where,intersect1d
-    from string import rjust
     
     
     datapath=home+project_name+'/analysis/frequency/'
@@ -2371,7 +2367,7 @@ def stf_spectra(home,project_name,rupt,flims,dlims,normalize=True,stacks=None):
     if stacks==None:
         for k in range(nfault):
             #Read coherences
-            P=load(datapath+rupt.split('.')[0]+'.'+rupt.split('.')[1]+'.sub'+rjust(str(k),4,'0')+'.stfpsd.npz')
+            P=load(datapath+rupt.split('.')[0]+'.'+rupt.split('.')[1]+'.sub'+str(k).rjust(4,'0')+'.stfpsd.npz')
             f=P['freq']
             psd=P['psd']
             i1=where(f>=flims[0])[0]
@@ -2388,7 +2384,7 @@ def stf_spectra(home,project_name,rupt,flims,dlims,normalize=True,stacks=None):
             current=stacks[k]
             for ks in range(len(current)):
                 #Read coherences
-                P=load(datapath+rupt.split('.')[0]+'.'+rupt.split('.')[1]+'.sub'+rjust(str(current[ks]),4,'0')+'.stfpsd.npz')
+                P=load(datapath+rupt.split('.')[0]+'.'+rupt.split('.')[1]+'.sub'+str(current[ks]).rjust(4,'0')+'.stfpsd.npz')
                 f=P['freq']
                 psd=P['psd']
                 i1=where(f>=flims[0])[0]
@@ -2428,7 +2424,6 @@ def dtopo_slices(dtopo_file,fault_file,out):
     from numpy import genfromtxt,unique,where,meshgrid
     from scipy.interpolate import griddata
     from matplotlib import pyplot as plt
-    from string import rjust
     
     dtopo=genfromtxt(dtopo_file)
     f=genfromtxt(fault_file)
@@ -2439,7 +2434,7 @@ def dtopo_slices(dtopo_file,fault_file,out):
     zrange=max([-z1,z2])
     #Loop over time slices
     for kt in range(len(t)):
-        print 't = '+str(t[kt])
+        print('t = '+str(t[kt]))
         i=where(dtopo[:,0]==t[kt])[0]
         lon=dtopo[i,1]
         lat=dtopo[i,2]     
@@ -2457,7 +2452,7 @@ def dtopo_slices(dtopo_file,fault_file,out):
         plt.xlabel('Longitude (deg)')
         plt.ylabel('Latitude (deg)')
         plt.scatter(f[:,1],f[:,2],c='k',marker='x')
-        plt.savefig(out+rjust(str(kt),4,'0')+'vert.png')
+        plt.savefig(out+str(kt).rjust(4,'0')+'vert.png')
         plt.close("all")
         
 

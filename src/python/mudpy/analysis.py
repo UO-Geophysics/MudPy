@@ -48,7 +48,7 @@ def subfault_STFs(rupt,epicenter,nstrike,ndip,beta=None,covfile=None):
     Mout=[]
     for kfault in range(nfault):
         if kfault%10==0:
-            print '... working on subfault '+str(kfault)+' of '+str(nfault)
+            print('... working on subfault '+str(kfault)+' of '+str(nfault))
         #Get rupture times for subfault windows
         i=where(num==unum[kfault])[0]
         trup=f[i,12]
@@ -86,7 +86,7 @@ def subfault_STFs(rupt,epicenter,nstrike,ndip,beta=None,covfile=None):
             tout=r_[tout,expand_dims(t1,1).T]
         #Track maximum moment
         Mmax=max(Mmax,M1.max())
-    print 'Maximum moment was '+str(Mmax)+'N-m'
+    print('Maximum moment was '+str(Mmax)+'N-m')
     
     return tout,Mout
     
@@ -126,7 +126,7 @@ def make_scaling_fault(home,project_name,slip,length,width,strike,dip,rake,hypoc
     too_shallow=True
     while too_shallow:
         if minz-delta_dip<0: #Fault breaches the surface
-            print 'Fault too shallow by '+str(delta_dip-minz)+'km, adjusting down-dip width...'
+            print('Fault too shallow by '+str(delta_dip-minz)+'km, adjusting down-dip width...')
             num_updip-=1
             num_downdip+=1
             #Get fault
@@ -171,7 +171,7 @@ def make_glarms_fault(home,project_name,length,width,strike,dip,rake,fault_lon,f
         too_shallow=True
         while too_shallow:
             if minz-delta_dip<0: #Fault breaches the surface
-                print 'Fault too shallow by '+str(delta_dip-minz)+'km, adjusting down-dip width...'
+                print('Fault too shallow by '+str(delta_dip-minz)+'km, adjusting down-dip width...')
                 num_updip-=1
                 num_downdip+=1
                 #Get fault
@@ -271,7 +271,7 @@ def make_planar_geometry(strike,dip,nstrike,dx_dip,dx_strike,epicenter,num_updip
     la=zeros(len(d))
     for k in range(len(d)):
         if isnan(az[k]): #No azimuth because I'm on the epicenter
-            print 'Point on epicenter'
+            print('Point on epicenter')
             lo[k]=epicenter[0]
             la[k]=epicenter[1]
         else:
@@ -533,7 +533,7 @@ def pgd_slope_difference(home,project_name,rupture_list):
     slope_observed=array([])
     slope_theory=array([])
     for krupt in range(len(ruptures)):
-        print 'Reading data from rupture '+ruptures[krupt]
+        print('Reading data from rupture '+ruptures[krupt])
         run_name=ruptures[krupt].split('.')[0]
         run_number=ruptures[krupt].split('.')[1]
         A,B,C=pgd_regression(home,project_name,run_name,run_number,norm=2)
