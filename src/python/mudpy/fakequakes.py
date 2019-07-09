@@ -1213,7 +1213,6 @@ def run_generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_n
     '''
     
     from numpy import load,save,genfromtxt,log10,cos,sin,deg2rad,savetxt,zeros,where
-    from string import rjust
     from time import gmtime, strftime
     from obspy.taup import TauPyModel
 
