@@ -21,9 +21,9 @@ def init(home,project_name):
     clob='y'
     proj_dir=home+project_name+'/'
     if path.exists(proj_dir):  #Path exists, clobber?
-        clob=raw_input('Project directory exists, clobber (y/n)?')
+        clob=input('Project directory exists, clobber (y/n)?')
         if clob is'y' or clob is 'Y': #Clobber baby
-            clob=raw_input('This will delete everything in this project directory, so, take a minute, think about it: clobber (y/n)?')
+            clob=input('This will delete everything in this project directory, so, take a minute, think about it: clobber (y/n)?')
             if clob is 'y' or clob is 'Y':
                 rmtree(proj_dir)
             else: #Leave direcory alone
@@ -236,6 +236,7 @@ def make_parallel_green(home,project_name,station_file,fault_name,model_name,dt,
         pass
     else:
         mpi='mpiexec -n '+str(ncpus)+' python '+mud_source+'parallel.py run_parallel_green '+home+' '+project_name+' '+station_file+' '+model_name+' '+str(dt)+' '+str(NFFT)+' '+str(static)+' '+str(dk)+' '+str(pmin)+' '+str(pmax)+' '+str(kmax)+' '+str(tsunami)+' '+str(insar)
+        print(mpi)
         mpi=split(mpi)
         p=subprocess.Popen(mpi)
         p.communicate()
