@@ -30,9 +30,9 @@ def init(home,project_name):
             if clob is 'y' or clob is 'Y':
                 rmtree(proj_dir)
             else: #Leave direcory alone
-                print 'Phew, almost shot yourself in the foot there didn\'t you?'
+                print('Phew, almost shot yourself in the foot there didn\'t you?')
         else: #Leave direcory alone
-            print 'Phew, almost shot yourself in the foot there didn\'t you?'
+            print('Phew, almost shot yourself in the foot there didn\'t you?')
     if clob is 'y' or clob is 'Y':
         makedirs(proj_dir)
         #And make the subdirectories
@@ -86,7 +86,7 @@ def llz2utm(lon,lat,projection_zone='None'):
         z=str(int(zone[0]))+letter
     else:
         z=projection_zone
-    print z
+    print(z)
     p = Proj(proj='utm',zone=z,ellps='WGS84')
     x,y=p(lon,lat)
     return x,y
@@ -140,11 +140,11 @@ def subfault_distances_3D(home,project_name,fault_name,slab_name,projection_zone
         g = Geod(ellps='WGS84') 
         
         #Loop over faults an compute distances
-        print 'Getting inter-fault distances'
+        print('Getting inter-fault distances')
         for i in range(len(fault)):
             
             if i%10==0:
-                print '... working on subfault '+str(i)+' of '+str(len(fault))
+                print('... working on subfault '+str(i)+' of '+str(len(fault)))
             
             #For each subfault loop over every other subfault
             for j in range(len(fault)):
@@ -240,10 +240,10 @@ def subfault_distances_3D(home,project_name,fault_name,slab_name,projection_zone
         x_down_dip=linspace(-x_range/2,x_range/2,200)
         
         #Loop over number of subfaults, we want the distance from i-th fault to all other (j) subfaults
-        print 'Getting inter-fault distances'
+        print('Getting inter-fault distances')
         for i in range(len(fault)):
             if i%10==0:
-                print '... working on subfault '+str(i)+' of '+str(len(fault))
+                print('... working on subfault '+str(i)+' of '+str(len(fault)))
             #Current fault
             xi = fault_x[i]
             yi = fault_y[i]
@@ -443,7 +443,7 @@ def make_KL_slip(fault,num_modes,eigenvals,V,mean_slip,max_slip,lognormal=True,m
             break
         iterations+=1
         if iterations>maxiter:
-            print'... ... ... improper eigenvalues, recalculating...'
+            print('... ... ... improper eigenvalues, recalculating...')
             break
     
 
@@ -588,7 +588,7 @@ def select_faults(whole_fault,Dstrike,Ddip,target_Mw,buffer_factor,num_modes,sca
     if no_shallow_epi==True:
         while hypo_found==False:
             if whole_fault[hypo_fault,3]<hypo_depth:
-                print '... ... ... hypocenter is km too shallow at %dkm, recalculating...' %(whole_fault[hypo_fault,3])
+                print('... ... ... hypocenter is km too shallow at %dkm, recalculating...' %(whole_fault[hypo_fault,3]))
                 i=randint(0,len(selected_faults)-1)
                 hypo_fault=selected_faults[i]
             else:
@@ -875,8 +875,8 @@ def get_rupture_onset(home,project_name,slip,fault_array,model_name,hypocenter,
         attempt=1
         while (t_onset_final[kfault] < Ptime) & (attempt < 500):
             #if attempt == 1:
-                #print "Trying at subfault " + str(kfault)
-            #print ".....kfault " + str(kfault) + " is too early... recalculating!"
+                #print("Trying at subfault " + str(kfault)
+            #print(".....kfault " + str(kfault) + " is too early... recalculating!"
             rand_numb=randn()
             delta_t=delta_t0*exp(sigma_rise_time*rand_numb*(1./attempt))
             perturbation=(log10(slip[kfault])-log10(slip_average))/(log10(slip.max())-log10(slip_average))
@@ -884,7 +884,7 @@ def get_rupture_onset(home,project_name,slip,fault_array,model_name,hypocenter,
             attempt+=1
             if attempt == 500:
                 t_onset_final[kfault]=t_onset[kfault]
-                #print "...Failed at subfault " + str(kfault)
+                #print("...Failed at subfault " + str(kfault)
             #GP 2015 extra perturbation to destroy the 1:1 correlation with slip
             t_onset_final[kfault]=t_onset[kfault]
 
@@ -963,7 +963,7 @@ def write_all_event_summary(home,project_name,run_name):
     
     for k in range(len(logs)):
         
-        print k
+        print(k)
         
         #Get info about fault
         f=open(logs[k],'r')
@@ -1096,7 +1096,6 @@ def write_rupt_list(home,project_name,run_name,target_Mw,Nrealizations,ncpus):
     x Nrealizations ruptures made
     '''
    
-    from string import rjust
     from numpy import ceil
     
     f=open(home+project_name+'/data/ruptures.list','w')
@@ -1112,7 +1111,7 @@ def write_rupt_list(home,project_name,run_name,target_Mw,Nrealizations,ncpus):
     
     for krup in range(Nruptures):
     
-        run_number = rjust(str(krup),6,'0')
+        run_number = str(krup).rjust(6,'0')
         rupture = run_name+'.'+run_number+'.rupt\n'
         f.write(rupture)            
 
@@ -1184,7 +1183,7 @@ def run_generate_ruptures_parallel(home,project_name,run_name,fault_name,slab_na
     #calculate number of realizations per CPU:
     Nrealizations_parallel=int(ceil(float(Nrealizations)/float(ncpus)))
     if (Nrealizations_parallel*ncpus > Nrealizations):
-        print "Extra CPUS-- have " + str(Nrealizations_parallel*ncpus-Nrealizations) + " free ruptures!!"
+        print("Extra CPUS-- have " + str(Nrealizations_parallel*ncpus-Nrealizations) + " free ruptures!!")
     rise_time_depths0=rise_time_depths[0]
     rise_time_depths1=rise_time_depths[1]
     tMw=target_Mw[0]
@@ -1192,7 +1191,7 @@ def run_generate_ruptures_parallel(home,project_name,run_name,fault_name,slab_na
         #tMw.append(target_Mw[r])
         tMw=str(tMw)+','+str(target_Mw[r+1])
     #Make mpi system call
-    print "MPI: Starting " + str(Nrealizations_parallel*ncpus) + " FakeQuakes Rupture Generations on ", ncpus, "CPUs"
+    print("MPI: Starting " + str(Nrealizations_parallel*ncpus) + " FakeQuakes Rupture Generations on ", ncpus, "CPUs")
     mud_source=environ['MUD']+'/src/python/mudpy/'
     mpi='mpiexec -n '+str(ncpus)+' python '+mud_source+'generate_ruptures_parallel.py run_parallel_generate_ruptures '+home+' '+project_name+' '+run_name+' '+fault_name+' '+str(slab_name)+' '+str(mesh_name)+' '+str(load_distances)+' '+distances_name+' '+UTM_zone+' '+str(tMw)+' '+model_name+' '+str(hurst)+' '+Ldip+' '+Lstrike+' '+str(num_modes)+' '+str(Nrealizations_parallel)+' '+str(rake)+' '+str(buffer_factor)+' '+str(rise_time_depths0)+' '+str(rise_time_depths1)+' '+str(time_epi)+' '+str(max_slip)+' '+source_time_function+' '+str(lognormal)+' '+str(slip_standard_deviation)+' '+scaling_law+' '+str(ncpus)+' '+str(force_magnitude)+' '+str(force_area)+' '+str(mean_slip_name)+' '+str(hypocenter[0])+' '+str(hypocenter[1])+' '+str(hypocenter[2])+' '+str(slip_tol)+' '+str(force_hypocenter)+' '+str(no_random)+' '+str(shypo)+' '+str(use_hypo_fraction)+' '+str(shear_wave_fraction)
     mpi=split(mpi)
@@ -1241,12 +1240,12 @@ def run_generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_n
 
     #Now loop over the number of realizations
     realization=0
-    print 'Generating rupture scenarios'
+    print('Generating rupture scenarios')
     for kmag in range(len(target_Mw)):
-        print '... Calculating ruptures for target magnitude Mw = '+str(target_Mw[kmag])
+        print('... Calculating ruptures for target magnitude Mw = '+str(target_Mw[kmag]))
         for kfault in range(Nrealizations):
             if kfault%1==0:
-                print '... ... working on rupture '+str(kfault)+' of '+str(Nrealizations)
+                print('... ... working on rupture '+str(kfault)+' of '+str(Nrealizations))
             
             #Prepare output
             fault_out=zeros((len(whole_fault),14))
@@ -1309,7 +1308,7 @@ def run_generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_n
                         slip_unrectified,success=make_KL_slip(fault_array,num_modes,eigenvals,V,mean_slip,max_slip,lognormal=False,seed=None)
                         slip,rejected,percent_negative=rectify_slip(slip_unrectified,percent_reject=13)
                         if rejected==True:
-                            print '... ... ... negative slip threshold exceeeded with %d%% negative slip. Recomputing...' % (percent_negative)
+                            print('... ... ... negative slip threshold exceeeded with %d%% negative slip. Recomputing...' % (percent_negative))
                 else:
                     #Get lognormal values
                     C_log,mean_slip_log=get_lognormal(mean_slip,C,target_Mw[kmag],fault_array,vel_mod_file,slip_standard_deviation)               
