@@ -41,7 +41,7 @@ def waveforms(home,project_name,rupture_name,station_file,model_name,run_name,in
     source=loadtxt(home+project_name+'/forward_models/'+rupture_name,ndmin=2)
     #Load stations
     stagps_file=home+project_name+'/data/station_info/'+station_file
-    staname=genfromtxt(station_file,dtype="S6",usecols=0)
+    staname=genfromtxt(station_file,dtype="U",usecols=0)
     #What am I processing v or d ?
     if integrate==1:
         vord='disp'
@@ -186,7 +186,7 @@ def waveforms_matrix(home,project_name,fault_name,rupture_name,station_file,GF_l
     #source=loadtxt(home+project_name+'/forward_models/'+rupture_name,ndmin=2)
     #Load stations
     station_file=home+project_name+'/data/station_info/'+station_file
-    staname=genfromtxt(station_file,dtype="S6",usecols=0)
+    staname=genfromtxt(station_file,dtype="U",usecols=0)
     #Now load rupture model
     mss=genfromtxt(home+project_name+'/forward_models/'+rupture_name,usecols=8)
     mds=genfromtxt(home+project_name+'/forward_models/'+rupture_name,usecols=9)
@@ -201,7 +201,7 @@ def waveforms_matrix(home,project_name,fault_name,rupture_name,station_file,GF_l
     else:
         vord='vel'
     #Load gflist
-    gfsta=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=0,skip_header=1,dtype='S6')
+    gfsta=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=0,skip_header=1,dtype='U')
     #Loop over stations
     for ksta in range(hot_start,len(staname)):
         print('Working on station '+staname[ksta]+' ('+str(ksta+1)+'/'+str(len(staname))+')')
@@ -648,7 +648,7 @@ def load_fakequakes_synthetics(home,project_name,fault_name,model_name,GF_list,G
     else: #assemble G one data type at a time, just displacememnt right now
         #Load station info
         station_file=home+project_name+'/data/station_info/'+GF_list
-        staname=genfromtxt(station_file,dtype="S6",usecols=0)
+        staname=genfromtxt(station_file,dtype="U",usecols=0)
         Nsta=len(staname)
         #Load fault model
         source=loadtxt(home+project_name+'/data/model_info/'+fault_name,ndmin=2)
@@ -733,7 +733,7 @@ def get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_nam
     
     #Stations
     station_file=home+project_name+'/data/station_info/'+GF_list
-    staname=genfromtxt(station_file,dtype="S6",usecols=0)
+    staname=genfromtxt(station_file,dtype="U",usecols=0)
     Nsta=len(staname)
     
     #Initalize G matrix
@@ -883,7 +883,7 @@ def coseismics(home,project_name,rupture_name,station_file,hot_start=None):
     source=loadtxt(home+project_name+'/forward_models/'+rupture_name,ndmin=2)
     #Load stations
     station_file=home+project_name+'/data/station_info/'+station_file
-    staname=genfromtxt(station_file,dtype="S6",usecols=0)
+    staname=genfromtxt(station_file,dtype="U",usecols=0)
     #Get unique sources
     source_id=unique(source[:,0])
     #Loop over stations
@@ -968,7 +968,7 @@ def coseismics_matrix(home,project_name,rupture_name,station_file,G_from_file,G_
     source=loadtxt(home+project_name+'/forward_models/'+rupture_name,ndmin=2)
     #Load stations
     station_file=home+project_name+'/data/station_info/'+station_file
-    staname=genfromtxt(station_file,dtype="S6",usecols=0)
+    staname=genfromtxt(station_file,dtype="U",usecols=0)
     #Get unique sources
     source_id=unique(source[:,0])
     m=zeros((2*len(source_id),1))
