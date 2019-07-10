@@ -1202,7 +1202,7 @@ def laplace_stencil(ifault,nstrike,ndip,bounds):
     left=bounds[2]
     right=bounds[3]
     #Create stencil
-    row=ifault/nstrike #Row number corresponding to this subfault
+    row=ifault//nstrike #Row number corresponding to this subfault
     column=ifault-(nstrike*row)
     if nstrike<4 or ndip<4:
         print("ERROR: The fault model is too small for Laplacian regualrization. You need a minimum of 4 rows and 4 columns in the model.")
