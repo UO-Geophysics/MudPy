@@ -115,7 +115,7 @@ def run_syn(home,project_name,source,station_file,green_path,model_name,integrat
     if static==0 and tsunami==1:  #Where to save dynamic waveforms
         green_path=green_path+'tsunami/'+model_name+"_"+strdepth+".sub"+subfault+"/"
     print("--> Computing synthetics at stations for the source at ("+str(xs)+" , "+str(ys)+")")
-    staname=genfromtxt(station_file,dtype="S6",usecols=0)
+    staname=genfromtxt(station_file,dtype="U",usecols=0)
     if staname.shape==(): #Single staiton file
         staname=array([staname])
     #Compute distances and azimuths
@@ -444,7 +444,7 @@ def src2sta(station_file,source,output_coordinates=False):
     
     
     #Read station file
-    #staname=genfromtxt(home+station_file,dtype="S6",usecols=0)
+    #staname=genfromtxt(home+station_file,dtype="U",usecols=0)
     x=genfromtxt(station_file,dtype="f8",usecols=1)
     y=genfromtxt(station_file,dtype="f8",usecols=2)
     if x.shape==() or y.shape==(): #Single station file

@@ -337,6 +337,7 @@ def make_parallel_synthetics(home,project_name,station_file,fault_name,model_nam
     print("MPI: Starting synthetics computation on", ncpus, "CPUs\n")
     mud_source=environ['MUD']+'/src/python/mudpy/'
     mpi='mpiexec -n '+str(ncpus)+' python '+mud_source+'parallel.py run_parallel_synthetics '+home+' '+project_name+' '+station_file+' '+model_name+' '+str(integrate)+' '+str(static)+' '+str(tsunami)+' '+str(time_epi)+' '+str(beta)+' '+str(custom_stf)+' '+str(impulse)+' '+str(insar)+' '+str(okada)+' '+str(mu)
+    print(mpi)
     mpi=split(mpi)
     p=subprocess.Popen(mpi)
     p.communicate()
@@ -373,7 +374,7 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
             print('Static GFs requested...')
             f=open(home+project_name+'/data/station_info/'+station_file,'w')
             for k in range(len(i)): #Write temp .sta file
-                out=str(stations[i[k]])+'\t'+repr(GF[i[k],0])+'\t'+repr(GF[i[k],1])+'\n'
+                out=stations[i[k]]+'\t'+repr(GF[i[k],0])+'\t'+repr(GF[i[k],1])+'\n'
                 f.write(out)
             f.close()
             static=1

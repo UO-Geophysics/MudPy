@@ -19,7 +19,7 @@ def inversionGFs(home,project_name,GF_list,source_name,model_name,
     
     #Read in GFlist and decide what to compute
     gf_file=home+project_name+'/data/station_info/'+GF_list
-    stations=genfromtxt(gf_file,usecols=0,skip_header=1,dtype='S6')
+    stations=genfromtxt(gf_file,usecols=0,skip_header=1,dtype='U')
     GF=genfromtxt(gf_file,usecols=[1,2,3,4,5,6,7],skip_header=1,dtype='f8')
     
     #Parameters not used but needed in function call
@@ -350,7 +350,7 @@ def getG(home,project_name,source_name,model_name,GF_list,G_from_file,G_name,for
         #Read in GFlist and decide what to compute
         gf_file=home+project_name+'/data/station_info/'+GF_list
         mini_station=home+project_name+'/data/station_info/tempG.sta'
-        stations=genfromtxt(gf_file,usecols=0,dtype='S6')
+        stations=genfromtxt(gf_file,usecols=0,dtype='U')
         GF=genfromtxt(gf_file,usecols=[1,2,3,4,5,6,7],dtype='f8')
         GFfiles=genfromtxt(gf_file,usecols=[8,9,10,11,12],dtype='S')
         #Check for single station sized arrays
@@ -426,7 +426,7 @@ def makeG(home,project_name,source_name,model_name,station_file,gftype,forceMT):
     Nfaults=source.shape[0] #Number of subfaults
     #Load station info
     station_file=home+project_name+'/data/station_info/'+station_file
-    staname=genfromtxt(station_file,dtype="S6",usecols=0)
+    staname=genfromtxt(station_file,dtype="U",usecols=0)
     datafiles=genfromtxt(station_file,dtype="S",usecols=3)
     syn_path=home+project_name+'/GFs/static/'
     

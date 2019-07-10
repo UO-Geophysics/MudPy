@@ -15,7 +15,6 @@ def run_parallel_green(home,project_name,station_file,model_name,dt,NFFT,static,
         NFFT: No. of samples requested in waveform (must be power of 2)
         static: =0 if computing full waveforms, =1 if computing only the static field
         coord_type: =0 if problem is in cartesian coordinates, =1 if problem is in lat/lon
-
     OUT:
         log: Sysytem standard output and standard error for log
     '''
@@ -208,7 +207,6 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
         staname=genfromtxt(station_file,dtype="U",usecols=0)
         if staname.shape==(): #Single staiton file
             staname=array([staname])
-        
         #Compute distances and azimuths
         d,az,lon_sta,lat_sta=src2sta(station_file,source,output_coordinates=True)
         
@@ -914,4 +912,3 @@ if __name__ == '__main__':
         run_parallel_synthetics_mt3d(home,project_name,station_file,model_name,forceMT,mt,insar,rank,size)
     else:
         print('ERROR: You''re not allowed to run '+sys.argv[1]+' from the shell or it does not exist')
-        
