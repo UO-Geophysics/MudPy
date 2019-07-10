@@ -59,9 +59,9 @@ def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epic
         #Read in GFlist and decide what to compute
         gf_file=home+project_name+'/data/station_info/'+GF_list
         mini_station=home+project_name+'/data/station_info/tempG.sta'
-        stations=genfromtxt(gf_file,usecols=0,skip_header=1,dtype='S6')
+        stations=genfromtxt(gf_file,usecols=0,skip_header=1,dtype='U')
         GF=genfromtxt(gf_file,usecols=[1,2,3,4,5,6,7],skip_header=1,dtype='f8')
-        GFfiles=genfromtxt(gf_file,usecols=[8,9,10,11,12],dtype='S')
+        GFfiles=genfromtxt(gf_file,usecols=[8,9,10,11,12],dtype='U')
         #Check for single station sized arrays
         if GF.ndim==1: #One station
             GF=expand_dims(GF,0)
@@ -268,8 +268,8 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tsunami,td
     Nfaults=source.shape[0] #Number of subfaults
     #Load station info
     station_file=home+project_name+'/data/station_info/'+station_file
-    staname=genfromtxt(station_file,dtype="S6",usecols=0)
-    datafiles=genfromtxt(station_file,dtype="S",usecols=3)
+    staname=genfromtxt(station_file,dtype="U",usecols=0)
+    datafiles=genfromtxt(station_file,dtype="U",usecols=3)
     try:
         Nsta=len(staname)
     except:
@@ -676,10 +676,10 @@ def getdata(home,project_name,GF_list,decimate,bandpass,quiet=False):
     for ksta in range(len(i)):
         if quiet==False:  
             print('Assembling displacement waveforms from '+str(stations[i[ksta]])+' into data vector.')
-        print(GFfiles[i[ksta],kgf].decode('UTF-8'))
-        n=read(GFfiles[i[ksta],kgf].decode('UTF-8')+'.n')
-        e=read(GFfiles[i[ksta],kgf].decode('UTF-8')+'.e')
-        u=read(GFfiles[i[ksta],kgf].decode('UTF-8')+'.u')
+        print(str(GFfiles[i[ksta],kgf]))
+        n=read(GFfiles[i[ksta],kgf]+'.n')
+        e=read(GFfiles[i[ksta],kgf]+'.e')
+        u=read(GFfiles[i[ksta],kgf]+'.u')
         if displacement_bandpass is not None: #Apply low pass filter to data
             fsample=1./n[0].stats.delta
             n[0].data=lfilt(n[0].data,displacement_bandpass,fsample,2)
@@ -789,8 +789,14 @@ def getLs(home,project_name,fault_name,nfaults,num_windows,bounds):
     #Which L am I building?
     print('Making discrete Laplace operator regularization matrix...')
     for kfault in range(N):#Loop over faults and fill regularization matrix
+        print(kfault)
+        print(nstrike)
+        print(ndip)
+        print(bounds)
         stencil,values=laplace_stencil(kfault,nstrike,ndip,bounds)
         #Add strike slip branches of stencil
+        print('kfault:'+str(kfault))
+        print('stencil:'+str(stencil))
         L[2*kfault,2*stencil]=values
         #Add dip slip branches of stencil
         L[2*kfault+1,2*stencil+1]=values
@@ -865,7 +871,7 @@ def get_data_weights(home,project_name,GF_list,d,decimate):
     #Read gf file and decide what needs tog et loaded
     gf_file=home+project_name+'/data/station_info/'+GF_list
     GF=genfromtxt(gf_file,usecols=[3,4,5,6,7],dtype='f8')
-    GFfiles=genfromtxt(gf_file,usecols=[8,9,10,11,12],dtype='S')
+    GFfiles=genfromtxt(gf_file,usecols=[8,9,10,11,12],dtype='U')
     weights=genfromtxt(gf_file,usecols=range(13,28),dtype='f')
     #Initalize
     w=zeros(len(d))
@@ -988,7 +994,7 @@ def write_model(home,project_name,run_name,fault_name,model_name,rupture_speed,n
     #Get rupture start times
     trupt=arange(0,num_windows)*trise/2 #Time delays fore ach sub-window
     for krup in range(num_windows):
-        trup[krup*(len(ds)/num_windows):(krup+1)*(len(ds)/num_windows)]=epi2subfault(epicenter,f,rupture_speed,trupt[krup])
+        trup[krup*(len(ds)//num_windows):(krup+1)*(len(ds)//num_windows)]=epi2subfault(epicenter,f,rupture_speed,trupt[krup])
     #Prepare for output
     out1=f[:,0:8]
     out2=f[:,8:10]
@@ -1027,9 +1033,9 @@ def write_synthetics(home,project_name,run_name,GF_list,G,sol,ds,num,decimate):
     num=str(num).rjust(4,'0')
     #Read gf file and decide what needs to get loaded
     gf_file=home+project_name+'/data/station_info/'+GF_list
-    stations=genfromtxt(gf_file,usecols=[0],skip_header=1,dtype='S')
+    stations=genfromtxt(gf_file,usecols=[0],skip_header=1,dtype='U')
     GF=genfromtxt(gf_file,usecols=[3,4,5,6,7],skip_header=1,dtype='f8')
-    GFfiles=genfromtxt(gf_file,usecols=[8,9,10,11,12],skip_header=1,dtype='S')
+    GFfiles=genfromtxt(gf_file,usecols=[8,9,10,11,12],skip_header=1,dtype='U')
     #Separate into its constituent parts (statics,displacaments, velocities, etc...)
     kinsert=0
     #Statics
@@ -1202,7 +1208,7 @@ def laplace_stencil(ifault,nstrike,ndip,bounds):
     left=bounds[2]
     right=bounds[3]
     #Create stencil
-    row=ifault/nstrike #Row number corresponding to this subfault
+    row=ifault//nstrike #Row number corresponding to this subfault
     column=ifault-(nstrike*row)
     if nstrike<4 or ndip<4:
         print("ERROR: The fault model is too small for Laplacian regualrization. You need a minimum of 4 rows and 4 columns in the model.")
@@ -1474,9 +1480,9 @@ def get_VR(home,project_name,GF_list,sol,d,ds,decimate):
     
     #Read gf file and decide what needs to get loaded
     gf_file=home+project_name+'/data/station_info/'+GF_list
-    stations=genfromtxt(gf_file,usecols=[0],skip_header=1,dtype='S')
+    stations=genfromtxt(gf_file,usecols=[0],skip_header=1,dtype='U')
     GF=genfromtxt(gf_file,usecols=[3,4,5,6,7],skip_header=1,dtype='f8')
-    GFfiles=genfromtxt(gf_file,usecols=[8,9,10,11,12],skip_header=1,dtype='S')
+    GFfiles=genfromtxt(gf_file,usecols=[8,9,10,11,12],skip_header=1,dtype='U')
     #Separate into its constituent parts (statics,displacaments, velocities, etc...)
     kstart=0
     kend=0
@@ -1617,8 +1623,8 @@ def get_moment(home,project_name,fault_name,model_name,sol):
     #Open structure file
     mod=loadtxt(home+project_name+'/structure/'+model_name,ndmin=2)
     #Get slip quantities
-    iss=2*arange(len(sol)/2)
-    ids=2*arange(len(sol)/2)+1
+    iss=2*arange(len(sol)//2)
+    ids=2*arange(len(sol)//2)+1
     ss=sol[iss]
     ds=sol[ids]
     #Get total slip
@@ -1627,7 +1633,7 @@ def get_moment(home,project_name,fault_name,model_name,sol):
     mu=zeros(len(ds))
     A=zeros(len(ds))
     i=0
-    for krupt in range((len(sol)/len(f))/2):
+    for krupt in range((len(sol)//len(f))//2):
         for k in range(len(f)):
             mu[i]=get_mu(mod,f[k,3])
             A[i]=f[k,8]*f[k,9]
@@ -1922,7 +1928,7 @@ def make_tgf_dtopo(home,project_name,model_name,tgf_file,coast_file,fault_name,
     from scipy.interpolate import griddata
 
     #Get station names
-    staname=genfromtxt(home+project_name+'/data/station_info/'+tgf_file,usecols=0,dtype='S')
+    staname=genfromtxt(home+project_name+'/data/station_info/'+tgf_file,usecols=0,dtype='U')
     sta=genfromtxt(home+project_name+'/data/station_info/'+tgf_file)
     lon=sta[:,1]
     lat=sta[:,2]
@@ -2278,7 +2284,7 @@ def data_norms(home,project_name,GF_list,decimate=None,bandpass=[None,None,None]
     ivel=where(GF[:,2]==1)[0]
     itsun=where(GF[:,3]==1)[0]
     iinsar=where(GF[:,4]==1)[0]
-    GFfiles=genfromtxt(gf_file,usecols=[8,9,10,11,12],dtype='S') 
+    GFfiles=genfromtxt(gf_file,usecols=[8,9,10,11,12],dtype='U') 
     kstart=0
     kend=0
     #compute norms
