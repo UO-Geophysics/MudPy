@@ -205,7 +205,7 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
             green_path=home+project_name+'/GFs/tsunami/'+model_name+"_"+strdepth+".sub"+subfault+"/"
         if static==1:  #Where to save statics
             green_path=home+project_name+'/GFs/static/'
-        staname=genfromtxt(station_file,dtype="S6",usecols=0)
+        staname=genfromtxt(station_file,dtype="U",usecols=0)
         if staname.shape==(): #Single staiton file
             staname=array([staname])
         
@@ -569,7 +569,7 @@ def run_parallel_synthetics_mt3d(home,project_name,station_file,model_name,force
  
         strdepth='%.4f' % zs
         subfault=str(int(source[0])).rjust(4,'0')
-        staname=genfromtxt(station_file,dtype="S6",usecols=0)
+        staname=genfromtxt(station_file,dtype="U",usecols=0)
         
         if staname.shape==(): #Single staiton file
             staname=array([staname])
