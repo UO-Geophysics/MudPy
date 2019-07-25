@@ -688,7 +688,7 @@ def apply_spectrum(w,A,f,hf_dt):
     
     #Get positive frequencies
     Nf=len(freq)
-    positive_freq=freq[1:1+Nf/2]
+    positive_freq=freq[1:int(1+Nf/2)]
       
     #Make POWER spectrum of windowed time series have a mean of 1
     #norm_factor=hf_dt*mean(abs(fourier)**2)**0.5
@@ -708,9 +708,9 @@ def apply_spectrum(w,A,f,hf_dt):
     #DC value
     amplitude[0]=0
     #Positive freq. div by 2 to keep right power
-    amplitude[1:1+Nf/2]=amplitude_positive/2
+    amplitude[1:int(1+Nf/2)]=amplitude_positive/2
     #Negative freq
-    amplitude[1+Nf/2:]=amplitude_positive[::-1]/2
+    amplitude[int(1+Nf/2):]=amplitude_positive[::-1]/2
     
     #Apply model amplitude spectrum
     amplitude=amplitude*abs(fourier)
