@@ -723,7 +723,7 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
                 L2,Lmodel,VR,ABIC,Mo,Mw,model_name,fault_name,G_name,GF_list,solver)
             #Write output to file
             inv.write_synthetics(home,project_name,run_name,GF_list,G,sol,ds,kout,decimate)
-            inv.write_model(home,project_name,run_name,fault_name,model_name,rupture_speed,num_windows,epicenter,sol,kout)
+            inv.write_model(home,project_name,run_name,fault_name,model_name,rupture_speed,num_windows,epicenter,sol,kout,onset_file=onset_file)
             kout+=1
             dt1=datetime.now()-t1
             dt2=datetime.now()-ttotal
