@@ -582,7 +582,7 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
                                                         
 def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_from_file,G_name,epicenter,
                 rupture_speed,num_windows,reg_spatial,reg_temporal,nfaults,beta,decimate,bandpass,
-                solver,bounds,weight=False,Ltype=2,target_moment=None,data_vector=None):
+                solver,bounds,weight=False,Ltype=2,target_moment=None,data_vector=None,onset_file=None):
     '''
     Assemble G and d, determine smoothing and run the inversion
     '''
@@ -605,7 +605,7 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
         d=load(data_vector) 
     #Get GFs
     G=inv.getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epicenter,
-                rupture_speed,num_windows,decimate,bandpass)
+                rupture_speed,num_windows,decimate,bandpass,onset_file=onset_file)
     gc.collect()
     #Get data weights
     if weight==True:
