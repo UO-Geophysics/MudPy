@@ -114,7 +114,7 @@ def subfault_distances_3D(home,project_name,fault_name,slab_name,projection_zone
 
     """
 
-    from numpy import sqrt,sin,cos,deg2rad,zeros,meshgrid,linspace,where,c_,unravel_index,sort,diff,genfromtxt,sign,unique
+    from numpy import sqrt,sin,cos,deg2rad,zeros,meshgrid,linspace,where,c_,unravel_index,sort,diff,genfromtxt,sign,argmin
     from scipy.interpolate import griddata
     from matplotlib import pyplot as plt
     from scipy.spatial.distance import cdist
@@ -239,6 +239,23 @@ def subfault_distances_3D(home,project_name,fault_name,slab_name,projection_zone
         x_range=slab_x.max()-slab_x.min()
         x_down_dip=linspace(-x_range/2,x_range/2,200)
         
+        #get contours
+        all_contours=[]
+        contour_lengths=zeros(len(fault))
+        print('Calculcating slab contours')
+        for i in range(len(fault)):
+            if i%10==0:
+                print('... working on subfault '+str(i)+' of '+str(len(fault)))
+            
+            contour=plt.contour(X,Y,Z,levels=fault[i,3])
+            contour=contour.collections[0].get_paths()[0].vertices
+            contour_lengths[i]=((contour[0,0]-contour[-1,0])**2+(contour[0,1]-contour[-1,1])**2)**0.5
+            all_contours.append(contour)
+        
+        #if a contour is shorter than this number use the next deepest
+        minimum_contour_length=0.95*contour_lengths.max()
+        
+        
         #Loop over number of subfaults, we want the distance from i-th fault to all other (j) subfaults
         print('Getting inter-fault distances')
         for i in range(len(fault)):
@@ -249,11 +266,23 @@ def subfault_distances_3D(home,project_name,fault_name,slab_name,projection_zone
             yi = fault_y[i]
             zi = fault_z[i]
             
-            # X, Y and Z are matrices with the grid info, now create one contour at each subfault centroid depth
-            contour=plt.contour(X,Y,Z,levels=fault[i,3])
+            #find most approriate contour for lenght calculation
+            icontour=where(contour_lengths>minimum_contour_length)[0]
             
-            #Get contour at depth of current subfault
-            contour=contour.collections[0].get_paths()[0].vertices
+            #find closest depth_contour of the ones that pass the minimum length
+            deltaZ=abs(fault_z[i]-fault_z)
+            icontour_depth=argmin(deltaZ[icontour])
+            
+            #This si the contour that is long enough and closest in depth
+            icontour_correct=icontour[icontour_depth]
+            contour=all_contours[icontour_correct]
+            
+            
+#            # X, Y and Z are matrices with the grid info, now create one contour at each subfault centroid depth
+#            contour=plt.contour(X,Y,Z,levels=fault[i,3])
+#            
+#            #Get contour at depth of current subfault
+#            contour=contour.collections[0].get_paths()[0].vertices
             
             # Now find coordinates of point on this contour closest to subfault centroid
             dist=sqrt((xi-contour[:,0])**2+(yi-contour[:,1])**2)
@@ -1213,7 +1242,6 @@ def run_generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_n
     '''
     
     from numpy import load,save,genfromtxt,log10,cos,sin,deg2rad,savetxt,zeros,where
-    from string import rjust
     from time import gmtime, strftime
     from obspy.taup import TauPyModel
 
@@ -1370,7 +1398,7 @@ def run_generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_n
             centroid_lon,centroid_lat,centroid_z=get_centroid(fault_out)
             
             #Write to file
-            run_number=rjust(str(realization),6,'0')
+            run_number=str(realization).rjust(6,'0')
             outfile=home+project_name+'/output/ruptures/'+run_name+'.'+run_number+'.rupt'
             savetxt(outfile,fault_out,fmt='%d\t%10.6f\t%10.6f\t%8.4f\t%7.2f\t%7.2f\t%4.1f\t%5.2f\t%5.2f\t%5.2f\t%10.2f\t%10.2f\t%5.2f\t%.6e',header='No,lon,lat,z(km),strike,dip,rise,dura,ss-slip(m),ds-slip(m),ss_len(m),ds_len(m),rupt_time(s),rigidity(Pa)')
             

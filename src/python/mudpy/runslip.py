@@ -582,7 +582,7 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
                                                         
 def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_from_file,G_name,epicenter,
                 rupture_speed,num_windows,reg_spatial,reg_temporal,nfaults,beta,decimate,bandpass,
-                solver,bounds,weight=False,Ltype=2,target_moment=None,data_vector=None):
+                solver,bounds,weight=False,Ltype=2,target_moment=None,data_vector=None,onset_file=None):
     '''
     Assemble G and d, determine smoothing and run the inversion
     '''
@@ -605,8 +605,8 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
         d=load(data_vector) 
     #Get GFs
     G=inv.getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epicenter,
-                rupture_speed,num_windows,decimate,bandpass)
-    print(G.shape)
+                rupture_speed,num_windows,decimate,bandpass,onset_file=onset_file)
+    print(G.shape)                
     gc.collect()
     #Get data weights
     if weight==True:
@@ -725,7 +725,7 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
                 L2,Lmodel,VR,ABIC,Mo,Mw,model_name,fault_name,G_name,GF_list,solver)
             #Write output to file
             inv.write_synthetics(home,project_name,run_name,GF_list,G,sol,ds,kout,decimate)
-            inv.write_model(home,project_name,run_name,fault_name,model_name,rupture_speed,num_windows,epicenter,sol,kout)
+            inv.write_model(home,project_name,run_name,fault_name,model_name,rupture_speed,num_windows,epicenter,sol,kout,onset_file=onset_file)
             kout+=1
             dt1=datetime.now()-t1
             dt2=datetime.now()-ttotal

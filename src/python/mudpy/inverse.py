@@ -17,7 +17,7 @@ Functions in this module:
 
 
 def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epicenter,rupture_speed,
-        num_windows,decimate,bandpass,tsunami=False):
+        num_windows,decimate,bandpass,tsunami=False,onset_file=None):
     '''
     Assemble Green functions matrix. If requested will parse all available synthetics on file and build the matrix.
     Otherwise, if it exists, it will be loaded from file 
@@ -56,6 +56,11 @@ def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epic
         #K=load(K_name)
     else: #assemble G one data type at a time
         print('Assembling G from synthetic computations...')
+        
+        #is there an onset times file?
+        if onset_file is not None:
+            tdelay_constant=genfromtxt(home+project_name+'/data/model_info/'+onset_file)
+        
         #Read in GFlist and decide what to compute
         gf_file=home+project_name+'/data/station_info/'+GF_list
         mini_station=home+project_name+'/data/station_info/tempG.sta'
@@ -109,7 +114,10 @@ def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epic
                 trupt=trupt*delay_multiplier
                 for krup in range(num_windows):
                     print('Working on window '+str(krup+1))
-                    tdelay=epi2subfault(epicenter,source,rupture_speed,trupt[krup,:])
+                    if onset_file==None: #There is no onset times file, caluclate them
+                        tdelay=epi2subfault(epicenter,source,rupture_speed,trupt[krup,:])
+                    else: #use provided onset times and add time window delay
+                        tdelay =  tdelay_constant+trupt[krup,:]
                     if krup==0: #First rupture speed
                         first_window=True
                         Ess=[] ; Eds=[] ; Nss=[] ; Nds=[] ; Zss=[] ; Zds=[]
@@ -144,7 +152,10 @@ def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epic
                 trupt=trupt*delay_multiplier
                 for krup in range(num_windows):
                     print('Working on window '+str(krup+1))
-                    tdelay=epi2subfault(epicenter,source,rupture_speed,trupt[krup,:])
+                    if onset_file==None: #There is no onset times file, caluclate them
+                        tdelay=epi2subfault(epicenter,source,rupture_speed,trupt[krup,:])
+                    else: #use provided onset times and add time window delay
+                        tdelay =  tdelay_constant+trupt[krup,:]
                     if krup==0: #First rupture speed
                         first_window=True
                         Ess=[] ; Eds=[] ; Nss=[] ; Nds=[] ; Zss=[] ; Zds=[]
@@ -177,7 +188,10 @@ def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epic
                 trupt=arange(0,num_windows)*trise/2
                 for krup in range(num_windows):
                     print('Working on window '+str(krup+1))
-                    tdelay=epi2subfault(epicenter,source,rupture_speed,trupt[krup])
+                    if onset_file==None: #There is no onset times file, caluclate them
+                        tdelay=epi2subfault(epicenter,source,rupture_speed,trupt[krup])
+                    else: #use provided onset times and add time window delay
+                        tdelay =  tdelay_constant+trupt[krup,:]
                     if krup==0: #First rupture speed
                         first_window=True
                         Ess=[] ; Eds=[] ; Nss=[] ; Nds=[] ; Zss=[] ; Zds=[]
@@ -950,7 +964,7 @@ def get_data_weights(home,project_name,GF_list,d,decimate):
     
 #=================        Write inversion results      =========================
     
-def write_model(home,project_name,run_name,fault_name,model_name,rupture_speed,num_windows,epicenter,sol,num):
+def write_model(home,project_name,run_name,fault_name,model_name,rupture_speed,num_windows,epicenter,sol,num,onset_file=None):
     '''
     Write inversion results to .inv file
     
@@ -978,6 +992,11 @@ def write_model(home,project_name,run_name,fault_name,model_name,rupture_speed,n
     trise=f[0,7]
     #Open structure file
     mod=loadtxt(home+project_name+'/structure/'+model_name,ndmin=2)
+    
+    # are there forced onset times?
+    if onset_file is not None:
+        tdelay_constant = genfromtxt(home+project_name+'/data/model_info/'+onset_file)
+    
     #Get slip quantities
     iss=2*arange(len(f)*num_windows)
     ids=2*arange(len(f)*num_windows)+1
@@ -994,7 +1013,10 @@ def write_model(home,project_name,run_name,fault_name,model_name,rupture_speed,n
     #Get rupture start times
     trupt=arange(0,num_windows)*trise/2 #Time delays fore ach sub-window
     for krup in range(num_windows):
-        trup[krup*(len(ds)//num_windows):(krup+1)*(len(ds)//num_windows)]=epi2subfault(epicenter,f,rupture_speed,trupt[krup])
+        if onset_file==None: #No forced onset times
+            trup[krup*(len(ds)//num_windows):(krup+1)*(len(ds)//num_windows)]=epi2subfault(epicenter,f,rupture_speed,trupt[krup])
+        else: # use specified onset times plus window time delay
+            trup[krup*(len(ds)//num_windows):(krup+1)*(len(ds)//num_windows)]=tdelay_constant+trupt[krup]
     #Prepare for output
     out1=f[:,0:8]
     out2=f[:,8:10]

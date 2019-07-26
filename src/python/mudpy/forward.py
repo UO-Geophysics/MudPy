@@ -293,7 +293,7 @@ def waveforms_fakequakes(home,project_name,fault_name,rupture_list,GF_list,
         #all_sources=array([home+project_name+'/forward_models/'+rupture_name])   
         all_sources=array([rupture_name])  
     else:
-        all_sources=genfromtxt(home+project_name+'/data/'+rupture_list,dtype='S')
+        all_sources=genfromtxt(home+project_name+'/data/'+rupture_list,dtype='U')
     
     #Load all synthetics
     print('... loading all synthetics into memory')
@@ -330,7 +330,7 @@ def hf_waveforms(home,project_name,fault_name,rupture_list,GF_list,model_name,ru
     '''
     from numpy import genfromtxt
     from mudpy import hfsims
-    all_sources=genfromtxt(home+project_name+'/data/'+rupture_list,dtype='S')
+    all_sources=genfromtxt(home+project_name+'/data/'+rupture_list,dtype='U')
     #Now loop over rupture models
     Nsources=all_sources.size
     for ksource in range(hot_start,Nsources):        
@@ -341,7 +341,7 @@ def hf_waveforms(home,project_name,fault_name,rupture_list,GF_list,model_name,ru
             rupture_name=str(all_sources)
         
         #Get station info from GF_list
-        sta=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=[0],dtype='S')
+        sta=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=[0],dtype='U')
         lonlat=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=[1,2])
         sta_lon=lonlat[:,0]
         sta_lat=lonlat[:,1]
@@ -410,7 +410,7 @@ def run_hf_waveforms(home,project_name,fault_name,rupture_list,GF_list,model_nam
     from mudpy import hfsims
     
     #load list of source names
-    all_sources=genfromtxt(home+project_name+'/data/'+rupture_list,dtype='S')
+    all_sources=genfromtxt(home+project_name+'/data/'+rupture_list,dtype='U')
 
     #Now loop over rupture models
     Nsources=all_sources.size
@@ -427,7 +427,7 @@ def run_hf_waveforms(home,project_name,fault_name,rupture_list,GF_list,model_nam
         epicenter,time_epi=read_fakequakes_hypo_time(home,project_name,rupture_name)
         
         #Get station info from GF_list
-        sta=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=[0],dtype='S')
+        sta=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=[0],dtype='U')
         lonlat=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=[1,2])
         
         comp=['N','E','Z']  #components to loop through
@@ -527,13 +527,13 @@ def match_filter(home,project_name,fault_name,rupture_list,GF_list,
     from obspy import read
     
     #read stations list
-    sta=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=0,dtype='S')
+    sta=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=0,dtype='U')
     ista=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=4)
     ista=where(ista==1)[0]
     sta=sta[ista]
     
     #read ruptures
-    ruptures=genfromtxt(home+project_name+'/data/'+rupture_list,dtype='S')
+    ruptures=genfromtxt(home+project_name+'/data/'+rupture_list,dtype='U')
     Nruptures=ruptures.size
     
     for krup in range(Nruptures):
@@ -811,7 +811,7 @@ def write_fakequakes_waveforms(home,project_name,rupture_name,waveforms,GF_list,
         makedirs(directory)
     
     # Get station list and coords
-    sta=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=0,dtype='S') 
+    sta=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=0,dtype='U') 
     lon=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=1)  
     lat=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=2)  
     line_out='# Station, lon, lat, N[m], E[m], Up[m], PGD[m]\n'
@@ -1080,9 +1080,9 @@ def tsunami_waveforms(home,project_name,fault_name,rupture_name,station_file,mod
     #Write to file (Modified from inverse.write_synthetics)
     #Read gf file and decide what needs to get loaded
     gf_file=home+project_name+'/data/station_info/'+GF_list
-    stations=genfromtxt(gf_file,usecols=[0],skip_header=1,dtype='S')
+    stations=genfromtxt(gf_file,usecols=[0],skip_header=1,dtype='U')
     GF=genfromtxt(gf_file,usecols=[3,4,5,6,7],skip_header=1,dtype='f8')
-    GFfiles=genfromtxt(gf_file,usecols=[8,9,10,11,12],skip_header=1,dtype='S')
+    GFfiles=genfromtxt(gf_file,usecols=[8,9,10,11,12],skip_header=1,dtype='U')
     #Separate into its constituent parts (statics,displacaments, velocities, etc...)
     kinsert=0
     kgf=3
@@ -1119,7 +1119,7 @@ def move_seafloor(home,project_name,run_name,topo_dx_file,topo_dy_file,tgf_file,
 
     #Get station names
     sta=genfromtxt(home+project_name+'/data/station_info/'+tgf_file)
-    stanames=genfromtxt(home+project_name+'/data/station_info/'+tgf_file,usecols=0,dtype='S')
+    stanames=genfromtxt(home+project_name+'/data/station_info/'+tgf_file,usecols=0,dtype='U')
     #lon=360+sta[:,1]
     lon=sta[:,1]
     print('correcting longitude')
@@ -2313,7 +2313,7 @@ def grid2xyz(home,project_name,sta_file,out_file):
     
     from numpy import genfromtxt
     
-    sta=genfromtxt(home+project_name+'/data/station_info/'+sta_file,usecols=0,dtype='S')
+    sta=genfromtxt(home+project_name+'/data/station_info/'+sta_file,usecols=0,dtype='U')
     lon=genfromtxt(home+project_name+'/data/station_info/'+sta_file,usecols=1)
     lat=genfromtxt(home+project_name+'/data/station_info/'+sta_file,usecols=2)
     f=open(out_file,'w')
@@ -2787,7 +2787,6 @@ def read_fakequakes_hypo_time(home,project_name,rupture_name):
     '''
     
     from obspy.core import UTCDateTime
-    from string import replace
     from numpy import array
     
     rupture=rupture_name.split('.')[0]+'.'+rupture_name.split('.')[1]
@@ -2796,8 +2795,10 @@ def read_fakequakes_hypo_time(home,project_name,rupture_name):
     while True:
         line=f.readline()
         if 'Hypocenter (lon,lat,z[km])' in line:
-            s=replace(line.split(':')[-1],'(','')
-            s=replace(s,')','')
+            s=line.split(':')[-1]
+            s=s.replace('(','')
+            s=s.replace(')','')
+            
             epicenter=array(s.split(',')).astype('float')
         if 'Hypocenter time' in line:
             time_epi=line.split(' ')[-1]
@@ -2818,7 +2819,7 @@ def convert_to_grid(home,project_name,GF_list,out_file):
     
     from numpy import genfromtxt
     
-    sta=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=0,dtype='S')
+    sta=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=0,dtype='U')
     lonlat=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=[1,2])
     fout=home+'/'+project_name+'/output/forward_models/'+out_file
     f=open(fout,'w')

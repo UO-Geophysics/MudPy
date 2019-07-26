@@ -197,7 +197,7 @@ def quick_static(gflist,datapath,scale=1):
     plt.show()
 
 
-def slip3D(rupt,marker_size=60,clims=None):
+def slip3D(rupt,marker_size=60,clims=None,plot_onset=False,cmap=whitejet):
     '''
     For complex fault geometries make a quick 3D plot of the rupture model
     
@@ -236,18 +236,30 @@ def slip3D(rupt,marker_size=60,clims=None):
     lat=f[0:len(unum),2]
     depth=-f[0:len(unum),3]
 
+    #get onsets
+    onsets=f[0:len(unum),12]
+
+    if plot_onset==False:
+        plot_variable=slip
+    else:
+        plot_variable=onsets
+
     #Plot it
     fig = plt.figure(figsize=(14, 4))
     ax = fig.add_subplot(111, projection='3d')
     if clims==None:
-        p=ax.scatter(lon, lat, depth, c=slip,cmap=whitejet, marker='o',s=marker_size,lw=0)
+        p=ax.scatter(lon, lat, depth, c=plot_variable,cmap=cmap, marker='o',s=marker_size,lw=0)
     else:
-        p=ax.scatter(lon, lat, depth, c=slip,cmap=whitejet, marker='o',s=marker_size,vmin=clims[0],vmax=clims[1],lw=0)
+        p=ax.scatter(lon, lat, depth, c=plot_variable,cmap=cmap, marker='o',s=marker_size,vmin=clims[0],vmax=clims[1],lw=0)
     ax.set_xlabel('Longitude')
     ax.set_ylabel('Latitude')
     ax.set_zlabel('Depth (km)')
     cb=fig.colorbar(p)
-    cb.set_label('Slip (m)')
+    
+    if plot_onset==False:
+        cb.set_label('Slip (m)')
+    else:
+        cb.set_label('Onset time (s)')
     plt.subplots_adjust(left=0.1, bottom=0.1, right=1.0, top=0.9, wspace=0, hspace=0)
     plt.title(rupt)
     plt.show()
