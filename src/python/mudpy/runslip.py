@@ -606,6 +606,7 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
     #Get GFs
     G=inv.getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epicenter,
                 rupture_speed,num_windows,decimate,bandpass,onset_file=onset_file)
+    print(G.shape)                
     gc.collect()
     #Get data weights
     if weight==True:
@@ -687,6 +688,7 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
             lambda_temporal=reg_temporal[kt]
             print('Running inversion '+str(kout+1)+' of '+str(Ninversion)+' at regularization levels: ls ='+repr(lambda_spatial)+' , lt = '+repr(lambda_temporal))
             if static==True: #Only statics inversion no Lt matrix
+                import numpy as np
                 Kinv=K+(lambda_spatial**2)*LsLs
                 Lt=eye(len(K))
                 LtLt=Lt.T.dot(Lt)
