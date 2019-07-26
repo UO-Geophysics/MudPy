@@ -381,7 +381,7 @@ def fence_slip(home,project_name,run_name,run_number,maxslip=None,UTM_zone='10S'
 
 
 
-def plot_insar(home,project_name,GF_list,(los_min,los_max)):
+def plot_insar(home,project_name,GF_list,los_min,los_max):
     '''
     Plot the InSAR LOS data
     '''
@@ -422,7 +422,7 @@ def plot_insar(home,project_name,GF_list,(los_min,los_max)):
     plt.show()
 
 
-def tile_slip(rupt,nstrike,ndip,(slip_bounds),geographic=False,epicenter=0,epicenter_line=0,thresh=0,xlims=[-100,100],ylims=[-100,100],fig_size=(10, 3)):
+def tile_slip(rupt,nstrike,ndip,slip_bounds,geographic=False,epicenter=0,epicenter_line=0,thresh=0,xlims=[-100,100],ylims=[-100,100],fig_size=(10, 3)):
     '''
     Detailed plot of a forward model or inversion result file
     
@@ -571,7 +571,7 @@ def tile_slip(rupt,nstrike,ndip,(slip_bounds),geographic=False,epicenter=0,epice
     plt.show()
 
 
-def tile_resolution(rupt,resfile,nstrike,ndip,(res_min,res_max),epicenter=0,epicenter_line=0):
+def tile_resolution(rupt,resfile,nstrike,ndip,res_min,res_max,epicenter=0,epicenter_line=0):
     '''
     Plot subfault source time functions
     
@@ -636,7 +636,7 @@ def tile_resolution(rupt,resfile,nstrike,ndip,(res_min,res_max),epicenter=0,epic
 
 
    
-def tile_slip_movieframes(home,project_name,sliprate_path,nstrike,ndip,(slip_min,slip_max),dt,geographic=False,epicenter=0,epicenter_line=0):
+def tile_slip_movieframes(home,project_name,sliprate_path,nstrike,ndip,slip_min,slip_max,dt,geographic=False,epicenter=0,epicenter_line=0):
     '''
     Quick and dirty plot of a .rupt file
     epicenter is the coordinates, epcienter line is the down dip lien number where 
@@ -787,7 +787,7 @@ def tile_slip_movieframes(home,project_name,sliprate_path,nstrike,ndip,(slip_min
     
         
             
-def panel_tile_slip(home,project_name,sliprate_path,nstrike,ndip,(slip_min,slip_max),nframes,geographic=False,epicenter=0,epicenter_line=0):
+def panel_tile_slip(home,project_name,sliprate_path,nstrike,ndip,slip_min,slip_max,nframes,geographic=False,epicenter=0,epicenter_line=0):
     '''
     Quick and dirty plot of a .rupt file
     epicenter is the coordinates, epcienter line is the down dip lien number where 
@@ -961,7 +961,7 @@ def panel_tile_slip(home,project_name,sliprate_path,nstrike,ndip,(slip_min,slip_
                     
                             
                        
-def tile_moment(rupt,epicenter,nstrike,ndip,covfile,beta=0,(vfast,vslow)=(0,0),shade=False):
+def tile_moment(rupt,epicenter,nstrike,ndip,covfile,beta=0,vfast=0,vslow=0,shade=False):
     '''
     Tile plot of subfault source-time functions
     '''
@@ -1521,7 +1521,7 @@ def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpas
     
     matplotlib.rcParams.update({'font.size': 14})
     #Decide what to plot
-    sta=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=0,dtype='S')
+    sta=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=0,dtype='U')
     lon=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=[1],dtype='f')
     lat=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=[2],dtype='f')
     gf=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=[4,5],dtype='f')
@@ -1730,7 +1730,7 @@ def static_synthetics(home,project_name,run_name,run_number,gflist,qscale,xl=Non
     
     matplotlib.rcParams.update({'font.size': 14})
     #Decide what to plot
-    sta=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=0,dtype='S')
+    sta=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=0,dtype='U')
     lon_all=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=[1],dtype='f')
     lat_all=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=[2],dtype='f')
     gf=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=[3],dtype='f')
@@ -1747,7 +1747,7 @@ def static_synthetics(home,project_name,run_name,run_number,gflist,qscale,xl=Non
     es=zeros(len(i))
     us=zeros(len(i))
     for k in range(len(i)):
-        neu=genfromtxt(datapath+sta[i[k]]+'.neu')
+        neu=genfromtxt(datapath+str(sta[i[k]])+'.neu')
         #neu=genfromtxt(datapath+sta[i[k]]+'.static.neu')
         n[k]=neu[0] ; e[k]=neu[1] ; u[k]=neu[2]
         neus=genfromtxt(synthpath+run_name+'.'+run_number+'.'+sta[i[k]]+'.static.neu')
@@ -2029,7 +2029,7 @@ def ABIC(home,project_name,run_name):
     print('... lambda = '+repr(ls[imin]))
     pl.show()
     
-def ABIC2D(home,project_name,run_name,(ABICmin,ABICmax)):
+def ABIC2D(home,project_name,run_name,ABICmin,ABICmax):
     '''
     plot 2D values of ABIC vs smoothing parameter for model selection
     '''

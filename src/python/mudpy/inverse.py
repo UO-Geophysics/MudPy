@@ -676,7 +676,7 @@ def getdata(home,project_name,GF_list,decimate,bandpass,quiet=False):
     for ksta in range(len(i)):
         if quiet==False:  
             print('Assembling displacement waveforms from '+str(stations[i[ksta]])+' into data vector.')
-        print(str(GFfiles[i[ksta],kgf]))
+        #print(str(GFfiles[i[ksta],kgf]))
         n=read(GFfiles[i[ksta],kgf]+'.n')
         e=read(GFfiles[i[ksta],kgf]+'.e')
         u=read(GFfiles[i[ksta],kgf]+'.u')
