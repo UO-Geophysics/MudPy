@@ -397,6 +397,8 @@ def make_parallel_hfsims(home,project_name,rupture_name,ncpus,sta,sta_lon,sta_la
     mpi=split(mpi)
     p=subprocess.Popen(mpi)
     p.communicate()
+    
+    
                 
 def run_hf_waveforms(home,project_name,fault_name,rupture_list,GF_list,model_name,run_name,dt,NFFT,G_from_file,
             G_name,rise_time_depths,moho_depth_in_km,source_time_function='dreger',duration=100.0,
@@ -452,7 +454,7 @@ def write_parallel_hfsims(home,project_name,rupture_name,station,component,remov
     from obspy import read
     import os
     rupture=rupture_name.split('.')[0]+'.'+rupture_name.split('.')[1]
-    parallel_waveforms=glob(home+project_name+'/output/waveforms/'+rupture+'/'+station+'.HN'+component+'.???.sac')
+    parallel_waveforms=glob(home+project_name+'/output/waveforms/'+rupture+'/'+station+'.HN'+component+'.[0-9][0-9][0-9].sac')
     #print "Number of MPI outputs: " + str(len(parallel_waveforms))
     if len(parallel_waveforms)==0:
         print("No waveforms at this location to add in")
@@ -2831,3 +2833,30 @@ def convert_to_grid(home,project_name,GF_list,out_file):
         line='%s\t%.4f\t%.4f\t%.6f\t%.6f\t%.6f\n' % (sta[k],lonlat[k,0],lonlat[k,1],neu[0],neu[1],neu[2])
         f.write(line)
     f.close()
+    
+    
+    
+def get_Mw(rupture_file):
+    '''
+    Compute total moment from an inversion
+    '''
+    from numpy import log10,genfromtxt
+
+   
+    #Open model file
+    rupt=genfromtxt(rupture_file)
+    #Get slip quantities
+    ss=rupt[:,8]
+    ds=rupt[:,9]
+    #Get total slip
+    slip=(ss**2+ds**2)**0.5
+    #Get rigidities and areas
+    mu=rupt[:,13]
+    A=rupt[:,11]*rupt[:,12]
+
+    #Compute moments
+    M0=mu*A*slip
+    #Total up and copute magnitude
+    M0=M0.sum()
+    Mw=(2./3)*(log10(M0)-9.1)
+    return M0,Mw

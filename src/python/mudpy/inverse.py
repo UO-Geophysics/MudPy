@@ -1669,6 +1669,9 @@ def get_moment(home,project_name,fault_name,model_name,sol):
     M0=M0.sum()
     Mw=(2./3)*(log10(M0)-9.1)
     return M0,Mw
+
+
+
     
     
 def ds2rot(sol,beta):

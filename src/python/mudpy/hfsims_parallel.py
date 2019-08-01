@@ -20,6 +20,7 @@ def run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,
     from obspy import Stream,Trace
     from sys import stdout
     from os import path,makedirs
+    from mudpy.hfsims import is_subfault_in_smga
     import warnings
 
     rank=int(rank)
@@ -110,7 +111,7 @@ def run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,
     tau_perturb=0.1
     
     #Deep faults receive a higher stress
-    stress_multiplier=3
+    stress_multiplier=5
 
     #initalize output seismogram
     tr=Trace()
@@ -153,17 +154,18 @@ def run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,
             stress=stress_parameter
             
             #Is subfault in an SMGA?
-            #radius_in_km=15.0
-            #smga_center_lon=-69.709200
-            #smga_center_lat=-19.683600
-            #in_smga=is_subfault_in_smga(lon_source,lat_source,smga_center_lon,smga_center_lat,radius_in_km)
-            #
+            #smga_loc = [-71.501,-30.918]
+            radius_in_km=15.0
+            smga_center_lon=-71.501
+            smga_center_lat=-30.918
+            in_smga=is_subfault_in_smga(lon_source,lat_source,smga_center_lon,smga_center_lat,radius_in_km)
+            
             ###Apply multiplier?
-            #if in_smga==True:
-            #    stress=stress_parameter*stress_multiplier
-            #    print "%.4f,%.4f is in SMGA, stress is %d" % (lon_source,lat_source,stress)
-            #else:
-            #    stress=stress_parameter
+            if in_smga==True:
+                stress=stress_parameter*stress_multiplier
+                print "%.4f,%.4f is in SMGA, stress is %d" % (lon_source,lat_source,stress)
+            else:
+                stress=stress_parameter
             
             #Apply multiplier?
             #if slip[kfault]>7.5:

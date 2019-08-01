@@ -2964,3 +2964,19 @@ def corners2utm(corners,UTM_zone='10S'):
     return corners_out
     
     
+def plot_dtopo(dtopo_file,s=5):
+    
+    from matplotlib import pyplot as plt
+    from numpy import where,genfromtxt
+    
+    d=genfromtxt(dtopo_file)
+    i=where(d[:,0]==d[:,0].max())[0]
+    d=d[i,:]
+    
+    max_vert=max(abs(d[:,3]))
+    
+    plt.figure()
+    plt.scatter(360+d[:,1],d[:,2],c=d[:,3],vmin=-max_vert,vmax=max_vert,cmap=plt.cm.seismic)
+    plt.colorbar(label='Vertical deformation (m)')
+    plt.title(dtopo_file)
+    plt.show()
