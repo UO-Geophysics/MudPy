@@ -1698,8 +1698,8 @@ def get_RMS(home,project_name,run_name,run_number,GF_list,bandpass,use_weights=T
             d_disp=dtemp.copy()
             ds_disp=dstemp.copy()
         else:
-            d_disp=r_[d,d.copy()]
-            ds_disp=r_[ds,ds.copy()]
+            d_disp=r_[d_disp,dtemp.copy()]
+            ds_disp=r_[ds_disp,dstemp.copy()]
     
     RMSdisplacement=(sum((d_disp-ds_disp)**2)/len(d_disp))**0.5
     
@@ -1749,8 +1749,8 @@ def get_RMS(home,project_name,run_name,run_number,GF_list,bandpass,use_weights=T
             d_vel=dtemp.copy()
             ds_vel=dstemp.copy()
         else:
-            d_vel=r_[d,d.copy()]
-            ds_vel=r_[ds,ds.copy()]
+            d_vel=r_[d_vel,dtemp.copy()]
+            ds_vel=r_[ds_vel,dstemp.copy()]
     
     RMSvelocity=(sum((d_vel-ds_vel)**2)/len(d_vel))**0.5
        
