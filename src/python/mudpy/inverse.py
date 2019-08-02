@@ -1645,8 +1645,8 @@ def get_RMS(home,project_name,run_name,run_number,GF_list,bandpass,use_weights=T
         
     #Into a single vector they go
     if use_weights==True:
-        d=r_[n/nweight,e/eweight,u/uweight]
-        ds=r_[ns/nweight,es/eweight,us/uweight]        
+        d_stat=r_[n/nweight,e/eweight,u/uweight]
+        ds_stat=r_[ns/nweight,es/eweight,us/uweight]        
     else:
         d_stat=r_[n,e,u]
         ds_stat=r_[ns,es,us]
