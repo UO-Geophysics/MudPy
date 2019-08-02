@@ -154,10 +154,28 @@ def run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,
             stress=stress_parameter
             
             #Is subfault in an SMGA?
-            #smga_loc = [-71.501,-30.918]
-            radius_in_km=15.0
-            smga_center_lon=-71.501
-            smga_center_lat=-30.918
+            #SMGA1
+#            radius_in_km=15.0
+#            smga_center_lon=-71.501
+#            smga_center_lat=-30.918
+            
+            
+            #SMGA2
+#            radius_in_km=15.0
+#            smga_center_lon=-71.863
+#            smga_center_lat=-30.759
+            
+            #smga3
+#            radius_in_km=7.5  
+#            smga_center_lon=-72.3923
+#            smga_center_lat=-30.58
+            
+            
+            #smga4
+            radius_in_km=7.5  
+            smga_center_lon=-72.3923
+            smga_center_lat=-30.61
+            
             in_smga=is_subfault_in_smga(lon_source,lat_source,smga_center_lon,smga_center_lat,radius_in_km)
             
             ###Apply multiplier?

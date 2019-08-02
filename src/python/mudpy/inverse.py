@@ -1583,6 +1583,185 @@ def get_VR(home,project_name,GF_list,sol,d,ds,decimate):
     VR=r_[VRstatic,VRdisp,VRvel,VRtsun,VRinsar]
     return VR
     
+
+
+def get_RMS(home,project_name,run_name,run_number,GF_list,bandpass,use_weights=True):
+    '''
+    Compute RMS per data type
+    
+    IN:
+        G: GF matrix
+        sol: Solution  vector from inversion
+        d: data vector
+    OUT:
+        RMS
+    '''
+    
+    from numpy import genfromtxt,where,r_,nan,zeros,ones
+    from obspy import read
+    from mudpy.green import stdecimate
+    from mudpy.forward import lowpass as lfilter
+    
+    print('... calcualting RMS...')
+    
+    #Read gf file and decide what needs to get loaded
+    gf_file=home+project_name+'/data/station_info/'+GF_list
+    stations=genfromtxt(gf_file,usecols=[0],skip_header=1,dtype='U')
+    GF=genfromtxt(gf_file,usecols=[3,4,5,6,7],skip_header=1,dtype='f8')
+    all_weights=genfromtxt(gf_file,usecols=[13,14,15,16,17,18,19,20,21,22,23],skip_header=1,dtype='f8')
+    
+    # What are the fitler pass bands?
+    displacement_bandpass=bandpass[0]
+    velocity_bandpass=bandpass[1]
+    tsunami_bandpass=bandpass[2]
+    
+    
+    ####    Statics    ####
+    kgf=0
+    i=where(GF[:,kgf]==1)[0]
+    RMSstatic=nan
+    datapath=home+project_name+'/data/statics/'
+    synthpath=home+project_name+'/output/inverse_models/statics/'
+    
+    weights=all_weights[i,0:3]
+    nweight=weights[:,0]
+    eweight=weights[:,1]
+    uweight=weights[:,2]
+    
+    #where will the data and synthetics go
+    n=zeros(len(i))
+    e=zeros(len(i))
+    u=zeros(len(i))
+    ns=zeros(len(i))
+    es=zeros(len(i))
+    us=zeros(len(i))
+    for k in range(len(i)):
+        neu=genfromtxt(datapath+str(stations[i[k]])+'.neu')
+        #neu=genfromtxt(datapath+sta[i[k]]+'.static.neu')
+        n[k]=neu[0] ; e[k]=neu[1] ; u[k]=neu[2]
+        neus=genfromtxt(synthpath+run_name+'.'+run_number+'.'+stations[i[k]]+'.static.neu')
+        #neus=genfromtxt(synthpath+sta[i[k]]+'.static.neu')
+        ns[k]=neus[0] ; es[k]=neus[1] ; us[k]=neus[2]
+        
+    #Into a single vector they go
+    if use_weights==True:
+        d=r_[n/nweight,e/eweight,u/uweight]
+        ds=r_[ns/nweight,es/eweight,us/uweight]        
+    else:
+        d=r_[n,e,u]
+        ds=r_[ns,es,us]
+    RMSstatic=(sum((d-ds)**2)/len(d))**0.5
+    
+    
+    ###  displacememnt waveforms   ####
+    kgf=1
+    i=where(GF[:,kgf]==1)[0]
+    RMSdisplacement=nan
+    datapath=home+project_name+'/data/waveforms/'
+    synthpath=home+project_name+'/output/inverse_models/waveforms/'  
+    datasuffix='disp'
+    synthsuffix='disp'
+    
+    weights=all_weights[i,3:6]
+    nweight=weights[:,0]
+    eweight=weights[:,1]
+    uweight=weights[:,2]
+    
+    for k in range(len(i)):
+        n=read(datapath+stations[i[k]]+'.'+datasuffix+'.n')
+        e=read(datapath+stations[i[k]]+'.'+datasuffix+'.e')
+        u=read(datapath+stations[i[k]]+'.'+datasuffix+'.u')
+        ns=read(synthpath+run_name+'.'+run_number+'.'+stations[i[k]]+'.'+synthsuffix+'.n.sac')
+        es=read(synthpath+run_name+'.'+run_number+'.'+stations[i[k]]+'.'+synthsuffix+'.e.sac')
+        us=read(synthpath+run_name+'.'+run_number+'.'+stations[i[k]]+'.'+synthsuffix+'.u.sac')
+        
+        #Lowpass
+        fsample=1./e[0].stats.delta
+        e[0].data=lfilter(e[0].data,displacement_bandpass,fsample,2)
+        n[0].data=lfilter(n[0].data,displacement_bandpass,fsample,2)
+        u[0].data=lfilter(u[0].data,displacement_bandpass,fsample,2)
+        es[0].data=lfilter(es[0].data,displacement_bandpass,fsample,2)
+        ns[0].data=lfilter(ns[0].data,displacement_bandpass,fsample,2)
+        us[0].data=lfilter(us[0].data,displacement_bandpass,fsample,2)
+        
+        if use_weights==True:
+            nw=ones(n[0].stats.npts)*nweight[k]
+            ew=ones(n[0].stats.npts)*eweight[k]
+            uw=ones(n[0].stats.npts)*uweight[k]
+            dtemp=r_[n[0].data/nw,e[0].data/ew,u[0].data/uw]
+            dstemp=r_[ns[0].data/nw,es[0].data/ew,us[0].data/uw]  
+        else:
+            dtemp=r_[n[0].data,e[0].data,u[0].data]
+            dstemp=r_[ns[0].data,es[0].data,us[0].data]
+        
+        if k==0:
+            d=dtemp.copy()
+            ds=dstemp.copy()
+        else:
+            d=r_[d,d.copy()]
+            ds=r_[ds,ds.copy()]
+    
+    RMSdisplacement=(sum((d-ds)**2)/len(d))**0.5
+    
+    
+    ###  velocity waveforms   ####
+    kgf=2
+    i=where(GF[:,kgf]==1)[0]
+    RMSvelocity=nan
+    datapath=home+project_name+'/data/waveforms/'
+    synthpath=home+project_name+'/output/inverse_models/waveforms/'  
+    datasuffix='vel'
+    synthsuffix='vel'
+    
+    weights=all_weights[i,6:9]
+    nweight=weights[:,0]
+    eweight=weights[:,1]
+    uweight=weights[:,2]
+    
+    for k in range(len(i)):
+        n=read(datapath+stations[i[k]]+'.'+datasuffix+'.n')
+        e=read(datapath+stations[i[k]]+'.'+datasuffix+'.e')
+        u=read(datapath+stations[i[k]]+'.'+datasuffix+'.u')
+        ns=read(synthpath+run_name+'.'+run_number+'.'+stations[i[k]]+'.'+synthsuffix+'.n.sac')
+        es=read(synthpath+run_name+'.'+run_number+'.'+stations[i[k]]+'.'+synthsuffix+'.e.sac')
+        us=read(synthpath+run_name+'.'+run_number+'.'+stations[i[k]]+'.'+synthsuffix+'.u.sac')
+        
+        #Bandpass
+        fsample=1./e[0].stats.delta
+        e[0].data=lfilter(e[0].data,velocity_bandpass,fsample,2)
+        n[0].data=lfilter(n[0].data,velocity_bandpass,fsample,2)
+        u[0].data=lfilter(u[0].data,velocity_bandpass,fsample,2)
+        es[0].data=lfilter(es[0].data,velocity_bandpass,fsample,2)
+        ns[0].data=lfilter(ns[0].data,velocity_bandpass,fsample,2)
+        us[0].data=lfilter(us[0].data,velocity_bandpass,fsample,2)
+        
+        if use_weights==True:
+            nw=ones(n[0].stats.npts)*nweight[k]
+            ew=ones(n[0].stats.npts)*eweight[k]
+            uw=ones(n[0].stats.npts)*uweight[k]
+            dtemp=r_[n[0].data/nw,e[0].data/ew,u[0].data/uw]
+            dstemp=r_[ns[0].data/nw,es[0].data/ew,us[0].data/uw]  
+        else:
+            dtemp=r_[n[0].data,e[0].data,u[0].data]
+            dstemp=r_[ns[0].data,es[0].data,us[0].data]
+        
+        if k==0:
+            d=dtemp.copy()
+            ds=dstemp.copy()
+        else:
+            d=r_[d,d.copy()]
+            ds=r_[ds,ds.copy()]
+    
+    RMSvelocity=(sum((d-ds)**2)/len(d))**0.5
+       
+    RMStsunami=nan
+    RMSinsar=nan
+    
+    RMS=r_[RMSstatic,RMSdisplacement,RMSvelocity,RMStsunami,RMSinsar]
+    
+    return RMS
+
+
     
 def get_ABIC(G,GTG,sol,d,lambda_s,lambda_t,Ls,LsLs,Lt,LtLt):
     '''
