@@ -602,8 +602,8 @@ def select_faults(whole_fault,Dstrike,Ddip,target_Mw,buffer_factor,num_modes,sca
         dip_bounds[0]=dip_bounds[0]-abs(ddip_max-dip_bounds[1])
         dip_bounds[1]=ddip_max
     
-    Ds=Dstrike[hypo_fault,:]
-    Dd=Ddip[hypo_fault,:]
+    Ds=Dstrike[:,hypo_fault]
+    Dd=Ddip[:,hypo_fault]
     
     #Now select faults within those distances
     selected_faults=where((Ds>=strike_bounds[0]) & (Ds<=strike_bounds[1]) & (Dd>=dip_bounds[0]) & (Dd<=dip_bounds[1]))[0]

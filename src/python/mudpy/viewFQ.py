@@ -399,10 +399,10 @@ def plot_LW_scaling(home,project_name,run_name):
     '''
     
     from glob import glob
-    from numpy import zeros,arange,log10
+    from numpy import zeros,arange,log10,sort
     from matplotlib import pyplot as plt
     
-    logs=glob(home+project_name+'/output/ruptures/'+run_name+'*.log')
+    logs=sort(glob(home+project_name+'/output/ruptures/'+run_name+'*.log'))
     L=zeros(len(logs))
     W=zeros(len(logs))
     Mw=zeros(len(logs))
@@ -422,10 +422,10 @@ def plot_LW_scaling(home,project_name,run_name):
     plt.figure(figsize=(9,4))
     
     plt.subplot(121)
-    Mw_synth=arange(7.8,9.3,0.1)
+    Mw_synth=arange(7.0,9.3,0.1)
     plt.plot(Mw_synth,-2.37+0.57*Mw_synth,c='k',lw=2)
     plt.scatter(Mw,log10(L),marker='+')
-    plt.xlim([7.75,9.35])
+    plt.xlim([7.3,9.35])
     plt.xlabel('Actual Mw')
     plt.ylabel('log (L) [km]')
     plt.annotate(r'$\log (L)=-2.37+0.57M_w$',xy=(8.0,3.17))
@@ -433,7 +433,7 @@ def plot_LW_scaling(home,project_name,run_name):
     plt.subplot(122)
     plt.plot(Mw_synth,-1.86+0.46*Mw_synth,c='k',lw=2)
     plt.scatter(Mw,log10(W),marker='+')
-    plt.xlim([7.75,9.35])
+    plt.xlim([7.3,9.35])
     plt.xlabel('Actual Mw')
     plt.ylabel('log (W) [km]')
     plt.annotate(r'$\log (W)=-1.86+0.46M_w$',xy=(8.0,2.8))
@@ -441,6 +441,8 @@ def plot_LW_scaling(home,project_name,run_name):
     plt.show()
     
     plt.subplots_adjust(bottom=0.17)
+    
+    return L,W,Mw
  
     
 def analyze_sources(home,project_name,run_name,Mw_lims=[7.75,9.35]):
