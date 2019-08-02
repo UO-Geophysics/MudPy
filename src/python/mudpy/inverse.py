@@ -1648,9 +1648,9 @@ def get_RMS(home,project_name,run_name,run_number,GF_list,bandpass,use_weights=T
         d=r_[n/nweight,e/eweight,u/uweight]
         ds=r_[ns/nweight,es/eweight,us/uweight]        
     else:
-        d=r_[n,e,u]
-        ds=r_[ns,es,us]
-    RMSstatic=(sum((d-ds)**2)/len(d))**0.5
+        d_stat=r_[n,e,u]
+        ds_stat=r_[ns,es,us]
+    RMSstatic=(sum((d_stat-ds_stat)**2)/len(d_stat))**0.5
     
     
     ###  displacememnt waveforms   ####
@@ -1695,13 +1695,13 @@ def get_RMS(home,project_name,run_name,run_number,GF_list,bandpass,use_weights=T
             dstemp=r_[ns[0].data,es[0].data,us[0].data]
         
         if k==0:
-            d=dtemp.copy()
-            ds=dstemp.copy()
+            d_disp=dtemp.copy()
+            ds_disp=dstemp.copy()
         else:
-            d=r_[d,d.copy()]
-            ds=r_[ds,ds.copy()]
+            d_disp=r_[d,d.copy()]
+            ds_disp=r_[ds,ds.copy()]
     
-    RMSdisplacement=(sum((d-ds)**2)/len(d))**0.5
+    RMSdisplacement=(sum((d_disp-ds_disp)**2)/len(d_disp))**0.5
     
     
     ###  velocity waveforms   ####
@@ -1746,18 +1746,23 @@ def get_RMS(home,project_name,run_name,run_number,GF_list,bandpass,use_weights=T
             dstemp=r_[ns[0].data,es[0].data,us[0].data]
         
         if k==0:
-            d=dtemp.copy()
-            ds=dstemp.copy()
+            d_vel=dtemp.copy()
+            ds_vel=dstemp.copy()
         else:
-            d=r_[d,d.copy()]
-            ds=r_[ds,ds.copy()]
+            d_vel=r_[d,d.copy()]
+            ds_vel=r_[ds,ds.copy()]
     
-    RMSvelocity=(sum((d-ds)**2)/len(d))**0.5
+    RMSvelocity=(sum((d_vel-ds_vel)**2)/len(d_vel))**0.5
        
     RMStsunami=nan
     RMSinsar=nan
     
-    RMS=r_[RMSstatic,RMSdisplacement,RMSvelocity,RMStsunami,RMSinsar]
+    # Total RMS
+    d=r_[d_stat,d_disp,d_vel]
+    ds=r_[ds_stat,ds_disp,ds_vel]
+    RMStotal=(sum((d-ds)**2)/len(d))**0.5
+    
+    RMS=r_[RMSstatic,RMSdisplacement,RMSvelocity,RMStsunami,RMSinsar,RMStotal]
     
     return RMS
 
