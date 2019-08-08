@@ -10,7 +10,7 @@ def run_parallel_generate_ruptures(home,project_name,run_name,fault_name,slab_na
         load_distances,distances_name,UTM_zone,tMw,model_name,hurst,Ldip,Lstrike,
         num_modes,Nrealizations,rake,buffer_factor,rise_time_depths0,rise_time_depths1,time_epi,max_slip,
         source_time_function,lognormal,slip_standard_deviation,scaling_law,ncpus,force_magnitude,
-        force_area,mean_slip_name,hypocenter_lon,hypocenter_lat,hypocenter_dep,slip_tol,force_hypocenter,
+        force_area,mean_slip_name,hypocenter,slip_tol,force_hypocenter,
         no_random,shypo,use_hypo_fraction,shear_wave_fraction,rank,size):
     
     '''
@@ -31,9 +31,12 @@ def run_parallel_generate_ruptures(home,project_name,run_name,fault_name,slab_na
     # Fix input formats
     rank=int(rank)
     size=int(size)
-    time_epi=UTCDateTime(time_epi)
+    if time_epi=='None':
+        time_epi=None
+    else:
+        time_epi=UTCDateTime(time_epi)
     rise_time_depths=[rise_time_depths0,rise_time_depths1]
-    hypocenter=[hypocenter_lon,hypocenter_lat,hypocenter_dep]
+    #hypocenter=[hypocenter_lon,hypocenter_lat,hypocenter_dep]
     tMw=tMw.split(',')
     target_Mw=zeros(len(tMw))
     for rMw in range(len(tMw)):
@@ -225,6 +228,7 @@ def run_parallel_generate_ruptures(home,project_name,run_name,fault_name,slab_na
 #If main entry point
 if __name__ == '__main__':
     import sys
+    import numpy as np
     from mpi4py import MPI
     
     comm = MPI.COMM_WORLD
@@ -283,34 +287,39 @@ if __name__ == '__main__':
         mean_slip_name=sys.argv[31]
         if mean_slip_name == 'None':
             mean_slip_name=None
-        hypocenter_lon=float(sys.argv[32])
-        hypocenter_lat=float(sys.argv[33])
-        hypocenter_dep=float(sys.argv[34])
-        slip_tol=float(sys.argv[35])
-        force_hypocenter=sys.argv[36]
+        hypocenter=sys.argv[32]
+        if hypocenter == 'None':
+            hypocenter=None
+        else:
+            hypocenter_lon=float(hypocenter.split(' ')[0].split('[')[1])
+            hypocenter_lat=float(hypocenter.split(' ')[3])
+            hypocenter_dep=float(hypocenter.split(' ')[8])
+            hypocenter=np.array([hypocenter_lon,hypocenter_lat,hypocenter_dep])
+        slip_tol=float(sys.argv[33])
+        force_hypocenter=sys.argv[34]
         if force_hypocenter=='True':
             force_hypocenter=True
         elif force_hypocenter=='False':
             force_hypocenter=False
-        no_random=sys.argv[37]
+        no_random=sys.argv[35]
         if no_random=='True':
             no_random=True
         elif no_random=='False':
             no_random=False
-        shypo=sys.argv[38]
+        shypo=sys.argv[36]
         if shypo=='None':
             shypo=None
-        use_hypo_fraction=sys.argv[39]
+        use_hypo_fraction=sys.argv[37]
         if use_hypo_fraction=='True':
             use_hypo_fraction=True
         if use_hypo_fraction=='False':
             use_hypo_fraction=False
-        shear_wave_fraction=float(sys.argv[40])
+        shear_wave_fraction=float(sys.argv[38])
         run_parallel_generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
         load_distances,distances_name,UTM_zone,tMw,model_name,hurst,Ldip,Lstrike,
         num_modes,Nrealizations,rake,buffer_factor,rise_time_depths0,rise_time_depths1,time_epi,max_slip,
         source_time_function,lognormal,slip_standard_deviation,scaling_law,ncpus,force_magnitude,
-        force_area,mean_slip_name,hypocenter_lon,hypocenter_lat,hypocenter_dep,slip_tol,force_hypocenter,
+        force_area,mean_slip_name,hypocenter,slip_tol,force_hypocenter,
         no_random,shypo,use_hypo_fraction,shear_wave_fraction,rank,size)
     else:
         print("ERROR: You're not allowed to run "+sys.argv[1]+" from the shell or it does not exist")
