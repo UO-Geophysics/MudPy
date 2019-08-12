@@ -661,7 +661,7 @@ def load_fakequakes_synthetics(home,project_name,fault_name,model_name,GF_list,G
             for kfault in range(Nfaults):
                 #Get subfault GF directory
                 nsub='sub'+str(int(source[kfault,0])).rjust(4,'0')
-                nfault='subfault'+str(int(source[kfault,0])).U(4,'0')
+                nfault='subfault'+str(int(source[kfault,0])).rjust(4,'0')
                 strdepth='%.4f' % source[kfault,3]
                 syn_path=home+project_name+'/GFs/dynamic/'+model_name+'_'+strdepth+'.'+nsub+'/'
                 #Get synthetics
