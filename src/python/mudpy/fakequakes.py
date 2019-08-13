@@ -462,7 +462,8 @@ def make_KL_slip(fault,num_modes,eigenvals,V,mean_slip,max_slip,lognormal=True,m
         KL_slip = mean_slip.copy()  # start with the mean slip
         # add in the terms in the K-L expansion:
         for k in range(len(z)):
-            KL_slip += z[k] * sqrt(eigenvals[k]) * V[:,k]
+            if eigenvals[k]>0: #only use positive eigenvals
+                KL_slip += z[k] * sqrt(eigenvals[k]) * V[:,k]
         # exponentiate for lognormal:
         if lognormal==True:
             KL_slip = exp(KL_slip)
