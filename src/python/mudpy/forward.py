@@ -314,6 +314,7 @@ def waveforms_fakequakes(home,project_name,fault_name,rupture_list,GF_list,
             forward=True #This controls where we look for the rupture file
         
         # Put in matrix
+        print epicenter, time_epi
         m,G=get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_name,time_epi,GF_list,epicenter,NFFT,source_time_function,stf_falloff_rate,forward=forward)
         # Solve
         waveforms=G.dot(m)
@@ -732,6 +733,7 @@ def get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_nam
     #How many subfaults are non-zero?
     i_non_zero=where(rise_times>0)[0]
     N_non_zero=len(i_non_zero)
+    print('... '+str(N_non_zero)+' non-zero subfaults')
     
     #Stations
     station_file=home+project_name+'/data/station_info/'+GF_list
@@ -757,18 +759,20 @@ def get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_nam
             eds=Eds[read_start+i_non_zero[ksource]].copy()
             zds=Zds[read_start+i_non_zero[ksource]].copy()
             #Delay synthetics by rupture onset
+            print('... ... Delaying synthetics')
             tdelay=rupture_onset[i_non_zero[ksource]]
             nss,ess,zss,nds,eds,zds=tshift_trace(nss,ess,zss,nds,eds,zds,tdelay,time_epi,NFFT)
             #Convolve with source time function
             rise=rise_times[i_non_zero[ksource]]
             #Make sure rise time is a multiple of dt
+            print('... ... Fixing rise times')
             dt=nss.stats.delta
             rise=round(rise/dt)*nss.stats.delta
             if rise<(2.*dt): #Otherwise get nan's in STF
                 rise=2.*dt
             total_time=NFFT*dt
             t_stf,stf=build_source_time_function(rise,dt,total_time,stf_type=source_time_function,dreger_falloff_rate=stf_falloff_rate)
-
+            print('... ... Convolve STF')
             nss.data=convolve(nss.data,stf)[0:NFFT]
             ess.data=convolve(ess.data,stf)[0:NFFT]
             zss.data=convolve(zss.data,stf)[0:NFFT]
@@ -776,6 +780,7 @@ def get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_nam
             eds.data=convolve(eds.data,stf)[0:NFFT]
             zds.data=convolve(zds.data,stf)[0:NFFT]
             #Place in matrix
+            print('... ... Matrix')
             G[matrix_pos:matrix_pos+NFFT,2*ksource]=nss.data
             G[matrix_pos:matrix_pos+NFFT,2*ksource+1]=nds.data
             G[matrix_pos+NFFT:matrix_pos+2*NFFT,2*ksource]=ess.data

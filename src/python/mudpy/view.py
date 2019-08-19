@@ -122,7 +122,7 @@ def quick_model(rupt,s=5):
     #Get projection of rake vector
     x,y=slip2geo(ss,ds,strike)
     #Plot
-    plt.figure()
+    plt.figure(figsize=(5.2,10))
     plt.scatter(lon,lat,marker='o',c=slip,s=s,cmap=whitejet)
     plt.ylabel('Latitude')
     plt.xlabel('Longitude')
@@ -130,7 +130,10 @@ def quick_model(rupt,s=5):
     cb.set_label('Slip (m)')
     plt.quiver(lon,lat,x,y,color='green',width=0.0013)
     plt.grid()
-    plt.title(rupt)
+    #plt.title(rupt)
+    #plt.title(rupt[58:85])
+    #plt.savefig(rupt[0:49]+'figures/'+rupt[58:85]+'.png')
+    #plt.close()
     plt.show()
     
 def quick_static(gflist,datapath,scale=1):
@@ -1830,7 +1833,7 @@ def insar_residual(home,project_name,run_name,run_number,gflist,zlims):
     out=c_[lon,lat,los_data,los_synth,los_data-los_synth]
     savetxt(home+project_name+'/analysis/'+run_name+'.'+run_number+'.insar.res',out,fmt='%.6f\t%.6f\t%8.5f\t%8.5f\t%8.5f',header='lon,lat,los_data(m),los_synthetic(m),data-synthetic(m)')
     plt.figure()
-    plt.scatter(lon,lat,c=los_data-los_synth,cmap=matplotlib.cm.seismic,vmin=zlims[0],vmax=zlims[1],s=50)
+    plt.scatter(lon,lat,c=los_data-los_synth,cmap=matplotlib.cm.seismic,vmin=zlims[0],vmax=zlims[1],s=5)
     plt.title('LOS data - LOS predicted (m)')
     plt.colorbar()
     plt.grid()
