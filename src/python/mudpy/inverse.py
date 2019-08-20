@@ -1030,7 +1030,87 @@ def write_model(home,project_name,run_name,fault_name,model_name,rupture_speed,n
     print('... writing model results to file '+outdir)
     savetxt(outdir,out,fmtout,header='No,lon,lat,z(km),strike,dip,rise,dura,ss-slip(m),ds-slip(m),ss_len(m),ds_len(m),rupt_time(s),rigidity(Pa)')
         
+def write_synthetics_GOD(home,project_name,run_name,GF_list,G,sol,ds,num,decimate):
+    '''
+    Output synthetics as sac for displacement or velocity waveforms and ascii for static field
     
+    IN:
+        home: Home directory location
+        project_name: Name of the problem
+        run_name: Name of inversion run
+        sol: The solution vector from the inversion
+        ds: The predicted data ds=G*m
+        num: ID number of the inversion
+    OUT:
+        Nothing
+    '''
+    
+    from obspy import read
+    from numpy import array,savetxt,genfromtxt,squeeze,r_
+    from mudpy.green import stdecimate
+    
+    print('... computing and saving synthetics...')
+    num=str(num).rjust(4,'0')
+    #Read gf file and decide what needs to get loaded
+    gf_file=home+project_name+'/data/station_info/'+GF_list
+    stations=genfromtxt(gf_file,usecols=[0],skip_header=1,dtype='U')
+    GF=genfromtxt(gf_file,usecols=[3,4,5,6,7],skip_header=1,dtype='f8')
+    GFfiles=genfromtxt(gf_file,usecols=[8,9,10,11,12],skip_header=1,dtype='U')
+    #Separate into its constituent parts (statics,displacaments, velocities, etc...)
+    kinsert=0
+#    kgf=0
+    for i in range(len(stations)):
+        sta=stations[i]
+        if GF[i][0]==1: # STATIC DISPLACEMENT DATA
+            neu=array([ds[kinsert],ds[kinsert+1],ds[kinsert+2]])
+            kinsert+=3
+            savetxt(home+project_name+'/output/inverse_models/statics/'+run_name+'.'+num+'.'+sta+'.static.neu',neu)
+        if GF[i][1]==1: # DISPLACEMENT WAVEFORM DATA
+            n=read(GFfiles[i,1]+'.n')
+            e=read(GFfiles[i,1]+'.e')
+            u=read(GFfiles[i,1]+'.u')
+            if decimate != None:
+                n[0]=stdecimate(n[0],decimate)
+                e[0]=stdecimate(e[0],decimate)
+                u[0]=stdecimate(u[0],decimate)
+            npts=n[0].stats.npts
+            n[0].data=squeeze(ds[kinsert:kinsert+npts])
+            e[0].data=squeeze(ds[kinsert+npts:kinsert+2*npts])
+            u[0].data=squeeze(ds[kinsert+2*npts:kinsert+3*npts])
+            kinsert+=3*npts
+            n.write(home+project_name+'/output/inverse_models/waveforms/'+run_name+'.'+num+'.'+sta+'.disp.n.sac',format='SAC')
+            e.write(home+project_name+'/output/inverse_models/waveforms/'+run_name+'.'+num+'.'+sta+'.disp.e.sac',format='SAC')
+            u.write(home+project_name+'/output/inverse_models/waveforms/'+run_name+'.'+num+'.'+sta+'.disp.u.sac',format='SAC')
+        if GF[i][2]==1: #VELOCITY WAVEFORM DATA
+            n=read(GFfiles[i,2]+'.n')
+            e=read(GFfiles[i,2]+'.e')
+            u=read(GFfiles[i,2]+'.u')
+            if decimate != None:
+                n[0]=stdecimate(n[0],decimate)
+                e[0]=stdecimate(e[0],decimate)
+                u[0]=stdecimate(u[0],decimate)
+            npts=n[0].stats.npts
+            n[0].data=squeeze(ds[kinsert:kinsert+npts])
+            e[0].data=squeeze(ds[kinsert+npts:kinsert+2*npts])
+            u[0].data=squeeze(ds[kinsert+2*npts:kinsert+3*npts])
+            kinsert+=3*npts
+            n.write(home+project_name+'/output/inverse_models/waveforms/'+run_name+'.'+num+'.'+sta+'.vel.n.sac',format='SAC')
+            e.write(home+project_name+'/output/inverse_models/waveforms/'+run_name+'.'+num+'.'+sta+'.vel.e.sac',format='SAC')
+            u.write(home+project_name+'/output/inverse_models/waveforms/'+run_name+'.'+num+'.'+sta+'.vel.u.sac',format='SAC')
+        if GF[i][3]==1: #TSUNAMI DATA
+            tsun=read(GFfiles[i,3])
+            npts=tsun[0].stats.npts
+            synth=tsun.copy()
+            synth[0].data=squeeze(ds[kinsert:kinsert+npts])
+            kinsert+=npts
+            synth.write(home+project_name+'/output/inverse_models/waveforms/'+run_name+'.'+num+'.'+sta+'.tsun',format='SAC')
+        if GF[i][4]==1: #INSAR DATA
+            los_vector=genfromtxt(GFfiles[i,4])
+            los_vector=los_vector[1:]
+            los=array(r_[ds[kinsert],los_vector])
+            kinsert+=1
+            savetxt(home+project_name+'/output/inverse_models/statics/'+run_name+'.'+num+'.'+sta+'.los',los)
+
     
 def write_synthetics(home,project_name,run_name,GF_list,G,sol,ds,num,decimate):
     '''
