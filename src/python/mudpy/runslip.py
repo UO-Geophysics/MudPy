@@ -728,7 +728,8 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
                 L2,Lmodel,VR,ABIC,Mo,Mw,model_name,fault_name,G_name,GF_list,solver)
             #Write output to file
             if GOD_inversion==True:
-                np.save(home+project_name+'/output/inverse_models/'+run_name+'.'+kout+'.syn.npy',ds)
+                num=str(kout).rjust(4,'0')
+                np.save(home+project_name+'/output/inverse_models/'+run_name+'.'+num+'.syn.npy',ds)
                 inv.write_synthetics_GOD(home,project_name,run_name,GF_list,G,sol,ds,kout,decimate)
             else:
                 inv.write_synthetics(home,project_name,run_name,GF_list,G,sol,ds,kout,decimate)
