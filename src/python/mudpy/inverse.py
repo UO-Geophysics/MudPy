@@ -1063,7 +1063,7 @@ def write_synthetics_GOD(home,project_name,run_name,GF_list,ds,num,decimate):
         sta=stations[i]
         if GF[i][0]==1: # STATIC DISPLACEMENT DATA
             neu=array([ds[kinsert],ds[kinsert+1],ds[kinsert+2]])
-            print "... ... " + sta + " static synthetics saved: " + str(kinsert) + " - " + str(kinsert+3) 
+            #print "... ... " + sta + " static synthetics saved: " + str(kinsert) + " - " + str(kinsert+3) 
             kinsert+=3
             savetxt(home+project_name+'/output/inverse_models/statics/'+run_name+'.'+num+'.'+sta+'.static.neu',neu)
         if GF[i][1]==1: # DISPLACEMENT WAVEFORM DATA
@@ -1078,7 +1078,7 @@ def write_synthetics_GOD(home,project_name,run_name,GF_list,ds,num,decimate):
             n[0].data=squeeze(ds[kinsert:kinsert+npts])
             e[0].data=squeeze(ds[kinsert+npts:kinsert+2*npts])
             u[0].data=squeeze(ds[kinsert+2*npts:kinsert+3*npts])
-            print "... ... " + sta + " displacement synthetics saved: " + str(kinsert) + " - " + str(kinsert+3*npts)
+            #print "... ... " + sta + " displacement synthetics saved: " + str(kinsert) + " - " + str(kinsert+3*npts)
             kinsert+=3*npts
             n.write(home+project_name+'/output/inverse_models/waveforms/'+run_name+'.'+num+'.'+sta+'.disp.n.sac',format='SAC')
             e.write(home+project_name+'/output/inverse_models/waveforms/'+run_name+'.'+num+'.'+sta+'.disp.e.sac',format='SAC')
@@ -1095,7 +1095,7 @@ def write_synthetics_GOD(home,project_name,run_name,GF_list,ds,num,decimate):
             n[0].data=squeeze(ds[kinsert:kinsert+npts])
             e[0].data=squeeze(ds[kinsert+npts:kinsert+2*npts])
             u[0].data=squeeze(ds[kinsert+2*npts:kinsert+3*npts])
-            print "... ... " + sta + " velocity synthetics saved: " + str(kinsert) + " - " + str(kinsert+3*npts)
+            #print "... ... " + sta + " velocity synthetics saved: " + str(kinsert) + " - " + str(kinsert+3*npts)
             kinsert+=3*npts
             n.write(home+project_name+'/output/inverse_models/waveforms/'+run_name+'.'+num+'.'+sta+'.vel.n.sac',format='SAC')
             e.write(home+project_name+'/output/inverse_models/waveforms/'+run_name+'.'+num+'.'+sta+'.vel.e.sac',format='SAC')
@@ -1105,14 +1105,14 @@ def write_synthetics_GOD(home,project_name,run_name,GF_list,ds,num,decimate):
             npts=tsun[0].stats.npts
             synth=tsun.copy()
             synth[0].data=squeeze(ds[kinsert:kinsert+npts])
-            print "... ... " + sta + " tsunami synthetics saved: " + str(kinsert) + " - " + str(kinsert+npts)
+            #print "... ... " + sta + " tsunami synthetics saved: " + str(kinsert) + " - " + str(kinsert+npts)
             kinsert+=npts
             synth.write(home+project_name+'/output/inverse_models/waveforms/'+run_name+'.'+num+'.'+sta+'.tsun',format='SAC')
         if GF[i][4]==1: #INSAR DATA
             los_vector=genfromtxt(GFfiles[i,4])
             los_vector=los_vector[1:]
             los=array(r_[ds[kinsert],los_vector])
-            print "... ... " + sta + " InSAR synthetics saved: " + str(kinsert) + " - " + str(kinsert+1)
+            #print "... ... " + sta + " InSAR synthetics saved: " + str(kinsert) + " - " + str(kinsert+1)
             kinsert+=1
             savetxt(home+project_name+'/output/inverse_models/statics/'+run_name+'.'+num+'.'+sta+'.los',los)
 
