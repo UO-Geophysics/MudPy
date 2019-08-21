@@ -1030,7 +1030,7 @@ def write_model(home,project_name,run_name,fault_name,model_name,rupture_speed,n
     print('... writing model results to file '+outdir)
     savetxt(outdir,out,fmtout,header='No,lon,lat,z(km),strike,dip,rise,dura,ss-slip(m),ds-slip(m),ss_len(m),ds_len(m),rupt_time(s),rigidity(Pa)')
         
-def write_synthetics_GOD(home,project_name,run_name,GF_list,G,sol,ds,num,decimate):
+def write_synthetics_GOD(home,project_name,run_name,GF_list,ds,num,decimate):
     '''
     Output synthetics as sac for displacement or velocity waveforms and ascii for static field
     
