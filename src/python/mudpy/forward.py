@@ -718,6 +718,7 @@ def get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_nam
     '''
     
     from numpy import genfromtxt,loadtxt,convolve,where,zeros,arange,unique,save
+    import datetime
 
 
     if forward==True:
@@ -759,35 +760,39 @@ def get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_nam
             eds=Eds[read_start+i_non_zero[ksource]].copy()
             zds=Zds[read_start+i_non_zero[ksource]].copy()
             #Delay synthetics by rupture onset
-            print('... ... Delaying synthetics')
+            #now=datetime.datetime.now()
             tdelay=rupture_onset[i_non_zero[ksource]]
             nss,ess,zss,nds,eds,zds=tshift_trace(nss,ess,zss,nds,eds,zds,tdelay,time_epi,NFFT)
+            #print('... ... Delaying synthetics: ' + str(datetime.datetime.now()-now))
             #Convolve with source time function
+            #now=datetime.datetime.now()
             rise=rise_times[i_non_zero[ksource]]
             #Make sure rise time is a multiple of dt
-            print('... ... Fixing rise times')
+            
             dt=nss.stats.delta
             rise=round(rise/dt)*nss.stats.delta
             if rise<(2.*dt): #Otherwise get nan's in STF
                 rise=2.*dt
             total_time=NFFT*dt
             t_stf,stf=build_source_time_function(rise,dt,total_time,stf_type=source_time_function,dreger_falloff_rate=stf_falloff_rate)
-            print('... ... Convolve STF')
+            #print('... ... Fixing rise times: ' + str(datetime.datetime.now()-now))
+            #now=datetime.datetime.now()
             nss.data=convolve(nss.data,stf)[0:NFFT]
             ess.data=convolve(ess.data,stf)[0:NFFT]
             zss.data=convolve(zss.data,stf)[0:NFFT]
             nds.data=convolve(nds.data,stf)[0:NFFT]
             eds.data=convolve(eds.data,stf)[0:NFFT]
             zds.data=convolve(zds.data,stf)[0:NFFT]
+            #print('... ... Convolve STF: ' + str(datetime.datetime.now()-now))
             #Place in matrix
-            print('... ... Matrix')
+            #now=datetime.datetime.now()
             G[matrix_pos:matrix_pos+NFFT,2*ksource]=nss.data
             G[matrix_pos:matrix_pos+NFFT,2*ksource+1]=nds.data
             G[matrix_pos+NFFT:matrix_pos+2*NFFT,2*ksource]=ess.data
             G[matrix_pos+NFFT:matrix_pos+2*NFFT,2*ksource+1]=eds.data
             G[matrix_pos+2*NFFT:matrix_pos+3*NFFT,2*ksource]=zss.data
             G[matrix_pos+2*NFFT:matrix_pos+3*NFFT,2*ksource+1]=zds.data
-            
+            #print('... ... Matrix: ' + str(datetime.datetime.now()-now))
         matrix_pos+=3*NFFT
         read_start+=Nfaults
         #Get slip model vector
