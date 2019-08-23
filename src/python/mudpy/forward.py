@@ -314,7 +314,7 @@ def waveforms_fakequakes(home,project_name,fault_name,rupture_list,GF_list,
             forward=True #This controls where we look for the rupture file
         
         # Put in matrix
-        print epicenter, time_epi
+        #print epicenter, time_epi
         m,G=get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_name,time_epi,GF_list,epicenter,NFFT,source_time_function,stf_falloff_rate,forward=forward)
         # Solve
         waveforms=G.dot(m)
@@ -734,7 +734,7 @@ def get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_nam
     #How many subfaults are non-zero?
     i_non_zero=where(rise_times>0)[0]
     N_non_zero=len(i_non_zero)
-    print('... '+str(N_non_zero)+' non-zero subfaults')
+    #print('... '+str(N_non_zero)+' non-zero subfaults')
     
     #Stations
     station_file=home+project_name+'/data/station_info/'+GF_list
@@ -748,7 +748,7 @@ def get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_nam
     matrix_pos=0 #tracks where in matrix synths are placed
     read_start=0  #Which trace to start reading from
     for ksta in range(Nsta):
-        print('... working on station '+str(ksta)+' of '+str(Nsta))
+        print('... ... working on station '+str(ksta)+' of '+str(Nsta))
         
         for ksource in range(len(i_non_zero)):
 
