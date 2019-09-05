@@ -451,13 +451,13 @@ def analyze_sources(home,project_name,run_name,Mw_lims=[7.75,9.35]):
     '''
     
     from glob import glob
-    from numpy import zeros,arange,log10,genfromtxt,sqrt,where
+    from numpy import zeros,arange,log10,genfromtxt,sqrt,where,sort
     from matplotlib import pyplot as plt
     from matplotlib.ticker import MultipleLocator
     
     
-    logs=glob(home+project_name+'/output/ruptures/'+run_name+'*.log')
-    ruptures=glob(home+project_name+'/output/ruptures/'+run_name+'*.rupt')
+    logs=sort(glob(home+project_name+'/output/ruptures/'+run_name+'*.log'))
+    ruptures=sort(glob(home+project_name+'/output/ruptures/'+run_name+'*.rupt'))
     L=zeros(len(logs))
     W=zeros(len(logs))
     Mw_target=zeros(len(logs))
