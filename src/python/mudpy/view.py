@@ -1183,6 +1183,65 @@ def source_time_function(rupt,epicenter,plot=True):
         plt.subplots_adjust(left=0.3, bottom=0.3, right=0.7, top=0.7, wspace=0, hspace=0)
     return t1,M1
     
+
+def source_time_function_FQ(rupt,epicenter,plot=False):
+    '''
+    Get source time function for Fakequake (fix bug in rise_time=0 in subfaults)
+    '''
+    import matplotlib.pyplot as plt
+    from numpy import genfromtxt,unique,log10,where,floor
+    from mudpy.forward import get_source_time_function,add2stf
+    
+    f=genfromtxt(rupt)
+    num=f[:,0]
+    #Get slips
+    all_ss=f[:,8]
+    all_ds=f[:,9]
+    #Now parse for multiple rupture speeds
+    unum=unique(num)
+    nfault=len(unum)
+    #Count number of windows
+    nwin=len(where(num==unum[0])[0])
+    #Get rigidities
+    mu=f[0:len(unum),13]
+    #Get rise times
+    rise_time=f[0:len(unum),7]
+    #Get areas
+    area=f[0:len(unum),10]*f[0:len(unum),11]
+    #Loop over subfaults
+    t1=0;M1=0 #reset t1 and M1
+    for kfault in range(nfault):
+        if kfault%10==0:
+            print('... working on subfault '+str(kfault)+' of '+str(nfault))
+        #Get rupture times for subfault windows
+        i=where(num==unum[kfault])[0]
+        trup=f[i,12]
+        #Get slips on windows
+        ss=all_ss[i]
+        ds=all_ds[i]
+        #Add it up
+        slip=(ss**2+ds**2)**0.5
+        if type(M1)==int and rise_time[kfault]!=0: #Get first source time function
+            t1,M1=get_source_time_function(mu[kfault],area[kfault],rise_time[kfault],trup[0],slip[0])
+        elif type(M1)!=int and rise_time[kfault]!=0:
+            t2,M2=get_source_time_function(mu[kfault],area[kfault],rise_time[kfault],trup[0],slip[0])
+            t1,M1=add2stf(t1,M1,t2,M2)
+    #Get power
+    exp=floor(log10(M1.max()))
+    M2=M1.copy()
+    M1=M1/(10**exp)
+    if plot==True:
+        plt.figure()
+        plt.fill(t1,M1,'b',alpha=0.5)
+        plt.plot(t1,M1,color='k')
+        plt.grid()
+        plt.xlabel('Time(s)')
+        plt.ylabel('Moment Rate ('+r'$\times 10^{'+str(int(exp))+r'}$Nm/s)')
+        plt.subplots_adjust(left=0.3, bottom=0.3, right=0.7, top=0.7, wspace=0, hspace=0)
+    return t1,M1,M2
+
+
+
 def geographic_STFs(rupt,epicenter,nstrike,ndip,tscale=100,Mscale=1,figsize=(8,10),tout=[],Mout=[]):
     '''
     Plot STFs in their geographic locations
