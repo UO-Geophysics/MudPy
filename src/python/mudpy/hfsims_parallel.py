@@ -128,14 +128,14 @@ def run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,
     for kfault in range(len(fault)):
         if rank==0:
             #Print status to screen            
-            if kfault % 150 == 0:
+            if kfault % 25 == 0:
                 if kfault==0:
-                    stdout.write('      [')
+                    stdout.write('      [.')
                     stdout.flush()
                 stdout.write('.')
                 stdout.flush()
             if kfault==len(fault)-1:
-                stdout.write(']\n')
+                stdout.write('.]\n')
                 stdout.flush()                
         
         #Include only subfaults with non-zero slip

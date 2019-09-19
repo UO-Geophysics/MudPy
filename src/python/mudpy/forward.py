@@ -348,13 +348,16 @@ def hf_waveforms(home,project_name,fault_name,rupture_list,GF_list,model_name,ru
         sta_lat=lonlat[:,1]
         
         comp=['N','E','Z']  #components to loop through
-        
+        if ncpus>1:
+            write_parallel_rupts(home,project_name,rupture_name,ncpus)
+       
         #Now loop over stations
         for ksta in range(len(sta)):
             #Now loop over components N,E,Z
             for kcomp in range(len(comp)):
                 #HF_sims stochastic simulation for single station, component
                 if ncpus>1:
+#                    write_parallel_rupts(home,project_name,rupture_name,ncpus)
                     make_parallel_hfsims(home,project_name,rupture_name,ncpus,sta[ksta],sta_lon[ksta],sta_lat[ksta],
                         comp[kcomp],model_name,rise_time_depths[0],rise_time_depths[1],moho_depth_in_km,total_duration=duration,hf_dt=hf_dt,
                         Pwave=Pwave,stress_parameter=stress_parameter,high_stress_depth=high_stress_depth)
@@ -367,11 +370,22 @@ def hf_waveforms(home,project_name,fault_name,rupture_list,GF_list,model_name,ru
                     #Write to file
                     write_fakequakes_hf_waveforms_one_by_one(home,project_name,rupture_name,hf_waveform,comp[kcomp])
 
+def write_parallel_rupts(home,project_name,rupture_name,ncpus):
+    from numpy import arange,savetxt,genfromtxt
+    #Split rupture file into ncpu rupture files
+    rupture=home+project_name+'/output/ruptures/'+rupture_name
+    fault=genfromtxt(rupture)
+    for k in range(ncpus):
+        i=arange(k,len(fault),ncpus)
+        mpi_source=fault[i,:]
+        fmt='%d\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6E'
+        savetxt(home+project_name+'/output/ruptures/mpi_rupt.'+str(k)+'.'+rupture_name,mpi_source,fmt=fmt)
+
 def make_parallel_hfsims(home,project_name,rupture_name,ncpus,sta,sta_lon,sta_lat,component,model_name,rise_time_depths0,rise_time_depths1,moho_depth_in_km,total_duration,hf_dt,Pwave,stress_parameter,kappa=0.04,Qexp=0.6,high_stress_depth=30):
     '''
     Set up for MPI calculation of HF stochastics
     '''
-    from numpy import savetxt,arange,genfromtxt,where
+    from numpy import genfromtxt,where
     from os import environ
     import subprocess
     from shlex import split
@@ -385,12 +399,6 @@ def make_parallel_hfsims(home,project_name,rupture_name,ncpus,sta,sta_lon,sta_la
     M0=subfault_M0.sum()
     i=where(slip>0)[0]
     N=len(i)
-    #Split rupture file into ncpu rupture files
-    for k in range(ncpus):
-        i=arange(k,len(fault),ncpus)
-        mpi_source=fault[i,:]
-        fmt='%d\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6E'
-        savetxt(home+project_name+'/output/ruptures/mpi_rupt.'+str(k)+'.'+rupture_name,mpi_source,fmt=fmt)
     #Make mpi system call
     print("MPI: Starting Stochastic High Frequency Simulation on ", ncpus, "CPUs")
     mud_source=environ['MUD']+'/src/python/mudpy/'
@@ -398,8 +406,6 @@ def make_parallel_hfsims(home,project_name,rupture_name,ncpus,sta,sta_lon,sta_la
     mpi=split(mpi)
     p=subprocess.Popen(mpi)
     p.communicate()
-    
-    
                 
 def run_hf_waveforms(home,project_name,fault_name,rupture_list,GF_list,model_name,run_name,dt,NFFT,G_from_file,
             G_name,rise_time_depths,moho_depth_in_km,source_time_function='dreger',duration=100.0,
