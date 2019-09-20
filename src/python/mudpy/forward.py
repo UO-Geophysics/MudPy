@@ -2860,3 +2860,66 @@ def get_Mw(rupture_file):
     M0=M0.sum()
     Mw=(2./3)*(log10(M0)-9.1)
     return M0,Mw
+
+def gnss_noise_model():
+    
+    from numpy import genfromtxt
+    from os import environ
+    
+    mudpy_aux_folder=environ['MUD']+'/src/aux/'
+    
+    g=genfromtxt(mudpy_aux_folder+'gnss_noise_model.txt')
+    periods=g[:,0]
+    psd=g[:,1:]
+    
+    return periods,psd
+
+def gnss_psd(level='median',return_as_frequencies=False,return_as_db=True):
+    '''
+    Return PSD for all three components of motion
+    '''
+    
+    from numpy import r_
+    
+    periods,psd=gnss_noise_model()
+    
+    if level=='low':
+        Epsd=psd[:,0]
+        Npsd=psd[:,1]
+        Zpsd=psd[:,2]
+    elif level=='median':
+        Epsd=psd[:,3]
+        Npsd=psd[:,4]
+        Zpsd=psd[:,5]
+    elif level=='high':
+        Epsd=psd[:,6]
+        Npsd=psd[:,7]
+        Zpsd=psd[:,8]
+        
+    if return_as_frequencies==True:
+        
+        periods=1/periods[::-1]
+        
+        #reverse psds
+        Epsd=Epsd[::-1]
+        Npsd=Npsd[::-1]
+        Zpsd=Zpsd[::-1]
+        
+        #add zero frequency
+        periods=r_[0,periods]
+        
+        #add zero frequency values
+        Epsd=r_[Epsd[0],Epsd]
+        Npsd=r_[Npsd[0],Npsd]
+        Zpsd=r_[Zpsd[0],Zpsd]
+        
+    if return_as_db ==False: 
+        
+        #Un-decibelize (not a word I know)
+        Epsd=10**(Epsd/10)
+        Npsd=10**(Npsd/10)
+        Zpsd=10**(Zpsd/10)
+        
+    return periods, Epsd, Npsd, Zpsd
+    
+#    Ep1=
