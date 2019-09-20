@@ -677,12 +677,10 @@ def windowed_gaussian(duration,hf_dt,window_type='saragoni_hart',M=5.0,dist_in_k
     return noise
 
         
-def apply_spectrum(w,A,f,hf_dt,is_gnss=False,gnss_scale=628):
+def apply_spectrum(w,A,f,hf_dt,is_gnss=False,gnss_scale=1/2**0.5):
     '''
     Apply the modeled spectrum to the windowed time series
     
-    Note:
-        gnss_scale is 2*pi*100 to account for meters and Fourier transform scaling
     '''
     
     from numpy import fft,angle,cos,sin,mean,zeros
@@ -732,7 +730,11 @@ def apply_spectrum(w,A,f,hf_dt,is_gnss=False,gnss_scale=628):
     
     #ifft
     seis=fft.ifft(fourier)
-    seis=seis*len(seis)
+    
+    if is_gnss:
+        seis *= len(seis)**0.5
+    else:
+        seis=seis*len(seis)
     
     return seis         
                                 
