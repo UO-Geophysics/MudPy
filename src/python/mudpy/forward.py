@@ -321,6 +321,169 @@ def waveforms_fakequakes(home,project_name,fault_name,rupture_list,GF_list,
         write_fakequakes_waveforms(home,project_name,rupture_name,waveforms,GF_list,NFFT,time_epi,dt)
         
 
+
+def waveforms_fakequakes_dynGF(home,project_name,fault_name,rupture_list,GF_list,dynamic_GFlist,dist_threshold,
+                         model_name,run_name,dt,NFFT,G_from_file,G_name,source_time_function='dreger',
+                         stf_falloff_rate=4.0,rupture_name=None,epicenter=None,time_epi=None,
+                         hot_start=0,ncpus=1):
+    '''
+    To supplant waveforms_matrix() it needs to include resmapling and all that jazz...
+    
+    Instead of doing matrix multiplication one stations at a time, do it for all stations
+    
+    This routine will take synthetics and apply a slip dsitribution. It will delay each 
+    subfault by the appropriate rupture time and linearly superimpose all of them. Output
+    will be one sac waveform file per direction of motion (NEU) for each station defined in the
+    station_file. Depending on the specified rake angle at each subfault the code will compute 
+    the contribution to dip and strike slip directions. It will also compute the moment at that
+    subfault and scale it according to the unit amount of momeent (1e15 N-m)
+    
+    IN:
+        home: Home directory
+        project_name: Name of the problem
+        rupture_name: Name of rupture description file
+        station_file: File with coordinates of stations
+        model_Name: Name of Earth structure model file
+        integrate: =0 if you want output to be velocity, =1 if you want output to de displacement
+        dynamic_GFlist: A boolean, always to be True if you use this function
+        dist_threshold: A float, station to the closest subfault must be closer to this distance, otherwise skip it.
+        
+       
+    OUT:
+        Nothing
+    '''
+    from numpy import genfromtxt,array
+    import datetime
+    import numpy as np
+    try:
+        import multiprocessing as mp
+        import time
+        use_parallel=True
+    except:
+        print('Parallel waveform generation is unavailable...')
+        print('Please pip install multiprocessing')
+        print('Otherwise, this is now continue go with single cpu')
+        use_parallel=False
+    
+    print('Solving for kinematic problem(s)')
+    #Time for log file
+    now=datetime.datetime.now()
+    now=now.strftime('%b-%d-%H%M')
+
+    #load source names
+    if rupture_list==None:
+        #all_sources=array([home+project_name+'/forward_models/'+rupture_name])   
+        all_sources=array([rupture_name])
+    else:
+        all_sources=genfromtxt(home+project_name+'/data/'+rupture_list,dtype='U')
+
+    #Load all synthetics
+    print('... loading all synthetics into memory')
+    Nss,Ess,Zss,Nds,Eds,Zds=load_fakequakes_synthetics(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name)
+    print('... ... done loading synthetics')
+
+    #Load GF_list
+    STAname=np.genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=[0],skip_header=1,dtype='S6')
+    STA={sta:nsta for nsta,sta in enumerate(STAname)}
+
+    def loop_sources(ksource):
+        print('...Solving for source '+str(ksource)+' of '+str(len(all_sources)))
+        rupture_name=all_sources[ksource]
+        ###make new GF_list(dynamic GF_list)###
+        new_GF_list='subGF_list.rupt%06d.gflist'%(ksource) #make new GF_list for only close stations
+        sta_close_to_rupt(home,project_name,rupture_name,GF_list,dist_threshold,new_GF_list)
+        
+        if rupture_list!=None:
+            #Get epicentral time
+            epicenter,time_epi=read_fakequakes_hypo_time(home,project_name,rupture_name)
+            forward=False
+        else:
+            forward=True #This controls where we look for the rupture file
+        
+        # Put in matrix
+        #use only close stations (dynamic GF_list)
+        m,G=get_fakequakes_G_and_m_dynGF(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_name,time_epi,STA,new_GF_list,epicenter,NFFT,source_time_function,stf_falloff_rate,forward=forward)
+
+        # Solve
+        waveforms=G.dot(m)
+        ##Write output
+        write_fakequakes_waveforms(home,project_name,rupture_name,waveforms,new_GF_list,NFFT,time_epi,dt)
+
+    if use_parallel:
+        print('Using cpu=',ncpus)
+        #Parallel(n_jobs=ncpus,backend='loky')(delayed(loop_sources)(ksource) for ksource in range(hot_start,len(all_sources))) #Oh no, this is REALLY slow why?
+        ps=[]
+        for ksource in range(hot_start,len(all_sources)):
+            p = mp.Process(target=loop_sources, args=([ksource]) )
+            ps.append(p)
+        #start running
+        queue=np.zeros(len(ps))
+        for i_ps in range(len(ps)):
+            if (i_ps%10==0):
+                print('now at',i_ps,'out of',len(ps))
+            ps[i_ps].start()
+            queue[i_ps]=1
+            while True:
+                #check running status
+                running_idx=np.where(queue==1)[0]
+                for ri in running_idx:
+                    if not(ps[ri].is_alive()):
+                        #finnish running, close
+                        ps[ri].join()
+                        #ps[ri]=0 #.join() still has issue...
+                        queue[ri]=0
+                    else:
+                        continue
+                if len(np.where(queue==1)[0])<=ncpus:
+                    #add a process
+                    #print('number of processer=',len(np.where(queue==1)[0]),'add a process,now at',i)
+                    break
+                else:
+                    #print('number of queue reaches max:',nprocess,'try again later,now at',i)
+                    time.sleep(0.5) #wait and try again later
+        #Final check if all the processes are done
+        while True:
+            if np.sum([nps.is_alive() for nps in ps ])==0:
+                break
+            else:
+                time.sleep(1)
+
+    else:
+        #Now loop over rupture models
+        for ksource in range(hot_start,len(all_sources)):
+            loop_sources(ksource)
+            '''
+            print('... solving for source '+str(ksource)+' of '+str(len(all_sources)))
+            rupture_name=all_sources[ksource]
+            print(rupture_name)
+
+            ###make new GF_list(dynamic GF_list)###
+            new_GF_list='subGF_list.rupt%06d.gflist'%(ksource) #make new GF_list for only close stations
+            sta_close_to_rupt(home,project_name,rupture_name,GF_list,dist_threshold,new_GF_list)
+
+            if rupture_list!=None:
+                #Get epicentral time
+                epicenter,time_epi=read_fakequakes_hypo_time(home,project_name,rupture_name)
+                forward=False
+            else:
+                forward=True #This controls where we look for the rupture file
+
+            # Put in matrix
+            #use only close stations (dynamic GF_list)
+            m,G=get_fakequakes_G_and_m_dynGF(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_name,time_epi,STA,new_GF_list,epicenter,NFFT,source_time_function,stf_falloff_rate,forward=forward)
+
+            # Solve
+            waveforms=G.dot(m)
+            ##Write output
+            #write_fakequakes_waveforms(home,project_name,rupture_name,waveforms,GF_list,NFFT,time_epi,dt)
+            #Write output
+            write_fakequakes_waveforms(home,project_name,rupture_name,waveforms,new_GF_list,NFFT,time_epi,dt)
+            '''
+
+
+
+
+
 def hf_waveforms(home,project_name,fault_name,rupture_list,GF_list,model_name,run_name,dt,NFFT,G_from_file,
             G_name,rise_time_depths,moho_depth_in_km,ncpus,source_time_function='dreger',duration=100.0,
             stf_falloff_rate=4.0,hf_dt=0.02,Pwave=False,hot_start=0,stress_parameter=50,
@@ -793,6 +956,114 @@ def get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_nam
     m[ids,0]=source[i_non_zero,9]
 
     return m,G
+
+
+def get_fakequakes_G_and_m_dynGF(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_name,time_epi,STA,GF_list,epicenter,NFFT,
+                source_time_function,stf_falloff_rate,forward=False):
+    '''
+    Assemble Green functions matrix. If requested will parse all available synthetics on file and build the matrix.
+    Otherwise, if it exists, it will be loaded from file 
+    
+    IN:
+        home: Home directory location
+        project_name: Name of the problem
+        fault_name: Name of fault description file
+        model_name: Name of velocity structure file
+        STA: Dictionary of station's index
+        GF_list: Name of GF control file
+        G_from_file: if =0 build G from synthetics on file. If =1 then load from file
+        G_name: If building G fromsynthetics then this is the name G will be saved with
+            in binary .npy format. If loading from file this is the name to be looked for. 
+            It is not necessary to supply the .npy extension
+        epicenter: Epicenter coordinates
+        rupture_speed: Fastest rupture speed allowed in the problem
+        num_windows: Number of temporal rupture windows allowed
+        decimate: Constant decimationf actor applied to GFs, set =0 for no decimation
+        
+    OUT:
+        G: Fully assembled GF matrix
+    '''
+
+    from numpy import genfromtxt,loadtxt,convolve,where,zeros,arange,unique,save
+    import numpy as np
+
+    if forward==True:
+        source=genfromtxt(home+project_name+'/forward_models/'+rupture_name)
+    else:
+        source=genfromtxt(home+project_name+'/output/ruptures/'+rupture_name)
+    rise_times=source[:,7]
+    rupture_onset=source[:,12]
+
+    #How many unique faults?
+    Nfaults=len(unique(source[:,0]))
+
+    #How many subfaults are non-zero?
+    i_non_zero=where(rise_times>0)[0]
+    N_non_zero=len(i_non_zero)
+
+    #Stations
+    station_file=home+project_name+'/data/station_info/'+GF_list
+    staname=genfromtxt(station_file,dtype="S6",usecols=0)
+    Nsta=len(staname)
+
+    #Initalize G matrix
+    G=zeros((NFFT*3*Nsta,N_non_zero*2))
+
+    #Place synthetics in correct place in Gmatrix
+    matrix_pos=0 #tracks where in matrix synths are placed
+    #read_start=0  #Which trace to start reading from
+    for ksta in range(Nsta):
+        print('... working on station '+str(ksta)+' of '+str(Nsta))
+        read_start=STA[staname[ksta]]*Nfaults #Which trace to start reading from. Depending on the original GF_list order
+        for ksource in range(len(i_non_zero)):
+
+            #Get synthetics
+            nss=Nss[read_start+i_non_zero[ksource]].copy()
+            ess=Ess[read_start+i_non_zero[ksource]].copy()
+            zss=Zss[read_start+i_non_zero[ksource]].copy()
+            nds=Nds[read_start+i_non_zero[ksource]].copy()
+            eds=Eds[read_start+i_non_zero[ksource]].copy()
+            zds=Zds[read_start+i_non_zero[ksource]].copy()
+            #Delay synthetics by rupture onset
+            tdelay=rupture_onset[i_non_zero[ksource]]
+            nss,ess,zss,nds,eds,zds=tshift_trace(nss,ess,zss,nds,eds,zds,tdelay,time_epi,NFFT)
+            #Convolve with source time function
+            rise=rise_times[i_non_zero[ksource]]
+            #Make sure rise time is a multiple of dt
+            dt=nss.stats.delta
+            rise=round(rise/dt)*nss.stats.delta
+            if rise<(2.*dt): #Otherwise get nan's in STF
+                rise=2.*dt
+            total_time=NFFT*dt
+            t_stf,stf=build_source_time_function(rise,dt,total_time,stf_type=source_time_function,dreger_falloff_rate=stf_falloff_rate)
+
+            nss.data=convolve(nss.data,stf)[0:NFFT]
+            ess.data=convolve(ess.data,stf)[0:NFFT]
+            zss.data=convolve(zss.data,stf)[0:NFFT]
+            nds.data=convolve(nds.data,stf)[0:NFFT]
+            eds.data=convolve(eds.data,stf)[0:NFFT]
+            zds.data=convolve(zds.data,stf)[0:NFFT]
+            #Place in matrix
+            G[matrix_pos:matrix_pos+NFFT,2*ksource]=nss.data
+            G[matrix_pos:matrix_pos+NFFT,2*ksource+1]=nds.data
+            G[matrix_pos+NFFT:matrix_pos+2*NFFT,2*ksource]=ess.data
+            G[matrix_pos+NFFT:matrix_pos+2*NFFT,2*ksource+1]=eds.data
+            G[matrix_pos+2*NFFT:matrix_pos+3*NFFT,2*ksource]=zss.data
+            G[matrix_pos+2*NFFT:matrix_pos+3*NFFT,2*ksource+1]=zds.data
+
+        matrix_pos+=3*NFFT
+        #read_start+=Nfaults  #This is not always true, unless the GF_list is in the same order and use the same stations
+        #Get slip model vector
+    m=zeros((N_non_zero*2,1))
+    iss=arange(0,len(m),2)
+    ids=arange(1,len(m),2)
+    m[iss,0]=source[i_non_zero,8]
+    m[ids,0]=source[i_non_zero,9]
+
+    return m,G
+
+
+
 
 
 def write_fakequakes_waveforms(home,project_name,rupture_name,waveforms,GF_list,NFFT,time_epi,dt):
@@ -2923,3 +3194,53 @@ def gnss_psd(level='median',return_as_frequencies=False,return_as_db=True):
     return periods, Epsd, Npsd, Zpsd
     
 #    Ep1=
+
+
+
+
+
+def sta_close_to_rupt(home,project_name,rupt_file,GF_list,dist_threshold,new_GF_list):
+    '''
+    Filt the station too far away
+    IN:
+        rupt_file: name of the rupture file (e.g. subduction.000036.rupt)
+        GF_list: the original (large) GF_list file
+        dist_threshold: keeps only the stations within this distance (unit:degree)
+    OUTfile:
+        new_GF_list
+    '''
+    import numpy as np
+    import obspy
+    from obspy.geodetics import kilometers2degrees
+    rupt_file_path=home+project_name+'/output/ruptures/'+rupt_file
+    GF_list_path=home+project_name+'/data/station_info/'+GF_list
+    #load rpture file
+    source=np.genfromtxt(rupt_file_path)
+    rise_times=source[:,7]
+    rupture_onset=source[:,12]
+    #How many subfaults are non-zero?
+    idxs_non_zero=np.where(rise_times>0)[0]
+
+    #Load gflist
+    STAinfo=np.genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=[0,1,2],skip_header=1,dtype='S10') #higher resolution for float
+    STAname=STAinfo[:,0]
+    STAlon=STAinfo[:,1]
+    STAlat=STAinfo[:,2]
+    STAlon=np.array([float(i) for i in STAlon])
+    STAlat=np.array([float(i) for i in STAlat])
+    OUT1=open(home+project_name+'/data/station_info/'+new_GF_list,'w')
+    OUT1.write('#\n') #header
+    #loop through all stations
+    for nsta in range(len(STAname)):
+        for idx_non_zero in idxs_non_zero:
+            sub_lon=source[idx_non_zero,1]
+            sub_lat=source[idx_non_zero,2]
+            dist=obspy.geodetics.locations2degrees(lat1=sub_lat,long1=sub_lon,lat2=STAlat[nsta],long2=STAlon[nsta])
+            #dist,az,baz=obspy.geodetics.base.gps2dist_azimuth(lat1=sub_lat,lon1=sub_lon,lat2=STAlat[nsta],lon2=STAlon[nsta])
+            if dist<dist_threshold:
+                OUT1.write('%s %10.6f %10.6f 0 1 0 0 0 0 /foo/bar /foo/bar /foo/bar /foo/bar /foo/bar 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0\n'%(STAname[nsta],STAlon[nsta],STAlat[nsta]))
+                break
+    OUT1.close()
+
+
+
