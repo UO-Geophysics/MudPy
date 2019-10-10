@@ -345,7 +345,7 @@ def waveforms_fakequakes_dynGF(home,project_name,fault_name,rupture_list,GF_list
         station_file: File with coordinates of stations
         model_Name: Name of Earth structure model file
         integrate: =0 if you want output to be velocity, =1 if you want output to de displacement
-        dynamic_GFlist: A boolean, always to be True if you use this function
+        dynamic_GFlist: A boolean (Useless for current version)
         dist_threshold: A float, station to the closest subfault must be closer to this distance, otherwise skip it.
         
        
@@ -384,7 +384,7 @@ def waveforms_fakequakes_dynGF(home,project_name,fault_name,rupture_list,GF_list
 
     #Load GF_list
     STAname=np.genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=[0],skip_header=1,dtype='S6')
-    STA={sta:nsta for nsta,sta in enumerate(STAname)}
+    STA={sta.decode():nsta for nsta,sta in enumerate(STAname)}
 
     def loop_sources(ksource):
         print('...Solving for source '+str(ksource)+' of '+str(len(all_sources)))
@@ -1004,6 +1004,7 @@ def get_fakequakes_G_and_m_dynGF(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,ruptu
     #Stations
     station_file=home+project_name+'/data/station_info/'+GF_list
     staname=genfromtxt(station_file,dtype="S6",usecols=0)
+    staname=[n_name.decode() for n_name in staname]
     Nsta=len(staname)
 
     #Initalize G matrix
@@ -3224,6 +3225,7 @@ def sta_close_to_rupt(home,project_name,rupt_file,GF_list,dist_threshold,new_GF_
     #Load gflist
     STAinfo=np.genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=[0,1,2],skip_header=1,dtype='S10') #higher resolution for float
     STAname=STAinfo[:,0]
+    STAname=[n_staname.decode() for n_staname in STAname]
     STAlon=STAinfo[:,1]
     STAlat=STAinfo[:,2]
     STAlon=np.array([float(i) for i in STAlon])
