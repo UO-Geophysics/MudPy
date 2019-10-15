@@ -2874,7 +2874,7 @@ def gnss_noise_model():
     
     return periods,psd
 
-def gnss_psd(level='median',return_as_frequencies=False,return_as_db=True):
+def gnss_psd(level=50,return_as_frequencies=False,return_as_db=True):
     '''
     Return PSD for all three components of motion
     '''
@@ -2883,18 +2883,46 @@ def gnss_psd(level='median',return_as_frequencies=False,return_as_db=True):
     
     periods,psd=gnss_noise_model()
     
-    if level=='low':
+    if level==1:
         Epsd=psd[:,0]
         Npsd=psd[:,1]
         Zpsd=psd[:,2]
-    elif level=='median':
+    elif level==10:
         Epsd=psd[:,3]
         Npsd=psd[:,4]
         Zpsd=psd[:,5]
-    elif level=='high':
+    elif level==20:
         Epsd=psd[:,6]
         Npsd=psd[:,7]
         Zpsd=psd[:,8]
+    elif level==30:
+        Epsd=psd[:,9]
+        Npsd=psd[:,10]
+        Zpsd=psd[:,11]
+    elif level==40:
+        Epsd=psd[:,12]
+        Npsd=psd[:,13]
+        Zpsd=psd[:,14]
+    elif level==50:
+        Epsd=psd[:,15]
+        Npsd=psd[:,16]
+        Zpsd=psd[:,17]
+    elif level==60:
+        Epsd=psd[:,18]
+        Npsd=psd[:,19]
+        Zpsd=psd[:,20]
+    elif level==70:
+        Epsd=psd[:,21]
+        Npsd=psd[:,22]
+        Zpsd=psd[:,23]
+    elif level==80:
+        Epsd=psd[:,24]
+        Npsd=psd[:,25]
+        Zpsd=psd[:,26]
+    elif level==90:
+        Epsd=psd[:,27]
+        Npsd=psd[:,28]
+        Zpsd=psd[:,29]
         
     if return_as_frequencies==True:
         
