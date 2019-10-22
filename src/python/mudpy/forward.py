@@ -2815,7 +2815,7 @@ def read_fakequakes_hypo_time(home,project_name,rupture_name):
     while True:
         line=f.readline()
         if  'Actual magnitude:' in line:
-            Mw=line.split('Mw ')[-1]
+            Mw=float(line.split('Mw ')[-1])
         if 'Hypocenter (lon,lat,z[km])' in line:
             s=line.split(':')[-1]
             s=s.replace('(','')
