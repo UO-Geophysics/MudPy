@@ -280,7 +280,7 @@ def waveforms_fakequakes(home,project_name,fault_name,rupture_list,GF_list,
     OUT:
         Nothing
     '''
-    from numpy import genfromtxt,array
+    from numpy import genfromtxt,array,log10
     import datetime
     
     print('Solving for kinematic problem(s)')
@@ -308,14 +308,16 @@ def waveforms_fakequakes(home,project_name,fault_name,rupture_list,GF_list,
         
         if rupture_list!=None:
             #Get epicentral time
-            epicenter,time_epi=read_fakequakes_hypo_time(home,project_name,rupture_name)
+            epicenter,time_epi,Mw=read_fakequakes_hypo_time(home,project_name,rupture_name)
             forward=False
         else:
             forward=True #This controls where we look for the rupture file
         
         # Put in matrix
         #print epicenter, time_epi
-        m,G=get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_name,time_epi,GF_list,epicenter,NFFT,source_time_function,stf_falloff_rate,forward=forward)
+        M0=10**((3./2)*Mw+9.1)
+        zeta=10**(-4.975+0.217*log10(M0))
+        m,G=get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_name,time_epi,GF_list,epicenter,NFFT,source_time_function,stf_falloff_rate,zeta=zeta,forward=forward)
         # Solve
         waveforms=G.dot(m)
         #Write output
@@ -433,7 +435,7 @@ def run_hf_waveforms(home,project_name,fault_name,rupture_list,GF_list,model_nam
         print(rupture_name)
         
         #Get epicentral time
-        epicenter,time_epi=read_fakequakes_hypo_time(home,project_name,rupture_name)
+        epicenter,time_epi,Mw=read_fakequakes_hypo_time(home,project_name,rupture_name)
         
         #Get station info from GF_list
         sta=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=[0],dtype='U')
@@ -557,7 +559,7 @@ def match_filter(home,project_name,fault_name,rupture_list,GF_list,
         print('Running matched filter for all stations for rupture '+ rupture_name)
         
         #Get epicentral time
-        epicenter,time_epi=read_fakequakes_hypo_time(home,project_name,rupture_name)
+        epicenter,time_epi,Mw=read_fakequakes_hypo_time(home,project_name,rupture_name)
         
         for ksta in range(len(sta)):
             
@@ -699,7 +701,7 @@ def load_fakequakes_synthetics(home,project_name,fault_name,model_name,GF_list,G
 
 
 def get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_name,time_epi,GF_list,epicenter,NFFT,
-                source_time_function,stf_falloff_rate,forward=False):
+                source_time_function,stf_falloff_rate,zeta=0.2,forward=False):
     '''
     Assemble Green functions matrix. If requested will parse all available synthetics on file and build the matrix.
     Otherwise, if it exists, it will be loaded from file 
@@ -780,7 +782,7 @@ def get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_nam
             if rise<(2.*dt): #Otherwise get nan's in STF
                 rise=2.*dt
             total_time=NFFT*dt
-            t_stf,stf=build_source_time_function(rise,dt,total_time,stf_type=source_time_function,dreger_falloff_rate=stf_falloff_rate)
+            t_stf,stf=build_source_time_function(rise,dt,total_time,stf_type=source_time_function,zeta=zeta,dreger_falloff_rate=stf_falloff_rate)
             #print('... ... Fixing rise times: ' + str(datetime.datetime.now()-now))
             #now=datetime.datetime.now()
             nss.data=convolve(nss.data,stf)[0:NFFT]
@@ -2812,11 +2814,12 @@ def read_fakequakes_hypo_time(home,project_name,rupture_name):
     f=open(log_file,'r')
     while True:
         line=f.readline()
+        if  'Actual magnitude:' in line:
+            Mw=line.split('Mw ')[-1]
         if 'Hypocenter (lon,lat,z[km])' in line:
             s=line.split(':')[-1]
             s=s.replace('(','')
-            s=s.replace(')','')
-            
+            s=s.replace(')','')            
             epicenter=array(s.split(',')).astype('float')
         if 'Hypocenter time' in line:
             time_epi=line.split(' ')[-1]
@@ -2826,7 +2829,7 @@ def read_fakequakes_hypo_time(home,project_name,rupture_name):
             print('ERROR: No hypocetral time in log file')
             time_epi=''
             break
-    return epicenter,time_epi
+    return epicenter,time_epi,Mw
     
 
 

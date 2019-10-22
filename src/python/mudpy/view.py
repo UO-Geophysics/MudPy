@@ -135,6 +135,61 @@ def quick_model(rupt,s=5):
     #plt.savefig(rupt[0:49]+'figures/'+rupt[58:85]+'.png')
     #plt.close()
     plt.show()
+
+
+def plot_onsettime(rupt,s=5):
+    '''
+    Quick and dirty plot of a .rupt file. Shows map view of slip
+    
+    Parameters:
+            rupt: string
+            The absolute path to a .inv or .rupt file
+            
+    Example:
+        view.quick_model('/foo/bar/output/inverse_models/models/inv_result.inv')
+    '''
+    
+    from numpy import genfromtxt,unique,where,zeros,array
+    import matplotlib.pyplot as plt
+    from string import replace
+    
+    f=genfromtxt(rupt)
+    onset=f[:,12]
+    num=f[:,0]
+    #Now parse for multiple rupture speeds
+    unum=unique(num)
+    #Get other parameters
+    lon=f[0:len(unum),1]
+    lat=f[0:len(unum),2]
+    #Find hypocenter
+    log_file=rupt[:-5]+'.log'
+    j=open(log_file,'r')
+    loop_go=True
+    while loop_go:
+        line=j.readline()  
+        if 'Hypocenter (lon,lat,z[km])' in line:
+            q=replace(line.split(':')[-1],'(','')
+            q=replace(q,')','')
+            hypocenter=array(q.split(',')).astype('float')
+            loop_go=False       
+    #Plot
+    plt.figure(figsize=(5.2,10))
+    plt.scatter(hypocenter[0],hypocenter[1],marker='o',edgecolors='k',lw=2,s=5*s)
+    plt.scatter(lon,lat,marker='o',c=onset,s=s,cmap=whitejet,vmax=5)
+    plt.ylabel('Latitude')
+    plt.xlabel('Longitude')
+    plt.xlim([hypocenter[0]-1,hypocenter[0]+1])
+    plt.ylim([hypocenter[1]-1,hypocenter[1]+1])
+    cb=plt.colorbar()
+    cb.set_label('Onset Time (s)')
+    plt.grid()
+    plt.title(rupt[-26:-5])
+    #plt.title(rupt[58:85])
+    plt.savefig(rupt[:-35]+'figures/'+rupt[-26:-5]+'/'+rupt[-26:-5]+'_onset.png')
+    plt.close()
+    #plt.show()
+
+
     
 def quick_static(gflist,datapath,scale=1):
     '''

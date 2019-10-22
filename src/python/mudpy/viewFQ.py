@@ -2477,8 +2477,8 @@ def source_time_function(rupt,epicenter,dt=0.001,t_total=500,stf_type='dreger',p
     #Loop over subfaults
     faults_added=0
     for kfault in range(nfault):
-        if kfault%50==0:
-            print('Working on subfault %d of %d' % (kfault,nfault))
+#        if kfault%50==0:
+#            print('Working on subfault %d of %d' % (kfault,nfault))
         if rise_time[kfault]>0:
             faults_added+=1
             #get stf
