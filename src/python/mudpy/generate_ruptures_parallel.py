@@ -291,7 +291,6 @@ if __name__ == '__main__':
         if hypocenter == 'None':
             hypocenter=None
         else:
-            print(hypocenter)
             hypocenter_lon=float(hypocenter.split(',')[0].split('[')[1])
             hypocenter_lat=float(hypocenter.split(',')[1])
             hypocenter_dep=float(hypocenter.split(',')[2].split(']')[0])
