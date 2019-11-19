@@ -668,18 +668,22 @@ def windowed_gaussian(duration,hf_dt,window_type='saragoni_hart',M=5.0,dist_in_k
     elif window_type=='cua':
         ptime=0
         window=cua_envelope(M,dist_in_km,t,ptime,stime,Pcoeff=0,Scoeff=12)
+    elif window_type==None: #jsut white noise, no window
+        window=1
+        
         
     noise=noise*window
     
     return noise
 
         
-def apply_spectrum(w,A,f,hf_dt):
+def apply_spectrum(w,A,f,hf_dt,is_gnss=False,gnss_scale=1/2**0.5):
     '''
     Apply the modeled spectrum to the windowed time series
+    
     '''
     
-    from numpy import fft,angle,cos,sin,sqrt,mean,zeros
+    from numpy import fft,angle,cos,sin,mean,zeros
     from scipy.interpolate import interp1d
     
     #to frequency domain
@@ -712,6 +716,10 @@ def apply_spectrum(w,A,f,hf_dt):
     #Negative freq
     amplitude[int(1+Nf/2):]=amplitude_positive[::-1]/2
     
+    #Scale for GNSS displacememnts?
+    if is_gnss:
+        amplitude /= gnss_scale 
+    
     #Apply model amplitude spectrum
     amplitude=amplitude*abs(fourier)
     
@@ -722,7 +730,11 @@ def apply_spectrum(w,A,f,hf_dt):
     
     #ifft
     seis=fft.ifft(fourier)
-    seis=seis*len(seis)
+    
+    if is_gnss:
+        seis *= len(seis)**0.5
+    else:
+        seis=seis*len(seis)
     
     return seis         
                                 

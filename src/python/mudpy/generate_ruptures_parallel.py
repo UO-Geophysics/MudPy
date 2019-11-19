@@ -291,9 +291,9 @@ if __name__ == '__main__':
         if hypocenter == 'None':
             hypocenter=None
         else:
-            hypocenter_lon=float(hypocenter.split(' ')[0].split('[')[1])
-            hypocenter_lat=float(hypocenter.split(' ')[3])
-            hypocenter_dep=float(hypocenter.split(' ')[8])
+            hypocenter_lon=float(hypocenter.split(',')[0].split('[')[1])
+            hypocenter_lat=float(hypocenter.split(',')[1])
+            hypocenter_dep=float(hypocenter.split(',')[2].split(']')[0])
             hypocenter=np.array([hypocenter_lon,hypocenter_lat,hypocenter_dep])
         slip_tol=float(sys.argv[33])
         force_hypocenter=sys.argv[34]
