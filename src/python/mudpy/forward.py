@@ -280,7 +280,7 @@ def waveforms_fakequakes(home,project_name,fault_name,rupture_list,GF_list,
     OUT:
         Nothing
     '''
-    from numpy import genfromtxt,array,log10
+    from numpy import genfromtxt,array
     import datetime
     
     print('Solving for kinematic problem(s)')
@@ -308,16 +308,13 @@ def waveforms_fakequakes(home,project_name,fault_name,rupture_list,GF_list,
         
         if rupture_list!=None:
             #Get epicentral time
-            epicenter,time_epi,Mw=read_fakequakes_hypo_time(home,project_name,rupture_name)
+            epicenter,time_epi=read_fakequakes_hypo_time(home,project_name,rupture_name)
             forward=False
         else:
             forward=True #This controls where we look for the rupture file
         
         # Put in matrix
-        #print epicenter, time_epi
-        M0=10**((3./2)*Mw+9.1)
-        zeta=10**(-4.975+0.217*log10(M0))
-        m,G=get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_name,time_epi,GF_list,epicenter,NFFT,source_time_function,stf_falloff_rate,zeta=zeta,forward=forward)
+        m,G=get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_name,time_epi,GF_list,epicenter,NFFT,source_time_function,stf_falloff_rate,forward=forward)
         # Solve
         waveforms=G.dot(m)
         #Write output
@@ -459,22 +456,22 @@ def waveforms_fakequakes_dynGF(home,project_name,fault_name,rupture_list,GF_list
             print('... solving for source '+str(ksource)+' of '+str(len(all_sources)))
             rupture_name=all_sources[ksource]
             print(rupture_name)
-
+            
             ###make new GF_list(dynamic GF_list)###
             new_GF_list='subGF_list.rupt%06d.gflist'%(ksource) #make new GF_list for only close stations
             sta_close_to_rupt(home,project_name,rupture_name,GF_list,dist_threshold,new_GF_list)
-
+            
             if rupture_list!=None:
                 #Get epicentral time
                 epicenter,time_epi=read_fakequakes_hypo_time(home,project_name,rupture_name)
                 forward=False
             else:
                 forward=True #This controls where we look for the rupture file
-
+                
             # Put in matrix
             #use only close stations (dynamic GF_list)
             m,G=get_fakequakes_G_and_m_dynGF(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_name,time_epi,STA,new_GF_list,epicenter,NFFT,source_time_function,stf_falloff_rate,forward=forward)
-
+            
             # Solve
             waveforms=G.dot(m)
             ##Write output
@@ -513,16 +510,13 @@ def hf_waveforms(home,project_name,fault_name,rupture_list,GF_list,model_name,ru
         sta_lat=lonlat[:,1]
         
         comp=['N','E','Z']  #components to loop through
-        if ncpus>1:
-            write_parallel_rupts(home,project_name,rupture_name,ncpus)
-       
+        
         #Now loop over stations
         for ksta in range(len(sta)):
             #Now loop over components N,E,Z
             for kcomp in range(len(comp)):
                 #HF_sims stochastic simulation for single station, component
                 if ncpus>1:
-#                    write_parallel_rupts(home,project_name,rupture_name,ncpus)
                     make_parallel_hfsims(home,project_name,rupture_name,ncpus,sta[ksta],sta_lon[ksta],sta_lat[ksta],
                         comp[kcomp],model_name,rise_time_depths[0],rise_time_depths[1],moho_depth_in_km,total_duration=duration,hf_dt=hf_dt,
                         Pwave=Pwave,stress_parameter=stress_parameter,high_stress_depth=high_stress_depth)
@@ -535,22 +529,11 @@ def hf_waveforms(home,project_name,fault_name,rupture_list,GF_list,model_name,ru
                     #Write to file
                     write_fakequakes_hf_waveforms_one_by_one(home,project_name,rupture_name,hf_waveform,comp[kcomp])
 
-def write_parallel_rupts(home,project_name,rupture_name,ncpus):
-    from numpy import arange,savetxt,genfromtxt
-    #Split rupture file into ncpu rupture files
-    rupture=home+project_name+'/output/ruptures/'+rupture_name
-    fault=genfromtxt(rupture)
-    for k in range(ncpus):
-        i=arange(k,len(fault),ncpus)
-        mpi_source=fault[i,:]
-        fmt='%d\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6E'
-        savetxt(home+project_name+'/output/ruptures/mpi_rupt.'+str(k)+'.'+rupture_name,mpi_source,fmt=fmt)
-
 def make_parallel_hfsims(home,project_name,rupture_name,ncpus,sta,sta_lon,sta_lat,component,model_name,rise_time_depths0,rise_time_depths1,moho_depth_in_km,total_duration,hf_dt,Pwave,stress_parameter,kappa=0.04,Qexp=0.6,high_stress_depth=30):
     '''
     Set up for MPI calculation of HF stochastics
     '''
-    from numpy import genfromtxt,where
+    from numpy import savetxt,arange,genfromtxt,where
     from os import environ
     import subprocess
     from shlex import split
@@ -564,6 +547,12 @@ def make_parallel_hfsims(home,project_name,rupture_name,ncpus,sta,sta_lon,sta_la
     M0=subfault_M0.sum()
     i=where(slip>0)[0]
     N=len(i)
+    #Split rupture file into ncpu rupture files
+    for k in range(ncpus):
+        i=arange(k,len(fault),ncpus)
+        mpi_source=fault[i,:]
+        fmt='%d\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6E'
+        savetxt(home+project_name+'/output/ruptures/mpi_rupt.'+str(k)+'.'+rupture_name,mpi_source,fmt=fmt)
     #Make mpi system call
     print("MPI: Starting Stochastic High Frequency Simulation on ", ncpus, "CPUs")
     mud_source=environ['MUD']+'/src/python/mudpy/'
@@ -571,6 +560,8 @@ def make_parallel_hfsims(home,project_name,rupture_name,ncpus,sta,sta_lon,sta_la
     mpi=split(mpi)
     p=subprocess.Popen(mpi)
     p.communicate()
+    
+    
                 
 def run_hf_waveforms(home,project_name,fault_name,rupture_list,GF_list,model_name,run_name,dt,NFFT,G_from_file,
             G_name,rise_time_depths,moho_depth_in_km,source_time_function='dreger',duration=100.0,
@@ -598,7 +589,7 @@ def run_hf_waveforms(home,project_name,fault_name,rupture_list,GF_list,model_nam
         print(rupture_name)
         
         #Get epicentral time
-        epicenter,time_epi,Mw=read_fakequakes_hypo_time(home,project_name,rupture_name)
+        epicenter,time_epi=read_fakequakes_hypo_time(home,project_name,rupture_name)
         
         #Get station info from GF_list
         sta=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=[0],dtype='U')
@@ -722,7 +713,7 @@ def match_filter(home,project_name,fault_name,rupture_list,GF_list,
         print('Running matched filter for all stations for rupture '+ rupture_name)
         
         #Get epicentral time
-        epicenter,time_epi,Mw=read_fakequakes_hypo_time(home,project_name,rupture_name)
+        epicenter,time_epi=read_fakequakes_hypo_time(home,project_name,rupture_name)
         
         for ksta in range(len(sta)):
             
@@ -864,7 +855,7 @@ def load_fakequakes_synthetics(home,project_name,fault_name,model_name,GF_list,G
 
 
 def get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_name,time_epi,GF_list,epicenter,NFFT,
-                source_time_function,stf_falloff_rate,zeta=0.2,forward=False):
+                source_time_function,stf_falloff_rate,forward=False):
     '''
     Assemble Green functions matrix. If requested will parse all available synthetics on file and build the matrix.
     Otherwise, if it exists, it will be loaded from file 
@@ -889,7 +880,6 @@ def get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_nam
     '''
     
     from numpy import genfromtxt,loadtxt,convolve,where,zeros,arange,unique,save
-    import datetime
 
 
     if forward==True:
@@ -905,7 +895,6 @@ def get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_nam
     #How many subfaults are non-zero?
     i_non_zero=where(rise_times>0)[0]
     N_non_zero=len(i_non_zero)
-    #print('... '+str(N_non_zero)+' non-zero subfaults')
     
     #Stations
     station_file=home+project_name+'/data/station_info/'+GF_list
@@ -919,7 +908,7 @@ def get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_nam
     matrix_pos=0 #tracks where in matrix synths are placed
     read_start=0  #Which trace to start reading from
     for ksta in range(Nsta):
-        print('... ... working on station '+str(ksta)+' of '+str(Nsta))
+        print('... working on station '+str(ksta)+' of '+str(Nsta))
         
         for ksource in range(len(i_non_zero)):
 
@@ -931,39 +920,32 @@ def get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_nam
             eds=Eds[read_start+i_non_zero[ksource]].copy()
             zds=Zds[read_start+i_non_zero[ksource]].copy()
             #Delay synthetics by rupture onset
-            #now=datetime.datetime.now()
             tdelay=rupture_onset[i_non_zero[ksource]]
             nss,ess,zss,nds,eds,zds=tshift_trace(nss,ess,zss,nds,eds,zds,tdelay,time_epi,NFFT)
-            #print('... ... Delaying synthetics: ' + str(datetime.datetime.now()-now))
             #Convolve with source time function
-            #now=datetime.datetime.now()
             rise=rise_times[i_non_zero[ksource]]
             #Make sure rise time is a multiple of dt
-            
             dt=nss.stats.delta
             rise=round(rise/dt)*nss.stats.delta
             if rise<(2.*dt): #Otherwise get nan's in STF
                 rise=2.*dt
             total_time=NFFT*dt
-            t_stf,stf=build_source_time_function(rise,dt,total_time,stf_type=source_time_function,zeta=zeta,dreger_falloff_rate=stf_falloff_rate)
-            #print('... ... Fixing rise times: ' + str(datetime.datetime.now()-now))
-            #now=datetime.datetime.now()
+            t_stf,stf=build_source_time_function(rise,dt,total_time,stf_type=source_time_function,dreger_falloff_rate=stf_falloff_rate)
+
             nss.data=convolve(nss.data,stf)[0:NFFT]
             ess.data=convolve(ess.data,stf)[0:NFFT]
             zss.data=convolve(zss.data,stf)[0:NFFT]
             nds.data=convolve(nds.data,stf)[0:NFFT]
             eds.data=convolve(eds.data,stf)[0:NFFT]
             zds.data=convolve(zds.data,stf)[0:NFFT]
-            #print('... ... Convolve STF: ' + str(datetime.datetime.now()-now))
             #Place in matrix
-            #now=datetime.datetime.now()
             G[matrix_pos:matrix_pos+NFFT,2*ksource]=nss.data
             G[matrix_pos:matrix_pos+NFFT,2*ksource+1]=nds.data
             G[matrix_pos+NFFT:matrix_pos+2*NFFT,2*ksource]=ess.data
             G[matrix_pos+NFFT:matrix_pos+2*NFFT,2*ksource+1]=eds.data
             G[matrix_pos+2*NFFT:matrix_pos+3*NFFT,2*ksource]=zss.data
             G[matrix_pos+2*NFFT:matrix_pos+3*NFFT,2*ksource+1]=zds.data
-            #print('... ... Matrix: ' + str(datetime.datetime.now()-now))
+            
         matrix_pos+=3*NFFT
         read_start+=Nfaults
         #Get slip model vector
@@ -1844,7 +1826,7 @@ def add_traces(ss,ds,ssmult,dsmult):
     two stream objects and super impsoe them according tot he weights defined by ssmult
     dsmult. If one waveform is longer than the other then the code will extend the
     shorter waveform by padding it with the last value.
-
+    
     For simple addition use ss=ds=M=1
     
     IN:
@@ -3086,12 +3068,11 @@ def read_fakequakes_hypo_time(home,project_name,rupture_name):
     f=open(log_file,'r')
     while True:
         line=f.readline()
-        if  'Actual magnitude:' in line:
-            Mw=float(line.split('Mw ')[-1])
         if 'Hypocenter (lon,lat,z[km])' in line:
             s=line.split(':')[-1]
             s=s.replace('(','')
-            s=s.replace(')','')            
+            s=s.replace(')','')
+            
             epicenter=array(s.split(',')).astype('float')
         if 'Hypocenter time' in line:
             time_epi=line.split(' ')[-1]
@@ -3101,7 +3082,7 @@ def read_fakequakes_hypo_time(home,project_name,rupture_name):
             print('ERROR: No hypocetral time in log file')
             time_epi=''
             break
-    return epicenter,time_epi,Mw
+    return epicenter,time_epi
     
 
 
@@ -3290,6 +3271,4 @@ def sta_close_to_rupt(home,project_name,rupt_file,GF_list,dist_threshold,new_GF_
                 OUT1.write('%s %10.6f %10.6f 0 1 0 0 0 0 /foo/bar /foo/bar /foo/bar /foo/bar /foo/bar 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0\n'%(STAname[nsta],STAlon[nsta],STAlat[nsta]))
                 break
     OUT1.close()
-
-
 
