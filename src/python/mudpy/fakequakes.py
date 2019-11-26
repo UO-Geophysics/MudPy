@@ -574,6 +574,8 @@ def select_faults(whole_fault,Dstrike,Ddip,target_Mw,buffer_factor,num_modes,sca
     #so which subfault ended up being the middle?
     center_subfault=hypo_fault
         
+    hypo_fault=int(hypo_fault)
+    
     #Get max/min distances from hypocenter to all faults
     dstrike_max=Dstrike[:,hypo_fault].max()
     dstrike_min=Dstrike[:,hypo_fault].min()
