@@ -77,3 +77,8 @@ plt.ylabel('Solution Norm ||m$_\lambda$||$_2$')
 #plt.xlim([.03,.3])
 #plt.xlabel('Residual Norm ||Gm$_\lambda$-d||$_2$')
 #plt.ylabel('Solution Norm ||m$_\lambda$||$_2$')
+
+f=open('/Users/degoldbe/Desktop/Lcurve.txt','w')
+for r in range(len(res_norm)):
+    f.write(str(sol_norm[r])+'\t'+str(res_norm[r])+'\t'+str(regularization[r])+'\t'+str(M0s[r])+'\n')
+f.close()

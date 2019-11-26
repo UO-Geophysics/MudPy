@@ -254,7 +254,7 @@ def waveforms_matrix(home,project_name,fault_name,rupture_name,station_file,GF_l
 
         
 def waveforms_fakequakes(home,project_name,fault_name,rupture_list,GF_list,
-                model_name,run_name,dt,NFFT,G_from_file,G_name,source_time_function='dreger',
+                model_name,run_name,dt,NFFT,G_from_file,G_name,source_time_function='dreger',zeta=0.2,
                 stf_falloff_rate=4.0,rupture_name=None,epicenter=None,time_epi=None,
                 hot_start=0):
     '''
@@ -314,7 +314,7 @@ def waveforms_fakequakes(home,project_name,fault_name,rupture_list,GF_list,
             forward=True #This controls where we look for the rupture file
         
         # Put in matrix
-        m,G=get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_name,time_epi,GF_list,epicenter,NFFT,source_time_function,stf_falloff_rate,forward=forward)
+        m,G=get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_name,time_epi,GF_list,epicenter,NFFT,source_time_function,stf_falloff_rate,zeta,forward=forward)
         # Solve
         waveforms=G.dot(m)
         #Write output
@@ -855,7 +855,7 @@ def load_fakequakes_synthetics(home,project_name,fault_name,model_name,GF_list,G
 
 
 def get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_name,time_epi,GF_list,epicenter,NFFT,
-                source_time_function,stf_falloff_rate,forward=False):
+                source_time_function,stf_falloff_rate,zeta=0.2,forward=False):
     '''
     Assemble Green functions matrix. If requested will parse all available synthetics on file and build the matrix.
     Otherwise, if it exists, it will be loaded from file 
@@ -930,7 +930,7 @@ def get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_nam
             if rise<(2.*dt): #Otherwise get nan's in STF
                 rise=2.*dt
             total_time=NFFT*dt
-            t_stf,stf=build_source_time_function(rise,dt,total_time,stf_type=source_time_function,dreger_falloff_rate=stf_falloff_rate)
+            t_stf,stf=build_source_time_function(rise,dt,total_time,stf_type=source_time_function,zeta=zeta,dreger_falloff_rate=stf_falloff_rate)
 
             nss.data=convolve(nss.data,stf)[0:NFFT]
             ess.data=convolve(ess.data,stf)[0:NFFT]
@@ -1075,6 +1075,7 @@ def write_fakequakes_waveforms(home,project_name,rupture_name,waveforms,GF_list,
     from os import path,makedirs
     from numpy import genfromtxt,squeeze,sqrt
     from obspy import Stream,Trace
+    from pyproj import Geod
     
     #Where am I writting to?
     rupture=rupture_name.split('.')[0]+'.'+rupture_name.split('.')[1]
@@ -1087,7 +1088,13 @@ def write_fakequakes_waveforms(home,project_name,rupture_name,waveforms,GF_list,
     # Get station list and coords
     sta=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=0,dtype='U') 
     lon=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=1)  
-    lat=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=2)  
+    lat=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=2) 
+    # Get rupture information to store in waveform SAC files
+    epicenter,time_epi,Mw=read_fakequakes_hypo_time(home,project_name,rupture_name,get_Mw=True)
+    
+    #Projection object for distance calculations
+    g=Geod(ellps='WGS84')
+    
     line_out='# Station, lon, lat, N[m], E[m], Up[m], PGD[m]\n'
     #Parse waveforms vector
     read_pos=0
@@ -1097,6 +1104,9 @@ def write_fakequakes_waveforms(home,project_name,rupture_name,waveforms,GF_list,
         n[0].stats.starttime=time_epi
         n[0].stats.delta=dt
         n[0].stats.station=sta[ksta]
+        az,backaz,dist_in_m=g.inv(epicenter[0],epicenter[1],lon[ksta],lat[ksta])
+        dist_in_km=(1./1000)*dist_in_m
+        n[0].stats.update({'sac':{'stlo':lon[ksta],'stla':lat[ksta],'evlo':epicenter[0],'evla':epicenter[1],'evdp':epicenter[2],'dist':dist_in_km,'az':az,'baz':backaz,'mag':Mw}})
 #        n[0].stats.latitude=lat[ksta]  #these don't appear to save properly in SAC format anyway
 #        n[0].stats.longitude=lon[ksta]
         # Copy to the other components
@@ -3055,7 +3065,7 @@ def build_source_time_function(rise_time,dt,total_time,stf_type='triangle',zeta=
     return t,Mdot
     
     
-def read_fakequakes_hypo_time(home,project_name,rupture_name):
+def read_fakequakes_hypo_time(home,project_name,rupture_name,get_Mw=False):
     '''
     Read a fakequkaes log file and extrat hypocentral time
     '''
@@ -3068,21 +3078,26 @@ def read_fakequakes_hypo_time(home,project_name,rupture_name):
     f=open(log_file,'r')
     while True:
         line=f.readline()
+        if 'Actual magnitude' in line:
+            mag=line.split('Mw')[-1]
+            Mw=float(mag)
         if 'Hypocenter (lon,lat,z[km])' in line:
             s=line.split(':')[-1]
             s=s.replace('(','')
             s=s.replace(')','')
-            
             epicenter=array(s.split(',')).astype('float')
         if 'Hypocenter time' in line:
             time_epi=line.split(' ')[-1]
             time_epi=UTCDateTime(time_epi)
             break
         if line=='':
-            print('ERROR: No hypocetral time in log file')
+            print('ERROR: No hypocentral time in log file')
             time_epi=''
             break
-    return epicenter,time_epi
+    if get_Mw==True:
+        return epicenter,time_epi,Mw
+    else:
+        return epicenter,time_epi
     
 
 
