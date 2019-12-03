@@ -1320,6 +1320,25 @@ def run_generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_n
                     foo,mu=get_mean_slip(target_Mw[kmag],fault_array,vel_mod_file)
                     mean_fault=genfromtxt(mean_slip_name)
                     mean_slip=(mean_fault[:,8]**2+mean_fault[:,9]**2)**0.5
+                    
+                    #keep onlt faults that have man slip inside the fault_array seelcted faults
+                    mean_slip=mean_slip[ifaults]
+                    
+                    #get the area in those selected faults
+                    area=fault_array[:,-2]*fault_array[:,-1]
+                    
+                    #get the moment in those selected faults
+                    moment_on_selected=(area*mu*mean_slip).sum()
+                    
+                    #target moment
+                    target_moment=10**(1.5*target_Mw[kmag]+9.1)
+                    
+                    #How much do I need to upscale?
+                    scale_factor=target_moment/moment_on_selected
+                    
+                    #rescale the slip
+                    mean_slip = mean_slip*scale_factor
+                    
                     #Make sure mean_slip has no zero slip faults
                     izero=where(mean_slip==0)[0]
                     mean_slip[izero]=slip_tol
