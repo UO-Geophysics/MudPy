@@ -352,7 +352,7 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
     '''
     This routine will read a .gflist file and compute the required GF type for each station
     '''
-    from numpy import genfromtxt,where
+    from numpy import genfromtxt,where,loadtxt,shape,floor
     from os import remove
     from gc import collect
     
@@ -360,7 +360,12 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
     gf_file=home+project_name+'/data/station_info/'+GF_list
     stations=genfromtxt(gf_file,usecols=0,skip_header=1,dtype='U')
     GF=genfromtxt(gf_file,usecols=[1,2,3,4,5,6,7],skip_header=1,dtype='f8')
-    
+    fault_file=home+project_name+'/data/model_info/'+fault_name  
+    source=loadtxt(fault_file,ndmin=2)
+    num_faults=shape(source)[0]
+    if num_faults/ncpus < 2:
+        ncpus=int(floor(num_faults/2.))
+        print 'Cutting back to ' + str(ncpus) + ' cpus for ' + str(num_faults) + ' subfaults'
     # GFs can be computed all at the same time
     station_file='temp.sta'
     try:
