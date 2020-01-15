@@ -486,7 +486,7 @@ def waveforms_fakequakes_dynGF(home,project_name,fault_name,rupture_list,GF_list
 
 def hf_waveforms(home,project_name,fault_name,rupture_list,GF_list,model_name,run_name,dt,NFFT,G_from_file,
             G_name,rise_time_depths,moho_depth_in_km,ncpus,source_time_function='dreger',duration=100.0,
-            stf_falloff_rate=4.0,hf_dt=0.02,Pwave=False,hot_start=0,stress_parameter=50,
+            stf_falloff_rate=4.0,hf_dt=0.02,Pwave=False,Swave=True,hot_start=0,stress_parameter=50,
             high_stress_depth=1e4):
     '''
     Make semistochastic high frequency accelerograms
@@ -519,17 +519,17 @@ def hf_waveforms(home,project_name,fault_name,rupture_list,GF_list,model_name,ru
                 if ncpus>1:
                     make_parallel_hfsims(home,project_name,rupture_name,ncpus,sta[ksta],sta_lon[ksta],sta_lat[ksta],
                         comp[kcomp],model_name,rise_time_depths[0],rise_time_depths[1],moho_depth_in_km,total_duration=duration,hf_dt=hf_dt,
-                        Pwave=Pwave,stress_parameter=stress_parameter,high_stress_depth=high_stress_depth)
+                        Pwave=Pwave,Swave=Swave,stress_parameter=stress_parameter,high_stress_depth=high_stress_depth)
                     #Combine the separate MPI outputs into one full waveform
                     write_parallel_hfsims(home,project_name,rupture_name,sta[ksta],comp[kcomp],remove=True)
                 else:
                     hf_waveform=hfsims.stochastic_simulation(home,project_name,rupture_name,sta[ksta],sta_lon[ksta],sta_lat[ksta],
                         comp[kcomp],model_name,rise_time_depths,moho_depth_in_km,total_duration=duration,hf_dt=hf_dt,
-                        Pwave=Pwave,stress_parameter=stress_parameter,high_stress_depth=high_stress_depth)
+                        Pwave=Pwave,Swave=Swave,stress_parameter=stress_parameter,high_stress_depth=high_stress_depth)
                     #Write to file
                     write_fakequakes_hf_waveforms_one_by_one(home,project_name,rupture_name,hf_waveform,comp[kcomp])
 
-def make_parallel_hfsims(home,project_name,rupture_name,ncpus,sta,sta_lon,sta_lat,component,model_name,rise_time_depths0,rise_time_depths1,moho_depth_in_km,total_duration,hf_dt,Pwave,stress_parameter,kappa=0.04,Qexp=0.6,high_stress_depth=30):
+def make_parallel_hfsims(home,project_name,rupture_name,ncpus,sta,sta_lon,sta_lat,component,model_name,rise_time_depths0,rise_time_depths1,moho_depth_in_km,total_duration,hf_dt,Pwave,Swave,stress_parameter,kappa=0.04,Qexp=0.6,high_stress_depth=30):
     '''
     Set up for MPI calculation of HF stochastics
     '''
@@ -556,7 +556,7 @@ def make_parallel_hfsims(home,project_name,rupture_name,ncpus,sta,sta_lon,sta_la
     #Make mpi system call
     print("MPI: Starting Stochastic High Frequency Simulation on ", ncpus, "CPUs")
     mud_source=environ['MUD']+'/src/python/mudpy/'
-    mpi='mpiexec -n '+str(ncpus)+' python '+mud_source+'hfsims_parallel.py run_parallel_hfsims '+home+' '+project_name+' '+rupture_name+' '+str(N)+' '+str(M0)+' '+sta+' '+str(sta_lon)+' '+str(sta_lat)+' '+model_name+' '+str(rise_time_depths0)+' '+str(rise_time_depths1)+' '+str(moho_depth_in_km)+' '+component+' '+str(total_duration)+' '+str(hf_dt)+' '+str(stress_parameter)+' '+str(kappa)+' '+str(Qexp)+' '+str(Pwave)+' '+str(high_stress_depth)
+    mpi='mpiexec -n '+str(ncpus)+' python '+mud_source+'hfsims_parallel.py run_parallel_hfsims '+home+' '+project_name+' '+rupture_name+' '+str(N)+' '+str(M0)+' '+sta+' '+str(sta_lon)+' '+str(sta_lat)+' '+model_name+' '+str(rise_time_depths0)+' '+str(rise_time_depths1)+' '+str(moho_depth_in_km)+' '+component+' '+str(total_duration)+' '+str(hf_dt)+' '+str(stress_parameter)+' '+str(kappa)+' '+str(Qexp)+' '+str(Pwave)+' '+str(Swave)+' '+str(high_stress_depth)
     mpi=split(mpi)
     p=subprocess.Popen(mpi)
     p.communicate()
