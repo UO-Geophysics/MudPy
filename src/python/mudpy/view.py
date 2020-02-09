@@ -479,7 +479,7 @@ def tile_slip(rupt,nstrike,ndip,slip_bounds,geographic=False,epicenter=0,epicent
     
     from numpy import genfromtxt,unique,where,zeros,tile,sqrt
     import matplotlib.pyplot as plt
-    from obspy.core.util.geodetics import gps2DistAzimuth
+    from obspy.geodetics import gps2dist_azimuth
     
     f=genfromtxt(rupt)
     num=f[:,0]
@@ -504,11 +504,11 @@ def tile_slip(rupt,nstrike,ndip,slip_bounds,geographic=False,epicenter=0,epicent
     slip_min=slip_bounds[0]
     slip_max=slip_bounds[1]
     #Aftershocks
-    af=genfromtxt('/Users/dmelgar/Chiapas2017/afters/afters_10days_close2fault.txt')
-    lon_afters=af[:,0]
-    lat_afters=af[:,1]
-    depth_afters=af[:,2]
-    print(af)
+#    af=genfromtxt('/Users/dmelgar/Chiapas2017/afters/afters_10days_close2fault.txt')
+#    lon_afters=af[:,0]
+#    lat_afters=af[:,1]
+#    depth_afters=af[:,2]
+#    print(af)
     if geographic==True: #Get geographic coordinates to compute along strike and along dip distance
         lon=f[(epicenter_line-1)*nstrike:epicenter_line*nstrike,1] #Only compute line at the epicenter depth
         lat=f[(epicenter_line-1)*nstrike:epicenter_line*nstrike,2]    
@@ -516,7 +516,7 @@ def tile_slip(rupt,nstrike,ndip,slip_bounds,geographic=False,epicenter=0,epicent
         depth=depth[0:len(unum)]
         along_strike=zeros(nstrike)
         for k in range(len(lat)):
-            out=gps2DistAzimuth(epicenter[1],epicenter[0],lat[k],lon[k])
+            out=gps2dist_azimuth(epicenter[1],epicenter[0],lat[k],lon[k])
             if lat[k]<epicenter[1]: #It's to the south
                 #along_strike[k]=-out[0]/1000
                 along_strike[k]=out[0]/1000
@@ -525,15 +525,15 @@ def tile_slip(rupt,nstrike,ndip,slip_bounds,geographic=False,epicenter=0,epicent
                 along_strike[k]=-out[0]/1000
         #Now tile
         along_strike=tile(along_strike,ndip)
-        #Process the aftershocks
-        along_strike_afters=zeros(len(lon_afters))
-        for k in range(len(lat_afters)):
-            out=gps2DistAzimuth(epicenter[1],epicenter[0],lat_afters[k],lon_afters[k])
-            if lat_afters[k]<epicenter[1]: #It's to the south
-                #along_strike_afters[k]=-out[0]/1000
-                along_strike_afters[k]=out[0]/1000
-            else:
-                along_strike_afters[k]=-out[0]/1000
+#        #Process the aftershocks
+#        along_strike_afters=zeros(len(lon_afters))
+#        for k in range(len(lat_afters)):
+#            out=gps2dist_azimuth(epicenter[1],epicenter[0],lat_afters[k],lon_afters[k])
+#            if lat_afters[k]<epicenter[1]: #It's to the south
+#                #along_strike_afters[k]=-out[0]/1000
+#                along_strike_afters[k]=out[0]/1000
+#            else:
+#                along_strike_afters[k]=-out[0]/1000
     #Get indices for plot
     istrike=zeros(nstrike*ndip)
     idip=zeros(nstrike*ndip)
@@ -1576,7 +1576,8 @@ def plot_data(home,project_name,gflist,vord,decimate,lowpass,t_lim,sort,scale,k_
     #plt.subplots_adjust(left=0.2, bottom=0.05, right=0.8, top=0.95, wspace=0, hspace=0)
     plt.subplots_adjust(left=0.2, bottom=0.15, right=0.8, top=0.85, wspace=0, hspace=0)
       
-def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpass,t_lim,sort,scale,k_or_g,uncert=False,waveforms_as_accel=False):
+def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpass,t_lim,
+               sort,scale,k_or_g,uncert=False,waveforms_as_accel=False,units='m',uncerth=0.01,uncertv=0.03):
     '''
     Plot synthetics vs real data
     
@@ -1630,12 +1631,14 @@ def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpas
         es=read(synthpath+run_name+'.'+run_number+'.'+sta[i[k]]+'.'+synthsuffix+'.e.sac')
         us=read(synthpath+run_name+'.'+run_number+'.'+sta[i[k]]+'.'+synthsuffix+'.u.sac')
         
-        #Zero out a stations
-        if sta[i[k]]=="NILT":
-            n[0].data=zeros(len(n[0].data))
-            e[0].data=zeros(len(e[0].data))
-            ns[0].data=zeros(len(ns[0].data))
-            es[0].data=zeros(len(es[0].data))
+        if units=='cm':
+            n[0].data*=100
+            e[0].data*=100
+            u[0].data*=100
+            ns[0].data*=100
+            es[0].data*=100
+            us[0].data*=100
+           
         
         if lowpass!=None:
             print('Lowpassing')
@@ -1674,9 +1677,9 @@ def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpas
         axe.grid(which='both')
         axu.plot(u[0].times(),u[0].data,'k',us[0].times(),us[0].data,'r')
         if uncert==True:
-            axn.fill_between(n[0].times(),n[0].data-0.01,n[0].data+0.01,alpha=0.2,color='k')
-            axe.fill_between(e[0].times(),e[0].data-0.01,e[0].data+0.01,alpha=0.2,color='k')
-            axu.fill_between(u[0].times(),u[0].data-0.03,u[0].data+0.03,alpha=0.2,color='k')
+            axn.fill_between(n[0].times(),n[0].data-uncerth,n[0].data+uncerth,alpha=0.2,color='k')
+            axe.fill_between(e[0].times(),e[0].data-uncerth,e[0].data+uncerth,alpha=0.2,color='k')
+            axu.fill_between(u[0].times(),u[0].data-uncertv,u[0].data+uncertv,alpha=0.2,color='k')
         axu.grid(which='both')
         axe.yaxis.set_ticklabels([])
         axu.yaxis.set_ticklabels([])
@@ -1746,13 +1749,23 @@ def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpas
         axn.set_ylabel(sta[i[k]],rotation=0,labelpad=20)
         if k==0:
             if vord.lower()=='d':
-                axn.set_title('North (m)')
-                axe.set_title('East (m)')
-                axu.set_title('Up (m)')
+                if units=='cm':
+                    axn.set_title('North (cm)')
+                    axe.set_title('East (cm)')
+                    axu.set_title('Up (cm)')
+                else:
+                    axn.set_title('North (m)')
+                    axe.set_title('East (m)')
+                    axu.set_title('Up (m)')
             else:
-                axn.set_title('North (m/s)')
-                axe.set_title('East (m/s)')
-                axu.set_title('Up (m/s)')
+                if units=='cm':
+                    axn.set_title('North (cm/s)')
+                    axe.set_title('East (cm/s)')
+                    axu.set_title('Up (cm/s)')  
+                else:
+                    axn.set_title('North (m/s)')
+                    axe.set_title('East (m/s)')
+                    axu.set_title('Up (m/s)')
         if k!=len(i)-1:
             axn.xaxis.set_ticklabels([])
             axe.xaxis.set_ticklabels([])
@@ -1866,7 +1879,7 @@ def insar_residual(home,project_name,run_name,run_number,gflist,zlims):
     
     matplotlib.rcParams.update({'font.size': 14})
     #Decide what to plot
-    sta=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=0,dtype='S')
+    sta=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=0,dtype='U')
     lon_all=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=[1],dtype='f')
     lat_all=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=[2],dtype='f')
     gf=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=[7],dtype='f')
@@ -1909,7 +1922,7 @@ def insar_results(home,project_name,run_name,run_number,gflist,zlims,cmap,figsiz
     
     matplotlib.rcParams.update({'font.size': 14})
     #Decide what to plot
-    sta=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=0,dtype='S')
+    sta=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=0,dtype='U')
     lon_all=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=[1],dtype='f')
     lat_all=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=[2],dtype='f')
     gf=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=[7],dtype='f')

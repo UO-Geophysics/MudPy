@@ -1,10 +1,10 @@
 format compact
 
-fout='/Users/dmelgar/Ixtepec2017/InSAR/T107_Ascending/asc_quadtree.los'
-insar=textread('/Users/dmelgarm/Turkey2020/InSAR/asc_los_detrended.txt');
+fout='/Users/dmelgarm/Turkey2020/InSAR/desc_quadtree.los'
+insar=textread('/Users/dmelgarm/Turkey2020/InSAR/desc_los_detrended.txt');
 mindim=32
 maxdim=256
-thresh=0.04 
+thresh=0.1 
 
 plot_lims=[-0.3,0.3]
 
@@ -73,6 +73,22 @@ for k=1:length(lon_out)
    lookN_out=[lookN_out,lookN(i)];
    lookU_out=[lookU_out,lookU(i)];
 end
+
+%other random filters
+i=find(lon_out>38.68);
+lon_out=lon_out(i);
+lat_out=lat_out(i);
+los_out=los_out(i);
+lookE_out=lookE_out(i);
+lookN_out=lookN_out(i);
+lookU_out=lookU_out(i);
+i=find(lat_out>38.11);
+lon_out=lon_out(i);
+lat_out=lat_out(i);
+los_out=los_out(i);
+lookE_out=lookE_out(i);
+lookN_out=lookN_out(i);
+lookU_out=lookU_out(i);
 
 %Write to file
 out=[lon_out' lat_out' los_out' lookE_out' lookN_out' lookU_out'];
