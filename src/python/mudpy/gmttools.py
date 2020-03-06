@@ -589,7 +589,7 @@ def insar_xyz(home,project_name,run_name,run_number,GF_list,outfile):
     from numpy import genfromtxt,where,zeros,c_,savetxt
     
     #Decide what to plot
-    sta=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=0,dtype='S')
+    sta=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=0,dtype='U')
     lon_all=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=[1],dtype='f')
     lat_all=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=[2],dtype='f')
     gf=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=[7],dtype='f')

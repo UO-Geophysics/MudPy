@@ -181,7 +181,7 @@ def run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,
             ###Apply multiplier?
             if in_smga==True:
                 stress=stress_parameter*stress_multiplier
-                print "%.4f,%.4f is in SMGA, stress is %d" % (lon_source,lat_source,stress)
+                print("%.4f,%.4f is in SMGA, stress is %d" % (lon_source,lat_source,stress))
             else:
                 stress=stress_parameter
             

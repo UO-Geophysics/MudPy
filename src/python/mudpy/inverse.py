@@ -1137,7 +1137,7 @@ def write_synthetics(home,project_name,run_name,GF_list,G,sol,ds,num,decimate):
             
         
 def write_log(home,project_name,run_name,k,rupture_speed,num_windows,lambda_spatial,lambda_temporal,
-        beta,L2,Lm,VR,ABIC,Mo,Mw,velmod,fault,g_name,gflist,solver):
+        beta,L2,Lm,VR,ABIC,Mo,Mw,velmod,fault,g_name,gflist,solver,L2data):
     '''
     Write inversion sumamry to .log file
     
@@ -1188,6 +1188,11 @@ def write_log(home,project_name,run_name,k,rupture_speed,num_windows,lambda_spat
     f.write('VR velocity(%) = '+repr(VR[2])+'\n')
     f.write('VR tsunami(%) = '+repr(VR[3])+'\n')
     f.write('VR InSAR LOS(%) = '+repr(VR[4])+'\n')
+    f.write('RMS static(%) = '+repr(L2data[0])+'\n')
+    f.write('RMS displacement(%) = '+repr(L2data[1])+'\n')
+    f.write('RMS velocity(%) = '+repr(L2data[2])+'\n')
+    f.write('RMS tsunami(%) = '+repr(L2data[3])+'\n')
+    f.write('RMS InSAR LOS(%) = '+repr(L2data[4])+'\n')
     f.write('Lm = '+repr(Lm)+'\n')
     f.write('ABIC = '+repr(ABIC)+'\n')
     f.write('M0(N-m) = '+repr(Mo)+'\n')
@@ -1482,7 +1487,7 @@ def get_stats(WG,sol,wd):
     return L2,Lm
     
     
-def get_VR(home,project_name,GF_list,sol,d,ds,decimate):
+def get_VR(home,project_name,GF_list,sol,d,ds,decimate,WG,wd):
     '''
     Compute Variance reduction to the data
     
@@ -1497,6 +1502,7 @@ def get_VR(home,project_name,GF_list,sol,d,ds,decimate):
     from numpy import genfromtxt,where,r_,nan
     from obspy import read
     from mudpy.green import stdecimate
+    from numpy.linalg import norm
     
     print('... calcualting variance reduction...')
     
@@ -1508,10 +1514,15 @@ def get_VR(home,project_name,GF_list,sol,d,ds,decimate):
     #Separate into its constituent parts (statics,displacaments, velocities, etc...)
     kstart=0
     kend=0
+    
+    #Calculate weighted syntehtic data
+    wds=WG.dot(sol)
+    
     #Statics
     kgf=0
     i=where(GF[:,kgf]==1)[0]
     VRstatic=nan
+    L2static=nan
     if len(i)>0:
         for ksta in range(len(i)):
             kend+=3
@@ -1519,11 +1530,16 @@ def get_VR(home,project_name,GF_list,sol,d,ds,decimate):
         res=((d[kstart:kend]-ds[kstart:kend])**2)**0.5
         dnorm=(d[kstart:kend]**2)**0.5 #Yes i know this is dumb, shush
         VRstatic=(1-(res.sum()/dnorm.sum()))*100
+        
+        #Get RMS (L2 norm) of weigtehd data misfit
+        L2static=norm(wds[kstart:kend]-wd[kstart:kend])
+   
     #Displacement
     kstart=kend
     kgf=1
     i=where(GF[:,kgf]==1)[0]
     VRdisp=nan
+    L2disp=nan
     if len(i)>0:
         for ksta in range(len(i)):
             sta=stations[i[ksta]]
@@ -1536,11 +1552,16 @@ def get_VR(home,project_name,GF_list,sol,d,ds,decimate):
         res=((d[kstart:kend]-ds[kstart:kend])**2)**0.5
         dnorm=(d[kstart:kend]**2)**0.5 #Yes i know this is dumb, shush
         VRdisp=(1-(res.sum()/dnorm.sum()))*100
+        
+        #Get RMS (L2 norm) of weigtehd data misfit
+        L2disp=norm(wds[kstart:kend]-wd[kstart:kend])
+        
     #Velocity
     kstart=kend
     kgf=2
     i=where(GF[:,kgf]==1)[0]
     VRvel=nan
+    L2vel=nan
     if len(i)>0:
         for ksta in range(len(i)):
             sta=stations[i[ksta]]
@@ -1553,11 +1574,16 @@ def get_VR(home,project_name,GF_list,sol,d,ds,decimate):
         res=((d[kstart:kend]-ds[kstart:kend])**2)**0.5
         dnorm=(d[kstart:kend]**2)**0.5 #Yes i know this is dumb, shush
         VRvel=(1-(res.sum()/dnorm.sum()))*100
+        
+        #Get RMS (L2 norm) of weigtehd data misfit
+        L2vel=norm(wds[kstart:kend]-wd[kstart:kend])
+        
     #Tsunami
     kstart=kend
     kgf=3
     i=where(GF[:,kgf]==1)[0]
     VRtsun=nan
+    L2tsun=nan
     if len(i)>0:
         for ksta in range(len(i)):
             sta=stations[i[ksta]]
@@ -1568,20 +1594,32 @@ def get_VR(home,project_name,GF_list,sol,d,ds,decimate):
         res=((d[kstart:kend]-ds[kstart:kend])**2)**0.5
         dnorm=(d[kstart:kend]**2)**0.5 #Yes i know this is dumb, shush
         VRtsun=(1-(res.sum()/dnorm.sum()))*100
+        
+        #Get RMS (L2 norm) of weigtehd data misfit
+        L2tsun=norm(wds[kstart:kend]-wd[kstart:kend])
+        
     # InSAR
     kstart=kend
     kgf=4
     i=where(GF[:,kgf]==1)[0]
     VRinsar=nan
+    L2insar=nan
     if len(i)>0:
         for ksta in range(len(i)):
             kend+=1
         #Variance reduction
         res=((d[kstart:kend]-ds[kstart:kend])**2)**0.5
         dnorm=(d[kstart:kend]**2)**0.5 #Yes i know this is dumb, shush
-        VRinsar=(1-(res.sum()/dnorm.sum()))*100     
+        VRinsar=(1-(res.sum()/dnorm.sum()))*100  
+        
+        #Get RMS (L2 norm) of weigtehd data misfit
+        L2insar=norm(wds[kstart:kend]-wd[kstart:kend])
+        
+        
     VR=r_[VRstatic,VRdisp,VRvel,VRtsun,VRinsar]
-    return VR
+    L2=r_[L2static,L2disp,L2vel,L2tsun,L2insar]
+    
+    return VR,L2
     
 
 
@@ -1868,6 +1906,8 @@ def ds2rot(sol,beta):
     #Split into strike-slip and dip-slip
     iss=2*arange(0,len(sol)/2,1)
     ids=2*arange(0,len(sol)/2,1)+1
+    iss=iss.astype('int')
+    ids=ids.astype('int')
     if len(iss)==1:
         ss=sol[0]
         ds=sol[1]

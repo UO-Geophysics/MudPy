@@ -711,7 +711,7 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
             ds=dot(G,sol)
             #Get stats
             L2,Lmodel=inv.get_stats(Kinv,sol,x)
-            VR=inv.get_VR(home,project_name,GF_list,sol,d,ds,decimate)
+            VR,L2data=inv.get_VR(home,project_name,GF_list,sol,d,ds,decimate,WG,wd)
             #VR=inv.get_VR(WG,sol,wd)
             #ABIC=inv.get_ABIC(WG,K,sol,wd,lambda_spatial,lambda_temporal,Ls,LsLs,Lt,LtLt)
             ABIC=inv.get_ABIC(G,K,sol,d,lambda_spatial,lambda_temporal,Ls,LsLs,Lt,LtLt)
@@ -722,7 +722,7 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
                 sol=inv.rot2ds(sol,beta)
             #Write log
             inv.write_log(home,project_name,run_name,kout,rupture_speed,num_windows,lambda_spatial,lambda_temporal,beta,
-                L2,Lmodel,VR,ABIC,Mo,Mw,model_name,fault_name,G_name,GF_list,solver)
+                L2,Lmodel,VR,ABIC,Mo,Mw,model_name,fault_name,G_name,GF_list,solver,L2data)
             #Write output to file
             inv.write_synthetics(home,project_name,run_name,GF_list,G,sol,ds,kout,decimate)
             inv.write_model(home,project_name,run_name,fault_name,model_name,rupture_speed,num_windows,epicenter,sol,kout,onset_file=onset_file)
