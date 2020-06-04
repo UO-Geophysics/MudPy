@@ -1369,24 +1369,29 @@ def run_generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_n
 #                    slip,success=make_KL_slip(fault_array,num_modes,eigenvals,V,mean_slip_log,max_slip,lognormal=True,seed=kfault)
                     slip,success=make_KL_slip(fault_array,num_modes,eigenvals,V,mean_slip_log,max_slip,lognormal=True,seed=None)
             
-            #Slip pattern sucessfully made, moving on.
-            #Rigidities
-            foo,mu=get_mean_slip(target_Mw[kmag],whole_fault,vel_mod_file)
-            fault_out[:,13]=mu
-            
-            #Calculate moment and magnitude of fake slip pattern
-            M0=sum(slip*fault_out[ifaults,10]*fault_out[ifaults,11]*mu[ifaults])
-            Mw=(2./3)*(log10(M0)-9.1)
-            
-            #Force to target magnitude
-            if force_magnitude==True:
-                M0_target=10**(1.5*target_Mw[kmag]+9.1)
-                M0_ratio=M0_target/M0
-                #Multiply slip by ratio
-                slip=slip*M0_ratio
-                #Recalculate
+                #Slip pattern sucessfully made, moving on.
+                #Rigidities
+                foo,mu=get_mean_slip(target_Mw[kmag],whole_fault,vel_mod_file)
+                fault_out[:,13]=mu
+                
+                #Calculate moment and magnitude of fake slip pattern
                 M0=sum(slip*fault_out[ifaults,10]*fault_out[ifaults,11]*mu[ifaults])
                 Mw=(2./3)*(log10(M0)-9.1)
+                
+                #Force to target magnitude
+                if force_magnitude==True:
+                    M0_target=10**(1.5*target_Mw[kmag]+9.1)
+                    M0_ratio=M0_target/M0
+                    #Multiply slip by ratio
+                    slip=slip*M0_ratio
+                    #Recalculate
+                    M0=sum(slip*fault_out[ifaults,10]*fault_out[ifaults,11]*mu[ifaults])
+                    Mw=(2./3)*(log10(M0)-9.1)
+                    
+                #check max_slip again
+                if slip.max() > max_slip:
+                    success=False
+                    print('... ... ... max slip condition violated due to force_magnitude=True, recalculating...')
             
             #Get stochastic rake vector
             stoc_rake=get_stochastic_rake(rake,len(slip))
