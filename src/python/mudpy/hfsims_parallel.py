@@ -418,6 +418,7 @@ def run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,
                     #Add seismogram
                     hf[i:j]=hf[i:j]+real(hf_seis_S[0:len_paste])
                 else: #Lengths are fine
+                    pass
                     hf[i:j]=hf[i:j]+real(hf_seis_S)
             else: #Beginning of seismogram is past end of available space
                 pass

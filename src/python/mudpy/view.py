@@ -610,7 +610,7 @@ def tile_slip(rupt,nstrike,ndip,slip_bounds,geographic=False,epicenter=0,epicent
 #            plt.quiver(along_strike[k],depth[k],rakess[k]/sqrt(rakess[k]**2+rakeds[k]**2),rakeds[k]/sqrt(rakess[k]**2+rakeds[k]**2),color='green',width=0.002,scale=50/scale_slip)
     #plt.annotate('B',xy=(-160,-4),fontsize=16,annotation_clip=False)
     #plt.annotate("B'",xy=(55,-4),fontsize=16,annotation_clip=False)
-    cb.set_label('CV')
+    cb.set_label('Slip (m)')
     #cb.set_label('CV')
     #cb.set_label('Std. Dev. (m)')
     plt.subplots_adjust(left=0.15, bottom=0.25, right=0.92, top=0.90, wspace=0, hspace=0)

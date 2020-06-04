@@ -485,10 +485,10 @@ def analyze_sources(home,project_name,run_name,Mw_lims=[7.75,9.35]):
         source=genfromtxt(ruptures[k])
         slip=sqrt(source[:,8]**2+source[:,9]**2)
         trise=source[:,7]
-        slip_mean[k]=slip.mean()
-        slip_max[k]=slip.max()
-        slip_stdev[k]=slip.std()
         i=where(slip>0)[0]
+        slip_mean[k]=slip[i].mean()
+        slip_max[k]=slip[i].max()
+        slip_stdev[k]=slip.std()
         trise_mean[k]=trise[i].mean()
         trise_max[k]=trise[i].max()
         trise_stdev[k]=trise[i].std()
@@ -572,6 +572,12 @@ def analyze_sources(home,project_name,run_name,Mw_lims=[7.75,9.35]):
     #ax.yaxis.set_minor_locator(yminorLocator)
     ax.tick_params(which='major',length=7,width=1)
     ax.tick_params(which='minor',length=4,width=1) 
+    #Allen Hayes scaling lines
+    plt.plot([7.0,9.6],[0.4,21.1],c='k',lw=2)
+    plt.plot([7.0,9.6],[0.4,7.87],c='r',lw=2)
+    plt.plot([7.0,9.6],[0.55,10.71],c='orange',lw=2)
+    plt.plot([7.0,9.6],[1.20,23.33],c='g',lw=2)
+    plt.plot([7.0,9.27],[1.08,39.16],c='violet',lw=2)
         
     plt.subplot(335)
     plt.scatter(Mw_actual,slip_max,marker='+')
@@ -1741,7 +1747,7 @@ def plot_2_waveforms_2_spectra(home,project_name,run_name,run_number,sta1,sta2,c
     ax.tick_params(which='minor',length=4,width=1)        
                                                                 
                           
-def record_section(home,project_name,GF_list,rupture,factor=10):
+def record_section(home,project_name,GF_list,rupture,factor=10,max_time=300):
     '''
     Plot record section
     '''
@@ -1749,7 +1755,6 @@ def record_section(home,project_name,GF_list,rupture,factor=10):
     from obspy.geodetics.base import gps2dist_azimuth
     from numpy import genfromtxt,array,ones,zeros
     from matplotlib import pyplot as plt
-    from string import replace
     from obspy import read
     from obspy.taup import TauPyModel
     from obspy.geodetics import locations2degrees
@@ -1761,7 +1766,7 @@ def record_section(home,project_name,GF_list,rupture,factor=10):
     yminorLocator = MultipleLocator(50)
     
     # Read summary file
-    sta=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=0,dtype='S')
+    sta=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=0,dtype='U')
     lonlat=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=[1,2])
     event_log=home+project_name+'/output/ruptures/'+rupture+'.log'
     
@@ -1775,8 +1780,9 @@ def record_section(home,project_name,GF_list,rupture,factor=10):
     while loop_go:
         line=f.readline()
         if 'Hypocenter (lon,lat,z[km])' in line:
-            s=replace(line.split(':')[-1],'(','')
-            s=replace(s,')','')
+            s=line.split(':')[-1]
+            s=s.replace('(','')
+            s=s.replace(')','')
             hypo=array(s.split(',')).astype('float')
             loop_go=False
 
@@ -1834,15 +1840,14 @@ def record_section(home,project_name,GF_list,rupture,factor=10):
     plt.figure(figsize=(18,10))
     
     plt.subplot(131)
-    #plt.scatter(ptime,d,c='b',marker='|',s=80,lw=1.5)     
-    #plt.scatter(stime,d,c='r',marker='|',s=80,lw=1.5)    
+    plt.scatter(ptime,d,c='b',marker='|',s=80,lw=1.5)     
+    plt.scatter(stime,d,c='r',marker='|',s=80,lw=1.5)    
     for k in range(len(sta)):
         plt.plot(N[k].times(),N[k].data,'k',lw=0.5)         
     #After axis adjsutments
-    plt.xlim([n[0].times()[0],n[0].times()[-1]])
+    plt.xlim([n[0].times()[0],max_time])
     d_adjust=(d.max()-d.min())*0.05
     plt.ylim([d.min()-d_adjust,d.max()+d_adjust])
-    plt.xlabel('Seconds since OT')
     plt.ylabel('Hypocentral distance (km)')
     ax = plt.gca()
     ax.xaxis.set_major_locator(xmajorLocator)
@@ -1854,12 +1859,12 @@ def record_section(home,project_name,GF_list,rupture,factor=10):
     plt.title('North')
     
     plt.subplot(132)
-    #plt.scatter(ptime,d,c='b',marker='|',s=80,lw=1.5)     
-    #plt.scatter(stime,d,c='r',marker='|',s=80,lw=1.5)    
+    plt.scatter(ptime,d,c='b',marker='|',s=80,lw=1.5)     
+    plt.scatter(stime,d,c='r',marker='|',s=80,lw=1.5)    
     for k in range(len(sta)):
         plt.plot(E[k].times(),E[k].data,'k',lw=0.5)         
     #After axis adjsutments
-    plt.xlim([e[0].times()[0],e[0].times()[-1]])
+    plt.xlim([e[0].times()[0],max_time])
     d_adjust=(d.max()-d.min())*0.05
     plt.ylim([d.min()-d_adjust,d.max()+d_adjust])
     plt.xlabel('Seconds since OT')
@@ -1872,17 +1877,17 @@ def record_section(home,project_name,GF_list,rupture,factor=10):
     ax.tick_params(which='minor',length=4,width=1)
     plt.tick_params(axis='y',labelleft='off')
     plt.title('East')
+    plt.yticks([])
     
     plt.subplot(133)
-    #plt.scatter(ptime,d,c='b',marker='|',s=80,lw=1.5)     
-    #plt.scatter(stime,d,c='r',marker='|',s=80,lw=1.5)    
+    plt.scatter(ptime,d,c='b',marker='|',s=80,lw=1.5)     
+    plt.scatter(stime,d,c='r',marker='|',s=80,lw=1.5)    
     for k in range(len(sta)):
         plt.plot(Z[k].times(),Z[k].data,'k',lw=0.5)         
     #After axis adjsutments
-    plt.xlim([z[0].times()[0],z[0].times()[-1]])
+    plt.xlim([z[0].times()[0],max_time])
     d_adjust=(d.max()-d.min())*0.05
     plt.ylim([d.min()-d_adjust,d.max()+d_adjust])
-    plt.xlabel('Seconds since OT')
     ax = plt.gca()
     ax.xaxis.set_major_locator(xmajorLocator)
     ax.xaxis.set_minor_locator(xminorLocator)
@@ -1892,8 +1897,9 @@ def record_section(home,project_name,GF_list,rupture,factor=10):
     ax.tick_params(which='minor',length=4,width=1)
     plt.tick_params(axis='y',labelleft='off')
     plt.title('Vertical')
+    plt.yticks([])
     
-    plt.subplots_adjust(left=0.06,right=0.98,bottom=0.07,top=0.96,wspace=0.05)
+    plt.subplots_adjust(left=0.15,right=0.98,bottom=0.07,top=0.96,wspace=0.05)
     plt.show()
     
     

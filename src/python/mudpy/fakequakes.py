@@ -247,7 +247,7 @@ def subfault_distances_3D(home,project_name,fault_name,slab_name,projection_zone
             if i%10==0:
                 print('... working on subfault '+str(i)+' of '+str(len(fault)))
             
-            contour=plt.contour(X,Y,Z,levels=fault[i,3])
+            contour=plt.contour(X,Y,Z,levels=[fault[i,3]])
             contour=contour.collections[0].get_paths()[0].vertices
             contour_lengths[i]=((contour[0,0]-contour[-1,0])**2+(contour[0,1]-contour[-1,1])**2)**0.5
             all_contours.append(contour)
