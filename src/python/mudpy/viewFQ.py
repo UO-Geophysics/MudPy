@@ -596,6 +596,8 @@ def analyze_sources(home,project_name,run_name,Mw_lims=[7.75,9.35]):
     #ax.yaxis.set_minor_locator(yminorLocator)
     ax.tick_params(which='major',length=7,width=1)
     ax.tick_params(which='minor',length=4,width=1) 
+    #Allen Hayes scaling lines
+    plt.plot([7.0,9.6],[3.21,225],c='k',lw=2)
     
     plt.subplot(336)
     plt.scatter(Mw_actual,slip_stdev,marker='+')
@@ -2987,4 +2989,40 @@ def plot_dtopo(dtopo_file,s=5):
     plt.scatter(360+d[:,1],d[:,2],c=d[:,3],vmin=-max_vert,vmax=max_vert,cmap=plt.cm.seismic)
     plt.colorbar(label='Vertical deformation (m)')
     plt.title(dtopo_file)
+    plt.show()
+    
+    
+def plot_hypocenter_locations(home,project_name,run_name):
+    
+    from matplotlib import pyplot as plt
+    from glob import glob
+    from numpy import array
+    
+    logs=glob(home+project_name+'/output/ruptures/*.log')
+    hypo_lon=[]
+    hypo_lat=[]
+    hypo_z=[]
+    for kfault in range(len(logs)):
+        
+        #Get info about fault
+        f=open(logs[kfault],'r')
+        loop_go=True
+        while loop_go:
+            line=f.readline()
+            if 'Hypocenter (lon,lat,z[km])' in line:                
+                s=line.split(':')[-1]
+                s=s.replace('(','')
+                s=s.replace(')','')
+                hypo=array(s.split(',')).astype('float')
+                
+                hypo_lon.append(hypo[0])
+                hypo_lat.append(hypo[1])
+                hypo_z.append(hypo[2])
+     
+                loop_go=False  
+                
+    plt.figure()
+    plt.scatter(hypo_lon,hypo_lat,c=hypo_z,cmap='jet')
+    plt.colorbar(label='Depth (km)')
+    plt.axis('equal')
     plt.show()

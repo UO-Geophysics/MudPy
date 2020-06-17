@@ -1161,7 +1161,7 @@ def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
 		max_slip,source_time_function,lognormal,slip_standard_deviation,scaling_law,ncpus,
 		force_magnitude=False,force_area=False,mean_slip_name=None,hypocenter=None,
 		slip_tol=1e-2,force_hypocenter=False,no_random=False,shypo=None,use_hypo_fraction=True,
-		shear_wave_fraction=0.7):
+		shear_wave_fraction=0.7,max_slip_rule=False):
     '''
     Set up rupture generation-- use ncpus if available
     '''
@@ -1187,14 +1187,14 @@ def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
         Lstrike,num_modes,Nrealizations,rake,buffer_factor,rise_time_depths,time_epi,
         max_slip,source_time_function,lognormal,slip_standard_deviation,scaling_law,ncpus,
         force_magnitude,force_area,mean_slip_name,hypocenter,slip_tol,force_hypocenter,
-        no_random,shypo,use_hypo_fraction,shear_wave_fraction)
+        no_random,shypo,use_hypo_fraction,shear_wave_fraction,max_slip_rule)
     else:
         run_generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
         load_distances,distances_name,UTM_zone,target_Mw,model_name,hurst,Ldip,
         Lstrike,num_modes,Nrealizations,rake,buffer_factor,rise_time_depths,time_epi,
         max_slip,source_time_function,lognormal,slip_standard_deviation,scaling_law,
         force_magnitude,force_area,mean_slip_name,hypocenter,slip_tol,force_hypocenter,
-        no_random,shypo,use_hypo_fraction,shear_wave_fraction)
+        no_random,shypo,use_hypo_fraction,shear_wave_fraction,max_slip_rule)
                 
 
 
@@ -1205,7 +1205,7 @@ def run_generate_ruptures_parallel(home,project_name,run_name,fault_name,slab_na
         Lstrike,num_modes,Nrealizations,rake,buffer_factor,rise_time_depths,time_epi,
         max_slip,source_time_function,lognormal,slip_standard_deviation,scaling_law,ncpus,
         force_magnitude,force_area,mean_slip_name,hypocenter,slip_tol,force_hypocenter,
-        no_random,shypo,use_hypo_fraction,shear_wave_fraction):
+        no_random,shypo,use_hypo_fraction,shear_wave_fraction,max_slip_rule):
     
     from numpy import ceil
     from os import environ
@@ -1226,7 +1226,7 @@ def run_generate_ruptures_parallel(home,project_name,run_name,fault_name,slab_na
     print("MPI: Starting " + str(Nrealizations_parallel*ncpus) + " FakeQuakes Rupture Generations on ", ncpus, "CPUs")
     mud_source=environ['MUD']+'/src/python/mudpy/'
     print(str(hypocenter))
-    mpi='mpiexec -n '+str(ncpus)+' python '+mud_source+'generate_ruptures_parallel.py run_parallel_generate_ruptures '+home+' '+project_name+' '+run_name+' '+fault_name+' '+str(slab_name)+' '+str(mesh_name)+' '+str(load_distances)+' '+distances_name+' '+UTM_zone+' '+str(tMw)+' '+model_name+' '+str(hurst)+' '+Ldip+' '+Lstrike+' '+str(num_modes)+' '+str(Nrealizations_parallel)+' '+str(rake)+' '+str(buffer_factor)+' '+str(rise_time_depths0)+' '+str(rise_time_depths1)+' '+str(time_epi)+' '+str(max_slip)+' '+source_time_function+' '+str(lognormal)+' '+str(slip_standard_deviation)+' '+scaling_law+' '+str(ncpus)+' '+str(force_magnitude)+' '+str(force_area)+' '+str(mean_slip_name)+' "'+str(hypocenter)+'" '+str(slip_tol)+' '+str(force_hypocenter)+' '+str(no_random)+' '+str(shypo)+' '+str(use_hypo_fraction)+' '+str(shear_wave_fraction)
+    mpi='mpiexec -n '+str(ncpus)+' python '+mud_source+'generate_ruptures_parallel.py run_parallel_generate_ruptures '+home+' '+project_name+' '+run_name+' '+fault_name+' '+str(slab_name)+' '+str(mesh_name)+' '+str(load_distances)+' '+distances_name+' '+UTM_zone+' '+str(tMw)+' '+model_name+' '+str(hurst)+' '+Ldip+' '+Lstrike+' '+str(num_modes)+' '+str(Nrealizations_parallel)+' '+str(rake)+' '+str(buffer_factor)+' '+str(rise_time_depths0)+' '+str(rise_time_depths1)+' '+str(time_epi)+' '+str(max_slip)+' '+source_time_function+' '+str(lognormal)+' '+str(slip_standard_deviation)+' '+scaling_law+' '+str(ncpus)+' '+str(force_magnitude)+' '+str(force_area)+' '+str(mean_slip_name)+' "'+str(hypocenter)+'" '+str(slip_tol)+' '+str(force_hypocenter)+' '+str(no_random)+' '+str(shypo)+' '+str(use_hypo_fraction)+' '+str(shear_wave_fraction)+' '+str(max_slip_rule)
     mpi=split(mpi)
     p=subprocess.Popen(mpi)
     p.communicate()
@@ -1239,7 +1239,7 @@ def run_generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_n
         Lstrike,num_modes,Nrealizations,rake,buffer_factor,rise_time_depths,time_epi,
         max_slip,source_time_function,lognormal,slip_standard_deviation,scaling_law,
         force_magnitude,force_area,mean_slip_name,hypocenter,slip_tol,force_hypocenter,
-        no_random,shypo,use_hypo_fraction,shear_wave_fraction):
+        no_random,shypo,use_hypo_fraction,shear_wave_fraction,max_slip_rule):
     
     '''
     Depending on user selected flags parse the work out to different functions
@@ -1377,6 +1377,16 @@ def run_generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_n
                 #Calculate moment and magnitude of fake slip pattern
                 M0=sum(slip*fault_out[ifaults,10]*fault_out[ifaults,11]*mu[ifaults])
                 Mw=(2./3)*(log10(M0)-9.1)
+                
+                #Check max_slip_rule
+                if max_slip_rule==True:
+                    
+                    max_slip_from_rule=10**(-4.94+0.71*Mw) #From Allen & Hayes, 2017
+                    max_slip_tolerance = 3
+                    
+                    if slip.max() > max_slip_tolerance*max_slip_from_rule:
+                        success = False
+                        print('... ... ... max slip condition violated max_slip_rule, recalculating...')
                 
                 #Force to target magnitude
                 if force_magnitude==True:

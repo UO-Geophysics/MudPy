@@ -11,7 +11,7 @@ def run_parallel_generate_ruptures(home,project_name,run_name,fault_name,slab_na
         num_modes,Nrealizations,rake,buffer_factor,rise_time_depths0,rise_time_depths1,time_epi,max_slip,
         source_time_function,lognormal,slip_standard_deviation,scaling_law,ncpus,force_magnitude,
         force_area,mean_slip_name,hypocenter,slip_tol,force_hypocenter,
-        no_random,shypo,use_hypo_fraction,shear_wave_fraction,rank,size):
+        no_random,shypo,use_hypo_fraction,shear_wave_fraction,max_slip_rule,rank,size):
     
     '''
     Depending on user selected flags parse the work out to different functions
@@ -169,6 +169,16 @@ def run_parallel_generate_ruptures(home,project_name,run_name,fault_name,slab_na
                 #Calculate moment and magnitude of fake slip pattern
                 M0=sum(slip*fault_out[ifaults,10]*fault_out[ifaults,11]*mu[ifaults])
                 Mw=(2./3)*(log10(M0)-9.1)
+                
+                #Check max_slip_rule
+                if max_slip_rule==True:
+                    
+                    max_slip_from_rule=10**(-4.94+0.71*Mw) #From Allen & Hayes, 2017
+                    max_slip_tolerance = 3
+                    
+                    if slip.max() > max_slip_tolerance*max_slip_from_rule:
+                        success = False
+                        print('... ... ... max slip condition violated max_slip_rule, recalculating...')
                 
                 #Force to target magnitude
                 if force_magnitude==True:
@@ -341,11 +351,17 @@ if __name__ == '__main__':
         if use_hypo_fraction=='False':
             use_hypo_fraction=False
         shear_wave_fraction=float(sys.argv[38])
+        max_slip_rule=sys.argv[39]
+        if max_slip_rule=='True':
+            max_slip_rule=True
+        if max_slip_rule=='False':
+            max_slip_rule=False
+        
         run_parallel_generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
         load_distances,distances_name,UTM_zone,tMw,model_name,hurst,Ldip,Lstrike,
         num_modes,Nrealizations,rake,buffer_factor,rise_time_depths0,rise_time_depths1,time_epi,max_slip,
         source_time_function,lognormal,slip_standard_deviation,scaling_law,ncpus,force_magnitude,
         force_area,mean_slip_name,hypocenter,slip_tol,force_hypocenter,
-        no_random,shypo,use_hypo_fraction,shear_wave_fraction,rank,size)
+        no_random,shypo,use_hypo_fraction,shear_wave_fraction,max_slip_rule,rank,size)
     else:
         print("ERROR: You're not allowed to run "+sys.argv[1]+" from the shell or it does not exist")
