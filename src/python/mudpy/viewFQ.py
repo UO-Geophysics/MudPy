@@ -597,6 +597,7 @@ def analyze_sources(home,project_name,run_name,Mw_lims=[7.75,9.35]):
     ax.tick_params(which='major',length=7,width=1)
     ax.tick_params(which='minor',length=4,width=1) 
     #Allen Hayes scaling lines
+    plt.plot([7.0,9.6],[1.07,75],c='k',lw=2)
     plt.plot([7.0,9.6],[3.21,225],c='k',lw=2)
     
     plt.subplot(336)
@@ -2998,10 +2999,13 @@ def plot_hypocenter_locations(home,project_name,run_name):
     from glob import glob
     from numpy import array
     
-    logs=glob(home+project_name+'/output/ruptures/*.log')
+    logs=glob(home+project_name+'/output/ruptures/'+run_name+'*.log')
     hypo_lon=[]
     hypo_lat=[]
     hypo_z=[]
+    centroid_lon=[]
+    centroid_lat=[]
+    centroid_z=[]
     for kfault in range(len(logs)):
         
         #Get info about fault
@@ -3018,11 +3022,41 @@ def plot_hypocenter_locations(home,project_name,run_name):
                 hypo_lon.append(hypo[0])
                 hypo_lat.append(hypo[1])
                 hypo_z.append(hypo[2])
+                
+                
+            if 'Centroid (lon,lat,z[km])' in line:                
+                s=line.split(':')[-1]
+                s=s.replace('(','')
+                s=s.replace(')','')
+                centroid=array(s.split(',')).astype('float')
+                
+                centroid_lon.append(centroid[0])
+                centroid_lat.append(centroid[1])
+                centroid_z.append(centroid[2])
      
                 loop_go=False  
                 
+#    plt.figure()
+#    plt.scatter(hypo_lon,hypo_lat,c=hypo_z,cmap='jet')
+#    plt.colorbar(label='Hypocenter Depth (km)')
+#    plt.axis('equal')
+#    
+#    plt.figure()
+#    plt.scatter(centroid_lon,centroid_lat,c=hypo_z,cmap='jet')
+#    plt.colorbar(label='Centroid Depth (km)')
+#    plt.axis('equal')
+    
     plt.figure()
-    plt.scatter(hypo_lon,hypo_lat,c=hypo_z,cmap='jet')
-    plt.colorbar(label='Depth (km)')
+    plt.scatter(hypo_lon,hypo_lat,facecolor='k')
+    plt.scatter(centroid_lon,centroid_lat,facecolor='r')
+    plt.legend(['Hypocenters','Centroids'])
+    for k in range(len(hypo_lon)):
+        plt.plot([hypo_lon[k],centroid_lon[k]],[hypo_lat[k],centroid_lat[k]],'b')
     plt.axis('equal')
+        
+    plt.figure()
+    for k in range(len(hypo_lon)):
+        plt.scatter(hypo_lat[k],hypo_lat[k]-centroid_lat[k])
+    plt.ylabel('Hypo lat - centroid lat')
+    
     plt.show()

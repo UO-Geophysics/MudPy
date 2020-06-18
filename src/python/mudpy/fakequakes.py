@@ -640,10 +640,11 @@ def select_faults(whole_fault,Dstrike,Ddip,target_Mw,buffer_factor,num_modes,sca
         #witht he lowest combined maximum along strike and along dip distance to all
         #other faults
         
+        
         Dsmin=Dstrike[selected_faults,:] ; Dsmin=Dsmin[:,selected_faults]
         Ddmin=Ddip[selected_faults,:] ; Ddmin=Ddmin[:,selected_faults]
         
-        min_dist=Dsmin.max(axis=1) + Ddmin.max(axis=1)
+        min_dist=abs(Dsmin).max(axis=1) + abs(Ddmin).max(axis=1)
         imin=argmin(min_dist)
         center_subfault=selected_faults[imin]
         
@@ -673,11 +674,19 @@ def select_faults(whole_fault,Dstrike,Ddip,target_Mw,buffer_factor,num_modes,sca
         # go from fractions to distances, *2 is necessary to use the whole 
         # distance range since the PDF int he Melgar&Hayes paper only goes to 
         # a fraction value of 0.5
-        dip_distance=abs(Dd.max()*dip_fraction*2)
-        strike_distance=abs(Ds.max()*strike_fraction*2)
+        if dip_fraction<0:
+            dip_distance=Dd.min()*(abs(dip_fraction)*2)
+        else:
+            dip_distance=Dd.max()*(dip_fraction*2)
             
+        strike_distance=abs(Ds).max()*strike_fraction*2
+        sign=2*randint(0,2)-1
+        strike_distance*=sign
+            
+        
+        
         #where is the fualt that is this distance from the middle?
-        hypo_fault=argmin(abs(Ds-abs(strike_distance))+abs(Dd-abs(dip_distance)))      
+        hypo_fault=argmin((Ds-strike_distance)**2+(Dd-dip_distance)**2)      
         hypo_fault=selected_faults[hypo_fault]
 
     #############
