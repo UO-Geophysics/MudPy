@@ -3063,7 +3063,11 @@ def read_fakequakes_hypo_time(home,project_name,rupture_name):
     from obspy.core import UTCDateTime
     from numpy import array
     
-    rupture=rupture_name.split('.')[0]+'.'+rupture_name.split('.')[1]
+    #old
+    #rupture = rupture_name.split('.')[0]+'.'+rupture_name.split('.')[1]
+    #new
+    rupture = rupture_name.rsplit('.', 1)[0]
+    
     log_file=home+project_name+'/output/ruptures/'+rupture+'.log'
     f=open(log_file,'r')
     while True:
