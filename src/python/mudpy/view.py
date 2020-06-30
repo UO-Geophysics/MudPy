@@ -1870,9 +1870,9 @@ def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpas
             xticklabel=axn.xaxis.get_ticklabels()
             print(xticklabel)
 #            xticklabel=['','20','','40','','60','']
-            axn.set_xticks([20,40,60])
-            axe.set_xticks([20,40,60])
-            axu.set_xticks([20,40,60])
+            axn.set_xticks([20,40,60,80,100])
+            axe.set_xticks([20,40,60,80,100])
+            axu.set_xticks([20,40,60,80,100])
 #            axn.xaxis.set_ticklabels(xticklabel)
 #            axe.xaxis.set_ticklabels(xticklabel)
 #            axu.xaxis.set_ticklabels(xticklabel)
@@ -2086,7 +2086,7 @@ def tsunami_synthetics(home,project_name,run_name,run_number,gflist,t_lim,sort,s
     datapath
     '''
     from obspy import read
-    from numpy import genfromtxt,where,argsort
+    from numpy import genfromtxt,where,argsort,array,size
     import matplotlib.pyplot as plt
     import matplotlib
     from mudpy.green import stdecimate 
@@ -2094,10 +2094,18 @@ def tsunami_synthetics(home,project_name,run_name,run_number,gflist,t_lim,sort,s
     
     matplotlib.rcParams.update({'font.size': 14})
     #Decide what to plot
-    sta=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=0,dtype='S')
+    sta=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=0,dtype='U')    
     lon=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=[1],dtype='f')
     lat=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=[2],dtype='f')
     gf=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=[6],dtype='f')
+    
+    if size(sta)==1:
+        sta=array([sta])
+        lon=array([lon])
+        lat=array([lat])
+        gf=array([gf])
+    
+    
     datapath=home+project_name+'/data/waveforms/'
     synthpath=home+project_name+'/output/inverse_models/waveforms/'
     #Decide on sorting
@@ -2109,14 +2117,21 @@ def tsunami_synthetics(home,project_name,run_name,run_number,gflist,t_lim,sort,s
         j=argsort(lat[i])[::-1] 
         i=i[j]
     nsta=len(i)
+    
     fig, axarr = plt.subplots(nsta,1)  
+    if size(sta)==1:
+        axarr=array([axarr])
     for k in range(len(i)):
         #tsun=read(datapath+sta[i[k]]+'.tsun')
-        tsun=read(datapath+sta[i[k]]+'.sac')
+#        tsun=read(datapath+sta[i[k]]+'.sac')
+        tsun=read(datapath+'D43413.sac')
         tsun_synth=read(synthpath+run_name+'.'+run_number+'.'+sta[i[k]]+'.tsun')
+        
+        dt=tsun_synth[0].stats.starttime - tsun[0].stats.starttime
+        
         #Make plot
         ax=axarr[k]
-        ax.plot(tsun[0].times()/60,tsun[0].data/scale,'k',tsun_synth[0].times()/60,tsun_synth[0].data/scale,'r')
+        ax.plot(tsun[0].times()/60-dt/60,tsun[0].data/scale,'k',tsun_synth[0].times()/60,tsun_synth[0].data/scale,'r')
         ax.grid(which='both')
         ax.yaxis.set_ticklabels([])
         ax.set_xlim(t_lim)
@@ -2149,11 +2164,12 @@ def tsunami_synthetics(home,project_name,run_name,run_number,gflist,t_lim,sort,s
         #    xticklabel=['','50','','150','','250','']
         if k==len(i)-1: #Last plot
             ax.set_xlabel('Minutes after Origin Time')
+            ax.set_title('Tsunami (cm)')
             #ax.xaxis.set_ticklabels(xticklabel)
             #axn.xaxis.set_ticks(xtick)
             #axe.xaxis.set_ticks(xtick)
             #axu.xaxis.set_ticks(xtick)
-    plt.subplots_adjust(left=0.2, bottom=0.15, right=0.8, top=0.85, wspace=0, hspace=0)
+    plt.subplots_adjust(left=0.2, bottom=0.3, right=0.8, top=0.85, wspace=0, hspace=0)
     plt.show()
                 
 

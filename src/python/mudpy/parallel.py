@@ -54,10 +54,10 @@ def run_parallel_green(home,project_name,station_file,model_name,dt,NFFT,static,
         subfault=str(int(source[ksource,0])).rjust(4,'0')
         if tsunami==False and static==0:
             subfault_folder=home+project_name+'/GFs/dynamic/'+model_name+'_'+depth+'.sub'+subfault
-        elif tsunami==True and static==0:
+        elif tsunami==True and static==1:
             subfault_folder=home+project_name+'/GFs/tsunami/'+model_name+'_'+depth+'.sub'+subfault
         elif static==1:
-            subfault_folder=home+project_name+'/GFs/static/'
+            subfault_folder=home+project_name+'/GFs/static/'+model_name+'_'+depth+'.sub'+subfault
         
         #Check if subfault folder exists, if not create it
         if os.path.exists(subfault_folder+'/')==False:
@@ -91,7 +91,7 @@ def run_parallel_green(home,project_name,station_file,model_name,dt,NFFT,static,
                 suffix='insar'
             else:
                 suffix='gps'
-            write_file=subfault_folder+model_name+'.static.'+depth+'.sub'+subfault+'.'+suffix
+            write_file=subfault_folder+'/'+model_name+'.static.'+depth+'.sub'+subfault+'.'+suffix
             command=split("fk.pl -M"+model_name+"/"+depth+"/f -N1 "+diststr)
             file_is_empty=True
             while file_is_empty:
@@ -200,10 +200,10 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
         subfault=str(int(source[0])).rjust(4,'0')
         if static==0 and tsunami==0:  #Where to save dynamic waveforms
             green_path=home+project_name+'/GFs/dynamic/'+model_name+"_"+strdepth+".sub"+subfault+"/"
-        if static==0 and tsunami==1:  #Where to save dynamic waveforms
+        if static==1 and tsunami==1:  #Where to save dynamic waveforms
             green_path=home+project_name+'/GFs/tsunami/'+model_name+"_"+strdepth+".sub"+subfault+"/"
-        if static==1:  #Where to save statics
-            green_path=home+project_name+'/GFs/static/'
+        if static==1 and tsunami==0:  #Where to save statics
+            green_path=home+project_name+'/GFs/static/'+model_name+"_"+strdepth+".sub"+subfault+"/"
         staname=genfromtxt(station_file,dtype="U",usecols=0)
         if staname.shape==(): #Single staiton file
             staname=array([staname])
@@ -380,9 +380,9 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
                     temp_pipe=[]
                     diststr='%.1f' % d[k] #Need current distance in string form for external call
                     if insar==True:
-                        green_file=model_name+".static."+strdepth+".sub"+subfault+'.insar' #Output dir
+                        green_file=green_path+model_name+".static."+strdepth+".sub"+subfault+'.insar' #Output dir
                     else: #GPS
-                        green_file=model_name+".static."+strdepth+".sub"+subfault+'.gps' #Output dir
+                        green_file=green_path+model_name+".static."+strdepth+".sub"+subfault+'.gps' #Output dir
                     statics=loadtxt(green_file) #Load GFs
                     if len(statics)<1:
                         print('ERROR: Empty GF file')
@@ -404,28 +404,28 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
                     commandDS=split(commandDS)
                     #Make system calls, one for DS, one for SS
                     ps=subprocess.Popen(['printf',inpipe],stdout=subprocess.PIPE)  #This is the statics pipe, pint stdout to syn's stdin
-                    p=subprocess.Popen(commandSS,stdin=ps.stdout,stdout=open(staname[k]+'.subfault'+num+'.SS.static.rtz','w'))     
+                    p=subprocess.Popen(commandSS,stdin=ps.stdout,stdout=open(green_path+staname[k]+'.subfault'+num+'.SS.static.rtz','w'))     
                     p.communicate()  
                     ps=subprocess.Popen(['printf',inpipe],stdout=subprocess.PIPE)  #This is the statics pipe, pint stdout to syn's stdin
-                    p=subprocess.Popen(commandDS,stdin=ps.stdout,stdout=open(staname[k]+'.subfault'+num+'.DS.static.rtz','w'))     
+                    p=subprocess.Popen(commandDS,stdin=ps.stdout,stdout=open(green_path+staname[k]+'.subfault'+num+'.DS.static.rtz','w'))     
                     p.communicate()       
                     #Rotate radial/transverse to East/North, correct vertical and scale to m
-                    statics=loadtxt(staname[k]+'.subfault'+num+'.SS.static.rtz')
+                    statics=loadtxt(green_path+staname[k]+'.subfault'+num+'.SS.static.rtz')
                     u=statics[2]/100
                     r=statics[3]/100
                     t=statics[4]/100
                     ntemp,etemp=rt2ne(array([r,r]),array([t,t]),az[k])
                     n=ntemp[0]
                     e=etemp[0]
-                    savetxt(staname[k]+'.subfault'+num+'.SS.static.neu',(n,e,u,beta))
-                    statics=loadtxt(staname[k]+'.subfault'+num+'.DS.static.rtz')
+                    savetxt(green_path+staname[k]+'.subfault'+num+'.SS.static.neu',(n,e,u,beta))
+                    statics=loadtxt(green_path+staname[k]+'.subfault'+num+'.DS.static.rtz')
                     u=statics[2]/100
                     r=statics[3]/100
                     t=statics[4]/100
                     ntemp,etemp=rt2ne(array([r,r]),array([t,t]),az[k])
                     n=ntemp[0]
                     e=etemp[0]
-                    savetxt(staname[k]+'.subfault'+num+'.DS.static.neu',(n,e,u,beta),header='north(m),east(m),up(m),beta(degs)')     
+                    savetxt(green_path+staname[k]+'.subfault'+num+'.DS.static.neu',(n,e,u,beta),header='north(m),east(m),up(m),beta(degs)')     
                 else: #Okada half space solutions
                 #SS
                     n,e,u=okada_synthetics(strike,dip,rakeSS,ss_length_in_km,ds_length_in_km,xs,ys,

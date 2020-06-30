@@ -10,7 +10,7 @@ plot_lims=[-0.3,0.3]
 
 lon=insar(:,1);
 lat=insar(:,2);
-los=insar(:,3);
+los=insar(:,7)/1000;
 lookE=insar(:,4);
 lookN=insar(:,5);
 lookU=insar(:,6);

@@ -217,7 +217,12 @@ def make_parallel_green(home,project_name,station_file,fault_name,model_name,dt,
             if path.exists(subfault_folder)==False:
                 #It doesn't, make it, don't be lazy
                 makedirs(subfault_folder)               
-        elif static==0 and tsunami==True: #Tsunami GFs
+#        elif static==0 and tsunami==True: #Tsunami GFs
+#            subfault_folder=green_path+'tsunami/'+model_name+'_'+strdepth+'.sub'+subfault
+#            if path.exists(subfault_folder)==False:
+#                #It doesn't, make it, don't be lazy
+#                makedirs(subfault_folder)
+        elif static==1 and tsunami==True: #Tsunami GFs
             subfault_folder=green_path+'tsunami/'+model_name+'_'+strdepth+'.sub'+subfault
             if path.exists(subfault_folder)==False:
                 #It doesn't, make it, don't be lazy
@@ -420,7 +425,8 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
                             hot_start,dk,pmin,pmax,kmax)
         if tgf_file!=None: #Tsunami
             print('Seafloor displacement GFs requested...')
-            static=0
+#            static=0
+            static=1
             tsunami=True
             station_file=tgf_file
             if ncpus>1:
@@ -557,7 +563,7 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
                     f.write(out)
                 f.close()
                 integrate=1
-                static=0
+                static=1
                 tsunami=True
                 station_file=tgf_file
                 make_parallel_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,tsunami,beta,hot_start,time_epi,ncpus,custom_stf,impulse)

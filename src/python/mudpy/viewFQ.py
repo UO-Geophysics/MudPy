@@ -3006,6 +3006,7 @@ def plot_hypocenter_locations(home,project_name,run_name):
     centroid_lon=[]
     centroid_lat=[]
     centroid_z=[]
+    L=[]
     for kfault in range(len(logs)):
         
         #Get info about fault
@@ -3013,6 +3014,9 @@ def plot_hypocenter_locations(home,project_name,run_name):
         loop_go=True
         while loop_go:
             line=f.readline()
+            if 'Maximum length Lmax:' in line:
+                l=float(line.split(':')[-1].split()[0])
+                L.append(l)
             if 'Hypocenter (lon,lat,z[km])' in line:                
                 s=line.split(':')[-1]
                 s=s.replace('(','')
@@ -3058,5 +3062,11 @@ def plot_hypocenter_locations(home,project_name,run_name):
     for k in range(len(hypo_lon)):
         plt.scatter(hypo_lat[k],hypo_lat[k]-centroid_lat[k])
     plt.ylabel('Hypo lat - centroid lat')
+    
+    plt.figure()
+    for k in range(len(hypo_lon)):
+        plt.scatter(L[k],abs(hypo_lat[k]-centroid_lat[k])*110)
+    plt.ylabel('Hypo lat - centroid lat')
+    plt.xlabel('Length (km)')
     
     plt.show()
