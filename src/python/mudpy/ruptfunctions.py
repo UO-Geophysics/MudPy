@@ -454,206 +454,206 @@ def build_simple_fault(home,faultname,centroid,strike,dip,length,width):
     outfile=home+'data/model_info/'+fault+'.fault'
     forward.makefault(outfile,strike,dip,nstrike,dx_dip,dx_strike,hypo,num_updip,num_downdip,risetime)
 
-def build_faults_xml(faults,directories,workingdir,ucerf_xmlfile):
-    '''
-    Build fault(s) from UCERF3 fault_sections.xml file
-    
-    Input:
-    faults is list of fault names direct from UCERF3 (e.g., ['San Jacinto'])
-    directories is list of corresponding directories to put fault info (e.g., ['san_jacinto'])
-    workingdir is full path to where the fault directories will be created
-    ucerf_xmlfile is full path to XML file
-    
-    Notes:
-    This function does not account for overlapping segments.
-    
-    Christine J. Ruhl, August 2016
-    '''
-    import os
-    import math
-    import numpy as np
-    from pyproj import Geod
-    from mudpy import forward
-    import xml.etree.cElementTree as et 
-    from shutil import copyfile as cp
-    
-    g=Geod(ellps='WGS84')
-    VR=0.8*3600 # 0.8 times Vs ~ 4 km/s
-    
-    tree = et.ElementTree(file=ucerf_xmlfile)
-    root=tree.getroot()
-    for i in range(len(faults)):
-        print('working on the '+faults[i]+' fault...')
-        home=workingdir+directories[i]+'/'
-        if not os.path.exists(home):
-            os.mkdir(home)
-        for file in os.listdir(home):
-            if file.endswith(".file"):
-                os.remove(os.path.join(home,file))
-        # reinitialize some stuff        
-        dd=[]
-        dip=[]
-        sd=[] 
-        lon=[]
-        lat=[]
-        newlon=[]
-        newlat=[]
-        tempdist=[]
-        totallength=0
-        secids=[]
-        seccount=0
-        # get list of section IDs first
-        for elem in tree.iterfind('FaultSectionPrefDataList/'):
-            if faults[i] in elem.get('sectionName') and 'instance 0' in elem.get('sectionName'):      
-                if not secids:
-                    secids.append([elem.tag])
-                    dd.append(float(elem.get('dipDirection')))
-                    dip.append(float(elem.get('aveDip')))
-                    sd.append(float(elem.get('aveLowerDepth')))
-                    lat.append([])
-                    lon.append([])
-                    newlon.append([])
-                    newlat.append([])
-                    tempdist.append([])
-                    continue
-                if dd[len(dd)-1]==float(elem.get('dipDirection')) and sd[len(sd)-1]==float(elem.get('aveLowerDepth')) and dip[len(dip)-1]==float(elem.get('aveDip')):
-                    secids[seccount].append(elem.tag)
-                else:
-                    seccount=seccount+1
-                    secids.append([elem.tag])
-                    dd.append(float(elem.get('dipDirection')))
-                    print(elem.get('dipDirection'))
-                    dip.append(float(elem.get('aveDip')))
-                    sd.append(float(elem.get('aveLowerDepth')))
-                    lat.append([])
-                    lon.append([])
-                    newlon.append([])
-                    newlat.append([])
-                    tempdist.append([])
-                                
-        # then go through each section ID to get other information
-        for j in range(len(secids)): # extra loop added to keep track of multiple sections separately     
-            for k in range(len(secids[j])):
-                for elem0 in tree.iterfind('FaultSectionPrefDataList/'+secids[j][k]+'/FaultTrace'):
-               	    for elem1 in elem0:
-           	        # append if it is: 1) First instance, 2) not equal to previous value
-           	        if not lat[j]: #1	    
-                            lat[j].append(float(elem1.get('Latitude')))
-                            lon[j].append(float(elem1.get('Longitude')))
-                            tempdist[j].append(np.nan)
-           	        elif float(elem1.get('Latitude'))!=lat[j][len(lat[j])-1]: #2	    
-                            lat[j].append(float(elem1.get('Latitude')))
-                            lon[j].append(float(elem1.get('Longitude')))                        
-                            az,baz,dist=g.inv(lon[j][len(lon[j])-2],lat[j][len(lat[j])-2],lon[j][len(lon[j])-1],lat[j][len(lat[j])-1],radians=False)
-                            tempdist[j].append(dist/1000)
-                            totallength=totallength+dist/1000
-                            
-        print('length = ',totallength)
-        # calculate Mmax from Blaser et al 2010 relationship
-        # LOG10 (Length) = a + b x Mw
-        a=-2.69
-        b=0.64
-        Mmax=(np.log10(totallength)-a)/b
-        if Mmax>8.5:
-            Mmax=8.5
-        print('Mmax =',Mmax)
-                                            
-        # build subfault sizes based on total length of fault
-        if totallength<100:
-            strikefactor=1
-            dipfactor=1
-        elif totallength>=100 and totallength<150:
-            strikefactor=2
-            dipfactor=1
-        elif totallength>=150 and totallength<250:
-            strikefactor=2
-            dipfactor=2
-        elif totallength>=250 and totallength<400:
-            strikefactor=round(totallength/150)
-            dipfactor=2
-        else:	
-            strikefactor=round(totallength/200)
-            dipfactor=4
-            
-        # loop through distances and get rid of ones less than the size of strikefactor
-        newdist=[]
-        for j in range(len(lat)):
-            for k in range(len(lat[j])):
-                if k==0:
-                    newlat[j].append(lat[j][k])
-                    newlon[j].append(lon[j][k])
-                elif tempdist[j][k]>=(0.75*strikefactor):
-                    newlat[j].append(lat[j][k])
-                    newlon[j].append(lon[j][k])                                        
-                    az,baz,dist=g.inv(lon[j][len(lon[j])-2],lat[j][len(lat[j])-2],lon[j][len(lon[j])-1],lat[j][len(lat[j])-1],radians=False)
-                    newdist.append(dist/1000)
-                    
-        lon=newlon
-        lat=newlat       
-        
-        # check dip direction based on strike 
-        for j in range(len(dd)):                                       
-            az,baz,dist=g.inv(lon[j][len(lon[j])-2],lat[j][len(lat[j])-2],lon[j][len(lon[j])-1],lat[j][len(lat[j])-1],radians=False)
-            if (az<=0):
-                az=360+az
-            assdd=az+90 # assumed dip direction
-            #print('dd: ',dd[j]
-            if assdd>360:
-                assdd=assdd-360
-            #print('calc dd: ', assdd   ) 
-                if abs(assdd-dd[j])>=90:
-                    lon[j]=list(reversed(lon[j]))
-                    lat[j]=list(reversed(lat[j]))   
-                    #print('reversed'
-                
-        for j in range(len(lat)):
-            for k in range(len(lat[j])):
-                if k > (len(lat[j])-2):
-                    continue
-                lat1=lat[j][k]
-                lon1=lon[j][k]
-                lat2=lat[j][k+1]
-                lon2=lon[j][k+1]
-                az,baz,dist=g.inv(lon1,lat1,lon2,lat2,radians=False)
-                midlon,midlat,baz=g.fwd(lon1,lat1,az,dist/2,radians=False)
-                # SET FAULT PARAMETERS
-                if (az>=0):
-                    strike=az
-                else:
-                    strike=360+az
-    
-            
-                # build subfaults parameters using strikefactor and dipfactor
-                nstrike=int(round((dist/1000)/strikefactor))
-           	if (nstrike % 2 == 0):
-                    nstrike=nstrike+1
-                dx_strike=(dist/1000)/nstrike # in km
-                num_updip=0 # always zero because hypo is near surface
-                num_downdip=int(round(sd[j]/dipfactor))
-                dx_dip=(sd[j])/num_downdip
-                hypo=np.array([midlon,midlat,dx_dip/2])            
-                risetime=math.sqrt(dx_strike*dx_strike+dx_dip*dx_dip)/VR
-            
-                fout=home+'seg'+repr(j)+repr(k)+'.file' # name of output fault file
-                forward.makefault(fout,strike,dip[j],nstrike,dx_dip,dx_strike,hypo,num_updip,num_downdip,risetime)
-                
-        filelist=[]
-        filelist += [each for each in os.listdir(home) if each.endswith('.file')]
-        
-        outfile=open(home+directories[i]+'.fault','w')
-        outfile2=open(home+directories[i]+'.xy','w')
-        lastind=0
-        for file in filelist:
-            f=np.genfromtxt(home+file)   
-            for k in range(len(f)):
-                out='%i\t%.6f\t%.6f\t%.3f\t%.2f\t%.2f\t%.1f\t%.1f\t%.2f\t%.2f\n' % (f[k,0]+lastind,f[k,1],f[k,2],f[k,3],f[k,4],f[k,5],f[k,6],f[k,7],f[k,8],f[k,9])
-                outfile.write(out)
-                outfile2.write('%.6f\t%.6f\n' % (f[k,1],f[k,2]))
-                if (k==(len(f)-1)):
-                    lastind=f[-1,0]+lastind
-        print(lastind,' subfaults')
-        outfile.close()
-        outfile2.close()
+#def build_faults_xml(faults,directories,workingdir,ucerf_xmlfile):
+#    '''
+#    Build fault(s) from UCERF3 fault_sections.xml file
+#    
+#    Input:
+#    faults is list of fault names direct from UCERF3 (e.g., ['San Jacinto'])
+#    directories is list of corresponding directories to put fault info (e.g., ['san_jacinto'])
+#    workingdir is full path to where the fault directories will be created
+#    ucerf_xmlfile is full path to XML file
+#    
+#    Notes:
+#    This function does not account for overlapping segments.
+#    
+#    Christine J. Ruhl, August 2016
+#    '''
+#    import os
+#    import math
+#    import numpy as np
+#    from pyproj import Geod
+#    from mudpy import forward
+#    import xml.etree.cElementTree as et 
+#    from shutil import copyfile as cp
+#    
+#    g=Geod(ellps='WGS84')
+#    VR=0.8*3600 # 0.8 times Vs ~ 4 km/s
+#    
+#    tree = et.ElementTree(file=ucerf_xmlfile)
+#    root=tree.getroot()
+#    for i in range(len(faults)):
+#        print('working on the '+faults[i]+' fault...')
+#        home=workingdir+directories[i]+'/'
+#        if not os.path.exists(home):
+#            os.mkdir(home)
+#        for file in os.listdir(home):
+#            if file.endswith(".file"):
+#                os.remove(os.path.join(home,file))
+#        # reinitialize some stuff        
+#        dd=[]
+#        dip=[]
+#        sd=[] 
+#        lon=[]
+#        lat=[]
+#        newlon=[]
+#        newlat=[]
+#        tempdist=[]
+#        totallength=0
+#        secids=[]
+#        seccount=0
+#        # get list of section IDs first
+#        for elem in tree.iterfind('FaultSectionPrefDataList/'):
+#            if faults[i] in elem.get('sectionName') and 'instance 0' in elem.get('sectionName'):      
+#                if not secids:
+#                    secids.append([elem.tag])
+#                    dd.append(float(elem.get('dipDirection')))
+#                    dip.append(float(elem.get('aveDip')))
+#                    sd.append(float(elem.get('aveLowerDepth')))
+#                    lat.append([])
+#                    lon.append([])
+#                    newlon.append([])
+#                    newlat.append([])
+#                    tempdist.append([])
+#                    continue
+#                if dd[len(dd)-1]==float(elem.get('dipDirection')) and sd[len(sd)-1]==float(elem.get('aveLowerDepth')) and dip[len(dip)-1]==float(elem.get('aveDip')):
+#                    secids[seccount].append(elem.tag)
+#                else:
+#                    seccount=seccount+1
+#                    secids.append([elem.tag])
+#                    dd.append(float(elem.get('dipDirection')))
+#                    print(elem.get('dipDirection'))
+#                    dip.append(float(elem.get('aveDip')))
+#                    sd.append(float(elem.get('aveLowerDepth')))
+#                    lat.append([])
+#                    lon.append([])
+#                    newlon.append([])
+#                    newlat.append([])
+#                    tempdist.append([])
+#                                
+#        # then go through each section ID to get other information
+#        for j in range(len(secids)): # extra loop added to keep track of multiple sections separately     
+#            for k in range(len(secids[j])):
+#                for elem0 in tree.iterfind('FaultSectionPrefDataList/'+secids[j][k]+'/FaultTrace'):
+#               	    for elem1 in elem0:
+#           	        # append if it is: 1) First instance, 2) not equal to previous value
+#           	        if not lat[j]: #1	    
+#                        lat[j].append(float(elem1.get('Latitude')))
+#                        lon[j].append(float(elem1.get('Longitude')))
+#                        tempdist[j].append(np.nan)
+#           	        elif float(elem1.get('Latitude'))!=lat[j][len(lat[j])-1]: #2	    
+#                        lat[j].append(float(elem1.get('Latitude')))
+#                        lon[j].append(float(elem1.get('Longitude')))                        
+#                        az,baz,dist=g.inv(lon[j][len(lon[j])-2],lat[j][len(lat[j])-2],lon[j][len(lon[j])-1],lat[j][len(lat[j])-1],radians=False)
+#                        tempdist[j].append(dist/1000)
+#                        totallength=totallength+dist/1000
+#                            
+#        print('length = ',totallength)
+#        # calculate Mmax from Blaser et al 2010 relationship
+#        # LOG10 (Length) = a + b x Mw
+#        a=-2.69
+#        b=0.64
+#        Mmax=(np.log10(totallength)-a)/b
+#        if Mmax>8.5:
+#            Mmax=8.5
+#        print('Mmax =',Mmax)
+#                                            
+#        # build subfault sizes based on total length of fault
+#        if totallength<100:
+#            strikefactor=1
+#            dipfactor=1
+#        elif totallength>=100 and totallength<150:
+#            strikefactor=2
+#            dipfactor=1
+#        elif totallength>=150 and totallength<250:
+#            strikefactor=2
+#            dipfactor=2
+#        elif totallength>=250 and totallength<400:
+#            strikefactor=round(totallength/150)
+#            dipfactor=2
+#        else:	
+#            strikefactor=round(totallength/200)
+#            dipfactor=4
+#            
+#        # loop through distances and get rid of ones less than the size of strikefactor
+#        newdist=[]
+#        for j in range(len(lat)):
+#            for k in range(len(lat[j])):
+#                if k==0:
+#                    newlat[j].append(lat[j][k])
+#                    newlon[j].append(lon[j][k])
+#                elif tempdist[j][k]>=(0.75*strikefactor):
+#                    newlat[j].append(lat[j][k])
+#                    newlon[j].append(lon[j][k])                                        
+#                    az,baz,dist=g.inv(lon[j][len(lon[j])-2],lat[j][len(lat[j])-2],lon[j][len(lon[j])-1],lat[j][len(lat[j])-1],radians=False)
+#                    newdist.append(dist/1000)
+#                    
+#        lon=newlon
+#        lat=newlat       
+#        
+#        # check dip direction based on strike 
+#        for j in range(len(dd)):                                       
+#            az,baz,dist=g.inv(lon[j][len(lon[j])-2],lat[j][len(lat[j])-2],lon[j][len(lon[j])-1],lat[j][len(lat[j])-1],radians=False)
+#            if (az<=0):
+#                az=360+az
+#            assdd=az+90 # assumed dip direction
+#            #print('dd: ',dd[j]
+#            if assdd>360:
+#                assdd=assdd-360
+#            #print('calc dd: ', assdd   ) 
+#                if abs(assdd-dd[j])>=90:
+#                    lon[j]=list(reversed(lon[j]))
+#                    lat[j]=list(reversed(lat[j]))   
+#                    #print('reversed'
+#                
+#        for j in range(len(lat)):
+#            for k in range(len(lat[j])):
+#                if k > (len(lat[j])-2):
+#                    continue
+#                lat1=lat[j][k]
+#                lon1=lon[j][k]
+#                lat2=lat[j][k+1]
+#                lon2=lon[j][k+1]
+#                az,baz,dist=g.inv(lon1,lat1,lon2,lat2,radians=False)
+#                midlon,midlat,baz=g.fwd(lon1,lat1,az,dist/2,radians=False)
+#                # SET FAULT PARAMETERS
+#                if (az>=0):
+#                    strike=az
+#                else:
+#                    strike=360+az
+#    
+#            
+#                # build subfaults parameters using strikefactor and dipfactor
+#                nstrike=int(round((dist/1000)/strikefactor))
+#           	if (nstrike % 2 == 0):
+#                    nstrike=nstrike+1
+#                dx_strike=(dist/1000)/nstrike # in km
+#                num_updip=0 # always zero because hypo is near surface
+#                num_downdip=int(round(sd[j]/dipfactor))
+#                dx_dip=(sd[j])/num_downdip
+#                hypo=np.array([midlon,midlat,dx_dip/2])            
+#                risetime=math.sqrt(dx_strike*dx_strike+dx_dip*dx_dip)/VR
+#            
+#                fout=home+'seg'+repr(j)+repr(k)+'.file' # name of output fault file
+#                forward.makefault(fout,strike,dip[j],nstrike,dx_dip,dx_strike,hypo,num_updip,num_downdip,risetime)
+#                
+#        filelist=[]
+#        filelist += [each for each in os.listdir(home) if each.endswith('.file')]
+#        
+#        outfile=open(home+directories[i]+'.fault','w')
+#        outfile2=open(home+directories[i]+'.xy','w')
+#        lastind=0
+#        for file in filelist:
+#            f=np.genfromtxt(home+file)   
+#            for k in range(len(f)):
+#                out='%i\t%.6f\t%.6f\t%.3f\t%.2f\t%.2f\t%.1f\t%.1f\t%.2f\t%.2f\n' % (f[k,0]+lastind,f[k,1],f[k,2],f[k,3],f[k,4],f[k,5],f[k,6],f[k,7],f[k,8],f[k,9])
+#                outfile.write(out)
+#                outfile2.write('%.6f\t%.6f\n' % (f[k,1],f[k,2]))
+#                if (k==(len(f)-1)):
+#                    lastind=f[-1,0]+lastind
+#        print(lastind,' subfaults')
+#        outfile.close()
+#        outfile2.close()
         
 def bssa14(M,Rjb,Vs30,U=0,RS=0,NS=0,SS=1,Z1=None,intensity_measure='SA'):
     '''
@@ -1641,6 +1641,8 @@ def rotatedResponseSpectrum(timeStep, accelA, accelB, oscFreqs, oscDamping=0.05,
         computed psuedo-spectral acceleartion [g] at each of the percentiles
     '''
 
+    from numpy import array
+
     assert len(accelA) == len(accelB), 'Time series not equal lengths!'
 
     # Compute the Fourier amplitude spectra
@@ -1654,13 +1656,14 @@ def rotatedResponseSpectrum(timeStep, accelA, accelB, oscFreqs, oscDamping=0.05,
                 for fa in fourierAmps]
 
         # Compute the rotated values of the oscillator response
-        values.append(rotatedPercentiles(oscResps[0], oscResps[1], angles, percentiles))
+        vals,orients = rotatedPercentiles(oscResps[0], oscResps[1], angles, percentiles)
+        values.append(vals[0])
 
     # Reorganzie the arrays grouping by the percentile
-    oscResps = [np.array([v[i] for v in values],
-        dtype=[('value', '<f8'), ('orientation', '<f8')]) for i in range(len(percentiles))]
+#    oscResps = [np.array([v[i] for v in values],
+#        dtype=[('value', '<f8'), ('orientation', '<f8')]) for i in range(len(percentiles))]
 
-    return oscResps
+    return array(values)
 
 def rotatedPercentiles(accelA, accelB, angles, percentiles=[50]):
     '''
@@ -1706,9 +1709,9 @@ def rotatedPercentiles(accelA, accelB, angles, percentiles=[50]):
             }
     orientations = [orientationMap.get(p, np.nan) for p in percentiles] 
 
-    return np.array(
-            zip(values, orientations), 
-            dtype=[('value', '<f8'), ('orientation', '<f8')])
+#    out=np.array(zip(values, orientations), dtype=[('value', '<f8'), ('orientation', '<f8')])
+
+    return values,orientations
             
 def rotateTimeSeries(foo, bar, angle):
     '''

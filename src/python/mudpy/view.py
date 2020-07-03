@@ -1237,8 +1237,8 @@ def source_time_function(rupt,epicenter,plot=True,xlim=None,ylim=None):
     M1=M1/(10**exp)
     if plot==True:
         plt.figure()
-        plt.fill(t1-1,M1,'b',alpha=0.5)
-        plt.plot(t1-1,M1,color='k')
+        plt.fill(t1,M1,'b',alpha=0.5)
+        plt.plot(t1,M1,color='k')
         plt.grid()
         plt.xlabel('Time(s)')
         plt.ylabel('Moment Rate ('+r'$\times 10^{'+str(int(exp))+r'}$Nm/s)')

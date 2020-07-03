@@ -594,12 +594,14 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
     '''
     from mudpy import inverse as inv
     from mudpy.forward import get_mu_and_area
-    from numpy import zeros,dot,array,squeeze,expand_dims,empty,tile,eye,ones,arange,load,size
+    from numpy import zeros,dot,array,squeeze,expand_dims,empty,tile,eye,ones,arange,load,size,genfromtxt
+    from numpy import where,sort,r_
     from numpy.linalg import lstsq
     from scipy.sparse import csr_matrix as sparse
     from scipy.optimize import nnls
     from datetime import datetime
     import gc
+    from matplotlib import path
     
     
 
@@ -694,7 +696,6 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
             lambda_temporal=reg_temporal[kt]
             print('Running inversion '+str(kout+1)+' of '+str(Ninversion)+' at regularization levels: ls ='+repr(lambda_spatial)+' , lt = '+repr(lambda_temporal))
             if static==True: #Only statics inversion no Lt matrix
-                import numpy as np
                 Kinv=K+(lambda_spatial**2)*LsLs
                 Lt=eye(len(K))
                 LtLt=Lt.T.dot(Lt)
@@ -713,8 +714,22 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
                 sol=expand_dims(sol,axis=1)
             else:
                 print('ERROR: Unrecognized solver \''+solver+'\'')
+
+            #Force faults outside a polygon to be zero
+            print('WARNING: Using fault polygon to force solutions to zero')
+            #load faulkt
+            fault=genfromtxt(home+project_name+'/data/model_info/'+fault_name)
+            polygon=genfromtxt('/Users/dmelgarm/Oaxaca2020/etc/zero_fault.txt')
+            polygon=path.Path(polygon)
+            i=where(polygon.contains_points(fault[:,1:3])==False)[0]
+            i=sort(r_[i*2,i*2+1])
+            N=nfaults[0]*2
+            i=r_[i,i+N,i+2*N,i+3*N]
+            sol[i]=0
+            
             #Compute synthetics
             ds=dot(G,sol)
+            
             #Get stats
             L2,Lmodel=inv.get_stats(Kinv,sol,x)
             VR,L2data=inv.get_VR(home,project_name,GF_list,sol,d,ds,decimate,WG,wd)

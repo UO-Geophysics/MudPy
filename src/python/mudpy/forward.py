@@ -1077,7 +1077,11 @@ def write_fakequakes_waveforms(home,project_name,rupture_name,waveforms,GF_list,
     from obspy import Stream,Trace
     
     #Where am I writting to?
-    rupture=rupture_name.split('.')[0]+'.'+rupture_name.split('.')[1]
+    #old
+#    rupture=rupture_name.split('.')[0]+'.'+rupture_name.split('.')[1]
+    #new
+    rupture = rupture_name.rsplit('.', 1)[0]
+    
     directory=home+project_name+'/output/waveforms/'+rupture+'/'
     
     #Check if dir exists if not then create it
@@ -3065,7 +3069,7 @@ def read_fakequakes_hypo_time(home,project_name,rupture_name):
     
     #old
     #rupture = rupture_name.split('.')[0]+'.'+rupture_name.split('.')[1]
-    #new
+    #new (Tara's fix)
     rupture = rupture_name.rsplit('.', 1)[0]
     
     log_file=home+project_name+'/output/ruptures/'+rupture+'.log'
