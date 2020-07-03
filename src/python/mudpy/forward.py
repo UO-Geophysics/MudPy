@@ -616,7 +616,10 @@ def write_parallel_hfsims(home,project_name,rupture_name,station,component,remov
     from glob import glob
     from obspy import read
     import os
-    rupture=rupture_name.split('.')[0]+'.'+rupture_name.split('.')[1]
+    
+    #rupture=rupture_name.split('.')[0]+'.'+rupture_name.split('.')[1]
+    #new
+    rupture = rupture_name.rsplit('.', 1)[0]
     parallel_waveforms=glob(home+project_name+'/output/waveforms/'+rupture+'/'+station+'.HN'+component+'.[0-9][0-9][0-9].sac')
     #print "Number of MPI outputs: " + str(len(parallel_waveforms))
     if len(parallel_waveforms)==0:
@@ -646,7 +649,9 @@ def write_fakequakes_hf_waveforms_one_by_one(home,project_name,rupture_name,hf_t
     from os import path,makedirs
     
     #Where am I writing to?
-    rupture=rupture_name.split('.')[0]+'.'+rupture_name.split('.')[1]
+    #rupture=rupture_name.split('.')[0]+'.'+rupture_name.split('.')[1]
+    #new
+    rupture = rupture_name.rsplit('.', 1)[0]
     directory=home+project_name+'/output/waveforms/'+rupture+'/'
     
     #Check if dir exists if not then create it
@@ -667,7 +672,9 @@ def write_fakequakes_hf_waveforms(home,project_name,rupture_name,n,e,z):
     from obspy import Stream,Trace
     
     #Where am I writing to?
-    rupture=rupture_name.split('.')[0]+'.'+rupture_name.split('.')[1]
+    #rupture=rupture_name.split('.')[0]+'.'+rupture_name.split('.')[1]
+    #new
+    rupture = rupture_name.rsplit('.', 1)[0]
     directory=home+project_name+'/output/waveforms/'+rupture+'/'
     
     #Check if dir exists if not then create it
