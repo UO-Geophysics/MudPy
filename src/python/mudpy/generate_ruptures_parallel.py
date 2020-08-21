@@ -90,17 +90,17 @@ def run_parallel_generate_ruptures(home,project_name,run_name,fault_name,slab_na
                 Ddip_selected=Ddip[ifaults,:][:,ifaults]
                 
                 #Determine correlation lengths from effective length.width Leff and Weff
-                if Lstrike=='auto': #Use scaling
+                if Lstrike=='MB2002': #Use scaling
                     #Ls=10**(-2.43+0.49*target_Mw)
                     Ls=2.0+(1./3)*Leff
-                elif Lstrike=='MH2019':
+                elif Lstrike=='auto':
                     Ls=17.7+0.34*Leff
                 else:
                     Ls=Lstrike
-                if Ldip=='auto': #Use scaling
+                if Ldip=='MB2002': #Use scaling
                     #Ld=10**(-1.79+0.38*target_Mw)
                     Ld=1.0+(1./3)*Weff
-                elif Ldip=='MH2019':
+                elif Ldip=='auto':
                     Ld=6.8+0.4*Weff
                 else:
                     Ld=Ldip

@@ -963,11 +963,13 @@ def get_data_weights(home,project_name,GF_list,d,decimate):
         st=read(GFfiles[i[ksta],kgf])
         nsamples=st[0].stats.npts
         wtsun=(1/weights[i[ksta],9])*ones(nsamples)
-        wtsun2=read('/Users/dmelgarm/Oaxaca2020/tsunami/dart/43413.weights.sac')
-        wtsun2=1/wtsun2[0].data 
-        print('WARNING: Tsunami weights have been hard coded')
-        w[kinsert:kinsert+nsamples]=wtsun*wtsun2
-#        w[kinsert:kinsert+nsamples]=wtsun
+        
+#        wtsun2=read('/Users/dmelgarm/Oaxaca2020/tsunami/dart/43413.weights.sac')
+#        wtsun2=1/wtsun2[0].data 
+#        print('WARNING: Tsunami weights have been hard coded')
+#        w[kinsert:kinsert+nsamples]=wtsun*wtsun2
+        
+        w[kinsert:kinsert+nsamples]=wtsun
         kinsert=kinsert+nsamples
     #InSAR
     kgf=4

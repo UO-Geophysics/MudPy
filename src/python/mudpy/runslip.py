@@ -716,16 +716,16 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
                 print('ERROR: Unrecognized solver \''+solver+'\'')
 
             #Force faults outside a polygon to be zero
-            print('WARNING: Using fault polygon to force solutions to zero')
-            #load faulkt
-            fault=genfromtxt(home+project_name+'/data/model_info/'+fault_name)
-            polygon=genfromtxt('/Users/dmelgarm/Oaxaca2020/etc/zero_fault.txt')
-            polygon=path.Path(polygon)
-            i=where(polygon.contains_points(fault[:,1:3])==False)[0]
-            i=sort(r_[i*2,i*2+1])
-            N=nfaults[0]*2
-            i=r_[i,i+N,i+2*N,i+3*N]
-            sol[i]=0
+#            print('WARNING: Using fault polygon to force solutions to zero')
+#            #load faulkt
+#            fault=genfromtxt(home+project_name+'/data/model_info/'+fault_name)
+#            polygon=genfromtxt('/Users/dmelgarm/Oaxaca2020/etc/zero_fault.txt')
+#            polygon=path.Path(polygon)
+#            i=where(polygon.contains_points(fault[:,1:3])==False)[0]
+#            i=sort(r_[i*2,i*2+1])
+#            N=nfaults[0]*2
+#            i=r_[i,i+N,i+2*N,i+3*N]
+#            sol[i]=0
             
             #Compute synthetics
             ds=dot(G,sol)

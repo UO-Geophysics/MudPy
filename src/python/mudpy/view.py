@@ -1866,13 +1866,16 @@ def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpas
 #            xticklabel=['','20','','40','','60',''] #Tehuantepec preferred
 #            xticklabel=axn.xaxis.get_ticklabels()
         if k==len(i)-1 and nsta>1: #Last plot
-            axe.set_xlabel('Time (s)')
+            axe.set_xlabel('Seconds since OT')
             xticklabel=axn.xaxis.get_ticklabels()
             print(xticklabel)
 #            xticklabel=['','20','','40','','60','']
-            axn.set_xticks([20,40,60,80,100])
-            axe.set_xticks([20,40,60,80,100])
-            axu.set_xticks([20,40,60,80,100])
+#            axn.set_xticks([20,40,60,80,100])
+#            axe.set_xticks([20,40,60,80,100])
+#            axu.set_xticks([20,40,60,80,100])
+            axn.set_xticks([30,60,90])
+            axe.set_xticks([30,60,90])
+            axu.set_xticks([30,60,90])
 #            axn.xaxis.set_ticklabels(xticklabel)
 #            axe.xaxis.set_ticklabels(xticklabel)
 #            axu.xaxis.set_ticklabels(xticklabel)

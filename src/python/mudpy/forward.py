@@ -1224,7 +1224,7 @@ def coseismics(home,project_name,rupture_name,station_file,hot_start=None):
         savetxt(outpath+sta+'.static.neu',(n,e,z))
 
 
-def coseismics_matrix(home,project_name,rupture_name,station_file,G_from_file,G_name):
+def coseismics_matrix(home,project_name,rupture_name,station_file,G_from_file,model_name,G_name):
     '''
     This routine will take synthetics and apply a static slip dsitibution. It will 
     linearly superimpose the synthetic coseismic from each subfault. Output will be
@@ -1245,15 +1245,27 @@ def coseismics_matrix(home,project_name,rupture_name,station_file,G_from_file,G_
         Nothing
     '''
     from numpy import loadtxt,genfromtxt,array,savetxt,unique,where,zeros,load,save
+    import os
+    from glob import glob
     
     print('Solving for static problem')
     #Output where?
-    outpath=home+project_name+'/output/forward_models/'
+#    outpath=home+project_name+'/output/forward_models/'
+    outpath=home+project_name+'/output/statics/'+rupture_name.replace('.rupt','')+'/'
+    
+    #check if output folder exists, if not make it
+    if not os.path.exists(outpath):
+        os.makedirs(outpath)
+    
     #load source
-    source=loadtxt(home+project_name+'/forward_models/'+rupture_name,ndmin=2)
+#    source=loadtxt(home+project_name+'/forward_models/'+rupture_name,ndmin=2)
+    source=loadtxt(home+project_name+'/output/ruptures/'+rupture_name,ndmin=2)
+    
     #Load stations
     station_file=home+project_name+'/data/station_info/'+station_file
     staname=genfromtxt(station_file,dtype="U",usecols=0)
+    sta_lonlat=genfromtxt(station_file,usecols=[1,2])
+    
     #Get unique sources
     source_id=unique(source[:,0])
     m=zeros((2*len(source_id),1))
@@ -1289,19 +1301,20 @@ def coseismics_matrix(home,project_name,rupture_name,station_file,G_from_file,G_
             #Loop over sources
             for ksource in range(len(source_id)):
                 #Get subfault parameters
-                nfault='subfault'+str(int(source_id[ksource])).rjust(4,'0')
+                nfault='sub'+str(int(source_id[ksource])).rjust(4,'0')
+                nfault2='subfault'+str(int(source_id[ksource])).rjust(4,'0')
                 #Where's the synthetic data
-                syn_path=home+project_name+'/GFs/static/'
+                syn_path=glob(home+project_name+'/GFs/static/'+model_name+'*'+nfault)[0]
                 #Get synthetics
                 try:
-                    coseis_ss=loadtxt(syn_path+sta+'.'+nfault+'.SS.static.neu')
+                    coseis_ss=loadtxt(syn_path+'/'+sta+'.'+nfault2+'.SS.static.neu')
                 except:
                     coseis_ss=array([0,0,0])
                 nss=coseis_ss[0]
                 ess=coseis_ss[1]
                 zss=coseis_ss[2]
                 try:
-                    coseis_ds=loadtxt(syn_path+sta+'.'+nfault+'.DS.static.neu')
+                    coseis_ds=loadtxt(syn_path+'/'+sta+'.'+nfault2+'.SS.static.neu')
                 except:
                     coseis_ds=array([0,0,0])
                 nds=coseis_ds[0]
@@ -1320,15 +1333,61 @@ def coseismics_matrix(home,project_name,rupture_name,station_file,G_from_file,G_
     #Now go on to matrix multiply and save solutions
     print('Matrix multiplying and saving output...DONE')
     d=G.dot(m)
+    
+    #write to file
+    out_file = outpath+'statics.neu'
+    f=open(out_file,'w')
+    f.write('# sta,lon,lat,n(m),e(m),z(m)\n')
+            
     for ksta in range(len(staname)):
         sta=staname[ksta]
         n=d[3*ksta]
         e=d[3*ksta+1]
         z=d[3*ksta+2]
-        savetxt(outpath+sta+'.static.neu',(n,e,z))
+        
+        f.write('%s\t%.4f\t%.4f\t%.4e\t%.4e\t%.4e\n' % (sta,sta_lonlat[ksta,0],sta_lonlat[ksta,1],n,e,z))
+    f.close()
     
 
+def coseismics_fakequakes(home,project_name,GF_list,G_from_file,G_name,
+                          model_name,rupture_list):
+    '''
+    Make static offsets for all fakequakes ruptures
+    '''
 
+    from numpy import genfromtxt,where
+    
+    #load rupture list
+    all_sources=genfromtxt(home+project_name+'/data/'+rupture_list,dtype='U')
+    
+    #make temp GF_list with onlys tations that are flagged as statics
+    stations=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=0,dtype='U')
+    station_lonlat=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=[1,2])
+    statics_flag=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=3)
+    
+    #Keep only relevant sites
+    i=where(statics_flag==1)[0]
+    stations=stations[i]
+    station_lonlat=station_lonlat[i]
+    
+    station_file=home+project_name+'/data/station_info/coseismics.tmp'
+    f=open(station_file,'w')
+    for ksta in range(len(stations)):
+        f.write('%s\t%.4f\t%.4f\n' % (stations[ksta],station_lonlat[ksta,0],station_lonlat[ksta,1]))
+    f.close()
+        
+    #loop over sources
+    for krupt in range(len(all_sources)):
+        
+        #Only make G matrix the first time, otehrwise load it from file
+        if krupt==0:
+            G_from_file=False
+        else:
+            G_from_file=True
+            
+        #Run coseismcis on one rupture
+        rupture_name=all_sources[krupt]
+        coseismics_matrix(home,project_name,rupture_name,'coseismics.tmp',G_from_file,model_name,G_name)
 
 
 
@@ -2131,7 +2190,7 @@ def inv2coulomb(rupt,epicenter,fout,zeroslip=False,offset=0):
     f=open(fout,'w')
     for k in range(Nfaults):
         #out='1   %10.4f %10.4f %10.4f %10.4f 100 %10.4f %10.4f %10.4f %10.4f %10.4f %i\n' % (xstart[k],ystart[k],xfin[k],yfin[k],rake[k],slip[k],dip[k],ztop[k],zbot[k],k)
-        out='1\t%.4f\t%.4f\t%.4f\t%.4f\t100\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%d\n' % (xstart[k],ystart[k],xfin[k],yfin[k],-ss[k],ds[k],dip[k],ztop[k],zbot[k],k+1+offset)
+        out='%3d %10.4f %10.4f %10.4f %10.4f 100 %10.4f %10.4f %10.4f %10.4f %10.4f %d\n' % (1,xstart[k],ystart[k],xfin[k],yfin[k],-ss[k],ds[k],dip[k],ztop[k],zbot[k],k+1+offset)
         f.write(out)
     f.close()
     
@@ -2143,8 +2202,8 @@ def coulomb_xy2latlon(f,epicenter,fout):
     import pyproj
     
     s=genfromtxt(f)
-    x=s[:,0]
-    y=s[:,1]
+    x=s[:,1]
+    y=s[:,2]
     #Now use pyproj to dead reckon anf get lat/lon coordinates of subfaults
     g = pyproj.Geod(ellps='WGS84')
     #first get azimuths of all points, go by quadrant
@@ -2171,8 +2230,8 @@ def coulomb_xy2latlon(f,epicenter,fout):
             la[k]=epicenter[1]
         else:
             lo[k],la[k],ba=g.fwd(epicenter[0],epicenter[1],az[k],d[k])
-    s[:,0]=lo
-    s[:,1]=la
+    s[:,1]=lo
+    s[:,2]=la
     savetxt(fout,s,fmt='%.6f')
     
 def coulomb_disp_xy2latlon(f,epicenter,fout):

@@ -101,16 +101,16 @@ def make_total_model(rupt,thresh):
         ss[k]=all_ss[i].sum()
         ds[k]=all_ds[i].sum()
     #Apply threshold
-    i=where(sqrt(ss**2+ds**2)>thresh)[0]
-    ss=ss[i]
-    ds=ds[i]
+    j=where(sqrt(ss**2+ds**2)<thresh)[0]
+    ss[j]=0
+    ds[j]=0
     fname=rupt+'.total'
-    savetxt(fname, c_[f[i,0:8],ss,ds,f[i,10:12],f[i,13]],fmt='%d\t%10.4f\t%10.4f\t%8.4f\t%8.2f\t%6.2f\t%6.2f\t%6.2f\t%12.4e\t%12.4e\t%8.2f\t%8.2f\t%8.4e',header='No,lon,lat,z(km),strike,dip,rise,dura,ss-slip(m),ds-slip(m),ss_len(m),ds_len(m),rupt_time(s),rigidity(Pa)')
+    savetxt(fname, c_[f[0:len(unum),0:8],ss,ds,f[0:len(unum),10:12],f[0:len(unum),13]],fmt='%d\t%10.4f\t%10.4f\t%8.4f\t%8.2f\t%6.2f\t%6.2f\t%6.2f\t%12.4e\t%12.4e\t%8.2f\t%8.2f\t%8.4e',header='No,lon,lat,z(km),strike,dip,rise,dura,ss-slip(m),ds-slip(m),ss_len(m),ds_len(m),rupt_time(s),rigidity(Pa)')
     
     #Now dor akes
     rakes=rad2deg(arctan2(ds,ss))
     fname=rupt+'.rakes'
-    savetxt(fname, c_[f[i,1:3],ss,ds,rakes],fmt='%d\t%10.4f\t%10.4f\t%8.4f\t%8.2f',header='lon,lat,z(km),ss-slip(m),ds-slip(m),rake(deg)')
+    savetxt(fname, c_[f[0:len(unum),1:3],ss,ds,rakes],fmt='%d\t%10.4f\t%10.4f\t%8.4f\t%8.2f',header='lon,lat,z(km),ss-slip(m),ds-slip(m),rake(deg)')
     
     
 def make_subfault(rupt):

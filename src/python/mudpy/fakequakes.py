@@ -550,10 +550,10 @@ def select_faults(whole_fault,Dstrike,Ddip,target_Mw,buffer_factor,num_modes,sca
     if force_area==False and no_random==False: #Use scaling laws from Blaser et al 2010
         if scaling_law.upper()=='T':
             length_mean=-2.37+0.57*target_Mw
-            length_std=0.18/2
+            length_std=0.18
             length=10**normal(length_mean,length_std)
             width_mean=-1.86+0.46*target_Mw
-            width_std=0.17/2
+            width_std=0.17
             width=10**normal(width_mean,width_std)
         elif scaling_law.upper()=='S':
             length_mean=-2.69+0.64*target_Mw
@@ -1170,7 +1170,7 @@ def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
 		max_slip,source_time_function,lognormal,slip_standard_deviation,scaling_law,ncpus,
 		force_magnitude=False,force_area=False,mean_slip_name=None,hypocenter=None,
 		slip_tol=1e-2,force_hypocenter=False,no_random=False,shypo=None,use_hypo_fraction=True,
-		shear_wave_fraction=0.7,max_slip_rule=False):
+		shear_wave_fraction=0.7,max_slip_rule=True):
     '''
     Set up rupture generation-- use ncpus if available
     '''
@@ -1307,17 +1307,17 @@ def run_generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_n
                 Ddip_selected=Ddip[ifaults,:][:,ifaults]
                 
                 #Determine correlation lengths from effective length.width Leff and Weff
-                if Lstrike=='auto': #Use scaling
+                if Lstrike=='MB2002': #Use scaling
                     #Ls=10**(-2.43+0.49*target_Mw)
                     Ls=2.0+(1./3)*Leff
-                elif Lstrike=='MH2019':
+                elif Lstrike=='auto':
                     Ls=17.7+0.34*Leff
                 else:
                     Ls=Lstrike
-                if Ldip=='auto': #Use scaling
+                if Ldip=='MB2002': #Use scaling
                     #Ld=10**(-1.79+0.38*target_Mw)
                     Ld=1.0+(1./3)*Weff
-                elif Ldip=='MH2019':
+                elif Ldip=='auto': #MH2019
                     Ld=6.8+0.4*Weff
                 else:
                     Ld=Ldip
