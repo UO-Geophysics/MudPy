@@ -458,7 +458,7 @@ def make_KL_slip(fault,num_modes,eigenvals,V,mean_slip,max_slip,lognormal=True,m
         if len(fault)>num_modes:
             z = randn(num_modes) 
         else: #if fewer faults than requested modes then use all modes
-            z = randn(len(fault)) 
+            z = randn(len(fault))
         KL_slip = mean_slip.copy()  # start with the mean slip
         # add in the terms in the K-L expansion:
         for k in range(len(z)):

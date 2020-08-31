@@ -718,6 +718,129 @@ def read_neic_param(fault_file):
                 
 
 
+def triangular_rupt_2_gmt(meshfile,slipfile,outfile,kinematic_out_folder=None):
+    
+    '''
+    DM Note: Modified from Brendan's script because he refused to do a pull request :)
+    
+    This will take a triangular mesh and a mudpy slip file and create a total slip file
+    hat can be plotted in GMT and time slices and single seconds to plot the kinematic
+    #slip model
+    Written by Brendan Crowell, July 30, 2020
+    
+    IN:
+        meshfile = 'simeonof_slab2.mshout' #location of triangular mesh file
+        slipfile = 'final_10patch.0001.inv' #slip model with subevents
+        out_file = 'test.txt' #the GMT .xy file to plot with psxy
+        kinslipfolder = 'kinematic/' #create this in your working folder
+            
+    OUT:
+        Nothing
+    
+    '''
+    
+    import numpy
+    import csv
+    import math
+    
+    
+    #Read mesh file first
+    
+    meshnum = list()
+    meshlon1 = list()
+    meshlon2 = list()
+    meshlon3 = list()
+    meshlat1 = list()
+    meshlat2 = list()
+    meshlat3 = list()
+    meshdep1 = list()
+    meshdep2 = list()
+    meshdep3 = list()
+    faultarea = list()
+    with open(meshfile, 'r') as f:
+        next(f)
+        reader = csv.reader(f,delimiter='\t')
+        for row in reader:
+            meshnum.append(int(row[0]))
+            meshlon1.append(float(row[4]))
+            meshlat1.append(float(row[5]))
+            meshdep1.append(float(row[6]))
+            meshlon2.append(float(row[7]))
+            meshlat2.append(float(row[8]))
+            meshdep2.append(float(row[9]))
+            meshlon3.append(float(row[10]))
+            meshlat3.append(float(row[11]))
+            meshdep3.append(float(row[12]))
+            faultarea.append(float(row[14]))
+    
+    
+    #Read inverse file
+    
+    invnum = list()
+    ss = list()
+    ds = list()
+    rupttime = list()
+    risetime = list()
+    duration = list()
+    rig = list()
+    
+    
+    with open(slipfile, 'r') as f:
+        next(f)
+        reader = csv.reader(f,delimiter='\t')
+        for row in reader:
+            invnum.append(int(row[0]))
+            ss.append(float(row[8]))
+            ds.append(float(row[9]))
+            #rupttime.append(float(row[12]))
+            risetime.append(float(row[6]))
+            duration.append(float(row[7]))
+            rig.append(float(row[13]))
+    
+    
+    INVN = numpy.asarray(invnum)
+    MESN = numpy.asarray(meshnum)
+    
+    SS = numpy.asarray(ss)
+    DS = numpy.asarray(ds)
+    
+    RT = numpy.asarray(rupttime)
+    DR = numpy.asarray(duration)
+    
+    TOTS = numpy.sqrt(numpy.power(SS,2)+numpy.power(DS,2))
+    FA = numpy.asarray(faultarea)
+    RIG = numpy.asarray(rig)
+    
+    
+    #Total slip model
+    moment = 0
+    fso = open(outfile,'w')
+    for i in range(0, numpy.amax(MESN)):
+        a1 = numpy.where(MESN[i] == INVN)[0]
+        totslip = numpy.sum(TOTS[a1])
+        print (i+1,totslip*100)
+        if (totslip >= 0.0):
+            moment = moment+FA[i]*1000*1000*numpy.mean(RIG[a1])*totslip
+            lon1 = "{0:.4f}".format(meshlon1[i])
+            lon2 = "{0:.4f}".format(meshlon2[i])
+            lon3 = "{0:.4f}".format(meshlon3[i])
+            lat1 = "{0:.4f}".format(meshlat1[i])
+            lat2 = "{0:.4f}".format(meshlat2[i])
+            lat3 = "{0:.4f}".format(meshlat3[i])
+            dep1 = "{0:.4f}".format(meshdep1[i])
+            dep2 = "{0:.4f}".format(meshdep2[i])
+            dep3 = "{0:.4f}".format(meshdep3[i])
+            ts = "{0:.4f}".format(totslip)
+            fso.write('> -Z'+ts+'\n')
+            fso.write(lon1+' '+lat1+' '+dep1+'\n')
+            fso.write(lon2+' '+lat2+' '+dep2+'\n')
+            fso.write(lon3+' '+lat3+' '+dep3+'\n')
+            fso.write(lon1+' '+lat1+' '+dep1+'\n')
+    
+    fso.close()
+    print(moment,(math.log10(moment)-9.1)/1.5)
+
+
 
 def gmtColormap(fileName):
       '''
