@@ -1249,7 +1249,7 @@ def coseismics_matrix(home,project_name,rupture_name,station_file,G_from_file,
     import os
     from glob import glob
     
-    print('Solving for static problem')
+    print('... solving for static problem')
     #Output where?
 #    outpath=home+project_name+'/output/forward_models/'
     outpath=home+project_name+'/output/statics/'+rupture_name.replace('.rupt','')+'/'
@@ -1288,14 +1288,14 @@ def coseismics_matrix(home,project_name,rupture_name,station_file,G_from_file,
     if G_from_file==True and G==None: #load from file
         if G_name[-3:]!='npy':
             G_name=G_name+'.npy'
-        print('Loading G from file '+G_name)
+        print('... .... loading G from file '+G_name)
         G=load(G_name)
     elif G_from_file==True and G != None:
-        print('... G already provided, do not reload ...')
+        print('... ... G already provided, do not reload ...')
     elif G_from_file==False and G == None:
     #initalize matrices
         G=zeros((3*len(staname),2*len(source_id)))
-        print('... Assembling GFs matrix')
+        print('... ... Assembling GFs matrix from scratch')
         #Loop over stations
         for ksta in range(len(staname)):
             if ksta % 10 == 0:
@@ -1388,11 +1388,17 @@ def coseismics_fakequakes(home,project_name,GF_list,master_G_from_file,G_name,
         
         #Run coseismcis on one rupture
         rupture_name=all_sources[krupt]
+        print('Working on rupture '+rupture_name)
         
         if master_G_from_file==True:
-            G_from_file=True
-            coseismics_matrix(home,project_name,rupture_name,'coseismics.tmp',G_from_file,
-                                  model_name,G_name,return_G=False,G=None)
+            if krupt==0:
+                G_from_file=True
+                G=coseismics_matrix(home,project_name,rupture_name,'coseismics.tmp',G_from_file,
+                                      model_name,G_name,return_G=True,G=None)
+            else:
+                G_from_file=True
+                coseismics_matrix(home,project_name,rupture_name,'coseismics.tmp',G_from_file,
+                                  model_name,G_name,return_G=False,G=G)
         else:
         #Only make G matrix the first time, otehrwise load it from file
             if krupt==0:
