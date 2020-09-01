@@ -1292,7 +1292,7 @@ def coseismics_matrix(home,project_name,rupture_name,station_file,G_from_file,
         G=load(G_name)
     elif G_from_file==True and G != None:
         print('... G already provided, do not reload ...')
-    else:
+    elif G_from_file==False and G == None:
     #initalize matrices
         G=zeros((3*len(staname),2*len(source_id)))
         print('... Assembling GFs matrix')
@@ -1356,7 +1356,7 @@ def coseismics_matrix(home,project_name,rupture_name,station_file,G_from_file,
         return G
     
 
-def coseismics_fakequakes(home,project_name,GF_list,G_from_file,G_name,
+def coseismics_fakequakes(home,project_name,GF_list,master_G_from_file,G_name,
                           model_name,rupture_list):
     '''
     Make static offsets for all fakequakes ruptures
@@ -1389,15 +1389,20 @@ def coseismics_fakequakes(home,project_name,GF_list,G_from_file,G_name,
         #Run coseismcis on one rupture
         rupture_name=all_sources[krupt]
         
-        #Only make G matrix the first time, otehrwise load it from file
-        if krupt==0:
-            G_from_file=False
-            G=coseismics_matrix(home,project_name,rupture_name,'coseismics.tmp',G_from_file,
-                                model_name,G_name,return_G=True,G=None)
-        else:
+        if master_G_from_file==True:
             G_from_file=True
             coseismics_matrix(home,project_name,rupture_name,'coseismics.tmp',G_from_file,
-                              model_name,G_name,return_G=False,G=G)
+                                  model_name,G_name,return_G=False,G=None)
+        else:
+        #Only make G matrix the first time, otehrwise load it from file
+            if krupt==0:
+                G_from_file=False
+                G=coseismics_matrix(home,project_name,rupture_name,'coseismics.tmp',G_from_file,
+                                    model_name,G_name,return_G=True,G=None)
+            else:
+                G_from_file=True
+                coseismics_matrix(home,project_name,rupture_name,'coseismics.tmp',G_from_file,
+                                  model_name,G_name,return_G=False,G=G)
             
 
         
