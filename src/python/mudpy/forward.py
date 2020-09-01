@@ -1285,14 +1285,14 @@ def coseismics_matrix(home,project_name,rupture_name,station_file,G_from_file,
     
     #Do I need to make G or can I load it from file??
     G_name=home+project_name+'/GFs/matrices/'+G_name
-    if G_from_file==True and G==None: #load from file
+    if G_from_file==True and G is None: #load from file
         if G_name[-3:]!='npy':
             G_name=G_name+'.npy'
         print('... .... loading G from file '+G_name)
         G=load(G_name)
-    elif G_from_file==True and G != None:
+    elif G_from_file==True and G is not None:
         print('... ... G already provided, do not reload ...')
-    elif G_from_file==False and G == None:
+    elif G_from_file==False and G is None:
     #initalize matrices
         G=zeros((3*len(staname),2*len(source_id)))
         print('... ... Assembling GFs matrix from scratch')
