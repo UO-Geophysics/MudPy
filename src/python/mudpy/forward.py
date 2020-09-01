@@ -1224,7 +1224,8 @@ def coseismics(home,project_name,rupture_name,station_file,hot_start=None):
         savetxt(outpath+sta+'.static.neu',(n,e,z))
 
 
-def coseismics_matrix(home,project_name,rupture_name,station_file,G_from_file,model_name,G_name):
+def coseismics_matrix(home,project_name,rupture_name,station_file,G_from_file,
+                      model_name,G_name,return_G=False,G=None):
     '''
     This routine will take synthetics and apply a static slip dsitibution. It will 
     linearly superimpose the synthetic coseismic from each subfault. Output will be
@@ -1284,11 +1285,13 @@ def coseismics_matrix(home,project_name,rupture_name,station_file,G_from_file,mo
     
     #Do I need to make G or can I load it from file??
     G_name=home+project_name+'/GFs/matrices/'+G_name
-    if G_from_file==True: #load from file
+    if G_from_file==True and G==None: #load from file
         if G_name[-3:]!='npy':
             G_name=G_name+'.npy'
         print('Loading G from file '+G_name)
         G=load(G_name)
+    elif G_from_file==True and G != None:
+        print('... G already provided, do not reload ...')
     else:
     #initalize matrices
         G=zeros((3*len(staname),2*len(source_id)))
@@ -1314,7 +1317,7 @@ def coseismics_matrix(home,project_name,rupture_name,station_file,G_from_file,mo
                 ess=coseis_ss[1]
                 zss=coseis_ss[2]
                 try:
-                    coseis_ds=loadtxt(syn_path+'/'+sta+'.'+nfault2+'.SS.static.neu')
+                    coseis_ds=loadtxt(syn_path+'/'+sta+'.'+nfault2+'.DS.static.neu')
                 except:
                     coseis_ds=array([0,0,0])
                 nds=coseis_ds[0]
@@ -1331,7 +1334,7 @@ def coseismics_matrix(home,project_name,rupture_name,station_file,G_from_file,mo
         print('Saving GF matrix to '+G_name+' this might take just a second...')
         save(G_name,G)
     #Now go on to matrix multiply and save solutions
-    print('Matrix multiplying and saving output...DONE')
+    print('... matrix multiplying and saving output...DONE')
     d=G.dot(m)
     
     #write to file
@@ -1347,6 +1350,10 @@ def coseismics_matrix(home,project_name,rupture_name,station_file,G_from_file,mo
         
         f.write('%s\t%.4f\t%.4f\t%.4e\t%.4e\t%.4e\n' % (sta,sta_lonlat[ksta,0],sta_lonlat[ksta,1],n,e,z))
     f.close()
+    
+    #return G?
+    if return_G==True:
+        return G
     
 
 def coseismics_fakequakes(home,project_name,GF_list,G_from_file,G_name,
@@ -1379,15 +1386,23 @@ def coseismics_fakequakes(home,project_name,GF_list,G_from_file,G_name,
     #loop over sources
     for krupt in range(len(all_sources)):
         
+        #Run coseismcis on one rupture
+        rupture_name=all_sources[krupt]
+        
         #Only make G matrix the first time, otehrwise load it from file
         if krupt==0:
             G_from_file=False
+            G=coseismics_matrix(home,project_name,rupture_name,'coseismics.tmp',G_from_file,
+                                model_name,G_name,return_G=True,G=None)
         else:
             G_from_file=True
+            coseismics_matrix(home,project_name,rupture_name,'coseismics.tmp',G_from_file,
+                              model_name,G_name,return_G=False,G=G)
             
-        #Run coseismcis on one rupture
-        rupture_name=all_sources[krupt]
-        coseismics_matrix(home,project_name,rupture_name,'coseismics.tmp',G_from_file,model_name,G_name)
+
+        
+
+
 
 
 
