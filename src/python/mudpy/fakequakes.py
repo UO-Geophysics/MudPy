@@ -1145,7 +1145,7 @@ def build_TauPyModel(home,project_name,vel_mod_file,background_model='PREM'):
     
     
     
-def write_rupt_list(home,project_name,run_name,target_Mw,Nrealizations,ncpus):
+def write_rupt_list(home,project_name,run_name,target_Mw,Nrealizations,ncpus,previous_runs=0):
     '''
     Writes ruptures.list file, note this does not check whether all ruptures
     were succesfully generated, it simply assumes that there were len(target_Mw)
@@ -1167,7 +1167,7 @@ def write_rupt_list(home,project_name,run_name,target_Mw,Nrealizations,ncpus):
     
     for krup in range(Nruptures):
     
-        run_number = str(krup).rjust(6,'0')
+        run_number = str(krup+previous_runs).rjust(6,'0')
         rupture = run_name+'.'+run_number+'.rupt\n'
         f.write(rupture)            
 
@@ -1185,7 +1185,7 @@ def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
 		max_slip,source_time_function,lognormal,slip_standard_deviation,scaling_law,ncpus,
 		force_magnitude=False,force_area=False,mean_slip_name=None,hypocenter=None,
 		slip_tol=1e-2,force_hypocenter=False,no_random=False,shypo=None,use_hypo_fraction=True,
-		shear_wave_fraction=0.7,max_slip_rule=True):
+		shear_wave_fraction=0.7,max_slip_rule=True,previous_runs=0):
     '''
     Set up rupture generation-- use ncpus if available
     '''
@@ -1200,8 +1200,7 @@ def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
     build_TauPyModel(home,project_name,vel_mod_file,background_model='PREM')
 
     #Write ruptures.list file
-    write_rupt_list(home,project_name,run_name,target_Mw,Nrealizations,ncpus)
-    
+    write_rupt_list(home,project_name,run_name,target_Mw,Nrealizations,ncpus,previous_runs)
     
     #now decide where the work should go to
 
@@ -1211,14 +1210,14 @@ def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
         Lstrike,num_modes,Nrealizations,rake,buffer_factor,rise_time_depths,time_epi,
         max_slip,source_time_function,lognormal,slip_standard_deviation,scaling_law,ncpus,
         force_magnitude,force_area,mean_slip_name,hypocenter,slip_tol,force_hypocenter,
-        no_random,shypo,use_hypo_fraction,shear_wave_fraction,max_slip_rule)
+        no_random,shypo,use_hypo_fraction,shear_wave_fraction,max_slip_rule,previous_runs)
     else:
         run_generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
         load_distances,distances_name,UTM_zone,target_Mw,model_name,hurst,Ldip,
         Lstrike,num_modes,Nrealizations,rake,buffer_factor,rise_time_depths,time_epi,
         max_slip,source_time_function,lognormal,slip_standard_deviation,scaling_law,
         force_magnitude,force_area,mean_slip_name,hypocenter,slip_tol,force_hypocenter,
-        no_random,shypo,use_hypo_fraction,shear_wave_fraction,max_slip_rule)
+        no_random,shypo,use_hypo_fraction,shear_wave_fraction,max_slip_rule,previous_runs)
                 
 
 
@@ -1229,7 +1228,7 @@ def run_generate_ruptures_parallel(home,project_name,run_name,fault_name,slab_na
         Lstrike,num_modes,Nrealizations,rake,buffer_factor,rise_time_depths,time_epi,
         max_slip,source_time_function,lognormal,slip_standard_deviation,scaling_law,ncpus,
         force_magnitude,force_area,mean_slip_name,hypocenter,slip_tol,force_hypocenter,
-        no_random,shypo,use_hypo_fraction,shear_wave_fraction,max_slip_rule):
+        no_random,shypo,use_hypo_fraction,shear_wave_fraction,max_slip_rule,previous_runs=0):
     
     from numpy import ceil
     from os import environ
@@ -1250,7 +1249,8 @@ def run_generate_ruptures_parallel(home,project_name,run_name,fault_name,slab_na
     print("MPI: Starting " + str(Nrealizations_parallel*ncpus) + " FakeQuakes Rupture Generations on ", ncpus, "CPUs")
     mud_source=environ['MUD']+'/src/python/mudpy/'
     print(str(hypocenter))
-    mpi='mpiexec -n '+str(ncpus)+' python '+mud_source+'generate_ruptures_parallel.py run_parallel_generate_ruptures '+home+' '+project_name+' '+run_name+' '+fault_name+' '+str(slab_name)+' '+str(mesh_name)+' '+str(load_distances)+' '+distances_name+' '+UTM_zone+' '+str(tMw)+' '+model_name+' '+str(hurst)+' '+Ldip+' '+Lstrike+' '+str(num_modes)+' '+str(Nrealizations_parallel)+' '+str(rake)+' '+str(buffer_factor)+' '+str(rise_time_depths0)+' '+str(rise_time_depths1)+' '+str(time_epi)+' '+str(max_slip)+' '+source_time_function+' '+str(lognormal)+' '+str(slip_standard_deviation)+' '+scaling_law+' '+str(ncpus)+' '+str(force_magnitude)+' '+str(force_area)+' '+str(mean_slip_name)+' "'+str(hypocenter)+'" '+str(slip_tol)+' '+str(force_hypocenter)+' '+str(no_random)+' '+str(shypo)+' '+str(use_hypo_fraction)+' '+str(shear_wave_fraction)+' '+str(max_slip_rule)
+    mpi='mpiexec -n '+str(ncpus)+' python '+mud_source+'generate_ruptures_parallel.py run_parallel_generate_ruptures '+home+' '+project_name+' '+run_name+' '+fault_name+' '+str(slab_name)+' '+str(mesh_name)+' '+str(load_distances)+' '+distances_name+' '+UTM_zone+' '+str(tMw)+' '+model_name+' '+str(hurst)+' '+Ldip+' '+Lstrike+' '+str(num_modes)+' '+str(Nrealizations_parallel)+' '+str(rake)+' '+str(buffer_factor)+' '+str(rise_time_depths0)+' '+str(rise_time_depths1)+' '+str(time_epi)+' '+str(max_slip)+' '+source_time_function+' '+str(lognormal)+' '+str(slip_standard_deviation)+' '+scaling_law+' '+str(ncpus)+' '+str(force_magnitude)+' '+str(force_area)+' '+str(mean_slip_name)+' "'+str(hypocenter)+'" '+str(slip_tol)+' '+str(force_hypocenter)+' '+str(no_random)+' '+str(shypo)+' '+str(use_hypo_fraction)+' '+str(shear_wave_fraction)+' '+str(max_slip_rule)+' '+str(previous_runs)
+    #mpi=f'mpiexec -n {ncpus} python {mud_source}generate_ruptures_parallel.py run_parallel_generate_ruptures {home} {project_name} {run_name} {fault_name} {slab_name} {mesh_name} {load_distances} {distances_name} {UTM_zone} {tMw} {model_name} {hurst} {Ldip} {Lstrike} {num_modes} {Nrealizations_parallel} {rake} {buffer_factor} {rise_time_depths0} {rise_time_depths1} {time_epi} {max_slip} {source_time_function} {lognormal} {slip_standard_deviation} {scaling_law} {ncpus} {force_magnitude} {force_area} {mean_slip_name} {hypocenter} {slip_tol} {force_hypocenter} {no_random} {shypo} {use_hypo_fraction} {shear_wave_fraction} {max_slip_rule}'
     mpi=split(mpi)
     p=subprocess.Popen(mpi)
     p.communicate()
@@ -1263,7 +1263,7 @@ def run_generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_n
         Lstrike,num_modes,Nrealizations,rake,buffer_factor,rise_time_depths,time_epi,
         max_slip,source_time_function,lognormal,slip_standard_deviation,scaling_law,
         force_magnitude,force_area,mean_slip_name,hypocenter,slip_tol,force_hypocenter,
-        no_random,shypo,use_hypo_fraction,shear_wave_fraction,max_slip_rule):
+        no_random,shypo,use_hypo_fraction,shear_wave_fraction,max_slip_rule,previous_runs=0):
     
     '''
     Depending on user selected flags parse the work out to different functions
@@ -1460,7 +1460,9 @@ def run_generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_n
             centroid_lon,centroid_lat,centroid_z=get_centroid(fault_out)
             
             #Write to file
-            run_number=str(realization).rjust(6,'0')
+            print(f'previous runs = {previous_runs}')
+            run_number = str(krup+previous_runs).rjust(6,'0')
+            print(f'run number = {run_number}')
             outfile=home+project_name+'/output/ruptures/'+run_name+'.'+run_number+'.rupt'
             savetxt(outfile,fault_out,fmt='%d\t%10.6f\t%10.6f\t%8.4f\t%7.2f\t%7.2f\t%4.1f\t%5.2f\t%5.2f\t%5.2f\t%10.2f\t%10.2f\t%5.2f\t%.6e',header='No,lon,lat,z(km),strike,dip,rise,dura,ss-slip(m),ds-slip(m),ss_len(m),ds_len(m),rupt_time(s),rigidity(Pa)')
             
