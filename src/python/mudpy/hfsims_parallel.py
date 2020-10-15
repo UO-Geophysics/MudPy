@@ -482,7 +482,10 @@ def run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,
     tr.stats.update({'sac':{'stlo':sta_lon,'stla':sta_lat,'evlo':epicenter[0],'evla':epicenter[1],'evdp':epicenter[2],'dist':dist_in_km,'az':az,'baz':backaz,'mag':Mw}}) #,'idep':"ACC (m/s^2)" not sure why idep won't work
     
     #Write out to file 
-    rupture=rupture_name.split('.')[0]+'.'+rupture_name.split('.')[1]
+    # old
+    # rupture=rupture_name.split('.')[0]+'.'+rupture_name.split('.')[1]
+    # new
+    rupture = rupture_name.rsplit('.', 1)[0]
     if not path.exists(home+project_name+'/output/waveforms/'+rupture+'/'):
         makedirs(home+project_name+'/output/waveforms/'+rupture+'/')
     if rank < 10:
