@@ -11,7 +11,7 @@ def run_parallel_generate_ruptures(home,project_name,run_name,fault_name,slab_na
         num_modes,Nrealizations,rake,buffer_factor,rise_time_depths0,rise_time_depths1,time_epi,max_slip,
         source_time_function,lognormal,slip_standard_deviation,scaling_law,ncpus,force_magnitude,
         force_area,mean_slip_name,hypocenter,slip_tol,force_hypocenter,
-        no_random,shypo,use_hypo_fraction,shear_wave_fraction,max_slip_rule,rank,size):
+        no_random,shypo,use_hypo_fraction,shear_wave_fraction,max_slip_rule,previous_runs,rank,size):
     
     '''
     Depending on user selected flags parse the work out to different functions
@@ -229,7 +229,9 @@ def run_parallel_generate_ruptures(home,project_name,run_name,fault_name,slab_na
             centroid_lon,centroid_lat,centroid_z=fakequakes.get_centroid(fault_out)
             
             #Write to file
-            run_number=str(ncpus*realization+rank).rjust(6,'0')
+            print(f'ncpus*realization+rank+prev = {ncpus}*{realization}+{rank}+{previous_runs}')
+            run_number=str(ncpus*realization+rank+previous_runs).rjust(6,'0')
+            print(f'run number = {run_number}')
             outfile=home+project_name+'/output/ruptures/'+run_name+'.'+run_number+'.rupt'
             savetxt(outfile,fault_out,fmt='%d\t%10.6f\t%10.6f\t%8.4f\t%7.2f\t%7.2f\t%4.1f\t%5.2f\t%5.2f\t%5.2f\t%10.2f\t%10.2f\t%5.2f\t%.6e',header='No,lon,lat,z(km),strike,dip,rise,dura,ss-slip(m),ds-slip(m),ss_len(m),ds_len(m),rupt_time(s),rigidity(Pa)')
             
@@ -357,12 +359,13 @@ if __name__ == '__main__':
             max_slip_rule=True
         if max_slip_rule=='False':
             max_slip_rule=False
+        previous_runs=int(sys.argv[40])
         
         run_parallel_generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
         load_distances,distances_name,UTM_zone,tMw,model_name,hurst,Ldip,Lstrike,
         num_modes,Nrealizations,rake,buffer_factor,rise_time_depths0,rise_time_depths1,time_epi,max_slip,
         source_time_function,lognormal,slip_standard_deviation,scaling_law,ncpus,force_magnitude,
         force_area,mean_slip_name,hypocenter,slip_tol,force_hypocenter,
-        no_random,shypo,use_hypo_fraction,shear_wave_fraction,max_slip_rule,rank,size)
+        no_random,shypo,use_hypo_fraction,shear_wave_fraction,max_slip_rule,previous_runs,rank,size)
     else:
         print("ERROR: You're not allowed to run "+sys.argv[1]+" from the shell or it does not exist")
