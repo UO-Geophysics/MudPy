@@ -520,7 +520,7 @@ if __name__ == '__main__':
         component=sys.argv[14]
         total_duration=int(sys.argv[15])
         hf_dt=float(sys.argv[16])
-        stress_parameter=int(sys.argv[17])
+        stress_parameter=float(sys.argv[17])
         kappa=float(sys.argv[18])
         Qexp=float(sys.argv[19])
         Pwave=sys.argv[20]
