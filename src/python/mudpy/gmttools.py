@@ -818,7 +818,7 @@ def triangular_rupt_2_gmt(meshfile,slipfile,outfile,kinematic_out_folder=None):
     for i in range(0, numpy.amax(MESN)):
         a1 = numpy.where(MESN[i] == INVN)[0]
         totslip = numpy.sum(TOTS[a1])
-        print (i+1,totslip*100)
+#        print (i+1,totslip*100)
         if (totslip >= 0.0):
             moment = moment+FA[i]*1000*1000*numpy.mean(RIG[a1])*totslip
             lon1 = "{0:.4f}".format(meshlon1[i])
@@ -838,7 +838,7 @@ def triangular_rupt_2_gmt(meshfile,slipfile,outfile,kinematic_out_folder=None):
             fso.write(lon1+' '+lat1+' '+dep1+'\n')
     
     fso.close()
-    print(moment,(math.log10(moment)-9.1)/1.5)
+#    print(moment,(math.log10(moment)-9.1)/1.5)
 
 
 

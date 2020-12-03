@@ -445,7 +445,7 @@ def plot_LW_scaling(home,project_name,run_name):
     return L,W,Mw
  
     
-def analyze_sources(home,project_name,run_name,Mw_lims=[7.75,9.35]):
+def analyze_sources(home,project_name,run_name,Mw_lims=[7.75,9.35],return_values=False):
     '''
     Basic parameters of the sources
     '''
@@ -456,8 +456,10 @@ def analyze_sources(home,project_name,run_name,Mw_lims=[7.75,9.35]):
     from matplotlib.ticker import MultipleLocator
     
     
-    logs=sort(glob(home+project_name+'/output/ruptures/'+run_name+'*.log'))
-    ruptures=sort(glob(home+project_name+'/output/ruptures/'+run_name+'*.rupt'))
+    # logs=sort(glob(home+project_name+'/output/ruptures/'+run_name+'*.log'))
+    # ruptures=sort(glob(home+project_name+'/output/ruptures/'+run_name+'*.rupt'))
+    logs=sort(glob(home+project_name+'/output/'+run_name+'/*.log'))
+    ruptures=sort(glob(home+project_name+'/output/'+run_name+'/*.rupt'))
     L=zeros(len(logs))
     W=zeros(len(logs))
     Mw_target=zeros(len(logs))
@@ -675,6 +677,9 @@ def analyze_sources(home,project_name,run_name,Mw_lims=[7.75,9.35]):
     
     plt.subplots_adjust(bottom=0.1,left=0.06,right=0.99,top=0.97,hspace=0.03)    
     plt.show()
+    
+    if return_values==True:
+        return Mw_actual,L,slip_mean
     
     
                         

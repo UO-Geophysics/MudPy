@@ -524,7 +524,7 @@ def select_faults(whole_fault,Dstrike,Ddip,target_Mw,buffer_factor,num_modes,sca
         hypo_fault=subfault_hypocenter
     
     
-    if force_area==True: #Use entire fault model  nothing more to do here folks
+    if force_area==True and no_random==False: #Use entire fault model  nothing more to do here folks
         
         selected_faults =  arange(len(whole_fault))
         Lmax=Dstrike[selected_faults,:][:,selected_faults].max()    
