@@ -487,12 +487,14 @@ def waveforms_fakequakes_dynGF(home,project_name,fault_name,rupture_list,GF_list
 def hf_waveforms(home,project_name,fault_name,rupture_list,GF_list,model_name,run_name,dt,NFFT,G_from_file,
             G_name,rise_time_depths,moho_depth_in_km,ncpus,source_time_function='dreger',duration=100.0,
             stf_falloff_rate=4.0,hf_dt=0.02,Pwave=False,hot_start=0,stress_parameter=50,
-            high_stress_depth=1e4):
+            high_stress_depth=1e4,kappa=0.04):
     '''
     Make semistochastic high frequency accelerograms
     '''
-    from numpy import genfromtxt
+    from numpy import genfromtxt,ones
     from mudpy import hfsims
+    
+    
     all_sources=genfromtxt(home+project_name+'/data/'+rupture_list,dtype='U')
     #Now loop over rupture models
     Nsources=all_sources.size
@@ -509,17 +511,29 @@ def hf_waveforms(home,project_name,fault_name,rupture_list,GF_list,model_name,ru
         sta_lon=lonlat[:,0]
         sta_lat=lonlat[:,1]
         
+        #Multi kappa?
+        if kappa == 'gflist': #from station files
+            station_kappa = genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=[-1])
+        elif kappa == None: #default values
+            station_kappa = 0.04*ones(len(sta))
+        else: #one single value for all sites that is NOT the default
+            station_kappa = kappa*ones(len(sta))
+        
         comp=['N','E','Z']  #components to loop through
         
         #Now loop over stations
         for ksta in range(len(sta)):
             #Now loop over components N,E,Z
+            
+            kappa = station_kappa[ksta] # assign station specific kappa values
+            
             for kcomp in range(len(comp)):
                 #HF_sims stochastic simulation for single station, component
                 if ncpus>1:
                     make_parallel_hfsims(home,project_name,rupture_name,ncpus,sta[ksta],sta_lon[ksta],sta_lat[ksta],
-                        comp[kcomp],model_name,rise_time_depths[0],rise_time_depths[1],moho_depth_in_km,total_duration=duration,hf_dt=hf_dt,
-                        Pwave=Pwave,stress_parameter=stress_parameter,high_stress_depth=high_stress_depth)
+                        comp[kcomp],model_name,rise_time_depths[0],rise_time_depths[1],moho_depth_in_km,
+                        total_duration=duration,hf_dt=hf_dt,Pwave=Pwave,stress_parameter=stress_parameter,
+                        high_stress_depth=high_stress_depth,kappa=kappa)
                     #Combine the separate MPI outputs into one full waveform
                     write_parallel_hfsims(home,project_name,rupture_name,sta[ksta],comp[kcomp],remove=True)
                 else:
@@ -529,7 +543,11 @@ def hf_waveforms(home,project_name,fault_name,rupture_list,GF_list,model_name,ru
                     #Write to file
                     write_fakequakes_hf_waveforms_one_by_one(home,project_name,rupture_name,hf_waveform,comp[kcomp])
 
-def make_parallel_hfsims(home,project_name,rupture_name,ncpus,sta,sta_lon,sta_lat,component,model_name,rise_time_depths0,rise_time_depths1,moho_depth_in_km,total_duration,hf_dt,Pwave,stress_parameter,kappa=0.04,Qexp=0.6,high_stress_depth=30):
+
+def make_parallel_hfsims(home,project_name,rupture_name,ncpus,sta,sta_lon,sta_lat,component,
+                         model_name,rise_time_depths0,rise_time_depths1,moho_depth_in_km,
+                         total_duration,hf_dt,Pwave,stress_parameter,kappa=0.04,Qexp=0.6,
+                         high_stress_depth=30):
     '''
     Set up for MPI calculation of HF stochastics
     '''
