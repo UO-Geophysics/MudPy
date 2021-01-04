@@ -320,7 +320,7 @@ def run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,
                 path_length_P=path_length_P*100 #to cm
                 
                 #Get effect of intrinsic attenuation for that ray (path integrated)
-                Q_P=hfsims.get_attenuation(f,structure,directS,Qexp,Qtype='P')
+                Q_P=hfsims.get_attenuation(f,structure,directP,Qexp,Qtype='P')
                 
                 #Build the entire path term
                 G_P=(I*Q_P)/path_length_P
