@@ -312,7 +312,7 @@ def stochastic_simulation(home,project_name,rupture_name,sta,sta_lon,sta_lat,com
                 path_length_P=path_length_P*100 #to cm
                 
                 #Get effect of intrinsic attenuation for that ray (path integrated)
-                Q_P=get_attenuation(f,structure,directS,Qexp,Qtype='P')
+                Q_P=get_attenuation(f,structure,directP,Qexp,Qtype='P')
                 
                 #Build the entire path term
                 G_P=(I*Q_P)/path_length_P
