@@ -2124,11 +2124,11 @@ def upsample(st,delta):
     st[0].data=yi
     st[0].stats.delta=delta
 
-def lowpass(data,fcorner,fsample,order,zerophase=True):
+def lowpass(data,fcorner,fsample,order,zerophase=True,cascading=True):
     '''
     Make a lowpass zero phase filter
     '''
-    from scipy.signal import butter,filtfilt,lfilter
+    from scipy.signal import butter,filtfilt,lfilter,sosfiltfilt,sosfilt
     from numpy import size,array
     
     if size(fcorner)==2:
@@ -2136,27 +2136,45 @@ def lowpass(data,fcorner,fsample,order,zerophase=True):
     else:
         ftype='lowpass'
     fnyquist=fsample/2
-    b, a = butter(order, array(fcorner)/(fnyquist),ftype)
-    if zerophase==True:
-        data_filt=filtfilt(b,a,data)
+    
+    if cascading==True:
+        sos = butter(order, array(fcorner)/(fnyquist),ftype,output='sos')
+        if zerophase==True:
+            data_filt=sosfiltfilt(sos,data)
+        else:
+            data_filt=sosfilt(sos,data)
+    
     else:
-        data_filt=lfilter(b,a,data)
+        b, a = butter(order, array(fcorner)/(fnyquist),ftype)
+        if zerophase==True:
+            data_filt=filtfilt(b,a,data)
+        else:
+            data_filt=lfilter(b,a,data)
         
     return data_filt
     
-def highpass(data,fcorner,fsample,order,zerophase=True):
+def highpass(data,fcorner,fsample,order,zerophase=True,cascading=True):
     '''
     Make a highpass zero phase filter
     '''
-    from scipy.signal import butter,filtfilt,lfilter
+    from scipy.signal import butter,filtfilt,lfilter,sosfiltfilt,sosfilt
     from numpy import size,array
     
     fnyquist=fsample/2
-    b, a = butter(order, array(fcorner)/(fnyquist),'highpass')
-    if zerophase==True:
-        data_filt=filtfilt(b,a,data)
+    
+    if cascading==True:
+        sos = butter(order, array(fcorner)/(fnyquist),'highpass',output='sos')
+        if zerophase==True:
+            data_filt=sosfiltfilt(sos,data)
+        else:
+            data_filt=sosfilt(sos,data)
+    
     else:
-        data_filt=lfilter(b,a,data)
+        b, a = butter(order, array(fcorner)/(fnyquist),'highpass')
+        if zerophase==True:
+            data_filt=filtfilt(b,a,data)
+        else:
+            data_filt=lfilter(b,a,data)
     
     return data_filt
     
