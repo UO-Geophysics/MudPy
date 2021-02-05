@@ -374,7 +374,7 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
         pass
     if green_flag==1:
         print('...........................')
-        print('Making Green's Functions')
+        print('Making Greens Functions')
         print('...........................')
         #decide what GF computation is required for this station
         i=where(GF[:,2]==1)[0]
