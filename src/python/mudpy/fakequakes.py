@@ -215,8 +215,8 @@ def subfault_distances_3D(home,project_name,fault_name,slab_name,projection_zone
         
         #get down-dip azimuths
         down_dip=fault[:,4]+90
-        i=where(down_dip>360)[0]
-        down_dip[i]=down_dip[i]-360
+        # i=where(down_dip>360)[0]
+        # down_dip[i]=down_dip[i]-360
         
         #Convert slab1.0 to local UTM coordinates
         slab_x,slab_y=llz2utm(slab_model[:,0],slab_model[:,1],projection_zone)
@@ -226,7 +226,22 @@ def subfault_distances_3D(home,project_name,fault_name,slab_name,projection_zone
         #Convert faul centroid coordinates to local UTM
         fault_x,fault_y=llz2utm(fault[:,1],fault[:,2],projection_zone)
         fault_x,fault_y = fault_x/1000,fault_y/1000
-        fault_z=fault[:,3]    
+        fault_z=fault[:,3]
+        
+        #The goal is to only keep slab points close tot he actual fault, to accomplish this
+        # Calcualte the distance from each fault to slab point and only keep things
+        #Within a minimum distance
+        slab2fault_min_distance=30 #in km
+        keep_slab=zeros((len(fault_x),len(slab_x)))
+        for ksub in range(len(fault)):
+            dist=((fault_x[ksub]-slab_x)**2+(fault_y[ksub]-slab_y)**2)**0.5
+            i=where(dist<slab2fault_min_distance)[0]
+            keep_slab[ksub,i]=1
+        i=where(keep_slab.sum(axis=0)>0)[0]
+        slab_x=slab_x[i]
+        slab_y=slab_y[i]
+        slab_z=slab_z[i]
+        
         
         # grid Slab1.0 for making depth contours to be then used for along-strike distance calculation
         ngrid_pts=500
@@ -299,7 +314,7 @@ def subfault_distances_3D(home,project_name,fault_name,slab_name,projection_zone
                 zj = fault_z[j]
                 
                 #Get down_dip y coordinates
-                y_down_dip=x_down_dip*cos(deg2rad(down_dip[j]))
+                y_down_dip=x_down_dip*(-cos(deg2rad(down_dip[j])))
                 
                 #Move line origin to subfault being tested
                 x_down_dip_subfault=x_down_dip+xj
