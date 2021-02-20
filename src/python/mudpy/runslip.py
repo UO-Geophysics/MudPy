@@ -373,9 +373,6 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
     except:
         pass
     if green_flag==1:
-        print('...........................')
-        print('Making Greens Functions')
-        print('...........................')
         #decide what GF computation is required for this station
         i=where(GF[:,2]==1)[0]
         if len(i)>0: #Static offset
@@ -457,9 +454,6 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
                             hot_start,dk,pmin,pmax,kmax)
             collect()   
     #Synthetics are computed  one station at a time
-    print('...........................')
-    print('Making Syntehtics')
-    print('...........................')
     if synth_flag==1:
         if ncpus<2: #Serial rpocessing
             station_file='temp.sta'
