@@ -9,7 +9,7 @@ def run_parallel_green(home,project_name,station_file,model_name,dt,NFFT,static,
     and station file. This function will make an external system call to fk.pl
     
     IN:
-        source: 1-row numpy array containig informaiton aboutt he source, lat, lon, depth, etc...
+        source: 1-row numpy array containig information about the source, lat, lon, depth, etc...
         station_file: File name with the station coordinates
         dt: Desired sampling interval for waveforms
         NFFT: No. of samples requested in waveform (must be power of 2)
