@@ -566,8 +566,8 @@ def get_amplification_factors(f,structure,zs,beta,rho):
     rho_model[-2]=structure[-1,3]
     
     #interpolate
-    interpolator=interp1d(z,vs)
-    interpolator2=interp1d(z,rho_model)
+    interpolator=interp1d(z,vs,bounds_error=False)
+    interpolator2=interp1d(z,rho_model,bounds_error=False)
     dz=1.0
     zinterp=arange(0,zmax,dz)
     vsinterp=interpolator(zinterp)
@@ -586,7 +586,7 @@ def get_amplification_factors(f,structure,zs,beta,rho):
     Afz=((beta*rho)/(mean_rho*mean_vs))**0.5
     
     #resample to frequencies of interest
-    interpolator=interp1d(fz,Afz)
+    interpolator=interp1d(fz,Afz,bounds_error=False)
     I=interpolator(f)
     
     return I

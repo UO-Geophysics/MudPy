@@ -57,7 +57,9 @@ def run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,
         Rupture_Name = %s
         Station = %s
         Component (N,E,Z) = %s
-        '''%(rupture_name,sta,component)
+        Sample rate = %sHz
+        Duration = %ss
+        '''%(rupture_name,sta,component,str(1/hf_dt),str(total_duration))
         print(out)
         
     #print 'stress is '+str(stress_parameter)
@@ -78,7 +80,7 @@ def run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,
     structure=genfromtxt(home+project_name+'/structure/'+model_name)
     
     #Frequencies vector
-    f=logspace(log10(hf_dt),log10(1/(2*hf_dt))+0.01,50)
+    f=logspace(log10(1/total_duration),log10(1/(2*hf_dt))+0.01,100)
     omega=2*pi*f
     
     #Output time vector (0 is origin time)

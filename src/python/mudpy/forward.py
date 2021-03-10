@@ -488,6 +488,8 @@ def hf_waveforms(home,project_name,fault_name,rupture_list,GF_list,model_name,ru
             G_name,rise_time_depths,moho_depth_in_km,ncpus,source_time_function='dreger',duration=100.0,
             stf_falloff_rate=4.0,hf_dt=0.02,Pwave=False,hot_start=0,stress_parameter=50,
             high_stress_depth=1e4,kappa=0.04):
+    
+
     '''
     Make semistochastic high frequency accelerograms
     '''
@@ -626,6 +628,8 @@ def run_hf_waveforms(home,project_name,fault_name,rupture_list,GF_list,model_nam
                 #Write to file
                 write_fakequakes_hf_waveforms_one_by_one(home,project_name,rupture_name,hf_waveform,comp[kcomp])
     
+
+
 def write_parallel_hfsims(home,project_name,rupture_name,station,component,remove=False):
     '''
     Combine outputs from parallel hfsims into one complete waveform.
