@@ -712,7 +712,7 @@ def write_fakequakes_hf_waveforms(home,project_name,rupture_name,n,e,z):
                                                                                       
 
 def match_filter(home,project_name,fault_name,rupture_list,GF_list,
-        zero_phase=False,order=2,fcorner=1.0):
+        zero_phase=False,order=2,fcorner_low=1.0, fcorner_high=1):
     '''
     match filter waveforms
     '''
@@ -775,14 +775,14 @@ def match_filter(home,project_name,fault_name,rupture_list,GF_list,
             
             #Apply filters
             fsample=1./hf_n[0].stats.delta
-            hf_n[0].data=highpass(hf_n[0].data,fcorner,fsample,order,zerophase=zero_phase)
-            hf_e[0].data=highpass(hf_e[0].data,fcorner,fsample,order,zerophase=zero_phase)
-            hf_z[0].data=highpass(hf_z[0].data,fcorner,fsample,order,zerophase=zero_phase)
+            hf_n[0].data=highpass(hf_n[0].data,fcorner_high,fsample,order,zerophase=zero_phase)
+            hf_e[0].data=highpass(hf_e[0].data,fcorner_high,fsample,order,zerophase=zero_phase)
+            hf_z[0].data=highpass(hf_z[0].data,fcorner_high,fsample,order,zerophase=zero_phase)
 
             fsample=1./lf_n[0].stats.delta
-            lf_n[0].data=lowpass(lf_n[0].data,fcorner,fsample,order,zerophase=zero_phase)
-            lf_e[0].data=lowpass(lf_e[0].data,fcorner,fsample,order,zerophase=zero_phase)
-            lf_z[0].data=lowpass(lf_z[0].data,fcorner,fsample,order,zerophase=zero_phase)
+            lf_n[0].data=lowpass(lf_n[0].data,fcorner_low,fsample,order,zerophase=zero_phase)
+            lf_e[0].data=lowpass(lf_e[0].data,fcorner_low,fsample,order,zerophase=zero_phase)
+            lf_z[0].data=lowpass(lf_z[0].data,fcorner_low,fsample,order,zerophase=zero_phase)
             
             #Resample LF to HF sample rate
             tinterp=hf_n[0].times() #interpolation time vector
