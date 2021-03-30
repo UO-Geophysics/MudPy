@@ -712,7 +712,7 @@ def write_fakequakes_hf_waveforms(home,project_name,rupture_name,n,e,z):
                                                                                       
 
 def match_filter(home,project_name,fault_name,rupture_list,GF_list,
-        zero_phase=False,order=2,fcorner_low=1.0, fcorner_high=1):
+        zero_phase=False,order=2,fcorner_low=1.0, fcorner_high=1.0):
     '''
     match filter waveforms
     '''
