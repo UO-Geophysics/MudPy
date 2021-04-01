@@ -1267,13 +1267,12 @@ def coseismics_matrix(home,project_name,rupture_name,station_file,G_from_file,
     OUT:
         Nothing
     '''
-    from numpy import loadtxt,genfromtxt,array,savetxt,unique,where,zeros,load,save
+    from numpy import loadtxt,genfromtxt,array,savetxt,unique,where,zeros,load,save,arange
     import os
     from glob import glob
     
     print('... solving for static problem')
     #Output where?
-#    outpath=home+project_name+'/output/forward_models/'
     outpath=home+project_name+'/output/statics/'+rupture_name.replace('.rupt','')+'/'
     
     #check if output folder exists, if not make it
@@ -1281,8 +1280,8 @@ def coseismics_matrix(home,project_name,rupture_name,station_file,G_from_file,
         os.makedirs(outpath)
     
     #load source
-#    source=loadtxt(home+project_name+'/forward_models/'+rupture_name,ndmin=2)
     source=loadtxt(home+project_name+'/output/ruptures/'+rupture_name,ndmin=2)
+    print('... ... source geometry is '+home+project_name+'/output/ruptures/'+rupture_name)
     
     #Load stations
     station_file=home+project_name+'/data/station_info/'+station_file
@@ -1293,68 +1292,84 @@ def coseismics_matrix(home,project_name,rupture_name,station_file,G_from_file,
     source_id=unique(source[:,0])
     m=zeros((2*len(source_id),1))
     #Assemble source parameters vector
-    for ksta in range(len(staname)):
-        for ksource in range(len(source_id)):
-            #Get subfault parameters
-            nfault='subfault'+str(int(source_id[ksource])).rjust(4,'0')
-            ifault=where(source[:,0]==source_id[ksource])[0]
-            #Combine into model vector
-            ss_slip=source[ifault,8].sum()
-            ds_slip=source[ifault,9].sum()
-            m[2*ksource]=ss_slip
-            m[2*ksource+1]=ds_slip
+    for ksource in range(len(source_id)):
+
+        ifault=where(source[:,0]==source_id[ksource])[0]
+        #Combine into model vector
+        ss_slip=source[ifault,8].sum()
+        ds_slip=source[ifault,9].sum()
+        m[2*ksource]=ss_slip
+        m[2*ksource+1]=ds_slip
     
     
     #Do I need to make G or can I load it from file??
     G_name=home+project_name+'/GFs/matrices/'+G_name
+    
     if G_from_file==True and G is None: #load from file
+        
         if G_name[-3:]!='npy':
             G_name=G_name+'.npy'
         print('... .... loading G from file '+G_name)
         G=load(G_name)
+    
     elif G_from_file==True and G is not None:
         print('... ... G already provided, do not reload ...')
+    
     elif G_from_file==False and G is None:
-    #initalize matrices
+        
+        #initalize matrices
         G=zeros((3*len(staname),2*len(source_id)))
         print('... ... Assembling GFs matrix from scratch')
-        #Loop over stations
-        for ksta in range(len(staname)):
-            if ksta % 10 == 0:
-                print('... ... Loading station %i of %i' %(ksta,len(staname)))
-            sta=staname[ksta]
-            #Loop over sources
-            for ksource in range(len(source_id)):
-                #Get subfault parameters
-                nfault='sub'+str(int(source_id[ksource])).rjust(4,'0')
-                nfault2='subfault'+str(int(source_id[ksource])).rjust(4,'0')
-                #Where's the synthetic data
-                syn_path=glob(home+project_name+'/GFs/static/'+model_name+'*'+nfault)[0]
-                #Get synthetics
-                try:
-                    coseis_ss=loadtxt(syn_path+'/'+sta+'.'+nfault2+'.SS.static.neu')
-                except:
-                    coseis_ss=array([0,0,0])
-                nss=coseis_ss[0]
-                ess=coseis_ss[1]
-                zss=coseis_ss[2]
-                try:
-                    coseis_ds=loadtxt(syn_path+'/'+sta+'.'+nfault2+'.DS.static.neu')
-                except:
-                    coseis_ds=array([0,0,0])
-                nds=coseis_ds[0]
-                eds=coseis_ds[1]
-                zds=coseis_ds[2]
-                #Put in matrix
-                #North
-                G[3*ksta,2*ksource]=nss  ;  G[3*ksta,2*ksource+1]=nds
-                #East
-                G[3*ksta+1,2*ksource]=ess  ;  G[3*ksta+1,2*ksource+1]=eds
-                #East
-                G[3*ksta+2,2*ksource]=zss  ;  G[3*ksta+2,2*ksource+1]=zds
+        
+            
+        for ksource in range(len(source_id)):
+            
+            if ksource % 50 == 0:
+                print('... ... Loading source %i of %i' %(ksource,len(source_id)))
+            
+            #Get subfault parameters
+            nfault='sub'+str(int(source_id[ksource])).rjust(4,'0')
+            nfault2='subfault'+str(int(source_id[ksource])).rjust(4,'0')
+            #Where's the synthetic data
+            syn_path=glob(home+project_name+'/GFs/static/'+model_name+'*'+nfault)[0]
+            
+            #Get synthetics
+            try:
+                coseis_ss=genfromtxt(syn_path+'/'+nfault2+'.SS.static.neu',usecols=[1,2,3])
+            except:
+                coseis_ss=array([0,0,0])
+            
+            Nsites = len(coseis_ss)
+            
+            nss=coseis_ss[:,0]
+            ess=coseis_ss[:,1]
+            zss=coseis_ss[:,2]
+            
+            try:
+                coseis_ds=genfromtxt(syn_path+'/'+nfault2+'.DS.static.neu',usecols=[1,2,3])
+            except:
+                coseis_ds=array([0,0,0])
+            
+            nds=coseis_ds[:,0]
+            eds=coseis_ds[:,1]
+            zds=coseis_ds[:,2]
+            
+            #Put in matrix
+            inorth=arange(0,Nsites*3,3)
+            ieast=arange(1,Nsites*3,3)
+            iup=arange(2,Nsites*3,3)
+            
+            #North
+            G[inorth,2*ksource]=nss  ;  G[inorth,2*ksource+1]=nds
+            #East
+            G[ieast,2*ksource]=ess  ;  G[ieast,2*ksource+1]=eds
+            #East
+            G[iup,2*ksource]=zss  ;  G[iup,2*ksource+1]=zds
+        
         #Save G matrix
         print('Saving GF matrix to '+G_name+' this might take just a second...')
         save(G_name,G)
+    
     #Now go on to matrix multiply and save solutions
     print('... matrix multiplying and saving output...DONE')
     d=G.dot(m)
