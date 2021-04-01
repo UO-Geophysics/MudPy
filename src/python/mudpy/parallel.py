@@ -21,7 +21,7 @@ def run_parallel_green(home,project_name,station_file,model_name,dt,NFFT,static,
     import subprocess
     from os import chdir
     from shutil import copy,rmtree
-    from numpy import genfromtxt
+    from numpy import genfromtxt,zeros
     from shlex import split
     from shutil import copy
     from glob import glob
@@ -54,10 +54,10 @@ def run_parallel_green(home,project_name,station_file,model_name,dt,NFFT,static,
         subfault=str(int(source[ksource,0])).rjust(4,'0')
         if tsunami==False and static==0:
             subfault_folder=home+project_name+'/GFs/dynamic/'+model_name+'_'+depth+'.sub'+subfault
-        elif tsunami==True and static==0:
+        elif tsunami==True and static==1:
             subfault_folder=home+project_name+'/GFs/tsunami/'+model_name+'_'+depth+'.sub'+subfault
         elif static==1:
-            subfault_folder=home+project_name+'/GFs/static/'
+            subfault_folder=home+project_name+'/GFs/static/'+model_name+'_'+depth+'.sub'+subfault
         
         #Check if subfault folder exists, if not create it
         if os.path.exists(subfault_folder+'/')==False:
@@ -91,7 +91,7 @@ def run_parallel_green(home,project_name,station_file,model_name,dt,NFFT,static,
                 suffix='insar'
             else:
                 suffix='gps'
-            write_file=subfault_folder+model_name+'.static.'+depth+'.sub'+subfault+'.'+suffix
+            write_file=subfault_folder+'/'+model_name+'.static.'+depth+'.sub'+subfault+'.'+suffix
             command=split("fk.pl -M"+model_name+"/"+depth+"/f -N1 "+diststr)
             file_is_empty=True
             while file_is_empty:
@@ -129,8 +129,9 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
 
     import os
     import subprocess
+    from pandas import DataFrame as df
     from mudpy.forward import get_mu
-    from numpy import array,genfromtxt,loadtxt,savetxt,log10
+    from numpy import array,genfromtxt,loadtxt,savetxt,log10,zeros,sin,cos,ones,deg2rad
     from obspy import read
     from shlex import split
     from mudpy.green import src2sta,rt2ne,origin_time,okada_synthetics
@@ -176,6 +177,9 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
     model_file=home+project_name+'/structure/'+model_name
     structure=loadtxt(model_file,ndmin=2)
     
+    #this keeps track of statics dataframe
+    write_df=False
+    
     for ksource in range(len(mpi_source)):
         
         source=mpi_source[ksource,:]
@@ -200,10 +204,10 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
         subfault=str(int(source[0])).rjust(4,'0')
         if static==0 and tsunami==0:  #Where to save dynamic waveforms
             green_path=home+project_name+'/GFs/dynamic/'+model_name+"_"+strdepth+".sub"+subfault+"/"
-        if static==0 and tsunami==1:  #Where to save dynamic waveforms
+        if static==1 and tsunami==1:  #Where to save dynamic waveforms
             green_path=home+project_name+'/GFs/tsunami/'+model_name+"_"+strdepth+".sub"+subfault+"/"
-        if static==1:  #Where to save statics
-            green_path=home+project_name+'/GFs/static/'
+        if static==1 and tsunami==0:  #Where to save statics
+            green_path=home+project_name+'/GFs/static/'+model_name+"_"+strdepth+".sub"+subfault+"/"
         staname=genfromtxt(station_file,dtype="U",usecols=0)
         if staname.shape==(): #Single staiton file
             staname=array([staname])
@@ -218,7 +222,10 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
         #Move to output folder
         os.chdir(green_path)
         print('Processor '+str(rank)+' is working on subfault '+str(int(source[0]))+' and '+str(len(d))+' stations ')
+        
+        #This is looping over "sites"
         for k in range(len(d)):
+            
             if static==0: #Compute full waveforms
                 diststr='%.6f' % d[k] #Need current distance in string form for external call
                 #Form the strings to be used for the system calls according to user desired options
@@ -381,55 +388,166 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
                         silentremove(staname[k]+".subfault"+num+'.DS.vel.zi')
             else: #Compute static synthetics
                 if okada==False:  #Layered earth model
-                    temp_pipe=[]
-                    diststr='%.1f' % d[k] #Need current distance in string form for external call
-                    if insar==True:
-                        green_file=model_name+".static."+strdepth+".sub"+subfault+'.insar' #Output dir
-                    else: #GPS
-                        green_file=model_name+".static."+strdepth+".sub"+subfault+'.gps' #Output dir
-                    statics=loadtxt(green_file) #Load GFs
-                    if len(statics)<1:
-                        print('ERROR: Empty GF file')
-                        break
-                    #Print static GFs into a pipe and pass into synthetics command
-                    try:
-                        temp_pipe=statics[k,:]
-                    except:
-                        temp_pipe=statics
-                    inpipe=''
-                    for j in range(len(temp_pipe)):
-                        inpipe=inpipe+' %.6e' % temp_pipe[j]
-                    #Form command for external call
-                    commandDS="syn -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeDS)+\
-                            " -A"+str(az[k])+" -P"
-                    commandSS="syn -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeSS)+\
-                            " -A"+str(az[k])+" -P"
-                    commandSS=split(commandSS) #Lexical split
-                    commandDS=split(commandDS)
-                    #Make system calls, one for DS, one for SS
-                    ps=subprocess.Popen(['printf',inpipe],stdout=subprocess.PIPE)  #This is the statics pipe, pint stdout to syn's stdin
-                    p=subprocess.Popen(commandSS,stdin=ps.stdout,stdout=open(staname[k]+'.subfault'+num+'.SS.static.rtz','w'))     
-                    p.communicate()  
-                    ps=subprocess.Popen(['printf',inpipe],stdout=subprocess.PIPE)  #This is the statics pipe, pint stdout to syn's stdin
-                    p=subprocess.Popen(commandDS,stdin=ps.stdout,stdout=open(staname[k]+'.subfault'+num+'.DS.static.rtz','w'))     
-                    p.communicate()       
-                    #Rotate radial/transverse to East/North, correct vertical and scale to m
-                    statics=loadtxt(staname[k]+'.subfault'+num+'.SS.static.rtz')
-                    u=statics[2]/100
-                    r=statics[3]/100
-                    t=statics[4]/100
-                    ntemp,etemp=rt2ne(array([r,r]),array([t,t]),az[k])
-                    n=ntemp[0]
-                    e=etemp[0]
-                    savetxt(staname[k]+'.subfault'+num+'.SS.static.neu',(n,e,u,beta))
-                    statics=loadtxt(staname[k]+'.subfault'+num+'.DS.static.rtz')
-                    u=statics[2]/100
-                    r=statics[3]/100
-                    t=statics[4]/100
-                    ntemp,etemp=rt2ne(array([r,r]),array([t,t]),az[k])
-                    n=ntemp[0]
-                    e=etemp[0]
-                    savetxt(staname[k]+'.subfault'+num+'.DS.static.neu',(n,e,u,beta),header='north(m),east(m),up(m),beta(degs)')     
+                    
+                    #this is because when I first wrote this code it processed each
+                    #source/station pair independently but now that it's vectorized
+                    #it's does ALL stations in one fell swoop, given the logic it's 
+                    #easier to just keep this inside the for loop and use the if to
+                    #run it jsut the first time for all sites
+                    if k==0:   
+                        
+                        #initalize output variables
+                        staticsSS = zeros((len(d),4))
+                        staticsDS = zeros((len(d),4))
+                        write_df=True
+                        
+                        #read GFs file
+                        if insar==True:
+                            green_file=green_path+model_name+".static."+strdepth+".sub"+subfault+'.insar' #Output dir
+                        else: #GPS
+                            green_file=green_path+model_name+".static."+strdepth+".sub"+subfault+'.gps' #Output 
+
+                        statics=loadtxt(green_file) #Load GFs
+                        Nsites=len(statics) 
+                        
+                        if len(statics)<1:
+                            print('ERROR: Empty GF file')
+                            break
+                        
+                        #Now get radiation pattern terms, there will be 3 terms
+                        #for each direction so 9 terms total. THis comes from funtion
+                        #dc_radiat() in radiats.c from fk
+                        radiation_pattern_ss = zeros((Nsites,9))
+                        radiation_pattern_ds = zeros((Nsites,9))
+                        
+                        rakeSSrad = deg2rad(rakeSS)
+                        rakeDSrad = deg2rad(rakeDS)
+                        dip_rad = deg2rad(dip)
+                        pseudo_strike = deg2rad(az-strike)
+                        
+                        #Let's do SS first
+                        r = rakeSSrad
+                        
+                        #trigonometric terms following nomenclature used in radiats.c
+                        sstk=sin(pseudo_strike) ; cstk=cos(pseudo_strike)
+                        sdip=sin(dip_rad) ; cdip=cos(dip_rad)
+                        srak=sin(r) ; crak=cos(r)
+                        sstk2=2*sstk*cstk ; cstk2=cstk*cstk-sstk*sstk
+                        sdip2=2*sdip*cdip ; cdip2=cdip*cdip-sdip*sdip
+                        
+                        # terms for up component
+                        u_dd = 0.5*srak*sdip2*ones(Nsites)
+                        u_ds = -sstk*srak*cdip2+cstk*crak*cdip
+                        u_ss = -sstk2*crak*sdip-0.5*cstk2*srak*sdip2
+                        
+                        #terms for r component
+                        r_dd = u_dd.copy()
+                        r_ds = u_ds.copy()
+                        r_ss = u_ss.copy()
+                        
+                        #terms for t component
+                        t_dd = zeros(Nsites)
+                        t_ds = cstk*srak*cdip2+sstk*crak*cdip
+                        t_ss = cstk2*crak*sdip-0.5*sstk2*srak*sdip2
+
+                        #assemble in one variable
+                        radiation_pattern_ss[:,0] = u_dd
+                        radiation_pattern_ss[:,1] = u_ds
+                        radiation_pattern_ss[:,2] = u_ss
+                        
+                        radiation_pattern_ss[:,3] = r_dd
+                        radiation_pattern_ss[:,4] = r_ds
+                        radiation_pattern_ss[:,5] = r_ss
+                        
+                        radiation_pattern_ss[:,6] = t_dd
+                        radiation_pattern_ss[:,7] = t_ds
+                        radiation_pattern_ss[:,8] = t_ss
+                        
+                        
+                        #Now radiation pattern for DS
+                        r = rakeDSrad
+                        
+                        #trigonometric terms following nomenclature used in radiats.c
+                        sstk=sin(pseudo_strike) ; cstk=cos(pseudo_strike)
+                        sdip=sin(dip_rad) ; cdip=cos(dip_rad)
+                        srak=sin(r) ; crak=cos(r)
+                        sstk2=2*sstk*cstk ; cstk2=cstk*cstk-sstk*sstk
+                        sdip2=2*sdip*cdip ; cdip2=cdip*cdip-sdip*sdip
+                        
+                        # terms for up component
+                        u_dd = 0.5*srak*sdip2*ones(Nsites)
+                        u_ds = -sstk*srak*cdip2+cstk*crak*cdip
+                        u_ss = -sstk2*crak*sdip-0.5*cstk2*srak*sdip2
+                        
+                        #terms for r component
+                        r_dd = u_dd.copy()
+                        r_ds = u_ds.copy()
+                        r_ss = u_ss.copy()
+                        
+                        #terms for t component
+                        t_dd = zeros(Nsites)
+                        t_ds = cstk*srak*cdip2+sstk*crak*cdip
+                        t_ss = cstk2*crak*sdip-0.5*sstk2*srak*sdip2
+                        
+                        #assemble in one variable
+                        radiation_pattern_ds[:,0] = u_dd
+                        radiation_pattern_ds[:,1] = u_ds
+                        radiation_pattern_ds[:,2] = u_ss
+                        
+                        radiation_pattern_ds[:,3] = r_dd
+                        radiation_pattern_ds[:,4] = r_ds
+                        radiation_pattern_ds[:,5] = r_ss
+                        
+                        radiation_pattern_ds[:,6] = t_dd
+                        radiation_pattern_ds[:,7] = t_ds
+                        radiation_pattern_ds[:,8] = t_ss
+                        
+                        
+                        #Now define the scalng based on magnitude this is variable
+                        #"coef" in the syn.c original source code
+                        scale = 10**(1.5*Mw+16.1-20) #definition used in syn.c
+                        
+                        #Scale radiation patterns accordingly
+                        radiation_pattern_ss *= scale
+                        radiation_pattern_ds *= scale
+                        
+                        #Now multiply each GF component by the appropriate SCALED
+                        #radiation pattern term and add em up to get the displacements
+                        # also /100 to convert  to meters
+                        up_ss = radiation_pattern_ss[:,0:3]*statics[:,[1,4,7]] 
+                        up_ss = up_ss.sum(axis=1) / 100
+                        up_ds = radiation_pattern_ds[:,0:3]*statics[:,[1,4,7]] 
+                        up_ds = up_ds.sum(axis=1)    / 100                     
+
+                        radial_ss = radiation_pattern_ss[:,3:6]*statics[:,[2,5,8]] 
+                        radial_ss = radial_ss.sum(axis=1) / 100
+                        radial_ds = radiation_pattern_ds[:,3:6]*statics[:,[2,5,8]] 
+                        radial_ds = radial_ds.sum(axis=1) / 100 
+                        
+                        tangential_ss = radiation_pattern_ss[:,6:9]*statics[:,[3,6,9]] 
+                        tangential_ss = tangential_ss.sum(axis=1) / 100
+                        tangential_ds = radiation_pattern_ds[:,6:9]*statics[:,[3,6,9]] 
+                        tangential_ds = tangential_ds.sum(axis=1) / 100
+                        
+                        #rotate to neu
+                        n_ss,e_ss=rt2ne(radial_ss,tangential_ss,az)
+                        n_ds,e_ds=rt2ne(radial_ds,tangential_ds,az)
+
+                        #put in output variables
+                        staticsSS[:,0]=n_ss
+                        staticsSS[:,1]=e_ss
+                        staticsSS[:,2]=up_ss
+                        staticsSS[:,3]=beta*ones(Nsites)
+                        
+                        staticsDS[:,0]=n_ds
+                        staticsDS[:,1]=e_ds
+                        staticsDS[:,2]=up_ds
+                        staticsDS[:,3]=beta*ones(Nsites)
+                        
+                    else:
+                        pass
+            
+
                 else: #Okada half space solutions
                 #SS
                     n,e,u=okada_synthetics(strike,dip,rakeSS,ss_length_in_km,ds_length_in_km,xs,ys,
@@ -439,7 +557,26 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
                     n,e,u=okada_synthetics(strike,dip,rakeDS,ss_length_in_km,ds_length_in_km,xs,ys,
                         zs,lon_sta[k],lat_sta[k],mu_okada)
                     savetxt(staname[k]+'.subfault'+num+'.DS.static.neu',(n,e,u,beta),header='north(m),east(m),up(m),beta(degs)')
-     
+
+        
+        if write_df==True and static ==1: #Note to self: stop using 0,1 and swithc to True/False
+            
+            #Strike slip
+            SSdf = df(data=None, index=None, columns=['staname','n','e','u','beta'])
+            SSdf.staname=staname
+            SSdf.n=staticsSS[:,0]
+            SSdf.e=staticsSS[:,1]
+            SSdf.u=staticsSS[:,2]
+            SSdf.beta=staticsSS[:,3]
+            SSdf.to_csv(green_path+'subfault'+num+'.SS.static.neu',sep='\t',index=False,header=False)
+            
+            DSdf = df(data=None, index=None, columns=['staname','n','e','u','beta'])     
+            DSdf.staname=staname
+            DSdf.n=staticsDS[:,0]
+            DSdf.e=staticsDS[:,1]
+            DSdf.u=staticsDS[:,2]
+            DSdf.beta=staticsDS[:,3]
+            DSdf.to_csv(green_path+'subfault'+num+'.DS.static.neu',sep='\t',index=False,header=False)
 
                       
                                             

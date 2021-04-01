@@ -1,8 +1,7 @@
 '''
-InSAR tools gop in here
+InSAR tools go in here
 Diego Melgar
-UC Berkeley
-05/2015
+University of Oregon
 '''
 
 def quadtree2mudpy(home,project_name,quadtree_file,gflist_file,prefix):
@@ -31,13 +30,13 @@ def quadtree2mudpy(home,project_name,quadtree_file,gflist_file,prefix):
         E=insar[k,3]
         U=insar[k,5]
         los=c_[los_c,N,E,U]
-        #Make plot as you go to verify
-        plt.scatter(insar[k,0],insar[k,1],c=los_c,cmap=cm.magma,s=80,lw=0,vmin=vmin,vmax=vmax)
-        plt.legend(['LOS'])
         savetxt(home+project_name+'/data/statics/'+sta+'.los',los,header='LOS(m),los unit vector (positive towards satellite) n,e,u')
         #Generate gflist file as well
         gflist.write('%s\t%10.6f\t%10.6f\t0\t0\t0\t0\t1\t/foo/bar\t/foo/bar\t/foo/bar\t/foo/bar\t%s\t1\t1\t1\t1\t1\t1\t1\t1\t1\t1\t1\t1\t1\t1\t1\n'%(sta,insar[k,0],insar[k,1],home+project_name+'/data/statics/'+sta+'.los'))
     
+    #Make plot  to verify
+    plt.scatter(insar[:,0],insar[:,1],c=insar[:,2],cmap=cm.magma,s=80,lw=0,vmin=vmin,vmax=vmax)
+    plt.legend(['LOS'])
     plt.colorbar()
     gflist.close() 
     plt.show()  

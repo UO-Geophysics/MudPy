@@ -304,9 +304,16 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tsunami,td
             #Initalize output variable
             Gtemp=zeros([3,Nfaults*2])
             #Where's the data
-            syn_path=home+project_name+'/GFs/static/'
+            statics_path=home+project_name+'/GFs/static/'
             #Loop over subfaults
             for kfault in range(Nfaults):
+                
+                nsub='sub'+str(int(source[kfault,0])).rjust(4,'0')
+                nfault='subfault'+str(int(source[kfault,0])).rjust(4,'0')
+                strdepth='%.4f' % source[kfault,3]
+                syn_path=statics_path+model_name+'_'+strdepth+'.'+nsub+'/'
+                
+                
                 if kfault%10==0:
                     print('... working on subfault '+str(kfault)+' of '+str(Nfaults))
                 nfault='subfault'+str(int(source[kfault,0])).rjust(4,'0')
@@ -332,7 +339,7 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tsunami,td
             #Initalize output variable
             Gtemp=zeros([1,Nfaults*2])
             #Where's the data
-            syn_path=home+project_name+'/GFs/static/'
+            statics_path=home+project_name+'/GFs/static/'
             #Data path, need this to find LOS vector
             los_path=home+project_name+'/data/statics/'
             #Read los vector for this subfault
@@ -340,6 +347,13 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tsunami,td
             los=los[1:]
             #Loop over subfaults
             for kfault in range(Nfaults):
+                
+                nsub='sub'+str(int(source[kfault,0])).rjust(4,'0')
+                nfault='subfault'+str(int(source[kfault,0])).rjust(4,'0')
+                strdepth='%.4f' % source[kfault,3]
+                syn_path=statics_path+model_name+'_'+strdepth+'.'+nsub+'/'
+                
+                
                 if kfault%10==0:
                     print('... working on subfault '+str(kfault)+' of '+str(Nfaults))
                 nfault='subfault'+str(int(source[kfault,0])).rjust(4,'0')
@@ -949,6 +963,12 @@ def get_data_weights(home,project_name,GF_list,d,decimate):
         st=read(GFfiles[i[ksta],kgf])
         nsamples=st[0].stats.npts
         wtsun=(1/weights[i[ksta],9])*ones(nsamples)
+        
+#        wtsun2=read('/Users/dmelgarm/Oaxaca2020/tsunami/dart/43413.weights.sac')
+#        wtsun2=1/wtsun2[0].data 
+#        print('WARNING: Tsunami weights have been hard coded')
+#        w[kinsert:kinsert+nsamples]=wtsun*wtsun2
+        
         w[kinsert:kinsert+nsamples]=wtsun
         kinsert=kinsert+nsamples
     #InSAR
@@ -1222,7 +1242,7 @@ def write_synthetics(home,project_name,run_name,GF_list,G,sol,ds,num,decimate):
             
         
 def write_log(home,project_name,run_name,k,rupture_speed,num_windows,lambda_spatial,lambda_temporal,
-        beta,L2,Lm,VR,ABIC,Mo,Mw,velmod,fault,g_name,gflist,solver):
+        beta,L2,Lm,VR,ABIC,Mo,Mw,velmod,fault,g_name,gflist,solver,L2data):
     '''
     Write inversion sumamry to .log file
     
@@ -1273,6 +1293,11 @@ def write_log(home,project_name,run_name,k,rupture_speed,num_windows,lambda_spat
     f.write('VR velocity(%) = '+repr(VR[2])+'\n')
     f.write('VR tsunami(%) = '+repr(VR[3])+'\n')
     f.write('VR InSAR LOS(%) = '+repr(VR[4])+'\n')
+    f.write('RMS static(%) = '+repr(L2data[0])+'\n')
+    f.write('RMS displacement(%) = '+repr(L2data[1])+'\n')
+    f.write('RMS velocity(%) = '+repr(L2data[2])+'\n')
+    f.write('RMS tsunami(%) = '+repr(L2data[3])+'\n')
+    f.write('RMS InSAR LOS(%) = '+repr(L2data[4])+'\n')
     f.write('Lm = '+repr(Lm)+'\n')
     f.write('ABIC = '+repr(ABIC)+'\n')
     f.write('M0(N-m) = '+repr(Mo)+'\n')
@@ -1567,7 +1592,7 @@ def get_stats(WG,sol,wd):
     return L2,Lm
     
     
-def get_VR(home,project_name,GF_list,sol,d,ds,decimate):
+def get_VR(home,project_name,GF_list,sol,d,ds,decimate,WG,wd):
     '''
     Compute Variance reduction to the data
     
@@ -1582,6 +1607,7 @@ def get_VR(home,project_name,GF_list,sol,d,ds,decimate):
     from numpy import genfromtxt,where,r_,nan
     from obspy import read
     from mudpy.green import stdecimate
+    from numpy.linalg import norm
     
     print('... calcualting variance reduction...')
     
@@ -1593,10 +1619,15 @@ def get_VR(home,project_name,GF_list,sol,d,ds,decimate):
     #Separate into its constituent parts (statics,displacaments, velocities, etc...)
     kstart=0
     kend=0
+    
+    #Calculate weighted syntehtic data
+    wds=WG.dot(sol)
+    
     #Statics
     kgf=0
     i=where(GF[:,kgf]==1)[0]
     VRstatic=nan
+    L2static=nan
     if len(i)>0:
         for ksta in range(len(i)):
             kend+=3
@@ -1604,11 +1635,16 @@ def get_VR(home,project_name,GF_list,sol,d,ds,decimate):
         res=((d[kstart:kend]-ds[kstart:kend])**2)**0.5
         dnorm=(d[kstart:kend]**2)**0.5 #Yes i know this is dumb, shush
         VRstatic=(1-(res.sum()/dnorm.sum()))*100
+        
+        #Get RMS (L2 norm) of weigtehd data misfit
+        L2static=norm(wds[kstart:kend]-wd[kstart:kend])
+   
     #Displacement
     kstart=kend
     kgf=1
     i=where(GF[:,kgf]==1)[0]
     VRdisp=nan
+    L2disp=nan
     if len(i)>0:
         for ksta in range(len(i)):
             sta=stations[i[ksta]]
@@ -1621,11 +1657,16 @@ def get_VR(home,project_name,GF_list,sol,d,ds,decimate):
         res=((d[kstart:kend]-ds[kstart:kend])**2)**0.5
         dnorm=(d[kstart:kend]**2)**0.5 #Yes i know this is dumb, shush
         VRdisp=(1-(res.sum()/dnorm.sum()))*100
+        
+        #Get RMS (L2 norm) of weigtehd data misfit
+        L2disp=norm(wds[kstart:kend]-wd[kstart:kend])
+        
     #Velocity
     kstart=kend
     kgf=2
     i=where(GF[:,kgf]==1)[0]
     VRvel=nan
+    L2vel=nan
     if len(i)>0:
         for ksta in range(len(i)):
             sta=stations[i[ksta]]
@@ -1638,11 +1679,16 @@ def get_VR(home,project_name,GF_list,sol,d,ds,decimate):
         res=((d[kstart:kend]-ds[kstart:kend])**2)**0.5
         dnorm=(d[kstart:kend]**2)**0.5 #Yes i know this is dumb, shush
         VRvel=(1-(res.sum()/dnorm.sum()))*100
+        
+        #Get RMS (L2 norm) of weigtehd data misfit
+        L2vel=norm(wds[kstart:kend]-wd[kstart:kend])
+        
     #Tsunami
     kstart=kend
     kgf=3
     i=where(GF[:,kgf]==1)[0]
     VRtsun=nan
+    L2tsun=nan
     if len(i)>0:
         for ksta in range(len(i)):
             sta=stations[i[ksta]]
@@ -1653,20 +1699,32 @@ def get_VR(home,project_name,GF_list,sol,d,ds,decimate):
         res=((d[kstart:kend]-ds[kstart:kend])**2)**0.5
         dnorm=(d[kstart:kend]**2)**0.5 #Yes i know this is dumb, shush
         VRtsun=(1-(res.sum()/dnorm.sum()))*100
+        
+        #Get RMS (L2 norm) of weigtehd data misfit
+        L2tsun=norm(wds[kstart:kend]-wd[kstart:kend])
+        
     # InSAR
     kstart=kend
     kgf=4
     i=where(GF[:,kgf]==1)[0]
     VRinsar=nan
+    L2insar=nan
     if len(i)>0:
         for ksta in range(len(i)):
             kend+=1
         #Variance reduction
         res=((d[kstart:kend]-ds[kstart:kend])**2)**0.5
         dnorm=(d[kstart:kend]**2)**0.5 #Yes i know this is dumb, shush
-        VRinsar=(1-(res.sum()/dnorm.sum()))*100     
+        VRinsar=(1-(res.sum()/dnorm.sum()))*100  
+        
+        #Get RMS (L2 norm) of weigtehd data misfit
+        L2insar=norm(wds[kstart:kend]-wd[kstart:kend])
+        
+        
     VR=r_[VRstatic,VRdisp,VRvel,VRtsun,VRinsar]
-    return VR
+    L2=r_[L2static,L2disp,L2vel,L2tsun,L2insar]
+    
+    return VR,L2
     
 
 
@@ -1953,6 +2011,8 @@ def ds2rot(sol,beta):
     #Split into strike-slip and dip-slip
     iss=2*arange(0,len(sol)/2,1)
     ids=2*arange(0,len(sol)/2,1)+1
+    iss=iss.astype('int')
+    ids=ids.astype('int')
     if len(iss)==1:
         ss=sol[0]
         ds=sol[1]
@@ -2376,6 +2436,129 @@ def make_tgf_dtopo(home,project_name,model_name,tgf_file,coast_file,fault_name,
         savetxt(subdir+'SS.dtopo',dtopo_ss,fmt='%i\t%.6f\t%.6f\t%.4e')
              
                 
+def make_tgf_dtopo_static(home,project_name,model_name,tgf_file,fault_name,
+            time_epi,tsun_dt,maxt,topo_dx_file,topo_dy_file,
+            topo_effect=False,hot_start=0):
+    '''
+    Create moving topography input files for geoclaw
+    
+    tsun_dt - Sampling itnerval of synthetics ALREADY made
+    model_name is structure file
+    time_epi is UTC string
+    
+    '''
+    import datetime
+    from numpy import genfromtxt,zeros,arange,meshgrid,ones,c_,savetxt,argmin,nan,where,mean
+    from obspy import read
+    from netCDF4 import Dataset
+    from scipy.interpolate import griddata
+
+    #Get station names
+    staname=genfromtxt(home+project_name+'/data/station_info/'+tgf_file,usecols=0,dtype='U')
+    sta=genfromtxt(home+project_name+'/data/station_info/'+tgf_file)
+    lon=sta[:,1]
+    lat=sta[:,2]
+    #Get fault file
+    f=genfromtxt(home+project_name+'/data/model_info/'+fault_name)
+    #Where is the data
+    green_dir=home+project_name+'/GFs/tsunami/'
+
+    #Read topo/bathy derivative fileksub=0
+    #if topo_dx_file!=None
+    bathy_dx=Dataset(topo_dx_file,'r')
+    zdx=bathy_dx.variables['z'][:]
+    bathy_dy=Dataset(topo_dy_file,'r')
+    zdy=bathy_dy.variables['z'][:]
+    #Make mesh that matches it for interpolation later
+    try:
+        lonb=bathy_dx.variables['lon'][:]
+        latb=bathy_dx.variables['lat'][:]
+    except:
+        lonb=bathy_dx.variables['x'][:]
+        latb=bathy_dx.variables['y'][:]
+    #print("Correcting longitude"
+    #lon=360+lon
+    #lonb=360+lonb
+    loni,lati=meshgrid(lonb,latb)
+    #Now apply motion from every subfault
+    for ksub in range(hot_start,len(f)): #Loops through subfaults
+        if ksub%10==0:
+            print('... working on subfault '+str(ksub)+' of '+str(len(f)))
+        #Depth string
+        zs=f[ksub,3]
+        strdepth='%.4f' % zs
+        #subfault number
+        sub=str(ksub+1).rjust(4,'0')
+        #Subfault dir
+        subdir=green_dir+model_name+'_'+strdepth+'.sub'+sub+'/'
+        for ksta in range(len(sta)):
+            if ksta%500==0:
+                print('... ... working on seafloor grid point '+str(ksta)+' of '+str(len(sta)))
+            
+            ds=genfromtxt(subdir+staname[ksta]+'.subfault'+sub+'.DS.static.neu')
+            ss=genfromtxt(subdir+staname[ksta]+'.subfault'+sub+'.SS.static.neu')
+            
+            eds=ds[0]
+            nds=ds[1]
+            uds=ds[2]
+            ess=ss[0]
+            nss=ss[1]
+            uss=ss[2]
+
+            #Initalize matrices
+            if ksta==0:
+                eDS=zeros((1,len(sta)))
+                eSS=eDS.copy()
+                nDS=eDS.copy()
+                nSS=eDS.copy()
+                uDS=eDS.copy()
+                uSS=eDS.copy()
+            #Populate matrix
+            eDS[0,ksta]=eds
+            nDS[0,ksta]=nds
+            uDS[0,ksta]=uds
+            eSS[0,ksta]=ess
+            nSS[0,ksta]=nss
+            uSS[0,ksta]=uss
+
+        #Now go one epoch at a time, and interpolate all fields
+        print('... interpolating coseismic offsets to a regular grid')
+        
+        
+        nds=griddata((lon,lat),nDS[0,:],(loni,lati),method='linear',fill_value=0)
+        eds=griddata((lon,lat),eDS[0,:],(loni,lati),method='linear',fill_value=0)
+        uds=griddata((lon,lat),uDS[0,:],(loni,lati),method='linear',fill_value=0)
+        nss=griddata((lon,lat),nSS[0,:],(loni,lati),method='linear',fill_value=0)
+        ess=griddata((lon,lat),eSS[0,:],(loni,lati),method='linear',fill_value=0)
+        uss=griddata((lon,lat),uSS[0,:],(loni,lati),method='linear',fill_value=0)
+            
+            
+        #Output vertical
+        uout_ds=uds
+        uout_ss=uss
+        
+ 
+        #Convert to column format and append
+        xyz_ds=grd2xyz(uout_ds,loni,lati)
+        xyz_ss=grd2xyz(uout_ss,loni,lati)
+
+        numel=uout_ds.size #Number of elements in grid
+        dtopo_ds=zeros((numel*2,4))
+        dtopo_ss=zeros((numel*2,4))
+        dtopo_ds[0:numel,1:3]=xyz_ds[:,0:2]
+        dtopo_ss[0:numel,1:3]=xyz_ss[:,0:2]
+            
+        dtopo_ds[numel:,0]=1 
+        dtopo_ss[numel:,0]=1            
+        dtopo_ds[numel:,1:4]=xyz_ds
+        dtopo_ss[numel:,1:4]=xyz_ss
+
+        print('... writting dtopo files')
+        savetxt(subdir+'DS.dtopo',dtopo_ds,fmt='%i\t%.6f\t%.6f\t%.4e')
+        savetxt(subdir+'SS.dtopo',dtopo_ss,fmt='%i\t%.6f\t%.6f\t%.4e')
+        
+        
+        
                       
 def tsunami_gf(home,project_name,model_name,fault_name,hot_start):
     '''
@@ -2452,8 +2635,8 @@ def tsunami2sac(home,project_name,model_name,fault_name,tlims,dt,time_epi,hot_st
     #Load fault file
     f=genfromtxt(home+project_name+'/data/model_info/'+fault_name)
     #Load gauge correspondences
-    gaugesGC=genfromtxt(home+project_name+'/data/station_info/gauges.dict',usecols=0,dtype='S')  #This is what they are called in GeoClaw
-    gauges=genfromtxt(home+project_name+'/data/station_info/gauges.dict',usecols=3,dtype='S')   #their actual name
+    gaugesGC=genfromtxt(home+project_name+'/data/station_info/gauges.dict',usecols=0,dtype='U')  #This is what they are called in GeoClaw
+    gauges=genfromtxt(home+project_name+'/data/station_info/gauges.dict',usecols=3,dtype='U')   #their actual name
     #Where is the data
     green_dir=home+project_name+'/GFs/tsunami/'  
     for ksub in range(hot_start,len(f)):

@@ -217,7 +217,12 @@ def make_parallel_green(home,project_name,station_file,fault_name,model_name,dt,
             if path.exists(subfault_folder)==False:
                 #It doesn't, make it, don't be lazy
                 makedirs(subfault_folder)               
-        elif static==0 and tsunami==True: #Tsunami GFs
+#        elif static==0 and tsunami==True: #Tsunami GFs
+#            subfault_folder=green_path+'tsunami/'+model_name+'_'+strdepth+'.sub'+subfault
+#            if path.exists(subfault_folder)==False:
+#                #It doesn't, make it, don't be lazy
+#                makedirs(subfault_folder)
+        elif static==1 and tsunami==True: #Tsunami GFs
             subfault_folder=green_path+'tsunami/'+model_name+'_'+strdepth+'.sub'+subfault
             if path.exists(subfault_folder)==False:
                 #It doesn't, make it, don't be lazy
@@ -425,7 +430,8 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
                             hot_start,dk,pmin,pmax,kmax)
         if tgf_file!=None: #Tsunami
             print('Seafloor displacement GFs requested...')
-            static=0
+#            static=0
+            static=1
             tsunami=True
             station_file=tgf_file
             if ncpus>1:
@@ -562,7 +568,7 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
                     f.write(out)
                 f.close()
                 integrate=1
-                static=0
+                static=1
                 tsunami=True
                 station_file=tgf_file
                 make_parallel_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,tsunami,beta,hot_start,time_epi,ncpus,custom_stf,impulse)
@@ -593,12 +599,14 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
     '''
     from mudpy import inverse as inv
     from mudpy.forward import get_mu_and_area
-    from numpy import zeros,dot,array,squeeze,expand_dims,empty,tile,eye,ones,arange,load,size
+    from numpy import zeros,dot,array,squeeze,expand_dims,empty,tile,eye,ones,arange,load,size,genfromtxt
+    from numpy import where,sort,r_
     from numpy.linalg import lstsq
     from scipy.sparse import csr_matrix as sparse
     from scipy.optimize import nnls
     from datetime import datetime
     import gc
+    from matplotlib import path
     
     
 
@@ -696,7 +704,6 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
             lambda_temporal=reg_temporal[kt]
             print('Running inversion '+str(kout+1)+' of '+str(Ninversion)+' at regularization levels: ls ='+repr(lambda_spatial)+' , lt = '+repr(lambda_temporal))
             if static==True: #Only statics inversion no Lt matrix
-                import numpy as np
                 Kinv=K+(lambda_spatial**2)*LsLs
                 Lt=eye(len(K))
                 LtLt=Lt.T.dot(Lt)
@@ -715,11 +722,25 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
                 sol=expand_dims(sol,axis=1)
             else:
                 print('ERROR: Unrecognized solver \''+solver+'\'')
+
+            #Force faults outside a polygon to be zero
+#            print('WARNING: Using fault polygon to force solutions to zero')
+#            #load faulkt
+#            fault=genfromtxt(home+project_name+'/data/model_info/'+fault_name)
+#            polygon=genfromtxt('/Users/dmelgarm/Oaxaca2020/etc/zero_fault.txt')
+#            polygon=path.Path(polygon)
+#            i=where(polygon.contains_points(fault[:,1:3])==False)[0]
+#            i=sort(r_[i*2,i*2+1])
+#            N=nfaults[0]*2
+#            i=r_[i,i+N,i+2*N,i+3*N]
+#            sol[i]=0
+            
             #Compute synthetics
             ds=dot(G,sol)
+            
             #Get stats
             L2,Lmodel=inv.get_stats(Kinv,sol,x)
-            VR=inv.get_VR(home,project_name,GF_list,sol,d,ds,decimate)
+            VR,L2data=inv.get_VR(home,project_name,GF_list,sol,d,ds,decimate,WG,wd)
             #VR=inv.get_VR(WG,sol,wd)
             #ABIC=inv.get_ABIC(WG,K,sol,wd,lambda_spatial,lambda_temporal,Ls,LsLs,Lt,LtLt)
             ABIC=inv.get_ABIC(G,K,sol,d,lambda_spatial,lambda_temporal,Ls,LsLs,Lt,LtLt)
@@ -730,7 +751,7 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
                 sol=inv.rot2ds(sol,beta)
             #Write log
             inv.write_log(home,project_name,run_name,kout,rupture_speed,num_windows,lambda_spatial,lambda_temporal,beta,
-                L2,Lmodel,VR,ABIC,Mo,Mw,model_name,fault_name,G_name,GF_list,solver)
+                L2,Lmodel,VR,ABIC,Mo,Mw,model_name,fault_name,G_name,GF_list,solver,L2data)
             #Write output to file
             if GOD_inversion==True:
                 num=str(kout).rjust(4,'0')

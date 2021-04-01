@@ -24,9 +24,9 @@ def init(home,project_name):
     clob='y'
     proj_dir=path.expanduser(home+project_name+'/')
     if path.exists(proj_dir):  #Path exists, clobber?
-        clob=raw_input('Project directory exists, clobber (y/n)?')
+        clob=input('Project directory exists, clobber (y/n)?')
         if clob is'y' or clob is 'Y': #Clobber baby
-            clob=raw_input('This will delete everything in this project directory, so, take a minute, think about it: clobber (y/n)?')
+            clob=input('This will delete everything in this project directory, so, take a minute, think about it: clobber (y/n)?')
             if clob is 'y' or clob is 'Y':
                 rmtree(proj_dir)
             else: #Leave direcory alone
@@ -215,8 +215,8 @@ def subfault_distances_3D(home,project_name,fault_name,slab_name,projection_zone
         
         #get down-dip azimuths
         down_dip=fault[:,4]+90
-        i=where(down_dip>360)[0]
-        down_dip[i]=down_dip[i]-360
+        # i=where(down_dip>360)[0]
+        # down_dip[i]=down_dip[i]-360
         
         #Convert slab1.0 to local UTM coordinates
         slab_x,slab_y=llz2utm(slab_model[:,0],slab_model[:,1],projection_zone)
@@ -226,7 +226,22 @@ def subfault_distances_3D(home,project_name,fault_name,slab_name,projection_zone
         #Convert faul centroid coordinates to local UTM
         fault_x,fault_y=llz2utm(fault[:,1],fault[:,2],projection_zone)
         fault_x,fault_y = fault_x/1000,fault_y/1000
-        fault_z=fault[:,3]    
+        fault_z=fault[:,3]
+        
+        #The goal is to only keep slab points close tot he actual fault, to accomplish this
+        # Calcualte the distance from each fault to slab point and only keep things
+        #Within a minimum distance
+        slab2fault_min_distance=30 #in km
+        keep_slab=zeros((len(fault_x),len(slab_x)))
+        for ksub in range(len(fault)):
+            dist=((fault_x[ksub]-slab_x)**2+(fault_y[ksub]-slab_y)**2)**0.5
+            i=where(dist<slab2fault_min_distance)[0]
+            keep_slab[ksub,i]=1
+        i=where(keep_slab.sum(axis=0)>0)[0]
+        slab_x=slab_x[i]
+        slab_y=slab_y[i]
+        slab_z=slab_z[i]
+        
         
         # grid Slab1.0 for making depth contours to be then used for along-strike distance calculation
         ngrid_pts=500
@@ -247,7 +262,7 @@ def subfault_distances_3D(home,project_name,fault_name,slab_name,projection_zone
             if i%10==0:
                 print('... working on subfault '+str(i)+' of '+str(len(fault)))
             
-            contour=plt.contour(X,Y,Z,levels=fault[i,3])
+            contour=plt.contour(X,Y,Z,levels=[fault[i,3]])
             contour=contour.collections[0].get_paths()[0].vertices
             contour_lengths[i]=((contour[0,0]-contour[-1,0])**2+(contour[0,1]-contour[-1,1])**2)**0.5
             all_contours.append(contour)
@@ -299,7 +314,7 @@ def subfault_distances_3D(home,project_name,fault_name,slab_name,projection_zone
                 zj = fault_z[j]
                 
                 #Get down_dip y coordinates
-                y_down_dip=x_down_dip*cos(deg2rad(down_dip[j]))
+                y_down_dip=x_down_dip*(-cos(deg2rad(down_dip[j])))
                 
                 #Move line origin to subfault being tested
                 x_down_dip_subfault=x_down_dip+xj
@@ -458,7 +473,7 @@ def make_KL_slip(fault,num_modes,eigenvals,V,mean_slip,max_slip,lognormal=True,m
         if len(fault)>num_modes:
             z = randn(num_modes) 
         else: #if fewer faults than requested modes then use all modes
-            z = randn(len(fault)) 
+            z = randn(len(fault))
         KL_slip = mean_slip.copy()  # start with the mean slip
         # add in the terms in the K-L expansion:
         for k in range(len(z)):
@@ -502,7 +517,7 @@ def rectify_slip(slip_unrectified,percent_reject=10):
 
 
 
-def select_faults(whole_fault,Dstrike,Ddip,target_Mw,buffer_factor,num_modes,scaling_law,
+def select_faults(whole_fault,Dstrike,Ddip,target_Mw,num_modes,scaling_law,
     force_area,no_shallow_epi=True,hypo_depth=10,param_norm=(0.0451,0.1681),no_random=False,
     subfault_hypocenter=None,use_hypo_fraction=True):
     '''
@@ -524,7 +539,7 @@ def select_faults(whole_fault,Dstrike,Ddip,target_Mw,buffer_factor,num_modes,sca
         hypo_fault=subfault_hypocenter
     
     
-    if force_area==True: #Use entire fault model  nothing more to do here folks
+    if force_area==True and no_random==False: #Use entire fault model  nothing more to do here folks
         
         selected_faults =  arange(len(whole_fault))
         Lmax=Dstrike[selected_faults,:][:,selected_faults].max()    
@@ -550,10 +565,10 @@ def select_faults(whole_fault,Dstrike,Ddip,target_Mw,buffer_factor,num_modes,sca
     if force_area==False and no_random==False: #Use scaling laws from Blaser et al 2010
         if scaling_law.upper()=='T':
             length_mean=-2.37+0.57*target_Mw
-            length_std=0.18/2
+            length_std=0.18
             length=10**normal(length_mean,length_std)
             width_mean=-1.86+0.46*target_Mw
-            width_std=0.17/2
+            width_std=0.17
             width=10**normal(width_mean,width_std)
         elif scaling_law.upper()=='S':
             length_mean=-2.69+0.64*target_Mw
@@ -574,6 +589,8 @@ def select_faults(whole_fault,Dstrike,Ddip,target_Mw,buffer_factor,num_modes,sca
     #so which subfault ended up being the middle?
     center_subfault=hypo_fault
         
+    hypo_fault=int(hypo_fault)
+    
     #Get max/min distances from hypocenter to all faults
     dstrike_max=Dstrike[:,hypo_fault].max()
     dstrike_min=Dstrike[:,hypo_fault].min()
@@ -638,10 +655,11 @@ def select_faults(whole_fault,Dstrike,Ddip,target_Mw,buffer_factor,num_modes,sca
         #witht he lowest combined maximum along strike and along dip distance to all
         #other faults
         
+        
         Dsmin=Dstrike[selected_faults,:] ; Dsmin=Dsmin[:,selected_faults]
         Ddmin=Ddip[selected_faults,:] ; Ddmin=Ddmin[:,selected_faults]
         
-        min_dist=Dsmin.max(axis=1) + Ddmin.max(axis=1)
+        min_dist=abs(Dsmin).max(axis=1) + abs(Ddmin).max(axis=1)
         imin=argmin(min_dist)
         center_subfault=selected_faults[imin]
         
@@ -671,11 +689,19 @@ def select_faults(whole_fault,Dstrike,Ddip,target_Mw,buffer_factor,num_modes,sca
         # go from fractions to distances, *2 is necessary to use the whole 
         # distance range since the PDF int he Melgar&Hayes paper only goes to 
         # a fraction value of 0.5
-        dip_distance=abs(Dd.max()*dip_fraction*2)
-        strike_distance=abs(Ds.max()*strike_fraction*2)
+        if dip_fraction<0:
+            dip_distance=Dd.min()*(abs(dip_fraction)*2)
+        else:
+            dip_distance=Dd.max()*(dip_fraction*2)
             
+        strike_distance=abs(Ds).max()*strike_fraction*2
+        sign=2*randint(0,2)-1
+        strike_distance*=sign
+            
+        
+        
         #where is the fualt that is this distance from the middle?
-        hypo_fault=argmin(abs(Ds-abs(strike_distance))+abs(Dd-abs(dip_distance)))      
+        hypo_fault=argmin((Ds-strike_distance)**2+(Dd-dip_distance)**2)      
         hypo_fault=selected_faults[hypo_fault]
 
     #############
@@ -1155,11 +1181,11 @@ def write_rupt_list(home,project_name,run_name,target_Mw,Nrealizations,ncpus):
 
 def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
 		load_distances,distances_name,UTM_zone,target_Mw,model_name,hurst,Ldip,
-		Lstrike,num_modes,Nrealizations,rake,buffer_factor,rise_time_depths,time_epi,
+		Lstrike,num_modes,Nrealizations,rake,rise_time_depths,time_epi,
 		max_slip,source_time_function,lognormal,slip_standard_deviation,scaling_law,ncpus,
 		force_magnitude=False,force_area=False,mean_slip_name=None,hypocenter=None,
 		slip_tol=1e-2,force_hypocenter=False,no_random=False,shypo=None,use_hypo_fraction=True,
-		shear_wave_fraction=0.7):
+		shear_wave_fraction=0.7,max_slip_rule=True):
     '''
     Set up rupture generation-- use ncpus if available
     '''
@@ -1182,17 +1208,17 @@ def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
     if ncpus>1:
         run_generate_ruptures_parallel(home,project_name,run_name,fault_name,slab_name,mesh_name,
         load_distances,distances_name,UTM_zone,target_Mw,model_name,hurst,Ldip,
-        Lstrike,num_modes,Nrealizations,rake,buffer_factor,rise_time_depths,time_epi,
+        Lstrike,num_modes,Nrealizations,rake,rise_time_depths,time_epi,
         max_slip,source_time_function,lognormal,slip_standard_deviation,scaling_law,ncpus,
         force_magnitude,force_area,mean_slip_name,hypocenter,slip_tol,force_hypocenter,
-        no_random,shypo,use_hypo_fraction,shear_wave_fraction)
+        no_random,shypo,use_hypo_fraction,shear_wave_fraction,max_slip_rule)
     else:
         run_generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
         load_distances,distances_name,UTM_zone,target_Mw,model_name,hurst,Ldip,
-        Lstrike,num_modes,Nrealizations,rake,buffer_factor,rise_time_depths,time_epi,
+        Lstrike,num_modes,Nrealizations,rake,rise_time_depths,time_epi,
         max_slip,source_time_function,lognormal,slip_standard_deviation,scaling_law,
         force_magnitude,force_area,mean_slip_name,hypocenter,slip_tol,force_hypocenter,
-        no_random,shypo,use_hypo_fraction,shear_wave_fraction)
+        no_random,shypo,use_hypo_fraction,shear_wave_fraction,max_slip_rule)
                 
 
 
@@ -1200,10 +1226,10 @@ def generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           
 def run_generate_ruptures_parallel(home,project_name,run_name,fault_name,slab_name,mesh_name,
         load_distances,distances_name,UTM_zone,target_Mw,model_name,hurst,Ldip,
-        Lstrike,num_modes,Nrealizations,rake,buffer_factor,rise_time_depths,time_epi,
+        Lstrike,num_modes,Nrealizations,rake,rise_time_depths,time_epi,
         max_slip,source_time_function,lognormal,slip_standard_deviation,scaling_law,ncpus,
         force_magnitude,force_area,mean_slip_name,hypocenter,slip_tol,force_hypocenter,
-        no_random,shypo,use_hypo_fraction,shear_wave_fraction):
+        no_random,shypo,use_hypo_fraction,shear_wave_fraction,max_slip_rule):
     
     from numpy import ceil
     from os import environ
@@ -1224,7 +1250,7 @@ def run_generate_ruptures_parallel(home,project_name,run_name,fault_name,slab_na
     print("MPI: Starting " + str(Nrealizations_parallel*ncpus) + " FakeQuakes Rupture Generations on ", ncpus, "CPUs")
     mud_source=environ['MUD']+'/src/python/mudpy/'
     print(str(hypocenter))
-    mpi='mpiexec -n '+str(ncpus)+' python '+mud_source+'generate_ruptures_parallel.py run_parallel_generate_ruptures '+home+' '+project_name+' '+run_name+' '+fault_name+' '+str(slab_name)+' '+str(mesh_name)+' '+str(load_distances)+' '+distances_name+' '+UTM_zone+' '+str(tMw)+' '+model_name+' '+str(hurst)+' '+Ldip+' '+Lstrike+' '+str(num_modes)+' '+str(Nrealizations_parallel)+' '+str(rake)+' '+str(buffer_factor)+' '+str(rise_time_depths0)+' '+str(rise_time_depths1)+' '+str(time_epi)+' '+str(max_slip)+' '+source_time_function+' '+str(lognormal)+' '+str(slip_standard_deviation)+' '+scaling_law+' '+str(ncpus)+' '+str(force_magnitude)+' '+str(force_area)+' '+str(mean_slip_name)+' "'+str(hypocenter)+'" '+str(slip_tol)+' '+str(force_hypocenter)+' '+str(no_random)+' '+str(shypo)+' '+str(use_hypo_fraction)+' '+str(shear_wave_fraction)
+    mpi='mpiexec -n '+str(ncpus)+' python '+mud_source+'generate_ruptures_parallel.py run_parallel_generate_ruptures '+home+' '+project_name+' '+run_name+' '+fault_name+' '+str(slab_name)+' '+str(mesh_name)+' '+str(load_distances)+' '+distances_name+' '+UTM_zone+' '+str(tMw)+' '+model_name+' '+str(hurst)+' '+Ldip+' '+Lstrike+' '+str(num_modes)+' '+str(Nrealizations_parallel)+' '+str(rake)+' '+str(rise_time_depths0)+' '+str(rise_time_depths1)+' '+str(time_epi)+' '+str(max_slip)+' '+source_time_function+' '+str(lognormal)+' '+str(slip_standard_deviation)+' '+scaling_law+' '+str(ncpus)+' '+str(force_magnitude)+' '+str(force_area)+' '+str(mean_slip_name)+' "'+str(hypocenter)+'" '+str(slip_tol)+' '+str(force_hypocenter)+' '+str(no_random)+' '+str(shypo)+' '+str(use_hypo_fraction)+' '+str(shear_wave_fraction)+' '+str(max_slip_rule)
     mpi=split(mpi)
     p=subprocess.Popen(mpi)
     p.communicate()
@@ -1234,10 +1260,10 @@ def run_generate_ruptures_parallel(home,project_name,run_name,fault_name,slab_na
     
 def run_generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
         load_distances,distances_name,UTM_zone,target_Mw,model_name,hurst,Ldip,
-        Lstrike,num_modes,Nrealizations,rake,buffer_factor,rise_time_depths,time_epi,
+        Lstrike,num_modes,Nrealizations,rake,rise_time_depths,time_epi,
         max_slip,source_time_function,lognormal,slip_standard_deviation,scaling_law,
         force_magnitude,force_area,mean_slip_name,hypocenter,slip_tol,force_hypocenter,
-        no_random,shypo,use_hypo_fraction,shear_wave_fraction):
+        no_random,shypo,use_hypo_fraction,shear_wave_fraction,max_slip_rule):
     
     '''
     Depending on user selected flags parse the work out to different functions
@@ -1288,7 +1314,7 @@ def run_generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_n
                 #Select only a subset of the faults based on magnitude scaling
                 current_target_Mw=target_Mw[kmag]
                 ifaults,hypo_fault,Lmax,Wmax,Leff,Weff=select_faults(whole_fault,Dstrike,Ddip,current_target_Mw,
-                            buffer_factor,num_modes,scaling_law,force_area,no_shallow_epi=False,
+                            num_modes,scaling_law,force_area,no_shallow_epi=False,
                             no_random=no_random,subfault_hypocenter=shypo,use_hypo_fraction=use_hypo_fraction)
                 
                 fault_array=whole_fault[ifaults,:]
@@ -1296,17 +1322,17 @@ def run_generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_n
                 Ddip_selected=Ddip[ifaults,:][:,ifaults]
                 
                 #Determine correlation lengths from effective length.width Leff and Weff
-                if Lstrike=='auto': #Use scaling
+                if Lstrike=='MB2002': #Use scaling
                     #Ls=10**(-2.43+0.49*target_Mw)
                     Ls=2.0+(1./3)*Leff
-                elif Lstrike=='MH2019':
+                elif Lstrike=='auto':
                     Ls=17.7+0.34*Leff
                 else:
                     Ls=Lstrike
-                if Ldip=='auto': #Use scaling
+                if Ldip=='MB2002': #Use scaling
                     #Ld=10**(-1.79+0.38*target_Mw)
                     Ld=1.0+(1./3)*Weff
-                elif Ldip=='MH2019':
+                elif Ldip=='auto': #MH2019
                     Ld=6.8+0.4*Weff
                 else:
                     Ld=Ldip
@@ -1318,6 +1344,25 @@ def run_generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_n
                     foo,mu=get_mean_slip(target_Mw[kmag],fault_array,vel_mod_file)
                     mean_fault=genfromtxt(mean_slip_name)
                     mean_slip=(mean_fault[:,8]**2+mean_fault[:,9]**2)**0.5
+                    
+                    #keep onlt faults that have man slip inside the fault_array seelcted faults
+                    mean_slip=mean_slip[ifaults]
+                    
+                    #get the area in those selected faults
+                    area=fault_array[:,-2]*fault_array[:,-1]
+                    
+                    #get the moment in those selected faults
+                    moment_on_selected=(area*mu*mean_slip).sum()
+                    
+                    #target moment
+                    target_moment=10**(1.5*target_Mw[kmag]+9.1)
+                    
+                    #How much do I need to upscale?
+                    scale_factor=target_moment/moment_on_selected
+                    
+                    #rescale the slip
+                    mean_slip = mean_slip*scale_factor
+                    
                     #Make sure mean_slip has no zero slip faults
                     izero=where(mean_slip==0)[0]
                     mean_slip[izero]=slip_tol
@@ -1348,24 +1393,39 @@ def run_generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_n
 #                    slip,success=make_KL_slip(fault_array,num_modes,eigenvals,V,mean_slip_log,max_slip,lognormal=True,seed=kfault)
                     slip,success=make_KL_slip(fault_array,num_modes,eigenvals,V,mean_slip_log,max_slip,lognormal=True,seed=None)
             
-            #Slip pattern sucessfully made, moving on.
-            #Rigidities
-            foo,mu=get_mean_slip(target_Mw[kmag],whole_fault,vel_mod_file)
-            fault_out[:,13]=mu
-            
-            #Calculate moment and magnitude of fake slip pattern
-            M0=sum(slip*fault_out[ifaults,10]*fault_out[ifaults,11]*mu[ifaults])
-            Mw=(2./3)*(log10(M0)-9.1)
-            
-            #Force to target magnitude
-            if force_magnitude==True:
-                M0_target=10**(1.5*target_Mw[kmag]+9.1)
-                M0_ratio=M0_target/M0
-                #Multiply slip by ratio
-                slip=slip*M0_ratio
-                #Recalculate
+                #Slip pattern sucessfully made, moving on.
+                #Rigidities
+                foo,mu=get_mean_slip(target_Mw[kmag],whole_fault,vel_mod_file)
+                fault_out[:,13]=mu
+                
+                #Calculate moment and magnitude of fake slip pattern
                 M0=sum(slip*fault_out[ifaults,10]*fault_out[ifaults,11]*mu[ifaults])
                 Mw=(2./3)*(log10(M0)-9.1)
+                
+                #Check max_slip_rule
+                if max_slip_rule==True:
+                    
+                    max_slip_from_rule=10**(-4.94+0.71*Mw) #From Allen & Hayes, 2017
+                    max_slip_tolerance = 3
+                    
+                    if slip.max() > max_slip_tolerance*max_slip_from_rule:
+                        success = False
+                        print('... ... ... max slip condition violated max_slip_rule, recalculating...')
+                
+                #Force to target magnitude
+                if force_magnitude==True:
+                    M0_target=10**(1.5*target_Mw[kmag]+9.1)
+                    M0_ratio=M0_target/M0
+                    #Multiply slip by ratio
+                    slip=slip*M0_ratio
+                    #Recalculate
+                    M0=sum(slip*fault_out[ifaults,10]*fault_out[ifaults,11]*mu[ifaults])
+                    Mw=(2./3)*(log10(M0)-9.1)
+                    
+                #check max_slip again
+                if slip.max() > max_slip:
+                    success=False
+                    print('... ... ... max slip condition violated due to force_magnitude=True, recalculating...')
             
             #Get stochastic rake vector
             stoc_rake=get_stochastic_rake(rake,len(slip))

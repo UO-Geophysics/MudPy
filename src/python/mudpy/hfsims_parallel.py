@@ -58,7 +58,9 @@ def run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,
         Rupture_Name = %s
         Station = %s
         Component (N,E,Z) = %s
-        '''%(rupture_name,sta,component)
+        Sample rate = %sHz
+        Duration = %ss
+        '''%(rupture_name,sta,component,str(1/hf_dt),str(total_duration))
         print(out)
         
     #print 'stress is '+str(stress_parameter)
@@ -79,7 +81,7 @@ def run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,
     structure=genfromtxt(home+project_name+'/structure/'+model_name)
     
     #Frequencies vector
-    f=logspace(log10(hf_dt),log10(1/(2*hf_dt))+0.01,50)
+    f=logspace(log10(1/total_duration),log10(1/(2*hf_dt))+0.01,100)
     omega=2*pi*f
     
     #Output time vector (0 is origin time)
@@ -182,7 +184,7 @@ def run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,
             ###Apply multiplier?
             if in_smga==True:
                 stress=stress_parameter*stress_multiplier
-                print "%.4f,%.4f is in SMGA, stress is %d" % (lon_source,lat_source,stress)
+                print("%.4f,%.4f is in SMGA, stress is %d" % (lon_source,lat_source,stress))
             else:
                 stress=stress_parameter
             
@@ -373,6 +375,7 @@ def run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,
                                                                                                                 
                           
             #######         Build Direct S ray           ######
+
             if Swave==True:
                 take_off_angle_S=directS.takeoff_angle
                 
@@ -428,6 +431,7 @@ def run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,
                         hf[i:j]=hf[i:j]+real(hf_seis_S)
                 else: #Beginning of seismogram is past end of available space
                     pass
+
             
             
             #######         Build Moho reflected S ray           ######

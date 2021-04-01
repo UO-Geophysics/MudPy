@@ -60,7 +60,7 @@ bounds=(top,bottom,left,right)
 ################################################################################e=
 
 ########      Run-time modifications to the time series             ############
-weight=None
+weight=True
 decimate=None  #Decimate by constant (=None for NO decimation)
 # #Corner frequencies in Hz =None if no filter is desired
  # [0.5] is a low pass filter

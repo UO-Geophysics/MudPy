@@ -488,11 +488,14 @@ def hf_waveforms(home,project_name,fault_name,rupture_list,GF_list,model_name,ru
             G_name,rise_time_depths,moho_depth_in_km,ncpus,source_time_function='dreger',duration=100.0,
             stf_falloff_rate=4.0,hf_dt=0.02,Pwave=False,Swave=True,hot_start=0,stress_parameter=50,
             high_stress_depth=1e4):
+
     '''
     Make semistochastic high frequency accelerograms
     '''
-    from numpy import genfromtxt
+    from numpy import genfromtxt,ones
     from mudpy import hfsims
+    
+    
     all_sources=genfromtxt(home+project_name+'/data/'+rupture_list,dtype='U')
     #Now loop over rupture models
     Nsources=all_sources.size
@@ -509,17 +512,29 @@ def hf_waveforms(home,project_name,fault_name,rupture_list,GF_list,model_name,ru
         sta_lon=lonlat[:,0]
         sta_lat=lonlat[:,1]
         
+        #Multi kappa?
+        if kappa == 'gflist': #from station files
+            station_kappa = genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=[-1])
+        elif kappa == None: #default values
+            station_kappa = 0.04*ones(len(sta))
+        else: #one single value for all sites that is NOT the default
+            station_kappa = kappa*ones(len(sta))
+        
         comp=['N','E','Z']  #components to loop through
         
         #Now loop over stations
         for ksta in range(len(sta)):
             #Now loop over components N,E,Z
+            
+            kappa = station_kappa[ksta] # assign station specific kappa values
+            
             for kcomp in range(len(comp)):
                 #HF_sims stochastic simulation for single station, component
                 if ncpus>1:
                     make_parallel_hfsims(home,project_name,rupture_name,ncpus,sta[ksta],sta_lon[ksta],sta_lat[ksta],
                         comp[kcomp],model_name,rise_time_depths[0],rise_time_depths[1],moho_depth_in_km,total_duration=duration,hf_dt=hf_dt,
                         Pwave=Pwave,Swave=Swave,stress_parameter=stress_parameter,high_stress_depth=high_stress_depth)
+
                     #Combine the separate MPI outputs into one full waveform
                     write_parallel_hfsims(home,project_name,rupture_name,sta[ksta],comp[kcomp],remove=True)
                 else:
@@ -530,6 +545,8 @@ def hf_waveforms(home,project_name,fault_name,rupture_list,GF_list,model_name,ru
                     write_fakequakes_hf_waveforms_one_by_one(home,project_name,rupture_name,hf_waveform,comp[kcomp])
 
 def make_parallel_hfsims(home,project_name,rupture_name,ncpus,sta,sta_lon,sta_lat,component,model_name,rise_time_depths0,rise_time_depths1,moho_depth_in_km,total_duration,hf_dt,Pwave,Swave,stress_parameter,kappa=0.04,Qexp=0.6,high_stress_depth=30):
+
+
     '''
     Set up for MPI calculation of HF stochastics
     '''
@@ -608,6 +625,8 @@ def run_hf_waveforms(home,project_name,fault_name,rupture_list,GF_list,model_nam
                 #Write to file
                 write_fakequakes_hf_waveforms_one_by_one(home,project_name,rupture_name,hf_waveform,comp[kcomp])
     
+
+
 def write_parallel_hfsims(home,project_name,rupture_name,station,component,remove=False):
     '''
     Combine outputs from parallel hfsims into one complete waveform.
@@ -616,7 +635,10 @@ def write_parallel_hfsims(home,project_name,rupture_name,station,component,remov
     from glob import glob
     from obspy import read
     import os
-    rupture=rupture_name.split('.')[0]+'.'+rupture_name.split('.')[1]
+    
+    #rupture=rupture_name.split('.')[0]+'.'+rupture_name.split('.')[1]
+    #new
+    rupture = rupture_name.rsplit('.', 1)[0]
     parallel_waveforms=glob(home+project_name+'/output/waveforms/'+rupture+'/'+station+'.HN'+component+'.[0-9][0-9][0-9].sac')
     #print "Number of MPI outputs: " + str(len(parallel_waveforms))
     if len(parallel_waveforms)==0:
@@ -646,7 +668,9 @@ def write_fakequakes_hf_waveforms_one_by_one(home,project_name,rupture_name,hf_t
     from os import path,makedirs
     
     #Where am I writing to?
-    rupture=rupture_name.split('.')[0]+'.'+rupture_name.split('.')[1]
+    #rupture=rupture_name.split('.')[0]+'.'+rupture_name.split('.')[1]
+    #new
+    rupture = rupture_name.rsplit('.', 1)[0]
     directory=home+project_name+'/output/waveforms/'+rupture+'/'
     
     #Check if dir exists if not then create it
@@ -667,7 +691,9 @@ def write_fakequakes_hf_waveforms(home,project_name,rupture_name,n,e,z):
     from obspy import Stream,Trace
     
     #Where am I writing to?
-    rupture=rupture_name.split('.')[0]+'.'+rupture_name.split('.')[1]
+    #rupture=rupture_name.split('.')[0]+'.'+rupture_name.split('.')[1]
+    #new
+    rupture = rupture_name.rsplit('.', 1)[0]
     directory=home+project_name+'/output/waveforms/'+rupture+'/'
     
     #Check if dir exists if not then create it
@@ -1078,7 +1104,11 @@ def write_fakequakes_waveforms(home,project_name,rupture_name,waveforms,GF_list,
     from pyproj import Geod
     
     #Where am I writting to?
-    rupture=rupture_name.split('.')[0]+'.'+rupture_name.split('.')[1]
+    #old
+#    rupture=rupture_name.split('.')[0]+'.'+rupture_name.split('.')[1]
+    #new
+    rupture = rupture_name.rsplit('.', 1)[0]
+    
     directory=home+project_name+'/output/waveforms/'+rupture+'/'
     
     #Check if dir exists if not then create it
@@ -1223,7 +1253,8 @@ def coseismics(home,project_name,rupture_name,station_file,hot_start=None):
         savetxt(outpath+sta+'.static.neu',(n,e,z))
 
 
-def coseismics_matrix(home,project_name,rupture_name,station_file,G_from_file,G_name):
+def coseismics_matrix(home,project_name,rupture_name,station_file,G_from_file,
+                      model_name,G_name,return_G=False,G=None):
     '''
     This routine will take synthetics and apply a static slip dsitibution. It will 
     linearly superimpose the synthetic coseismic from each subfault. Output will be
@@ -1243,89 +1274,188 @@ def coseismics_matrix(home,project_name,rupture_name,station_file,G_from_file,G_
     OUT:
         Nothing
     '''
-    from numpy import loadtxt,genfromtxt,array,savetxt,unique,where,zeros,load,save
+    from numpy import loadtxt,genfromtxt,array,savetxt,unique,where,zeros,load,save,arange
+    import os
+    from glob import glob
     
-    print('Solving for static problem')
+    print('... solving for static problem')
     #Output where?
-    outpath=home+project_name+'/output/forward_models/'
+    outpath=home+project_name+'/output/statics/'+rupture_name.replace('.rupt','')+'/'
+    
+    #check if output folder exists, if not make it
+    if not os.path.exists(outpath):
+        os.makedirs(outpath)
+    
     #load source
-    source=loadtxt(home+project_name+'/forward_models/'+rupture_name,ndmin=2)
+    source=loadtxt(home+project_name+'/output/ruptures/'+rupture_name,ndmin=2)
+    print('... ... source geometry is '+home+project_name+'/output/ruptures/'+rupture_name)
+    
     #Load stations
     station_file=home+project_name+'/data/station_info/'+station_file
     staname=genfromtxt(station_file,dtype="U",usecols=0)
+    sta_lonlat=genfromtxt(station_file,usecols=[1,2])
+    
     #Get unique sources
     source_id=unique(source[:,0])
     m=zeros((2*len(source_id),1))
     #Assemble source parameters vector
-    for ksta in range(len(staname)):
-        for ksource in range(len(source_id)):
-            #Get subfault parameters
-            nfault='subfault'+str(int(source_id[ksource])).rjust(4,'0')
-            ifault=where(source[:,0]==source_id[ksource])[0]
-            #Combine into model vector
-            ss_slip=source[ifault,8].sum()
-            ds_slip=source[ifault,9].sum()
-            m[2*ksource]=ss_slip
-            m[2*ksource+1]=ds_slip
+    for ksource in range(len(source_id)):
+
+        ifault=where(source[:,0]==source_id[ksource])[0]
+        #Combine into model vector
+        ss_slip=source[ifault,8].sum()
+        ds_slip=source[ifault,9].sum()
+        m[2*ksource]=ss_slip
+        m[2*ksource+1]=ds_slip
     
     
     #Do I need to make G or can I load it from file??
     G_name=home+project_name+'/GFs/matrices/'+G_name
-    if G_from_file==True: #load from file
+    
+    if G_from_file==True and G is None: #load from file
+        
         if G_name[-3:]!='npy':
             G_name=G_name+'.npy'
-        print('Loading G from file '+G_name)
+        print('... .... loading G from file '+G_name)
         G=load(G_name)
-    else:
-    #initalize matrices
+    
+    elif G_from_file==True and G is not None:
+        print('... ... G already provided, do not reload ...')
+    
+    elif G_from_file==False and G is None:
+        
+        #initalize matrices
         G=zeros((3*len(staname),2*len(source_id)))
-        print('... Assembling GFs matrix')
-        #Loop over stations
-        for ksta in range(len(staname)):
-            if ksta % 10 == 0:
-                print('... ... Loading station %i of %i' %(ksta,len(staname)))
-            sta=staname[ksta]
-            #Loop over sources
-            for ksource in range(len(source_id)):
-                #Get subfault parameters
-                nfault='subfault'+str(int(source_id[ksource])).rjust(4,'0')
-                #Where's the synthetic data
-                syn_path=home+project_name+'/GFs/static/'
-                #Get synthetics
-                try:
-                    coseis_ss=loadtxt(syn_path+sta+'.'+nfault+'.SS.static.neu')
-                except:
-                    coseis_ss=array([0,0,0])
-                nss=coseis_ss[0]
-                ess=coseis_ss[1]
-                zss=coseis_ss[2]
-                try:
-                    coseis_ds=loadtxt(syn_path+sta+'.'+nfault+'.DS.static.neu')
-                except:
-                    coseis_ds=array([0,0,0])
-                nds=coseis_ds[0]
-                eds=coseis_ds[1]
-                zds=coseis_ds[2]
-                #Put in matrix
-                #North
-                G[3*ksta,2*ksource]=nss  ;  G[3*ksta,2*ksource+1]=nds
-                #East
-                G[3*ksta+1,2*ksource]=ess  ;  G[3*ksta+1,2*ksource+1]=eds
-                #East
-                G[3*ksta+2,2*ksource]=zss  ;  G[3*ksta+2,2*ksource+1]=zds
+        print('... ... Assembling GFs matrix from scratch')
+        
+            
+        for ksource in range(len(source_id)):
+            
+            if ksource % 50 == 0:
+                print('... ... Loading source %i of %i' %(ksource,len(source_id)))
+            
+            #Get subfault parameters
+            nfault='sub'+str(int(source_id[ksource])).rjust(4,'0')
+            nfault2='subfault'+str(int(source_id[ksource])).rjust(4,'0')
+            #Where's the synthetic data
+            syn_path=glob(home+project_name+'/GFs/static/'+model_name+'*'+nfault)[0]
+            
+            #Get synthetics
+            try:
+                coseis_ss=genfromtxt(syn_path+'/'+nfault2+'.SS.static.neu',usecols=[1,2,3])
+            except:
+                coseis_ss=array([0,0,0])
+            
+            Nsites = len(coseis_ss)
+            
+            nss=coseis_ss[:,0]
+            ess=coseis_ss[:,1]
+            zss=coseis_ss[:,2]
+            
+            try:
+                coseis_ds=genfromtxt(syn_path+'/'+nfault2+'.DS.static.neu',usecols=[1,2,3])
+            except:
+                coseis_ds=array([0,0,0])
+            
+            nds=coseis_ds[:,0]
+            eds=coseis_ds[:,1]
+            zds=coseis_ds[:,2]
+            
+            #Put in matrix
+            inorth=arange(0,Nsites*3,3)
+            ieast=arange(1,Nsites*3,3)
+            iup=arange(2,Nsites*3,3)
+            
+            #North
+            G[inorth,2*ksource]=nss  ;  G[inorth,2*ksource+1]=nds
+            #East
+            G[ieast,2*ksource]=ess  ;  G[ieast,2*ksource+1]=eds
+            #East
+            G[iup,2*ksource]=zss  ;  G[iup,2*ksource+1]=zds
+        
         #Save G matrix
         print('Saving GF matrix to '+G_name+' this might take just a second...')
         save(G_name,G)
+    
     #Now go on to matrix multiply and save solutions
-    print('Matrix multiplying and saving output...DONE')
+    print('... matrix multiplying and saving output...DONE')
     d=G.dot(m)
+    
+    #write to file
+    out_file = outpath+'statics.neu'
+    f=open(out_file,'w')
+    f.write('# sta,lon,lat,n(m),e(m),z(m)\n')
+            
     for ksta in range(len(staname)):
         sta=staname[ksta]
         n=d[3*ksta]
         e=d[3*ksta+1]
         z=d[3*ksta+2]
-        savetxt(outpath+sta+'.static.neu',(n,e,z))
+        
+        f.write('%s\t%.4f\t%.4f\t%.4e\t%.4e\t%.4e\n' % (sta,sta_lonlat[ksta,0],sta_lonlat[ksta,1],n,e,z))
+    f.close()
     
+    #return G?
+    if return_G==True:
+        return G
+    
+
+def coseismics_fakequakes(home,project_name,GF_list,master_G_from_file,G_name,
+                          model_name,rupture_list):
+    '''
+    Make static offsets for all fakequakes ruptures
+    '''
+
+    from numpy import genfromtxt,where
+    
+    #load rupture list
+    all_sources=genfromtxt(home+project_name+'/data/'+rupture_list,dtype='U')
+    
+    #make temp GF_list with onlys tations that are flagged as statics
+    stations=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=0,dtype='U')
+    station_lonlat=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=[1,2])
+    statics_flag=genfromtxt(home+project_name+'/data/station_info/'+GF_list,usecols=3)
+    
+    #Keep only relevant sites
+    i=where(statics_flag==1)[0]
+    stations=stations[i]
+    station_lonlat=station_lonlat[i]
+    
+    station_file=home+project_name+'/data/station_info/coseismics.tmp'
+    f=open(station_file,'w')
+    for ksta in range(len(stations)):
+        f.write('%s\t%.4f\t%.4f\n' % (stations[ksta],station_lonlat[ksta,0],station_lonlat[ksta,1]))
+    f.close()
+        
+    #loop over sources
+    for krupt in range(len(all_sources)):
+        
+        #Run coseismcis on one rupture
+        rupture_name=all_sources[krupt]
+        print('Working on rupture '+rupture_name)
+        
+        if master_G_from_file==True:
+            if krupt==0:
+                G_from_file=True
+                G=coseismics_matrix(home,project_name,rupture_name,'coseismics.tmp',G_from_file,
+                                      model_name,G_name,return_G=True,G=None)
+            else:
+                G_from_file=True
+                coseismics_matrix(home,project_name,rupture_name,'coseismics.tmp',G_from_file,
+                                  model_name,G_name,return_G=False,G=G)
+        else:
+        #Only make G matrix the first time, otehrwise load it from file
+            if krupt==0:
+                G_from_file=False
+                G=coseismics_matrix(home,project_name,rupture_name,'coseismics.tmp',G_from_file,
+                                    model_name,G_name,return_G=True,G=None)
+            else:
+                G_from_file=True
+                coseismics_matrix(home,project_name,rupture_name,'coseismics.tmp',G_from_file,
+                                  model_name,G_name,return_G=False,G=G)
+            
+
+        
 
 
 
@@ -2020,11 +2150,11 @@ def upsample(st,delta):
     st[0].data=yi
     st[0].stats.delta=delta
 
-def lowpass(data,fcorner,fsample,order,zerophase=True):
+def lowpass(data,fcorner,fsample,order,zerophase=True,cascading=True):
     '''
     Make a lowpass zero phase filter
     '''
-    from scipy.signal import butter,filtfilt,lfilter
+    from scipy.signal import butter,filtfilt,lfilter,sosfiltfilt,sosfilt
     from numpy import size,array
     
     if size(fcorner)==2:
@@ -2032,27 +2162,45 @@ def lowpass(data,fcorner,fsample,order,zerophase=True):
     else:
         ftype='lowpass'
     fnyquist=fsample/2
-    b, a = butter(order, array(fcorner)/(fnyquist),ftype)
-    if zerophase==True:
-        data_filt=filtfilt(b,a,data)
+    
+    if cascading==True:
+        sos = butter(order, array(fcorner)/(fnyquist),ftype,output='sos')
+        if zerophase==True:
+            data_filt=sosfiltfilt(sos,data)
+        else:
+            data_filt=sosfilt(sos,data)
+    
     else:
-        data_filt=lfilter(b,a,data)
+        b, a = butter(order, array(fcorner)/(fnyquist),ftype)
+        if zerophase==True:
+            data_filt=filtfilt(b,a,data)
+        else:
+            data_filt=lfilter(b,a,data)
         
     return data_filt
     
-def highpass(data,fcorner,fsample,order,zerophase=True):
+def highpass(data,fcorner,fsample,order,zerophase=True,cascading=True):
     '''
     Make a highpass zero phase filter
     '''
-    from scipy.signal import butter,filtfilt,lfilter
+    from scipy.signal import butter,filtfilt,lfilter,sosfiltfilt,sosfilt
     from numpy import size,array
     
     fnyquist=fsample/2
-    b, a = butter(order, array(fcorner)/(fnyquist),'highpass')
-    if zerophase==True:
-        data_filt=filtfilt(b,a,data)
+    
+    if cascading==True:
+        sos = butter(order, array(fcorner)/(fnyquist),'highpass',output='sos')
+        if zerophase==True:
+            data_filt=sosfiltfilt(sos,data)
+        else:
+            data_filt=sosfilt(sos,data)
+    
     else:
-        data_filt=lfilter(b,a,data)
+        b, a = butter(order, array(fcorner)/(fnyquist),'highpass')
+        if zerophase==True:
+            data_filt=filtfilt(b,a,data)
+        else:
+            data_filt=lfilter(b,a,data)
     
     return data_filt
     
@@ -2130,7 +2278,7 @@ def inv2coulomb(rupt,epicenter,fout,zeroslip=False,offset=0):
     f=open(fout,'w')
     for k in range(Nfaults):
         #out='1   %10.4f %10.4f %10.4f %10.4f 100 %10.4f %10.4f %10.4f %10.4f %10.4f %i\n' % (xstart[k],ystart[k],xfin[k],yfin[k],rake[k],slip[k],dip[k],ztop[k],zbot[k],k)
-        out='1\t%.4f\t%.4f\t%.4f\t%.4f\t100\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%d\n' % (xstart[k],ystart[k],xfin[k],yfin[k],-ss[k],ds[k],dip[k],ztop[k],zbot[k],k+1+offset)
+        out='%3d %10.4f %10.4f %10.4f %10.4f 100 %10.4f %10.4f %10.4f %10.4f %10.4f %d\n' % (1,xstart[k],ystart[k],xfin[k],yfin[k],-ss[k],ds[k],dip[k],ztop[k],zbot[k],k+1+offset)
         f.write(out)
     f.close()
     
@@ -2142,8 +2290,8 @@ def coulomb_xy2latlon(f,epicenter,fout):
     import pyproj
     
     s=genfromtxt(f)
-    x=s[:,0]
-    y=s[:,1]
+    x=s[:,1]
+    y=s[:,2]
     #Now use pyproj to dead reckon anf get lat/lon coordinates of subfaults
     g = pyproj.Geod(ellps='WGS84')
     #first get azimuths of all points, go by quadrant
@@ -2170,8 +2318,8 @@ def coulomb_xy2latlon(f,epicenter,fout):
             la[k]=epicenter[1]
         else:
             lo[k],la[k],ba=g.fwd(epicenter[0],epicenter[1],az[k],d[k])
-    s[:,0]=lo
-    s[:,1]=la
+    s[:,1]=lo
+    s[:,2]=la
     savetxt(fout,s,fmt='%.6f')
     
 def coulomb_disp_xy2latlon(f,epicenter,fout):
@@ -3073,7 +3221,11 @@ def read_fakequakes_hypo_time(home,project_name,rupture_name,get_Mw=False):
     from obspy.core import UTCDateTime
     from numpy import array
     
-    rupture=rupture_name.split('.')[0]+'.'+rupture_name.split('.')[1]
+    #old
+    #rupture = rupture_name.split('.')[0]+'.'+rupture_name.split('.')[1]
+    #new (Tara's fix)
+    rupture = rupture_name.rsplit('.', 1)[0]
+    
     log_file=home+project_name+'/output/ruptures/'+rupture+'.log'
     f=open(log_file,'r')
     while True:
