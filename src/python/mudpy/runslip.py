@@ -357,7 +357,7 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
     '''
     This routine will read a .gflist file and compute the required GF type for each station
     '''
-    from numpy import genfromtxt,where
+    from numpy import genfromtxt,where,loadtxt,shape,floor
     from os import remove
     from gc import collect
     
@@ -365,7 +365,12 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
     gf_file=home+project_name+'/data/station_info/'+GF_list
     stations=genfromtxt(gf_file,usecols=0,skip_header=1,dtype='U')
     GF=genfromtxt(gf_file,usecols=[1,2,3,4,5,6,7],skip_header=1,dtype='f8')
-    
+    fault_file=home+project_name+'/data/model_info/'+fault_name  
+    source=loadtxt(fault_file,ndmin=2)
+    num_faults=shape(source)[0]
+    if num_faults/ncpus < 2:
+        ncpus=int(floor(num_faults/2.))
+        print 'Cutting back to ' + str(ncpus) + ' cpus for ' + str(num_faults) + ' subfaults'
     # GFs can be computed all at the same time
     station_file='temp.sta'
     try:
@@ -588,7 +593,7 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
                                                         
 def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_from_file,G_name,epicenter,
                 rupture_speed,num_windows,reg_spatial,reg_temporal,nfaults,beta,decimate,bandpass,
-                solver,bounds,weight=False,Ltype=2,target_moment=None,data_vector=None,onset_file=None):
+                solver,bounds,weight=False,Ltype=2,target_moment=None,data_vector=None,weight_vector=None,onset_file=None,GOD_inversion=False):
     '''
     Assemble G and d, determine smoothing and run the inversion
     '''
@@ -619,7 +624,10 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
     #Get data weights
     if weight==True:
         print('Applying data weights')
-        w=inv.get_data_weights(home,project_name,GF_list,d,decimate)
+        if weight_vector==None:
+            w=inv.get_data_weights(home,project_name,GF_list,d,decimate)
+        else:
+            w=load(weight_vector)
         W=empty(G.shape)
         W=tile(w,(G.shape[1],1)).T
         WG=empty(G.shape)
@@ -745,7 +753,12 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
             inv.write_log(home,project_name,run_name,kout,rupture_speed,num_windows,lambda_spatial,lambda_temporal,beta,
                 L2,Lmodel,VR,ABIC,Mo,Mw,model_name,fault_name,G_name,GF_list,solver,L2data)
             #Write output to file
-            inv.write_synthetics(home,project_name,run_name,GF_list,G,sol,ds,kout,decimate)
+            if GOD_inversion==True:
+                num=str(kout).rjust(4,'0')
+                np.save(home+project_name+'/output/inverse_models/'+run_name+'.'+num+'.syn.npy',ds)
+                inv.write_synthetics_GOD(home,project_name,run_name,GF_list,ds,kout,decimate)
+            else:
+                inv.write_synthetics(home,project_name,run_name,GF_list,G,sol,ds,kout,decimate)
             inv.write_model(home,project_name,run_name,fault_name,model_name,rupture_speed,num_windows,epicenter,sol,kout,onset_file=onset_file)
             kout+=1
             dt1=datetime.now()-t1

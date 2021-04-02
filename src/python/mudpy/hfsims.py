@@ -1,6 +1,6 @@
 def stochastic_simulation(home,project_name,rupture_name,sta,sta_lon,sta_lat,component,model_name,
         rise_time_depths,moho_depth_in_km,total_duration=100,hf_dt=0.01,stress_parameter=50,
-        kappa=0.04,Qexp=0.6,Pwave=False,high_stress_depth=1e4): 
+        kappa=0.04,Qexp=0.6,Pwave=False,Swave=True,high_stress_depth=1e4): 
     '''
     Run stochastic HF sims
     
@@ -35,10 +35,11 @@ def stochastic_simulation(home,project_name,rupture_name,sta,sta_lon,sta_lat,com
     Qexp = %s
     component = %s
     Pwave = %s
+    Swave = %s
     high_stress_depth = %s
     '''%(home,project_name,rupture_name,sta,str(sta_lon),str(sta_lat),model_name,str(rise_time_depths),
     str(moho_depth_in_km),str(total_duration),str(hf_dt),str(stress_parameter),
-    str(kappa),str(Qexp),str(component),str(Pwave),str(high_stress_depth))
+    str(kappa),str(Qexp),str(component),str(Pwave),str(Swave),str(high_stress_depth))
     print(out)
 
 #    rupture=rupture_name.split('.')[0]+'.'+rupture_name.split('.')[1]
@@ -226,9 +227,6 @@ def stochastic_simulation(home,project_name,rupture_name,sta,sta_lon,sta_lat,com
             #get high frequency decay
             P=exp(-pi*kappa*f)
             
-            #get quarter wavelength amplificationf actors
-            # pass rho in kg/m^3 (this units nightmare is what I get for following Graves' code)
-            I=get_amplification_factors(f,structure,zs,beta,rho*1000)
             
 #            if kfault==0:
 #                out='''Parameters within subfault calculations:
@@ -314,8 +312,12 @@ def stochastic_simulation(home,project_name,rupture_name,sta,sta_lon,sta_lat,com
                 #Get effect of intrinsic attenuation for that ray (path integrated)
                 Q_P=get_attenuation(f,structure,directP,Qexp,Qtype='P')
                 
+                #get quarter wavelength amplificationf actors
+                # pass rho in kg/m^3 (this units nightmare is what I get for following Graves' code)
+                I_P=get_amplification_factors(f,structure,zs,alpha,rho*1000)
+            
                 #Build the entire path term
-                G_P=(I*Q_P)/path_length_P
+                G_P=(I_P*Q_P)/path_length_P
 
                 #Get conically averaged radiation pattern terms
                 RP=conically_avg_P_radiation_pattern(strike,dip,rake,azimuth,take_off_angle_P)
@@ -366,56 +368,60 @@ def stochastic_simulation(home,project_name,rupture_name,sta,sta_lon,sta_lat,com
                                                                                                                 
                           
             #######         Build Direct S ray           ######
-            take_off_angle_S=directS.takeoff_angle
-            
-            #Get attenuation due to geometrical spreading (from the path length)
-            path_length_S=get_path_length(directS,zs,dist_in_degs)
-            path_length_S=path_length_S*100 #to cm
-            
-            #Get effect of intrinsic aptimeenuation for that ray (path integrated)
-            Q_S=get_attenuation(f,structure,directS,Qexp)
-            
-            #Build the entire path term
-            G_S=(I*Q_S)/path_length_S
-
-            #Get conically averaged radiation pattern terms
-            if component=='Z':
-                RP_vert=conically_avg_vert_radiation_pattern(strike,dip,rake,azimuth,take_off_angle_S)
-                #And finally multiply everything together to get the subfault amplitude spectrum
-                AS=CS*S*G_S*P*RP_vert   
-            else:
-                RP=conically_avg_radiation_pattern(strike,dip,rake,azimuth,take_off_angle_S,component_angle)
-                RP=abs(RP)
-                #And finally multiply everything together to get the subfault amplitude spectrum
-                AS=CS*S*G_S*P*RP                
-
-            #Generate windowed time series
-            duration=1./fc_subfault+0.063*(dist/1000)
-            w=windowed_gaussian(duration,hf_dt,window_type='saragoni_hart')
-            #w=windowed_gaussian(3*duration,hf_dt,window_type='cua',ptime=Ppaths[0].path['time'][-1],stime=Spaths[0].path['time'][-1])
-            
-            #Go to frequency domain, apply amplitude spectrum and ifft for final time series
-            hf_seis_S=apply_spectrum(w,AS,f,hf_dt)
-            
-            #What time after OT should this time series start at?
-            time_insert=directS.path['time'][-1]+onset_times[kfault]
-            #print 'ts = '+str(time_insert)+' , Td = '+str(duration)
-            #time_insert=Ppaths[0].path['time'][-1]
-            i=argmin(abs(t-time_insert))
-            j=i+len(hf_seis_S)
-            
-            
-            #Check seismogram doesn't go past last sample
-            if i<len(hf)-1: #if i (the beginning of the seimogram) is less than the length
-                if j>len(hf): #seismogram goes past total_duration length, trim it
-                    len_paste=len(hf)-i
-                    j=len(hf)
-                    #Add seismogram
-                    hf[i:j]=hf[i:j]+real(hf_seis_S[0:len_paste])
-                else: #Lengths are fine
-                    hf[i:j]=hf[i:j]+real(hf_seis_S)
-            else: #Beginning of seismogram is past end of available space
-                pass
+            if Swave==True:
+                take_off_angle_S=directS.takeoff_angle
+                
+                #Get attenuation due to geometrical spreading (from the path length)
+                path_length_S=get_path_length(directS,zs,dist_in_degs)
+                path_length_S=path_length_S*100 #to cm
+                
+                #Get effect of intrinsic aptimeenuation for that ray (path integrated)
+                Q_S=get_attenuation(f,structure,directS,Qexp)
+                
+                #get quarter wavelength amplificationf actors
+                # pass rho in kg/m^3 (this units nightmare is what I get for following Graves' code)
+                I_S=get_amplification_factors(f,structure,zs,beta,rho*1000)
+                #Build the entire path term
+                G_S=(I_S*Q_S)/path_length_S
+    
+                #Get conically averaged radiation pattern terms
+                if component=='Z':
+                    RP_vert=conically_avg_vert_radiation_pattern(strike,dip,rake,azimuth,take_off_angle_S)
+                    #And finally multiply everything together to get the subfault amplitude spectrum
+                    AS=CS*S*G_S*P*RP_vert   
+                else:
+                    RP=conically_avg_radiation_pattern(strike,dip,rake,azimuth,take_off_angle_S,component_angle)
+                    RP=abs(RP)
+                    #And finally multiply everything together to get the subfault amplitude spectrum
+                    AS=CS*S*G_S*P*RP                
+    
+                #Generate windowed time series
+                duration=1./fc_subfault+0.063*(dist/1000)
+                w=windowed_gaussian(duration,hf_dt,window_type='saragoni_hart')
+                #w=windowed_gaussian(3*duration,hf_dt,window_type='cua',ptime=Ppaths[0].path['time'][-1],stime=Spaths[0].path['time'][-1])
+                
+                #Go to frequency domain, apply amplitude spectrum and ifft for final time series
+                hf_seis_S=apply_spectrum(w,AS,f,hf_dt)
+                
+                #What time after OT should this time series start at?
+                time_insert=directS.path['time'][-1]+onset_times[kfault]
+                #print 'ts = '+str(time_insert)+' , Td = '+str(duration)
+                #time_insert=Ppaths[0].path['time'][-1]
+                i=argmin(abs(t-time_insert))
+                j=i+len(hf_seis_S)
+                
+                
+                #Check seismogram doesn't go past last sample
+                if i<len(hf)-1: #if i (the beginning of the seimogram) is less than the length
+                    if j>len(hf): #seismogram goes past total_duration length, trim it
+                        len_paste=len(hf)-i
+                        j=len(hf)
+                        #Add seismogram
+                        hf[i:j]=hf[i:j]+real(hf_seis_S[0:len_paste])
+                    else: #Lengths are fine
+                        hf[i:j]=hf[i:j]+real(hf_seis_S)
+                else: #Beginning of seismogram is past end of available space
+                    pass
             
             
             #######         Build Moho reflected S ray           ######

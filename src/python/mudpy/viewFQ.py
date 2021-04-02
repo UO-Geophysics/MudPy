@@ -455,11 +455,10 @@ def analyze_sources(home,project_name,run_name,Mw_lims=[7.75,9.35],return_values
     from matplotlib import pyplot as plt
     from matplotlib.ticker import MultipleLocator
     
-    
-    # logs=sort(glob(home+project_name+'/output/ruptures/'+run_name+'*.log'))
-    # ruptures=sort(glob(home+project_name+'/output/ruptures/'+run_name+'*.rupt'))
-    logs=sort(glob(home+project_name+'/output/'+run_name+'/*.log'))
-    ruptures=sort(glob(home+project_name+'/output/'+run_name+'/*.rupt'))
+    plt.rcParams.update({'font.size': 12})
+    logs=sort(glob(home+project_name+'/output/ruptures/'+run_name+'*.log'))
+    ruptures=sort(glob(home+project_name+'/output/ruptures/'+run_name+'*.rupt'))
+
     L=zeros(len(logs))
     W=zeros(len(logs))
     Mw_target=zeros(len(logs))
@@ -504,9 +503,9 @@ def analyze_sources(home,project_name,run_name,Mw_lims=[7.75,9.35],return_values
     plt.xlim(Mw_lims)
     plt.ylim([70,1100])
     plt.ylabel('Fault length (km)')
-    plt.annotate(r'$\log (L)=-2.37+0.57M_w$',xy=(8.15,85),fontsize=18)
+    plt.annotate(r'$\log (L)=-2.37+0.57M_w$',xy=(7.95,85),fontsize=12)
     plt.tick_params(axis='x',labelbottom='off')
-    plt.annotate('(a)',xy=(7.9,765),fontsize=18)
+    plt.annotate('(a)',xy=(7.9,765),fontsize=12)
     ax=plt.gca()
     ax.set_yscale('log')
     xmajorLocator = MultipleLocator(0.2)
@@ -527,9 +526,9 @@ def analyze_sources(home,project_name,run_name,Mw_lims=[7.75,9.35],return_values
     plt.xlim(Mw_lims)
     plt.ylim([9,300])
     plt.ylabel('Fault width (km)')
-    plt.annotate(r'$\log (W)=-1.86+0.46M_w$',xy=(8.3,12.2))
+    plt.annotate(r'$\log (W)=-1.86+0.46M_w$',xy=(7.9,12.2))
     plt.tick_params(axis='x',labelbottom='off')
-    plt.annotate('(b)',xy=(7.9,190),fontsize=18)
+    plt.annotate('(b)',xy=(7.9,190),fontsize=12)
     ax=plt.gca()
     ymajorLocator = MultipleLocator(0.2)
     yminorLocator = MultipleLocator(0.05)
@@ -546,7 +545,7 @@ def analyze_sources(home,project_name,run_name,Mw_lims=[7.75,9.35],return_values
     plt.xlim(Mw_lims)
     plt.ylabel('Target Mw')
     plt.tick_params(axis='x',labelbottom='off')
-    plt.annotate('(c)',xy=(7.9,9.18),fontsize=18)
+    plt.annotate('(c)',xy=(7.9,8.8),fontsize=12)
     ax=plt.gca()
     ymajorLocator = MultipleLocator(0.2)
     yminorLocator = MultipleLocator(0.05)
@@ -563,7 +562,7 @@ def analyze_sources(home,project_name,run_name,Mw_lims=[7.75,9.35],return_values
     plt.ylim([0.04,115])
     plt.ylabel(r'Mean slip (m)')
     plt.tick_params(axis='x',labelbottom='off')
-    plt.annotate('(d)',xy=(7.9,45),fontsize=18)
+    plt.annotate('(d)',xy=(7.9,45),fontsize=12)
     ax=plt.gca()
     ymajorLocator = MultipleLocator(5)
     yminorLocator = MultipleLocator(1)
@@ -587,7 +586,7 @@ def analyze_sources(home,project_name,run_name,Mw_lims=[7.75,9.35],return_values
     plt.ylim([0.7,110])
     plt.ylabel(r'Max. slip (m)')
     plt.tick_params(axis='x',labelbottom='off')
-    plt.annotate('(e)',xy=(7.9,51),fontsize=18)
+    plt.annotate('(e)',xy=(7.9,51),fontsize=12)
     ax=plt.gca()
     ymajorLocator = MultipleLocator(10)
     yminorLocator = MultipleLocator(2)
@@ -608,7 +607,7 @@ def analyze_sources(home,project_name,run_name,Mw_lims=[7.75,9.35],return_values
     plt.ylim([0.2,20])
     plt.ylabel(r'Slip std. dev. (m)')
     plt.tick_params(axis='x',labelbottom='off')
-    plt.annotate('(f)',xy=(7.9,12),fontsize=18)
+    plt.annotate('(f)',xy=(7.9,12),fontsize=12)
     ax=plt.gca()
     ymajorLocator = MultipleLocator(2)
     yminorLocator = MultipleLocator(0.5)
@@ -627,7 +626,7 @@ def analyze_sources(home,project_name,run_name,Mw_lims=[7.75,9.35],return_values
     plt.ylim([0.9,30])
     plt.xlabel('Actual Mw')
     plt.ylabel(r'Mean rise time (s)')
-    plt.annotate('(g)',xy=(7.9,17.3),fontsize=18)
+    plt.annotate('(g)',xy=(7.9,17.3),fontsize=12)
     ax=plt.gca()
     ymajorLocator = MultipleLocator(5)
     yminorLocator = MultipleLocator(1)
@@ -645,7 +644,7 @@ def analyze_sources(home,project_name,run_name,Mw_lims=[7.75,9.35],return_values
     plt.ylim([3,115])
     plt.xlabel('Actual Mw')
     plt.ylabel(r'Max rise time (s)')
-    plt.annotate('(h)',xy=(7.9,70),fontsize=18)
+    plt.annotate('(h)',xy=(7.9,70),fontsize=12)
     ax=plt.gca()
     ymajorLocator = MultipleLocator(10)
     yminorLocator = MultipleLocator(2)
@@ -663,7 +662,7 @@ def analyze_sources(home,project_name,run_name,Mw_lims=[7.75,9.35],return_values
     plt.ylim([0.4,15])
     plt.xlabel('Actual Mw')
     plt.ylabel(r'Rise time std. dev (s)')
-    plt.annotate('(i)',xy=(7.9,10.),fontsize=18)
+    plt.annotate('(i)',xy=(7.9,10.),fontsize=12)
     ax=plt.gca()
     ymajorLocator = MultipleLocator(2)
     yminorLocator = MultipleLocator(0.5)
@@ -2491,8 +2490,8 @@ def source_time_function(rupt,epicenter,dt=0.001,t_total=500,stf_type='dreger',p
     #Loop over subfaults
     faults_added=0
     for kfault in range(nfault):
-        if kfault%50==0:
-            print('Working on subfault %d of %d' % (kfault,nfault))
+#        if kfault%50==0:
+#            print('Working on subfault %d of %d' % (kfault,nfault))
         if rise_time[kfault]>0:
             faults_added+=1
             #get stf

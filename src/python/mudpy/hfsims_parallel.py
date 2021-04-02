@@ -4,7 +4,7 @@ Module for high frequency simulations in parallel
 
 def run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,component,model_name,
                         rise_time_depths0,rise_time_depths1,moho_depth_in_km,total_duration,
-                        hf_dt,stress_parameter,kappa,Qexp,Pwave,high_stress_depth,rank,size): 
+                        hf_dt,stress_parameter,kappa,Qexp,Pwave,Swave,high_stress_depth,rank,size): 
     '''
     Run stochastic HF sims
     
@@ -15,7 +15,7 @@ def run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,
     from pyproj import Geod
     from obspy.geodetics import kilometer2degrees
     from obspy.taup import TauPyModel
-    from mudpy.forward import get_mu, write_fakequakes_hf_waveforms_one_by_one,read_fakequakes_hypo_time
+    from mudpy.forward import get_mu, read_fakequakes_hypo_time
     from mudpy import hfsims
     from obspy import Stream,Trace
     from sys import stdout
@@ -46,6 +46,7 @@ def run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,
 #        Qexp = %s
 #        component = %s
 #        Pwave = %s
+#        Swave = %s
 #        high_stress_depth = %s
 #        '''%(home,project_name,rupture_name,str(N),str(M0),sta,str(sta_lon),str(sta_lat),model_name,str([rise_time_depths0,rise_time_depths1]),
 #        str(moho_depth_in_km),str(total_duration),str(hf_dt),str(stress_parameter),
@@ -130,14 +131,14 @@ def run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,
     for kfault in range(len(fault)):
         if rank==0:
             #Print status to screen            
-            if kfault % 150 == 0:
+            if kfault % 25 == 0:
                 if kfault==0:
-                    stdout.write('      [')
+                    stdout.write('      [.')
                     stdout.flush()
                 stdout.write('.')
                 stdout.flush()
             if kfault==len(fault)-1:
-                stdout.write(']\n')
+                stdout.write('.]\n')
                 stdout.flush()                
         
         #Include only subfaults with non-zero slip
@@ -248,9 +249,6 @@ def run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,
             #get high frequency decay
             P=exp(-pi*kappa*f)
             
-            #get quarter wavelength amplificationf actors
-            # pass rho in kg/m^3 (this units nightmare is what I get for following Graves' code)
-            I=hfsims.get_amplification_factors(f,structure,zs,beta,rho*1000)
             
             #Get other geometric parameters necessar for radiation pattern
             strike=fault[kfault,4]
@@ -324,8 +322,12 @@ def run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,
                 #Get effect of intrinsic attenuation for that ray (path integrated)
                 Q_P=hfsims.get_attenuation(f,structure,directP,Qexp,Qtype='P')
                 
+                #get quarter wavelength amplificationf actors
+                # pass rho in kg/m^3 (this units nightmare is what I get for following Graves' code)
+                I_P=hfsims.get_amplification_factors(f,structure,zs,alpha,rho*1000)
+                
                 #Build the entire path term
-                G_P=(I*Q_P)/path_length_P
+                G_P=(I_P*Q_P)/path_length_P
 
                 #Get conically averaged radiation pattern terms
                 RP=hfsims.conically_avg_P_radiation_pattern(strike,dip,rake,azimuth,take_off_angle_P)
@@ -373,57 +375,63 @@ def run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,
                                                                                                                 
                           
             #######         Build Direct S ray           ######
-            take_off_angle_S=directS.takeoff_angle
-            
-            #Get attenuation due to geometrical spreading (from the path length)
-            path_length_S=hfsims.get_path_length(directS,zs,dist_in_degs)
-            path_length_S=path_length_S*100 #to cm
-            
-            #Get effect of intrinsic aptimeenuation for that ray (path integrated)
-            Q_S=hfsims.get_attenuation(f,structure,directS,Qexp)
-            
-            #Build the entire path term
-            G_S=(I*Q_S)/path_length_S
 
-            #Get conically averaged radiation pattern terms
-            if component=='Z':
-                RP_vert=hfsims.conically_avg_vert_radiation_pattern(strike,dip,rake,azimuth,take_off_angle_S)
-                #And finally multiply everything together to get the subfault amplitude spectrum
-                AS=CS*S*G_S*P*RP_vert   
-            else:
-                RP=hfsims.conically_avg_radiation_pattern(strike,dip,rake,azimuth,take_off_angle_S,component_angle)
-                RP=abs(RP)
-                #And finally multiply everything together to get the subfault amplitude spectrum
-                AS=CS*S*G_S*P*RP                
-
-            #Generate windowed time series
-            duration=1./fc_subfault+0.063*(dist/1000)
-            w=hfsims.windowed_gaussian(duration,hf_dt,window_type='saragoni_hart')
-            #w=windowed_gaussian(3*duration,hf_dt,window_type='cua',ptime=Ppaths[0].path['time'][-1],stime=Spaths[0].path['time'][-1])
-            
-            #Go to frequency domain, apply amplitude spectrum and ifft for final time series
-            hf_seis_S=hfsims.apply_spectrum(w,AS,f,hf_dt)
-            
-            #What time after OT should this time series start at?
-            time_insert=directS.path['time'][-1]+onset_times[kfault]
-            #print 'ts = '+str(time_insert)+' , Td = '+str(duration)
-            #time_insert=Ppaths[0].path['time'][-1]
-            i=argmin(abs(t-time_insert))
-            j=i+len(hf_seis_S)
-            
-            
-            #Check seismogram doesn't go past last sample
-            if i<len(hf)-1: #if i (the beginning of the seimogram) is less than the length
-                if j>len(hf): #seismogram goes past total_duration length, trim it
-                    len_paste=len(hf)-i
-                    j=len(hf)
-                    #Add seismogram
-                    hf[i:j]=hf[i:j]+real(hf_seis_S[0:len_paste])
-                else: #Lengths are fine
+            if Swave==True:
+                take_off_angle_S=directS.takeoff_angle
+                
+                #Get attenuation due to geometrical spreading (from the path length)
+                path_length_S=hfsims.get_path_length(directS,zs,dist_in_degs)
+                path_length_S=path_length_S*100 #to cm
+                
+                #Get effect of intrinsic aptimeenuation for that ray (path integrated)
+                Q_S=hfsims.get_attenuation(f,structure,directS,Qexp)
+                
+                #get quarter wavelength amplificationf actors
+                # pass rho in kg/m^3 (this units nightmare is what I get for following Graves' code)
+                I_S=hfsims.get_amplification_factors(f,structure,zs,beta,rho*1000)
+                
+                #Build the entire path term
+                G_S=(I_S*Q_S)/path_length_S
+    
+                #Get conically averaged radiation pattern terms
+                if component=='Z':
+                    RP_vert=hfsims.conically_avg_vert_radiation_pattern(strike,dip,rake,azimuth,take_off_angle_S)
+                    #And finally multiply everything together to get the subfault amplitude spectrum
+                    AS=CS*S*G_S*P*RP_vert   
+                else:
+                    RP=hfsims.conically_avg_radiation_pattern(strike,dip,rake,azimuth,take_off_angle_S,component_angle)
+                    RP=abs(RP)
+                    #And finally multiply everything together to get the subfault amplitude spectrum
+                    AS=CS*S*G_S*P*RP                
+    
+                #Generate windowed time series
+                duration=1./fc_subfault+0.063*(dist/1000)
+                w=hfsims.windowed_gaussian(duration,hf_dt,window_type='saragoni_hart')
+                #w=windowed_gaussian(3*duration,hf_dt,window_type='cua',ptime=Ppaths[0].path['time'][-1],stime=Spaths[0].path['time'][-1])
+                
+                #Go to frequency domain, apply amplitude spectrum and ifft for final time series
+                hf_seis_S=hfsims.apply_spectrum(w,AS,f,hf_dt)
+                
+                #What time after OT should this time series start at?
+                time_insert=directS.path['time'][-1]+onset_times[kfault]
+                #print 'ts = '+str(time_insert)+' , Td = '+str(duration)
+                #time_insert=Ppaths[0].path['time'][-1]
+                i=argmin(abs(t-time_insert))
+                j=i+len(hf_seis_S)
+                
+                
+                #Check seismogram doesn't go past last sample
+                if i<len(hf)-1: #if i (the beginning of the seimogram) is less than the length
+                    if j>len(hf): #seismogram goes past total_duration length, trim it
+                        len_paste=len(hf)-i
+                        j=len(hf)
+                        #Add seismogram
+                        hf[i:j]=hf[i:j]+real(hf_seis_S[0:len_paste])
+                    else: #Lengths are fine
+                        hf[i:j]=hf[i:j]+real(hf_seis_S)
+                else: #Beginning of seismogram is past end of available space
                     pass
-                    hf[i:j]=hf[i:j]+real(hf_seis_S)
-            else: #Beginning of seismogram is past end of available space
-                pass
+
             
             
             #######         Build Moho reflected S ray           ######
@@ -525,7 +533,10 @@ if __name__ == '__main__':
         Pwave=sys.argv[20]
         if Pwave=='True':
             Pwave=True
-        high_stress_depth=int(sys.argv[21])
-        run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,component,model_name,rise_time_depths0,rise_time_depths1,moho_depth_in_km,total_duration,hf_dt,stress_parameter,kappa,Qexp,Pwave,high_stress_depth,rank,size)
+        Swave=sys.argv[21]
+        if Swave=='True':
+            Swave=True
+        high_stress_depth=int(sys.argv[22])
+        run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,component,model_name,rise_time_depths0,rise_time_depths1,moho_depth_in_km,total_duration,hf_dt,stress_parameter,kappa,Qexp,Pwave,Swave,high_stress_depth,rank,size)
     else:
         print("ERROR: You're not allowed to run "+sys.argv[1]+" from the shell or it does not exist")

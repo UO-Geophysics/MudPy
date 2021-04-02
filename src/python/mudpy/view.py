@@ -144,7 +144,7 @@ def quick_model(rupt,s=5):
     #Get projection of rake vector
     x,y=slip2geo(ss,ds,strike)
     #Plot
-    plt.figure()
+    plt.figure(figsize=(5.2,10))
     plt.scatter(lon,lat,marker='o',c=slip,s=s,cmap=whitejet)
     plt.ylabel('Latitude')
     plt.xlabel('Longitude')
@@ -152,8 +152,66 @@ def quick_model(rupt,s=5):
     cb.set_label('Slip (m)')
     plt.quiver(lon,lat,x,y,color='green',width=0.0013)
     plt.grid()
-    plt.title(rupt)
+    #plt.title(rupt)
+    #plt.title(rupt[58:85])
+    #plt.savefig(rupt[0:49]+'figures/'+rupt[58:85]+'.png')
+    #plt.close()
     plt.show()
+
+
+def plot_onsettime(rupt,s=5):
+    '''
+    Quick and dirty plot of a .rupt file. Shows map view of slip
+    
+    Parameters:
+            rupt: string
+            The absolute path to a .inv or .rupt file
+            
+    Example:
+        view.quick_model('/foo/bar/output/inverse_models/models/inv_result.inv')
+    '''
+    
+    from numpy import genfromtxt,unique,where,zeros,array
+    import matplotlib.pyplot as plt
+    from string import replace
+    
+    f=genfromtxt(rupt)
+    onset=f[:,12]
+    num=f[:,0]
+    #Now parse for multiple rupture speeds
+    unum=unique(num)
+    #Get other parameters
+    lon=f[0:len(unum),1]
+    lat=f[0:len(unum),2]
+    #Find hypocenter
+    log_file=rupt[:-5]+'.log'
+    j=open(log_file,'r')
+    loop_go=True
+    while loop_go:
+        line=j.readline()  
+        if 'Hypocenter (lon,lat,z[km])' in line:
+            q=replace(line.split(':')[-1],'(','')
+            q=replace(q,')','')
+            hypocenter=array(q.split(',')).astype('float')
+            loop_go=False       
+    #Plot
+    plt.figure(figsize=(5.2,10))
+    plt.scatter(hypocenter[0],hypocenter[1],marker='o',edgecolors='k',lw=2,s=5*s)
+    plt.scatter(lon,lat,marker='o',c=onset,s=s,cmap=whitejet,vmax=5)
+    plt.ylabel('Latitude')
+    plt.xlabel('Longitude')
+    plt.xlim([hypocenter[0]-1,hypocenter[0]+1])
+    plt.ylim([hypocenter[1]-1,hypocenter[1]+1])
+    cb=plt.colorbar()
+    cb.set_label('Onset Time (s)')
+    plt.grid()
+    plt.title(rupt[-26:-5])
+    #plt.title(rupt[58:85])
+    plt.savefig(rupt[:-35]+'figures/'+rupt[-26:-5]+'/'+rupt[-26:-5]+'_onset.png')
+    plt.close()
+    #plt.show()
+
+
     
 def quick_static(gflist,datapath,scale=1):
     '''
@@ -1970,16 +2028,19 @@ def insar_residual(home,project_name,run_name,run_number,gflist,zlims):
     lon_all=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=[1],dtype='f')
     lat_all=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=[2],dtype='f')
     gf=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=[7],dtype='f')
-    datapath=home+project_name+'/data/statics/'
+    gf_datapath=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=[12],dtype='S')
+    #datapath=home+project_name+'/data/statics/'
     synthpath=home+project_name+'/output/inverse_models/statics/'
     #synthpath=home+project_name+'/output/forward_models/'
     i=where(gf==1)[0] #Which stations have statics?
     lon=lon_all[i]
     lat=lat_all[i]
+    gf_datapath=gf_datapath[i]
     los_data=zeros(len(i))
     los_synth=zeros(len(i))
     for k in range(len(i)):
-        neu=genfromtxt(datapath+sta[i[k]]+'.los')
+        #neu=genfromtxt(datapath+sta[i[k]]+'.los')
+        neu=genfromtxt(gf_datapath[k])
         #neu=genfromtxt(datapath+sta[i[k]]+'.static.neu')
         los_data[k]=neu[0]
         neus=genfromtxt(synthpath+run_name+'.'+run_number+'.'+sta[i[k]]+'.los')
@@ -1989,7 +2050,7 @@ def insar_residual(home,project_name,run_name,run_number,gflist,zlims):
     out=c_[lon,lat,los_data,los_synth,los_data-los_synth]
     savetxt(home+project_name+'/analysis/'+run_name+'.'+run_number+'.insar.res',out,fmt='%.6f\t%.6f\t%8.5f\t%8.5f\t%8.5f',header='lon,lat,los_data(m),los_synthetic(m),data-synthetic(m)')
     plt.figure()
-    plt.scatter(lon,lat,c=los_data-los_synth,cmap=matplotlib.cm.seismic,vmin=zlims[0],vmax=zlims[1],s=50)
+    plt.scatter(lon,lat,c=los_data-los_synth,cmap=matplotlib.cm.seismic,vmin=zlims[0],vmax=zlims[1],s=5)
     plt.title('LOS data - LOS predicted (m)')
     plt.colorbar()
     plt.grid()
@@ -2013,16 +2074,17 @@ def insar_results(home,project_name,run_name,run_number,gflist,zlims,cmap,figsiz
     lon_all=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=[1],dtype='f')
     lat_all=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=[2],dtype='f')
     gf=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=[7],dtype='f')
-    datapath=home+project_name+'/data/statics/'
+    gf_datapath=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=[12],dtype='S')
     synthpath=home+project_name+'/output/inverse_models/statics/'
     #synthpath=home+project_name+'/output/forward_models/'
     i=where(gf==1)[0] #Which stations have statics?
     lon=lon_all[i]
     lat=lat_all[i]
+    gf_datapath=gf_datapath[i]
     los_data=zeros(len(i))
     los_synth=zeros(len(i))
     for k in range(len(i)):
-        neu=genfromtxt(datapath+sta[i[k]]+'.los')
+        neu=genfromtxt(gf_datapath[k])
         #neu=genfromtxt(datapath+sta[i[k]]+'.static.neu')
         los_data[k]=neu[0]
         neus=genfromtxt(synthpath+run_name+'.'+run_number+'.'+sta[i[k]]+'.los')

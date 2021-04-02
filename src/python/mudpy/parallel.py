@@ -288,6 +288,10 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
                     e=t.copy()
                     e[0].data=etemp/100
                     z[0].data=z[0].data/100
+                    # get rid of numerical "noise" in the first tb samples
+                    n[0].data[0:tb]=0
+                    e[0].data[0:tb]=0
+                    z[0].data[0:tb]=0
                     n=origin_time(n,time_epi,tb)
                     e=origin_time(e,time_epi,tb)
                     z=origin_time(z,time_epi,tb)
