@@ -221,7 +221,7 @@ def run_parallel_generate_ruptures(home,project_name,run_name,fault_name,slab_na
             if force_hypocenter==False: #Use random hypo, otehrwise force hypo to user specified
                 hypocenter=whole_fault[hypo_fault,1:4]
 
-            t_onset=fakequakes.get_rupture_onset(home,project_name,slip,fault_array,model_name,hypocenter,rise_time_depths,M0,velmod)
+            t_onset=fakequakes.get_rupture_onset(home,project_name,slip,fault_array,model_name,hypocenter,rise_time_depths,M0,velmod,shear_wave_fraction=shear_wave_fraction)
             fault_out[:,12]=0
             fault_out[ifaults,12]=t_onset
             
