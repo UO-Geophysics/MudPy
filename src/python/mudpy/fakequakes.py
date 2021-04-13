@@ -837,7 +837,7 @@ def get_rupture_onset(home,project_name,slip,fault_array,model_name,hypocenter,
     # Transition 
     i=where((depth_to_top<rise_time_depths[1]) & (depth_to_top>rise_time_depths[0]))[0]
     slope=(shear_wave_fraction_deep-shear_wave_fraction_shallow)/(rise_time_depths[1]-rise_time_depths[0])
-    intercept=shear_wave_fraction-slope*rise_time_depths[1]
+    intercept=shear_wave_fraction_deep-slope*rise_time_depths[1]
     rupture_multiplier[i]=slope*depth_to_top[i]+intercept
     
     
