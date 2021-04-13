@@ -11,7 +11,7 @@ def run_parallel_generate_ruptures(home,project_name,run_name,fault_name,slab_na
         num_modes,Nrealizations,rake,buffer_factor,rise_time_depths0,rise_time_depths1,time_epi,max_slip,
         source_time_function,lognormal,slip_standard_deviation,scaling_law,ncpus,force_magnitude,
         force_area,mean_slip_name,hypocenter,slip_tol,force_hypocenter,
-        no_random,shypo,use_hypo_fraction,shear_wave_fraction,max_slip_rule,previous_runs,rank,size):
+        no_random,shypo,use_hypo_fraction,shear_wave_fraction_shallow,shear_wave_fraction_deep,max_slip_rule,previous_runs,rank,size):
     
     '''
     Depending on user selected flags parse the work out to different functions
@@ -221,7 +221,7 @@ def run_parallel_generate_ruptures(home,project_name,run_name,fault_name,slab_na
             if force_hypocenter==False: #Use random hypo, otehrwise force hypo to user specified
                 hypocenter=whole_fault[hypo_fault,1:4]
 
-            t_onset=fakequakes.get_rupture_onset(home,project_name,slip,fault_array,model_name,hypocenter,rise_time_depths,M0,velmod,shear_wave_fraction=shear_wave_fraction)
+            t_onset=fakequakes.get_rupture_onset(home,project_name,slip,fault_array,model_name,hypocenter,rise_time_depths,M0,velmod,shear_wave_fraction_shallow=shear_wave_fraction_shallow,shear_wave_fraction_deep=shear_wave_fraction_deep)
             fault_out[:,12]=0
             fault_out[ifaults,12]=t_onset
             
@@ -353,19 +353,20 @@ if __name__ == '__main__':
             use_hypo_fraction=True
         if use_hypo_fraction=='False':
             use_hypo_fraction=False
-        shear_wave_fraction=float(sys.argv[38])
-        max_slip_rule=sys.argv[39]
+        shear_wave_fraction_shallow=float(sys.argv[38])
+        shear_wave_fraction_deep=float(sys.argv[39])
+        max_slip_rule=sys.argv[40]
         if max_slip_rule=='True':
             max_slip_rule=True
         if max_slip_rule=='False':
             max_slip_rule=False
-        previous_runs=int(sys.argv[40])
+        previous_runs=int(sys.argv[41])
         
         run_parallel_generate_ruptures(home,project_name,run_name,fault_name,slab_name,mesh_name,
         load_distances,distances_name,UTM_zone,tMw,model_name,hurst,Ldip,Lstrike,
         num_modes,Nrealizations,rake,buffer_factor,rise_time_depths0,rise_time_depths1,time_epi,max_slip,
         source_time_function,lognormal,slip_standard_deviation,scaling_law,ncpus,force_magnitude,
         force_area,mean_slip_name,hypocenter,slip_tol,force_hypocenter,
-        no_random,shypo,use_hypo_fraction,shear_wave_fraction,max_slip_rule,previous_runs,rank,size)
+        no_random,shypo,use_hypo_fraction,shear_wave_fraction_shallow,shear_wave_fraction_deep,max_slip_rule,previous_runs,rank,size)
     else:
         print("ERROR: You're not allowed to run "+sys.argv[1]+" from the shell or it does not exist")
