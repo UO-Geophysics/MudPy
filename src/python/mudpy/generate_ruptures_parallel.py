@@ -23,6 +23,7 @@ def run_parallel_generate_ruptures(home,project_name,run_name,fault_name,slab_na
     from mudpy import fakequakes
     from obspy import UTCDateTime
     from obspy.taup import TauPyModel
+    import geopy.distance
     import warnings
 
     #I don't condone it but this cleans up the warnings
@@ -228,6 +229,18 @@ def run_parallel_generate_ruptures(home,project_name,run_name,fault_name,slab_na
             #Calculate location of moment centroid
             centroid_lon,centroid_lat,centroid_z=fakequakes.get_centroid(fault_out)
             
+            #Calculate average rupture velocity
+            lon_array = fault_out[:,1]
+            lat_array = fault_out[:,2]
+            vrupt = []
+            
+            for i in range(len(fault_array)):
+                if t_onset[i] > 0:
+                    r = geopy.distance.geodesic((hypocenter[1], hypocenter[0]), (lat_array[i], lon_array[i])).km
+                    vrupt.append(r/t_onset[i])
+            
+            avg_vrupt = np.mean(vrupt)
+            
             #Write to file
             print(f'ncpus*realization+rank+prev = {ncpus}*{realization}+{rank}+{previous_runs}')
             run_number=str(ncpus*realization+rank+previous_runs).rjust(6,'0')
@@ -257,7 +270,8 @@ def run_parallel_generate_ruptures(home,project_name,run_name,fault_name,slab_na
             f.write('Hypocenter (lon,lat,z[km]): (%.6f,%.6f,%.2f)\n' %(hypocenter[0],hypocenter[1],hypocenter[2]))
             f.write('Hypocenter time: %s\n' % time_epi)
             f.write('Centroid (lon,lat,z[km]): (%.6f,%.6f,%.2f)\n' %(centroid_lon,centroid_lat,centroid_z))
-            f.write('Source time function type: %s' % source_time_function)
+            f.write('Source time function type: %s\n' % source_time_function)
+            f.write('Average Rupture Velocity (km/s): %.2f' % avg_vrupt)
             f.close()
             
             realization+=1
