@@ -838,8 +838,7 @@ def get_rupture_onset(home,project_name,slip,fault_array,model_name,hypocenter,
     i=where((depth_to_top<rise_time_depths[1]) & (depth_to_top>rise_time_depths[0]))[0]
     slope=(shear_wave_fraction_deep-shear_wave_fraction_shallow)/(rise_time_depths[1]-rise_time_depths[0])
     intercept=shear_wave_fraction_deep-slope*rise_time_depths[1]
-    rupture_multiplier[i]=slope*depth_to_top[i]+intercept
-    
+    rupture_multiplier[i]=slope*depth_to_top[i]+intercept   
     
     
     #Perturb depths of the hypocenter so that faults at the same depth are not zero onset
@@ -902,6 +901,10 @@ def get_rupture_onset(home,project_name,slip,fault_array,model_name,hypocenter,
         #Now multiply ray path length times rupture velocity
         ray_times=length_ray/(vel[:,1]*rupture_multiplier)
         t_onset[kfault]=ray_times.sum()   
+        
+    a = vel[:,1]*rupture_multiplier
+    b = a.sum()/7
+    print(f'rupture velocity = {b}')
         
     #Now perturb onset times according to Graves-Pitarka eq 5 and 6 (assumes 1:1 corelation with slip)
     delta_t0=((M0*1e7)**(1./3))*1.8e-9

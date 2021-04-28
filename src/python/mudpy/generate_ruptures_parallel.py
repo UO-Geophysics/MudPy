@@ -229,6 +229,10 @@ def run_parallel_generate_ruptures(home,project_name,run_name,fault_name,slab_na
             #Calculate location of moment centroid
             centroid_lon,centroid_lat,centroid_z=fakequakes.get_centroid(fault_out)
             
+            #Calculate average risetime
+            rise = fault_out[:,7]
+            avg_rise = np.mean(rise)
+            
             #Calculate average rupture velocity
             lon_array = fault_out[:,1]
             lat_array = fault_out[:,2]
@@ -271,6 +275,7 @@ def run_parallel_generate_ruptures(home,project_name,run_name,fault_name,slab_na
             f.write('Hypocenter time: %s\n' % time_epi)
             f.write('Centroid (lon,lat,z[km]): (%.6f,%.6f,%.2f)\n' %(centroid_lon,centroid_lat,centroid_z))
             f.write('Source time function type: %s\n' % source_time_function)
+            f.write('Average Rise Time (s): %.2f\n' % avg_rise)
             f.write('Average Rupture Velocity (km/s): %.2f' % avg_vrupt)
             f.close()
             
