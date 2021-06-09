@@ -18,16 +18,16 @@ run_name='cascadia3D'
 
 ##############             What do you want to do??           ##################
 init=0
-make_ruptures=1
+make_ruptures=0
 make_GFs=0
 make_synthetics=0
-make_waveforms=0
+make_waveforms=1
 make_hf_waveforms=0
 match_filter=0
 make_statics=0
 # Things that only need to be done once
-load_distances=0
-G_from_file=0
+load_distances=1
+G_from_file=1
 ###############################################################################
 
 
@@ -40,12 +40,12 @@ fault_name='cascadia30.fault'
 slab_name='cascadia_slab.xyz'    # Slab 1.0 Ascii file
 mesh_name='cascadia30.mshout'  
 distances_name=fault_name # Name of distances matrices
-rupture_list='all.list'
+rupture_list='ruptures.list'
 UTM_zone='10T'
 scaling_law='T' # T for thrust, S for strike-slip, N for normal
 
 #Station information
-GF_list='cascadia_small.gflist'
+GF_list='cascadia_test.gflist'
 G_name=run_name  #Name of G matrix for waveforms
 G_name_static=run_name+'_statics' #Name of G matrix for statics
 
@@ -55,7 +55,7 @@ max_slip=100 #Maximum sip (m) allowed in the model
 max_slip_rule=True #restrict max slip to 3 times Allen & Hayes 2017
 
 # Displacement and velocity waveform parameters
-NFFT=512 ; dt=0.25
+NFFT=128 ; dt=1.0
 #fk-parameters
 dk=0.1 ; pmin=0 ; pmax=1 ; kmax=20
 custom_stf=None

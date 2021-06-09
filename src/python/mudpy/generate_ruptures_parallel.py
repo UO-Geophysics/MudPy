@@ -27,7 +27,7 @@ def run_parallel_generate_ruptures(home,project_name,run_name,fault_name,slab_na
 
     #I don't condone it but this cleans up the warnings
     warnings.filterwarnings("ignore")
-    print "hello?"
+
     # Fix input formats
     rank=int(rank)
     size=int(size)
@@ -42,7 +42,6 @@ def run_parallel_generate_ruptures(home,project_name,run_name,fault_name,slab_na
     for rMw in range(len(tMw)):
         target_Mw[rMw]=float(tMw[rMw])
     
-    print "HELLO?"
 
     #Should I calculate or load the distances?
     if load_distances==1:  

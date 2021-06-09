@@ -4,6 +4,10 @@ D. Melgar 02/2014
 Forward modeling routines
 '''
 
+from numba import jit
+
+
+
 def waveforms(home,project_name,rupture_name,station_file,model_name,run_name,integrate,tsunami,hot_start,resample,beta):
     '''
     This routine will take synthetics and apply a slip dsitribution. It will delay each 
@@ -252,7 +256,7 @@ def waveforms_matrix(home,project_name,fault_name,rupture_name,station_file,GF_l
         e.write(home+project_name+'/output/forward_models/'+run_name+'.'+gfsta[ksta]+'.'+vord+'.e',format='SAC')
         u.write(home+project_name+'/output/forward_models/'+run_name+'.'+gfsta[ksta]+'.'+vord+'.u',format='SAC')
 
-        
+
 def waveforms_fakequakes(home,project_name,fault_name,rupture_list,GF_list,
                 model_name,run_name,dt,NFFT,G_from_file,G_name,source_time_function='dreger',zeta=0.2,
                 stf_falloff_rate=4.0,rupture_name=None,epicenter=None,time_epi=None,
@@ -880,6 +884,7 @@ def load_fakequakes_synthetics(home,project_name,fault_name,model_name,GF_list,G
 
 
 
+
 def get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_name,time_epi,GF_list,epicenter,NFFT,
                 source_time_function,stf_falloff_rate,zeta=0.2,forward=False):
     '''
@@ -905,7 +910,7 @@ def get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_nam
         G: Fully assembled GF matrix
     '''
     
-    from numpy import genfromtxt,loadtxt,convolve,where,zeros,arange,unique,save
+    from numpy import genfromtxt,convolve,where,zeros,arange,unique
 
 
     if forward==True:

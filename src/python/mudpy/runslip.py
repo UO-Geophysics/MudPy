@@ -370,7 +370,7 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
     num_faults=shape(source)[0]
     if num_faults/ncpus < 2:
         ncpus=int(floor(num_faults/2.))
-        print 'Cutting back to ' + str(ncpus) + ' cpus for ' + str(num_faults) + ' subfaults'
+        print('Cutting back to ' + str(ncpus) + ' cpus for ' + str(num_faults) + ' subfaults')
     # GFs can be computed all at the same time
     station_file='temp.sta'
     try:
