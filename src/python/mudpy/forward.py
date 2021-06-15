@@ -491,7 +491,7 @@ def waveforms_fakequakes_dynGF(home,project_name,fault_name,rupture_list,GF_list
 def hf_waveforms(home,project_name,fault_name,rupture_list,GF_list,model_name,run_name,dt,NFFT,G_from_file,
             G_name,rise_time_depths,moho_depth_in_km,ncpus,source_time_function='dreger',duration=100.0,
             stf_falloff_rate=4.0,hf_dt=0.02,Pwave=False,Swave=True,hot_start=0,stress_parameter=50,
-            high_stress_depth=1e4):
+            high_stress_depth=1e4,kappa=None):
 
     '''
     Make semistochastic high frequency accelerograms
