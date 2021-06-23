@@ -2074,7 +2074,7 @@ def insar_results(home,project_name,run_name,run_number,gflist,zlims,cmap,figsiz
     lon_all=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=[1],dtype='f')
     lat_all=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=[2],dtype='f')
     gf=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=[7],dtype='f')
-    gf_datapath=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=[12],dtype='S')
+    gf_datapath=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=[12],dtype='U')
     synthpath=home+project_name+'/output/inverse_models/statics/'
     #synthpath=home+project_name+'/output/forward_models/'
     i=where(gf==1)[0] #Which stations have statics?

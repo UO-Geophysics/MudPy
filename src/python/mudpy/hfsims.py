@@ -689,7 +689,7 @@ def apply_spectrum(w,A,f,hf_dt,is_gnss=False,gnss_scale=1/2**0.5):
     
     '''
     
-    from numpy import fft,angle,cos,sin,mean,zeros
+    from numpy import fft,angle,cos,sin,mean,zeros,real
     from scipy.interpolate import interp1d
     
     #to frequency domain
@@ -735,7 +735,7 @@ def apply_spectrum(w,A,f,hf_dt,is_gnss=False,gnss_scale=1/2**0.5):
     fourier=R+I*1j
     
     #ifft
-    seis=fft.ifft(fourier)
+    seis=real(fft.ifft(fourier))
     
     if is_gnss:
         seis *= len(seis)**0.5

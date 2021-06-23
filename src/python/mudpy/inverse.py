@@ -270,7 +270,7 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tsunami,td
     OUT:
         G: Partially assembled GF with all synthetics from a particular data type
     '''
-    from numpy import genfromtxt,loadtxt,zeros,array,inf,size
+    from numpy import genfromtxt,loadtxt,zeros,array,inf,size,where
     from obspy import read,Stream,Trace
     from mudpy.forward import tshift
     from mudpy.forward import lowpass as lfilt
@@ -357,17 +357,27 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tsunami,td
                 if kfault%10==0:
                     print('... working on subfault '+str(kfault)+' of '+str(Nfaults))
                 nfault='subfault'+str(int(source[kfault,0])).rjust(4,'0')
-                coseis_ss=loadtxt(syn_path+staname[ksta]+'.'+nfault+'.SS.static.neu')
-                nss=coseis_ss[0]
-                ess=coseis_ss[1]
-                zss=coseis_ss[2]
-                coseis_ds=loadtxt(syn_path+staname[ksta]+'.'+nfault+'.DS.static.neu')
-                nds=coseis_ds[0]
-                eds=coseis_ds[1]
-                zds=coseis_ds[2]
+                
+                coseis_ss=loadtxt(syn_path+nfault+'.SS.static.neu',usecols=[1,2,3])
+                coseis_ds=loadtxt(syn_path+nfault+'.DS.static.neu',usecols=[1,2,3])
+                coseis_sta=loadtxt(syn_path+nfault+'.SS.static.neu',usecols=0,dtype='U')
+                
+                #Find row corresponding to station
+                ista=where(coseis_sta==staname[ksta])[0]
+                
+                #get values
+                nss=coseis_ss[ista,0]
+                ess=coseis_ss[ista,1]
+                zss=coseis_ss[ista,2]
+                
+                nds=coseis_ds[ista,0]
+                eds=coseis_ds[ista,1]
+                zds=coseis_ds[ista,2]
+                
                 # Dot product of GFs and los vector
                 los_ss=los.dot(array([nss,ess,zss]))
                 los_ds=los.dot(array([nds,eds,zds]))
+                
                 #Place into G matrix
                 Gtemp[0,2*kfault]=los_ss   ; Gtemp[0,2*kfault+1]=los_ds  
                 #Append to G
