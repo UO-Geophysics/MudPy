@@ -630,16 +630,24 @@ def select_faults(whole_fault,Dstrike,Ddip,target_Mw,num_modes,scaling_law,
     ## based on lieklihood of strike fraction and dip fraction
     ##From within the selected faults randomly select the hypocenter
     hypo_found=False
-    i=randint(0,len(selected_faults)-1)
-    hypo_fault=selected_faults[i]
-    if no_shallow_epi==True:
-        while hypo_found==False:
-            if whole_fault[hypo_fault,3]<hypo_depth:
-                print('... ... ... hypocenter is km too shallow at %dkm, recalculating...' %(whole_fault[hypo_fault,3]))
-                i=randint(0,len(selected_faults)-1)
-                hypo_fault=selected_faults[i]
-            else:
-                hypo_found=True
+    
+
+    if len(selected_faults)>1: #there is mroe than 1 subfault
+    
+        i=randint(0,len(selected_faults)-1)
+        hypo_fault=selected_faults[i]
+        if no_shallow_epi==True:
+            while hypo_found==False:
+                if whole_fault[hypo_fault,3]<hypo_depth:
+                    print('... ... ... hypocenter is km too shallow at %dkm, recalculating...' %(whole_fault[hypo_fault,3]))
+                    i=randint(0,len(selected_faults)-1)
+                    hypo_fault=selected_faults[i]
+                else:
+                    hypo_found=True
+                    
+    else: #only one subfault
+        hypo_fault=selected_faults[0]
+        hypo_found=True
     ############
     
     

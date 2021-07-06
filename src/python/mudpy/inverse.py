@@ -827,14 +827,8 @@ def getLs(home,project_name,fault_name,nfaults,num_windows,bounds):
     #Which L am I building?
     print('Making discrete Laplace operator regularization matrix...')
     for kfault in range(N):#Loop over faults and fill regularization matrix
-        print(kfault)
-        print(nstrike)
-        print(ndip)
-        print(bounds)
         stencil,values=laplace_stencil(kfault,nstrike,ndip,bounds)
         #Add strike slip branches of stencil
-        print('kfault:'+str(kfault))
-        print('stencil:'+str(stencil))
         L[2*kfault,2*stencil]=values
         #Add dip slip branches of stencil
         L[2*kfault+1,2*stencil+1]=values
@@ -1581,13 +1575,13 @@ def d2epi(epicenter,source):
     d=sqrt((xepi-x)**2+(yepi-y)**2+(zepi-z)**2) 
     return d
 
-def get_stats(WG,sol,wd):
+def get_stats(WG,sol,wd,Ls):
     '''
     Compute basic performance metrics of an inversion
     
     IN:
         WG: Dataweights times GFs WG=W*G
-        sol: Soluction vector from inversion
+        sol: Solution vector from inversion
         wd: Data weights times data vector, wd=W*d
     OUT:
         L2: ||Gm-d||
@@ -1598,7 +1592,7 @@ def get_stats(WG,sol,wd):
     
     wds=WG.dot(sol)
     L2=norm(wds-wd)
-    Lm=norm(sol)
+    Lm=norm(Ls.dot(sol))
     return L2,Lm
     
     

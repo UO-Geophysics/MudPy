@@ -2551,61 +2551,107 @@ def make_checkerboard(rupt,nstrike,ndip,fout,nwin):
     fmt='%6i\t%.4f\t%.4f\t%8.4f\t%.2f\t%.2f\t%.2f\t%.2f\t%12.4e\t%12.4e%10.1f\t%10.1f\t%8.4f\t%.4e'
     savetxt(fout,f,fmt)
     
-def model_resolution(Gfile,outdir,fault,nwindows,Ls,Lt,lambda_s,lambda_t):
+def model_resolution(Gfile,Ltype,lambda_s,nstrike,ndip,G=None,Ls=None,G_from_file=False,return_Ls=False):
     '''
     Compute model resolution matrix and output to GMT plottable file
     '''
-    from numpy import load,diag,arange,zeros,genfromtxt,savetxt,c_,r_,eye
+    from numpy import load
     from scipy.linalg import inv
     
-    #read fault model
-    lon=genfromtxt(fault,usecols=1)
-    lat=genfromtxt(fault,usecols=2)
-    nfaults=len(lon)
-    nfaults_total=nfaults*nwindows*2
-    G=load(Gfile)
-    ##Tsunami weights
-    #W=eye(G.shape[0])
-    #W[4302:,4302:]=W[4302:,4302:]*2
-    #W=W*1.1
-    #G=W.dot(G)
-    ##
-    #Vel weights
-    #W=eye(G.shape[0])*4.5
-    #G=W.dot(G)
-    #
-    ##Combine everything
-    #Gdisp=load(Gfile_disp)
-    #Gvel=load(Gfile_vel)
-    #W=eye(Gvel.shape[0])*4.5
-    #Gvel=W.dot(Gvel)
-    #Gtsun=load(Gfile_tsun)
-    #W=eye(Gtsun.shape[0])
-    #W[4302:,4302:]=W[4302:,4302:]*2
-    #W=W*1.1
-    #Gtsun=W.dot(Gtsun)
-    #G=r_[Gdisp,Gvel]
-    #Gdisp=Gvel=None
-    LsLs=Ls.T.dot(Ls)
-    #LtLt=Lt.T.dot(Lt)
-    #R=(inv(G.T.dot(G)+(lambda_s**2)*LsLs+(lambda_t**2)*LtLt).dot(G.T)).dot(G)
-    R=(inv(G.T.dot(G)+(lambda_s**2)*LsLs).dot(G.T)).dot(G)
-    r=diag(R)
-    R=None
-    rout=zeros(nfaults)
-    #Go one subfault at a time average ss and ds individually then average total ss and total ds
-    #for k in range(nfaults):
-    #    iss=arange(2*k,nfaults_total,nfaults)
-    #    ids=arange(2*k+1,nfaults_total,nfaults)
-    #    rss=r[iss].mean()
-    #    rds=r[ids].mean()
-    #    #rout[k]=max([rss,rds])
-    #    rout[k]=rds
-    #rout=r[arange(1,len(r),2)] #Saves ds
-    rout=r[arange(0,len(r),2)] #Saves ss
-    fout=Gfile.split('/')[-1]
-    fout=outdir+fout.split('.')[0]+fout.split('.')[1]+'.R'
-    savetxt(fout,c_[lon,lat,rout],fmt='%10.6f\t%10.6f\t%8.4f')
+    #Load Green's functions
+    if G_from_file: #load from file
+        G=load(Gfile)
+    else: #Use G from user
+        pass
+    
+    if Ls is None: #Make regularization matrix
+        top='free' ; bottom='locked' ; left='locked' ; right='locked'
+        bounds=(top,bottom,left,right)
+        Ls = laplacian_smoother(nstrike,ndip,bounds)
+    else: #Use provided by user
+        pass
+    
+    Gg = (G.T).dot(G) + (lambda_s**2)*(Ls.T).dot(Ls)
+    Gg = inv(Gg).dot(G.T)
+    
+    R = Gg.dot(G) 
+    
+    if return_Ls == False:
+        return R
+    else:
+        return R,Ls
+
+
+
+def model_spread(R,fault,dist=None,return_dist=False):
+    '''
+    Compute model resolution spread
+    dist is a matrix of itnerfault distances
+    '''
+
+    from pyproj import Geod
+    from numpy import zeros
+    
+    #projection object
+    p=Geod(ellps='WGS84')
+    
+    if dist is None: #calcualte dist matrix
+        #build distances matrix
+        dist=zeros(R.shape)
+        for row in range(R.shape[0]):
+            for col in range(R.shape[1]):
+                
+                sub1=fault[row,1:4]
+                sub2=fault[col,1:4]
+                az,baz,dist_in_km=p.inv(sub1[0],sub1[1],sub2[0],sub2[1])
+                dist_in_km /= 1000 # to km
+                
+                #add depth
+                dist_in_km = (dist_in_km**2+(sub1[2]-sub2[2])**2)**0.5
+                dist[row,col] = dist_in_km
+    else: #Just use the dist matrix provided by user
+        pass            
+
+    #calculate spread
+    Rspread=dist*(R**2)
+    spread=Rspread.sum()
+    row_spread=Rspread.sum(axis=1)
+    
+    if return_dist==False:
+        return spread,row_spread
+    else:
+        return spread,row_spread,dist
+    
+    
+def laplacian_smoother(nstrike,ndip,bounds):
+    '''
+    Make spatial regularization matrix based on finite difference Lapalce operator.
+    This routine will request adjustments depending on the boundary conditions requested
+    on the edges of the fault model.
+    '''
+    
+    from numpy import zeros
+    from mudpy.inverse import laplace_stencil
+    
+    N=nstrike*ndip
+    #Initalize
+    L=zeros((2*N,2*N))
+    #Which L am I building?
+    print('Making discrete Laplace operator regularization matrix...')
+    for kfault in range(N):#Loop over faults and fill regularization matrix
+        print(kfault)
+        print(nstrike)
+        print(ndip)
+        print(bounds)
+        stencil,values=laplace_stencil(kfault,nstrike,ndip,bounds)
+        #Add strike slip branches of stencil
+        print('kfault:'+str(kfault))
+        print('stencil:'+str(stencil))
+        L[2*kfault,2*stencil]=values
+        #Add dip slip branches of stencil
+        L[2*kfault+1,2*stencil+1]=values
+        Lout=L 
+    return Lout
     
 def trim_add_noise(data_path,checker_path,search_pattern):
     '''

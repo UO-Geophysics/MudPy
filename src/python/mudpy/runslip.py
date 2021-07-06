@@ -739,7 +739,7 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
             ds=dot(G,sol)
             
             #Get stats
-            L2,Lmodel=inv.get_stats(Kinv,sol,x)
+            L2,Lmodel=inv.get_stats(Kinv,sol,x,Ls)
             VR,L2data=inv.get_VR(home,project_name,GF_list,sol,d,ds,decimate,WG,wd)
             #VR=inv.get_VR(WG,sol,wd)
             #ABIC=inv.get_ABIC(WG,K,sol,wd,lambda_spatial,lambda_temporal,Ls,LsLs,Lt,LtLt)
