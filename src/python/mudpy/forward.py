@@ -534,19 +534,14 @@ def hf_waveforms(home,project_name,fault_name,rupture_list,GF_list,model_name,ru
             
             for kcomp in range(len(comp)):
                 #HF_sims stochastic simulation for single station, component
-                if ncpus>1:
-                    make_parallel_hfsims(home,project_name,rupture_name,ncpus,sta[ksta],sta_lon[ksta],sta_lat[ksta],
-                        comp[kcomp],model_name,rise_time_depths[0],rise_time_depths[1],moho_depth_in_km,total_duration=duration,hf_dt=hf_dt,
-                        Pwave=Pwave,Swave=Swave,stress_parameter=stress_parameter,high_stress_depth=high_stress_depth)
+                make_parallel_hfsims(home,project_name,rupture_name,ncpus,sta[ksta],sta_lon[ksta],sta_lat[ksta],
+                    comp[kcomp],model_name,rise_time_depths[0],rise_time_depths[1],moho_depth_in_km,total_duration=duration,hf_dt=hf_dt,
+                    Pwave=Pwave,Swave=Swave,stress_parameter=stress_parameter,high_stress_depth=high_stress_depth)
 
-                    #Combine the separate MPI outputs into one full waveform
-                    write_parallel_hfsims(home,project_name,rupture_name,sta[ksta],comp[kcomp],remove=True)
-                else:
-                    hf_waveform=hfsims.stochastic_simulation(home,project_name,rupture_name,sta[ksta],sta_lon[ksta],sta_lat[ksta],
-                        comp[kcomp],model_name,rise_time_depths,moho_depth_in_km,total_duration=duration,hf_dt=hf_dt,
-                        Pwave=Pwave,Swave=Swave,stress_parameter=stress_parameter,high_stress_depth=high_stress_depth)
-                    #Write to file
-                    write_fakequakes_hf_waveforms_one_by_one(home,project_name,rupture_name,hf_waveform,comp[kcomp])
+                #Combine the separate MPI outputs into one full waveform
+                write_parallel_hfsims(home,project_name,rupture_name,sta[ksta],comp[kcomp],remove=True)
+
+
 
 def make_parallel_hfsims(home,project_name,rupture_name,ncpus,sta,sta_lon,sta_lat,component,model_name,rise_time_depths0,rise_time_depths1,moho_depth_in_km,total_duration,hf_dt,Pwave,Swave,stress_parameter,kappa=0.04,Qexp=0.6,high_stress_depth=30):
 
@@ -713,7 +708,7 @@ def write_fakequakes_hf_waveforms(home,project_name,rupture_name,n,e,z):
                                                                                       
 
 def match_filter(home,project_name,fault_name,rupture_list,GF_list,
-        zero_phase=False,order=2,fcorner=1.0):
+        zero_phase=False,order=2,fcorner_low=1.0, fcorner_high=1.0):
     '''
     match filter waveforms
     '''
@@ -776,14 +771,14 @@ def match_filter(home,project_name,fault_name,rupture_list,GF_list,
             
             #Apply filters
             fsample=1./hf_n[0].stats.delta
-            hf_n[0].data=highpass(hf_n[0].data,fcorner,fsample,order,zerophase=zero_phase)
-            hf_e[0].data=highpass(hf_e[0].data,fcorner,fsample,order,zerophase=zero_phase)
-            hf_z[0].data=highpass(hf_z[0].data,fcorner,fsample,order,zerophase=zero_phase)
+            hf_n[0].data=highpass(hf_n[0].data,fcorner_high,fsample,order,zerophase=zero_phase)
+            hf_e[0].data=highpass(hf_e[0].data,fcorner_high,fsample,order,zerophase=zero_phase)
+            hf_z[0].data=highpass(hf_z[0].data,fcorner_high,fsample,order,zerophase=zero_phase)
 
             fsample=1./lf_n[0].stats.delta
-            lf_n[0].data=lowpass(lf_n[0].data,fcorner,fsample,order,zerophase=zero_phase)
-            lf_e[0].data=lowpass(lf_e[0].data,fcorner,fsample,order,zerophase=zero_phase)
-            lf_z[0].data=lowpass(lf_z[0].data,fcorner,fsample,order,zerophase=zero_phase)
+            lf_n[0].data=lowpass(lf_n[0].data,fcorner_low,fsample,order,zerophase=zero_phase)
+            lf_e[0].data=lowpass(lf_e[0].data,fcorner_low,fsample,order,zerophase=zero_phase)
+            lf_z[0].data=lowpass(lf_z[0].data,fcorner_low,fsample,order,zerophase=zero_phase)
             
             #Resample LF to HF sample rate
             tinterp=hf_n[0].times() #interpolation time vector
