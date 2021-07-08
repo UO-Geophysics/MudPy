@@ -390,12 +390,8 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
             static=1
             tsunami=False
             insar=False
-            if ncpus>1:
-                make_parallel_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,static,tsunami,
-                            hot_start,dk,pmin,pmax,kmax,ncpus,insar)
-            else:
-                make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,static,tsunami,
-                            hot_start,dk,pmin,pmax,kmax)
+            make_parallel_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,static,tsunami,
+                        hot_start,dk,pmin,pmax,kmax,ncpus,insar)
         i=where(GF[:,3]==1)[0]
         if len(i)>0 : #displ waveform
             print('Displacememnt GFs requested...')
@@ -406,12 +402,8 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
             f.close()
             static=0
             tsunami=False
-            if ncpus>1:
-                make_parallel_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,static,tsunami,
-                            hot_start,dk,pmin,pmax,kmax,ncpus)
-            else:
-                make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,static,tsunami,
-                            hot_start,dk,pmin,pmax,kmax)
+            make_parallel_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,static,tsunami,
+                        hot_start,dk,pmin,pmax,kmax,ncpus)
         i=where(GF[:,4]==1)[0]
         if len(i)>0 : #vel waveform
             print('Velocity GFs requested...')
@@ -422,24 +414,16 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
             f.close()
             static=0
             tsunami=False
-            if ncpus>1:
-                make_parallel_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,static,tsunami,
-                            hot_start,dk,pmin,pmax,kmax,ncpus)
-            else:
-                make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,static,tsunami,
-                            hot_start,dk,pmin,pmax,kmax)
+            make_parallel_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,static,tsunami,
+                        hot_start,dk,pmin,pmax,kmax,ncpus)
         if tgf_file!=None: #Tsunami
             print('Seafloor displacement GFs requested...')
 #            static=0
             static=1
             tsunami=True
             station_file=tgf_file
-            if ncpus>1:
-                make_parallel_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,static,tsunami,
-                            hot_start,dk,pmin,pmax,kmax,ncpus)
-            else:
-                make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,static,tsunami,
-                            hot_start,dk,pmin,pmax,kmax)
+            make_parallel_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,static,tsunami,
+                        hot_start,dk,pmin,pmax,kmax,ncpus)
         i=where(GF[:,6]==1)[0]
         if len(i)>0: #InSAR LOS
             print('InSAR GFs requested...')
@@ -451,142 +435,92 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
             static=1
             tsunami=False
             insar=True
-            if ncpus>1:
-                make_parallel_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,static,tsunami,
-                            hot_start,dk,pmin,pmax,kmax,ncpus,insar)
-            else:
-                make_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,static,tsunami,
-                            hot_start,dk,pmin,pmax,kmax)
+            make_parallel_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,static,tsunami,
+                        hot_start,dk,pmin,pmax,kmax,ncpus,insar)
             collect()   
     #Synthetics are computed  one station at a time
     if synth_flag==1:
-        if ncpus<2: #Serial rpocessing
-            station_file='temp.sta'
-            try:
-                remove(home+project_name+'/data/station_info/'+station_file) #Cleanup
-            except:
-                pass
-            for k in range(len(stations)):
-                #Make dummy station file
-                out=str(stations[k])+'\t'+repr(GF[k,0])+'\t'+repr(GF[k,1])
-                f=open(home+project_name+'/data/station_info/'+station_file,'w')
+        #Paralell processing
+        station_file='temp.sta'
+        #Decide which synthetics are required
+        i=where(GF[:,2]==1)[0]
+        if len(i)>0: #Static offset
+            print('Static synthetics requested')
+            #Make dummy station file
+            f=open(home+project_name+'/data/station_info/'+station_file,'w')
+            for k in range(len(i)):
+                out=stations[i[k]]+'\t'+repr(GF[i[k],0])+'\t'+repr(GF[i[k],1])+'\n'
                 f.write(out)
-                f.close()
-                #Decide which synthetics are required
-                if GF[k,2]==1: #Static offset
-                    integrate=0
-                    static=1
-                    tsunami=False
-                    make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,tsunami,beta,hot_start,time_epi,impulse)
-                if GF[k,3]==1: #dispalcement waveform
-                    integrate=1
-                    static=0
-                    if tgf_file==None: # I am computing for stations on land
-                        tsunami=False
-                    else: #I am computing seafloor deformation for tsunami GFs, eventaully
-                        tsunami=True
-                    make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,tsunami,beta,hot_start,time_epi,impulse)
-                if GF[k,4]==1: #velocity waveform
-                    integrate=0
-                    static=0
-                    if tgf_file==None: # I am computing for stations on land
-                        tsunami=False
-                    else: #I am computing seafloor deformation for tsunami GFs, eventaully
-                        tsunami=True
-                    make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,tsunami,beta,hot_start,time_epi,impulse)
-                if GF[k,5]==1: #tsunami waveform
-                    integrate=1
-                    static=0
-                    tsunami=True
-                    station_file=tgf_file
-                    make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,tsunami,beta,hot_start,time_epi,impulse)
-                if GF[k,6]==1: # InSAR LOS
-                    integrate=0
-                    static=1
-                    tsunami=False
-                    insar=True
-                    make_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,tsunami,beta,hot_start,time_epi,impulse,insar=insar)
-        else: #Paralell processing
-            station_file='temp.sta'
-            #Decide which synthetics are required
-            i=where(GF[:,2]==1)[0]
-            if len(i)>0: #Static offset
-                print('Static synthetics requested')
-                #Make dummy station file
-                f=open(home+project_name+'/data/station_info/'+station_file,'w')
-                for k in range(len(i)):
-                    out=stations[i[k]]+'\t'+repr(GF[i[k],0])+'\t'+repr(GF[i[k],1])+'\n'
-                    f.write(out)
-                f.close()
-                integrate=0
-                static=1
+            f.close()
+            integrate=0
+            static=1
+            tsunami=False
+            insar=False
+            make_parallel_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,tsunami,beta,hot_start,time_epi,ncpus,custom_stf,impulse,insar)
+        #Decide which synthetics are required
+        i=where(GF[:,3]==1)[0]
+        if len(i)>0: #dispalcement waveform
+            print('Displacement synthetics requested')
+            #Make dummy station file
+            f=open(home+project_name+'/data/station_info/'+station_file,'w')
+            for k in range(len(i)):
+                out=str(stations[i[k]])+'\t'+repr(GF[i[k],0])+'\t'+repr(GF[i[k],1])+'\n'
+                f.write(out)
+            f.close()
+            integrate=1
+            static=0
+            if tgf_file==None: # I am computing for stations on land
                 tsunami=False
-                insar=False
-                make_parallel_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,tsunami,beta,hot_start,time_epi,ncpus,custom_stf,impulse,insar)
-            #Decide which synthetics are required
-            i=where(GF[:,3]==1)[0]
-            if len(i)>0: #dispalcement waveform
-                print('Displacement synthetics requested')
-                #Make dummy station file
-                f=open(home+project_name+'/data/station_info/'+station_file,'w')
-                for k in range(len(i)):
-                    out=str(stations[i[k]])+'\t'+repr(GF[i[k],0])+'\t'+repr(GF[i[k],1])+'\n'
-                    f.write(out)
-                f.close()
-                integrate=1
-                static=0
-                if tgf_file==None: # I am computing for stations on land
-                    tsunami=False
-                else: #I am computing seafloor deformation for tsunami GFs, eventaully
-                    tsunami=True
-                make_parallel_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,tsunami,beta,hot_start,time_epi,ncpus,custom_stf,impulse)
-            #Decide which synthetics are required
-            i=where(GF[:,4]==1)[0]
-            if len(i)>0: #velocity waveform
-                print('Velocity synthetics requested')
-                #Make dummy station file
-                f=open(home+project_name+'/data/station_info/'+station_file,'w')
-                for k in range(len(i)):
-                    out=stations[i[k]]+'\t'+repr(GF[i[k],0])+'\t'+repr(GF[i[k],1])+'\n'
-                    f.write(out)
-                f.close()
-                integrate=0
-                static=0
-                if tgf_file==None: # I am computing for stations on land
-                    tsunami=False
-                else: #I am computing seafloor deformation for tsunami GFs, eventaully
-                    tsunami=True
-                make_parallel_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,tsunami,beta,hot_start,time_epi,ncpus,custom_stf,impulse)
-            #Decide which synthetics are required
-            i=where(GF[:,5]==1)[0]
-            if len(i)>0: #tsunami waveform
-                print('Tsunami synthetics requested')
-                #Make dummy station file
-                f=open(home+project_name+'/data/station_info/'+station_file,'w')
-                for k in range(len(i)):
-                    out=stations[i[k]]+'\t'+repr(GF[i[k],0])+'\t'+repr(GF[i[k],1])+'\n'
-                    f.write(out)
-                f.close()
-                integrate=1
-                static=1
+            else: #I am computing seafloor deformation for tsunami GFs, eventaully
                 tsunami=True
-                station_file=tgf_file
-                make_parallel_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,tsunami,beta,hot_start,time_epi,ncpus,custom_stf,impulse)
-            #Decide which synthetics are required
-            i=where(GF[:,6]==1)[0]
-            if len(i)>0: # InSAR LOS
-                print('InSAR synthetics requested')
-                #Make dummy station file
-                f=open(home+project_name+'/data/station_info/'+station_file,'w')
-                for k in range(len(i)):
-                    out=stations[i[k]]+'\t'+repr(GF[i[k],0])+'\t'+repr(GF[i[k],1])+'\n'
-                    f.write(out)
-                f.close()
-                integrate=0
-                static=1
+            make_parallel_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,tsunami,beta,hot_start,time_epi,ncpus,custom_stf,impulse)
+        #Decide which synthetics are required
+        i=where(GF[:,4]==1)[0]
+        if len(i)>0: #velocity waveform
+            print('Velocity synthetics requested')
+            #Make dummy station file
+            f=open(home+project_name+'/data/station_info/'+station_file,'w')
+            for k in range(len(i)):
+                out=stations[i[k]]+'\t'+repr(GF[i[k],0])+'\t'+repr(GF[i[k],1])+'\n'
+                f.write(out)
+            f.close()
+            integrate=0
+            static=0
+            if tgf_file==None: # I am computing for stations on land
                 tsunami=False
-                insar=True
-                make_parallel_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,tsunami,beta,hot_start,time_epi,ncpus,custom_stf,impulse,insar)
+            else: #I am computing seafloor deformation for tsunami GFs, eventaully
+                tsunami=True
+            make_parallel_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,tsunami,beta,hot_start,time_epi,ncpus,custom_stf,impulse)
+        #Decide which synthetics are required
+        i=where(GF[:,5]==1)[0]
+        if len(i)>0: #tsunami waveform
+            print('Tsunami synthetics requested')
+            #Make dummy station file
+            f=open(home+project_name+'/data/station_info/'+station_file,'w')
+            for k in range(len(i)):
+                out=stations[i[k]]+'\t'+repr(GF[i[k],0])+'\t'+repr(GF[i[k],1])+'\n'
+                f.write(out)
+            f.close()
+            integrate=1
+            static=1
+            tsunami=True
+            station_file=tgf_file
+            make_parallel_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,tsunami,beta,hot_start,time_epi,ncpus,custom_stf,impulse)
+        #Decide which synthetics are required
+        i=where(GF[:,6]==1)[0]
+        if len(i)>0: # InSAR LOS
+            print('InSAR synthetics requested')
+            #Make dummy station file
+            f=open(home+project_name+'/data/station_info/'+station_file,'w')
+            for k in range(len(i)):
+                out=stations[i[k]]+'\t'+repr(GF[i[k],0])+'\t'+repr(GF[i[k],1])+'\n'
+                f.write(out)
+            f.close()
+            integrate=0
+            static=1
+            tsunami=False
+            insar=True
+            make_parallel_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,tsunami,beta,hot_start,time_epi,ncpus,custom_stf,impulse,insar)
     
                     
                                 
