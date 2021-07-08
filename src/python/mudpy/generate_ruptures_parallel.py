@@ -24,7 +24,7 @@ def run_parallel_generate_ruptures(home,project_name,run_name,fault_name,slab_na
     from mudpy import fakequakes
     from obspy import UTCDateTime
     from obspy.taup import TauPyModel
-    import geopy.distancet
+    import geopy.distance
     import warnings
 
     #I don't condone it but this cleans up the warnings
