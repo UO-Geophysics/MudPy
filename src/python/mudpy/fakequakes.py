@@ -935,7 +935,15 @@ def get_rupture_onset(home,project_name,slip,fault_array,model_name,hypocenter,
         D=D/1000
         D_deg=kilometer2degrees(D)
         Ppaths=velmod.get_ray_paths(hypocenter[2],D_deg,phase_list=['P','p'])
-        Ptime=Ppaths[0].time
+        
+        try:
+            Ptime=Ppaths[0].time
+        except:
+            print('Ptime ERROR')
+            print('   Target is:')
+            print('     '+str(fault_array[kfault,0:4]))
+            print('   Hypo is:')
+            print('     '+str(hypocenter))
         attempt=1
         while (t_onset_final[kfault] < Ptime) & (attempt < 500):
             #if attempt == 1:
