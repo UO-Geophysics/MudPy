@@ -490,10 +490,7 @@ def run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,
     tr.stats.update({'sac':{'stlo':sta_lon,'stla':sta_lat,'evlo':epicenter[0],'evla':epicenter[1],'evdp':epicenter[2],'dist':dist_in_km,'az':az,'baz':backaz,'mag':Mw}}) #,'idep':"ACC (m/s^2)" not sure why idep won't work
     
     #Write out to file 
-    #old
     rupture=rupture_name.split('.')[0]+'.'+rupture_name.split('.')[1]
-    #new
-    rupture=rupture_name.rsplit('.',1)[0]
     if not path.exists(home+project_name+'/output/waveforms/'+rupture+'/'):
         makedirs(home+project_name+'/output/waveforms/'+rupture+'/')
     if rank < 10:
@@ -530,7 +527,7 @@ if __name__ == '__main__':
         component=sys.argv[14]
         total_duration=int(sys.argv[15])
         hf_dt=float(sys.argv[16])
-        stress_parameter=float(sys.argv[17])
+        stress_parameter=int(sys.argv[17])
         kappa=float(sys.argv[18])
         Qexp=float(sys.argv[19])
         Pwave=sys.argv[20]
@@ -543,4 +540,3 @@ if __name__ == '__main__':
         run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,component,model_name,rise_time_depths0,rise_time_depths1,moho_depth_in_km,total_duration,hf_dt,stress_parameter,kappa,Qexp,Pwave,Swave,high_stress_depth,rank,size)
     else:
         print("ERROR: You're not allowed to run "+sys.argv[1]+" from the shell or it does not exist")
-        

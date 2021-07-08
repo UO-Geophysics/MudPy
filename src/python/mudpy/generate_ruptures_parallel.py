@@ -11,8 +11,7 @@ def run_parallel_generate_ruptures(home,project_name,run_name,fault_name,slab_na
         num_modes,Nrealizations,rake,rise_time_depths0,rise_time_depths1,time_epi,max_slip,
         source_time_function,lognormal,slip_standard_deviation,scaling_law,ncpus,force_magnitude,
         force_area,mean_slip_name,hypocenter,slip_tol,force_hypocenter,
-        no_random,shypo,use_hypo_fraction,shear_wave_fraction_shallow,shear_wave_fraction_deep,
-        max_slip_rule,rank,size):
+        no_random,shypo,use_hypo_fraction,shear_wave_fraction,max_slip_rule,rank,size):
     
     '''
     Depending on user selected flags parse the work out to different functions
@@ -24,7 +23,6 @@ def run_parallel_generate_ruptures(home,project_name,run_name,fault_name,slab_na
     from mudpy import fakequakes
     from obspy import UTCDateTime
     from obspy.taup import TauPyModel
-    import geopy.distance
     import warnings
 
     #I don't condone it but this cleans up the warnings
@@ -224,28 +222,12 @@ def run_parallel_generate_ruptures(home,project_name,run_name,fault_name,slab_na
             if force_hypocenter==False: #Use random hypo, otehrwise force hypo to user specified
                 hypocenter=whole_fault[hypo_fault,1:4]
 
-            t_onset=fakequakes.get_rupture_onset(home,project_name,slip,fault_array,model_name,hypocenter,rise_time_depths,M0,velmod,shear_wave_fraction_shallow,shear_wave_fraction_deep)
+            t_onset=fakequakes.get_rupture_onset(home,project_name,slip,fault_array,model_name,hypocenter,rise_time_depths,M0,velmod)
             fault_out[:,12]=0
             fault_out[ifaults,12]=t_onset
             
             #Calculate location of moment centroid
             centroid_lon,centroid_lat,centroid_z=fakequakes.get_centroid(fault_out)
-            
-            #Calculate average risetime
-            rise = fault_out[:,7]
-            avg_rise = np.mean(rise)
-            
-            # Calculate average rupture velocity
-            lon_array = fault_out[:,1]
-            lat_array = fault_out[:,2]
-            vrupt = []
-            
-            for i in range(len(fault_array)):
-                if t_onset[i] > 0:
-                    r = geopy.distance.geodesic((hypocenter[1], hypocenter[0]), (lat_array[i], lon_array[i])).km
-                    vrupt.append(r/t_onset[i])
-            
-            avg_vrupt = np.mean(vrupt)
             
             #Write to file
             run_number=str(ncpus*realization+rank).rjust(6,'0')
@@ -274,9 +256,7 @@ def run_parallel_generate_ruptures(home,project_name,run_name,fault_name,slab_na
             f.write('Hypocenter (lon,lat,z[km]): (%.6f,%.6f,%.2f)\n' %(hypocenter[0],hypocenter[1],hypocenter[2]))
             f.write('Hypocenter time: %s\n' % time_epi)
             f.write('Centroid (lon,lat,z[km]): (%.6f,%.6f,%.2f)\n' %(centroid_lon,centroid_lat,centroid_z))
-            f.write('Source time function type: %s\n' % source_time_function)
-            f.write('Average Risetime (s): %.2f\n' % avg_rise)
-            f.write('Average Rupture Velocity (km/s): %.2f' % avg_vrupt)
+            f.write('Source time function type: %s' % source_time_function)
             f.close()
             
             realization+=1
@@ -369,9 +349,8 @@ if __name__ == '__main__':
             use_hypo_fraction=True
         if use_hypo_fraction=='False':
             use_hypo_fraction=False
-        shear_wave_fraction_shallow=float(sys.argv[37])
-        shear_wave_fraction_deep=float(sys.argv[38])
-        max_slip_rule=sys.argv[39]
+        shear_wave_fraction=float(sys.argv[37])
+        max_slip_rule=sys.argv[38]
         if max_slip_rule=='True':
             max_slip_rule=True
         if max_slip_rule=='False':
@@ -382,8 +361,6 @@ if __name__ == '__main__':
         num_modes,Nrealizations,rake,rise_time_depths0,rise_time_depths1,time_epi,max_slip,
         source_time_function,lognormal,slip_standard_deviation,scaling_law,ncpus,force_magnitude,
         force_area,mean_slip_name,hypocenter,slip_tol,force_hypocenter,
-        no_random,shypo,use_hypo_fraction,shear_wave_fraction_shallow,shear_wave_fraction_deep,
-        max_slip_rule,rank,size)
+        no_random,shypo,use_hypo_fraction,shear_wave_fraction,max_slip_rule,rank,size)
     else:
         print("ERROR: You're not allowed to run "+sys.argv[1]+" from the shell or it does not exist")
-        
