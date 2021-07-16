@@ -464,7 +464,6 @@ def pgd_regression(home,project_name,run_name,run_number,norm=2):
     '''
     
     from numpy import genfromtxt,array,zeros,log10,expand_dims,ones,diag,c_
-    from string import replace
     from obspy.geodetics.base import gps2dist_azimuth
     #from l1 import l1
     #from cvxopt import matrix 
@@ -482,8 +481,9 @@ def pgd_regression(home,project_name,run_name,run_number,norm=2):
     while loop_go:
         line=f.readline()
         if 'Centroid (lon,lat,z[km])' in line:                
-            s=replace(line.split(':')[-1],'(','')
-            s=replace(s,')','')
+            s=line.split(':')[-1]
+            s=s.replace('(','')
+            s=s.replace(')','')
             hypo=array(s.split(',')).astype('float')
             loop_go=False       
         if 'Actual magnitude' in line:
@@ -562,7 +562,6 @@ def dump_picks(event_log,vel_model,gf_list,out_file):
     from obspy.geodetics.base import gps2dist_azimuth
     from obspy.geodetics import locations2degrees
     from numpy import genfromtxt,zeros,array,ones
-    from string import replace
     
     
     #Read station locations
@@ -578,8 +577,9 @@ def dump_picks(event_log,vel_model,gf_list,out_file):
     while loop_go:
         line=f.readline()
         if 'Hypocenter (lon,lat,z[km])' in line:
-            s=replace(line.split(':')[-1],'(','')
-            s=replace(s,')','')
+            s=line.split(':')[-1]
+            s=s.replace('(','')
+            s=s.replace(')','')
             hypo=array(s.split(',')).astype('float')
             loop_go=False
 
