@@ -25,15 +25,15 @@ def init(home,project_name):
     proj_dir=path.expanduser(home+project_name+'/')
     if path.exists(proj_dir):  #Path exists, clobber?
         clob=input('Project directory exists, clobber (y/n)?')
-        if clob is'y' or clob is 'Y': #Clobber baby
+        if clob == 'y' or clob == 'Y': #Clobber baby
             clob=input('This will delete everything in this project directory, so, take a minute, think about it: clobber (y/n)?')
-            if clob is 'y' or clob is 'Y':
+            if clob == 'y' or clob == 'Y':
                 rmtree(proj_dir)
             else: #Leave direcory alone
                 print('Phew, almost shot yourself in the foot there didn\'t you?')
         else: #Leave direcory alone
             print('Phew, almost shot yourself in the foot there didn\'t you?')
-    if clob is 'y' or clob is 'Y':
+    if clob == 'y' or clob == 'Y':
         makedirs(proj_dir)
         #And make the subdirectories
         makedirs(proj_dir+'GFs')

@@ -516,7 +516,7 @@ def plot_insar(home,project_name,GF_list,los_min,los_max):
 
 def tile_slip(rupt,nstrike,ndip,slip_bounds,geographic=False,epicenter=0,epicenter_line=0,
               thresh=0,xlims=[-100,100],ylims=[-100,100],fig_size=(10, 3),cmap=whitejet,
-              afters=False,afters_file=None,histograms=False):
+              afters=False,afters_file=None,histograms=False,size=250):
     '''
     Detailed plot of a forward model or inversion result file
     
@@ -602,7 +602,7 @@ def tile_slip(rupt,nstrike,ndip,slip_bounds,geographic=False,epicenter=0,epicent
         along_strike=zeros(nstrike)
         for k in range(len(lat)):
             out=gps2dist_azimuth(epicenter[1],epicenter[0],lat[k],lon[k])
-            if lat[k]<epicenter[1]: #It's to the south
+            if lat[k]>epicenter[1]: #It's to the south
                 #along_strike[k]=-out[0]/1000
                 along_strike[k]=out[0]/1000
             else:
@@ -635,7 +635,7 @@ def tile_slip(rupt,nstrike,ndip,slip_bounds,geographic=False,epicenter=0,epicent
     #Plot
     if geographic==False:
         plt.figure()
-        plt.scatter(istrike,idip,marker='o',c=slip,s=250,cmap=cmap,vmin=slip_min,vmax=slip_max)
+        plt.scatter(istrike,idip,marker='o',c=slip,s=size,cmap=cmap,vmin=slip_min,vmax=slip_max)
         cb=plt.colorbar()
         plt.ylabel('Along-dip index')
         plt.xlabel('Along-strike index')
@@ -649,7 +649,7 @@ def tile_slip(rupt,nstrike,ndip,slip_bounds,geographic=False,epicenter=0,epicent
         rakess=rakess*slip
         rakeds=rakeds*slip
         plt.figure(num=None, figsize=fig_size, dpi=80)
-        plt.scatter(along_strike,depth,marker='s',linewidth=0.5,edgecolor='#CCCCCC',c=slip,s=250,cmap=cmap,vmin=slip_min,vmax=slip_max)
+        plt.scatter(along_strike,depth,marker='s',linewidth=0.5,edgecolor='#CCCCCC',c=slip,s=size,cmap=cmap,vmin=slip_min,vmax=slip_max)
         #plt.scatter(along_strike,depth,marker='s',linewidth=0.5,edgecolor='#CCCCCC',c=slip,s=250,cmap=plt.cm.afmhot_r,vmin=slip_min,vmax=slip_max)
         #plt.scatter(along_strike,depth,marker='s',linewidth=0.5,edgecolor='#CCCCCC',c=slip,s=250,cmap=plt.cm.bone_r,vmin=slip_min,vmax=slip_max)
         #plt.scatter(along_strike,depth,marker='s',linewidth=0.5,edgecolor='#CCCCCC',c=slip,s=250,cmap=plt.cm.magma_r,vmin=slip_min,vmax=slip_max)
@@ -662,7 +662,7 @@ def tile_slip(rupt,nstrike,ndip,slip_bounds,geographic=False,epicenter=0,epicent
         plt.xlabel('Along-strike distance (km)',fontsize=14)
         plt.xlim(xlims)
         plt.ylim(ylims)         
-        plt.scatter(0,-epicenter[2],marker='*',edgecolor='k',facecolor='w',s=350,linewidth=2)
+        plt.scatter(0,-epicenter[2],marker='*',edgecolor='k',facecolor='w',s=size,linewidth=2)
         for k in range(len(along_strike)):
             scale_slip=slip[k]/slip.max()
 #            plt.quiver(along_strike[k],depth[k],rakess[k]/sqrt(rakess[k]**2+rakeds[k]**2),rakeds[k]/sqrt(rakess[k]**2+rakeds[k]**2),color='green',width=0.002,scale=50/scale_slip)

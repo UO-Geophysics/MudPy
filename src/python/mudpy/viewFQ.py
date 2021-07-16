@@ -692,7 +692,6 @@ def one_event_pgd_scaling(home,project_name,run_name,run_number,reference='centr
     from obspy.geodetics.base import gps2dist_azimuth
     from numpy import genfromtxt,array,zeros,logspace,log10
     from matplotlib import pyplot as plt
-    from string import replace
     from mudpy.analysis import pgd_regression
     
     # Read summary file
@@ -715,14 +714,16 @@ def one_event_pgd_scaling(home,project_name,run_name,run_number,reference='centr
         line=f.readline()
         if reference=='hypocenter':
             if 'Hypocenter (lon,lat,z[km])' in line:
-                s=replace(line.split(':')[-1],'(','')
-                s=replace(s,')','')
+                s=line.split(':')[-1]
+                s=s.replace('(','')
+                s=s.replace(')','')
                 hypo=array(s.split(',')).astype('float')
                 loop_go=False
         elif reference=='centroid':
             if 'Centroid (lon,lat,z[km])' in line:                
-                s=replace(line.split(':')[-1],'(','')
-                s=replace(s,')','')
+                s=line.split(':')[-1]
+                s=s.replace('(','')
+                s=s.replace(')','')
                 hypo=array(s.split(',')).astype('float')
                 loop_go=False       
         if 'Actual magnitude' in line:
