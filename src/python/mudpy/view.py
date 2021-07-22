@@ -1705,7 +1705,7 @@ def plot_data(home,project_name,gflist,vord,decimate,lowpass,t_lim,sort,scale,k_
       
 def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpass,t_lim,
                sort,scale,k_or_g,uncert=False,waveforms_as_accel=False,units='m',uncerth=0.01,uncertv=0.03,
-               tick_frequency=10):
+               tick_frequency=10,spoof_vel_as_disp=False):
     '''
     Plot synthetics vs real data
     
@@ -1735,6 +1735,8 @@ def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpas
         else:
             datasuffix='disp'
         synthsuffix='disp'
+        if spoof_vel_as_disp==True: #Your an SM as dispalcememnt but was save as vel.
+            synthsuffix='vel'
     elif vord.lower()=='v':
         kgf=1 #vel
         if waveforms_as_accel==False:
