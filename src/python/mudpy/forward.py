@@ -2546,18 +2546,40 @@ def make_checkerboard(rupt,nstrike,ndip,fout,nwin):
     fmt='%6i\t%.4f\t%.4f\t%8.4f\t%.2f\t%.2f\t%.2f\t%.2f\t%12.4e\t%12.4e%10.1f\t%10.1f\t%8.4f\t%.4e'
     savetxt(fout,f,fmt)
     
-def model_resolution(Gfile,Ltype,lambda_s,nstrike,ndip,G=None,Ls=None,G_from_file=False,return_Ls=False):
+def model_resolution(home,project_name,GF_list,Gfile,Ltype,lambda_s,nstrike,ndip,bandpass,G=None,Ls=None,G_from_file=False,return_Ls=False):
     '''
     Compute model resolution matrix and output to GMT plottable file
     '''
-    from numpy import load
-    from scipy.linalg import inv
+    from numpy import load,diag
+    from scipy.linalg import inv,norm
+    from mudpy.inverse import getdata,get_data_weights
+    
+    #load data vector (needed for normalization weight)
+    decimate=None
+    d=getdata(home,project_name,GF_list,decimate,bandpass=bandpass)
+    
+    #get weights used in inversion
+    w=get_data_weights(home,project_name,GF_list,d,decimate)
+    
+    #apply to data vector
+    d=w*d.squeeze()
+    
+    #normalize
+    data_norm = norm(d)
+    d = d/data_norm
     
     #Load Green's functions
     if G_from_file: #load from file
         G=load(Gfile)
     else: #Use G from user
         pass
+    
+    #weight G according tow eights used in ivnersion
+    W=diag(w)
+    
+    #Normalization effect
+    W = W/data_norm
+    G=W.dot(G)
     
     if Ls is None: #Make regularization matrix
         top='free' ; bottom='locked' ; left='locked' ; right='locked'
@@ -2566,6 +2588,7 @@ def model_resolution(Gfile,Ltype,lambda_s,nstrike,ndip,G=None,Ls=None,G_from_fil
     else: #Use provided by user
         pass
     
+    #Now compute the resolution matrix
     Gg = (G.T).dot(G) + (lambda_s**2)*(Ls.T).dot(Ls)
     Gg = inv(Gg).dot(G.T)
     

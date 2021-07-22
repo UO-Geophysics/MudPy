@@ -1322,7 +1322,6 @@ def pgd_2D_GOF(home,project_name,rupture_list='ruptures.list',Mw_lims=[7.8,9.5],
     from numpy import genfromtxt,array,zeros,logspace,linspace,r_,log,genfromtxt,log10,ones,where,arange,median,mean
     from matplotlib import pyplot as plt
     from matplotlib import cm
-    from string import replace
     from matplotlib.ticker import MultipleLocator,LogLocator,MaxNLocator
     
     xmajorLocator = LogLocator(base=10.0, subs=[1])
@@ -1351,8 +1350,9 @@ def pgd_2D_GOF(home,project_name,rupture_list='ruptures.list',Mw_lims=[7.8,9.5],
         while loop_go:
             line=f.readline()
             if 'Centroid (lon,lat,z[km])' in line:                
-                s=replace(line.split(':')[-1],'(','')
-                s=replace(s,')','')
+                s=line.split(':')[-1]
+                s=s.replace('(','')
+                s=s.replace(')','')
                 hypo=array(s.split(',')).astype('float')
                 loop_go=False       
             if 'Actual magnitude' in line:
@@ -1446,7 +1446,6 @@ def pgd_2D_misfit_and_GOF(home,project_name,rupture_list='ruptures.list',Mw_lims
     from numpy import genfromtxt,array,zeros,logspace,linspace,r_,log,genfromtxt,log10,ones,where,arange,median,mean
     from matplotlib import pyplot as plt
     from matplotlib import cm
-    from string import replace
     from matplotlib.ticker import MultipleLocator,LogLocator,MaxNLocator
     
     xmajorLocator = LogLocator(base=10.0, subs=[1])
@@ -1475,8 +1474,9 @@ def pgd_2D_misfit_and_GOF(home,project_name,rupture_list='ruptures.list',Mw_lims
         while loop_go:
             line=f.readline()
             if 'Centroid (lon,lat,z[km])' in line:                
-                s=replace(line.split(':')[-1],'(','')
-                s=replace(s,')','')
+                s=line.split(':')[-1]
+                s=s.replace('(','')
+                s=s.replace(')','')
                 hypo=array(s.split(',')).astype('float')
                 loop_go=False       
             if 'Actual magnitude' in line:

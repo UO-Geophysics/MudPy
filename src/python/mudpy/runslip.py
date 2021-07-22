@@ -22,15 +22,15 @@ def init(home,project_name):
     proj_dir=home+project_name+'/'
     if path.exists(proj_dir):  #Path exists, clobber?
         clob=input('Project directory exists, clobber (y/n)?')
-        if clob is'y' or clob is 'Y': #Clobber baby
+        if clob =='y' or clob == 'Y': #Clobber baby
             clob=input('This will delete everything in this project directory, so, take a minute, think about it: clobber (y/n)?')
-            if clob is 'y' or clob is 'Y':
+            if clob == 'y' or clob == 'Y':
                 rmtree(proj_dir)
             else: #Leave direcory alone
                 print('Phew, almost shot yourself in the foot there didn\'t you?')
-        else: #Leave direcory alone
+        else: #Leave directory alone
             print('Phew, almost shot yourself in the foot there didn\'t you?')
-    if clob is 'y' or clob is 'Y':
+    if clob == 'y' or clob == 'Y':
         makedirs(proj_dir)
         #And make the subdirectories
         makedirs(proj_dir+'GFs')
@@ -534,8 +534,9 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
     from mudpy import inverse as inv
     from mudpy.forward import get_mu_and_area
     from numpy import zeros,dot,array,squeeze,expand_dims,empty,tile,eye,ones,arange,load,size,genfromtxt
-    from numpy import where,sort,r_
+    from numpy import where,sort,r_,diag
     from numpy.linalg import lstsq
+    from scipy.linalg import norm
     from scipy.sparse import csr_matrix as sparse
     from scipy.optimize import nnls
     from datetime import datetime
@@ -562,12 +563,26 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
             w=inv.get_data_weights(home,project_name,GF_list,d,decimate)
         else:
             w=load(weight_vector)
-        W=empty(G.shape)
-        W=tile(w,(G.shape[1],1)).T
-        WG=empty(G.shape)
-        WG=W*G
+        
+        #apply data weights
         wd=w*d.squeeze()
+        
+        #get norm after applying weights and normalize weghted data vector
+        data_norm = norm(wd)
+        wd = wd/data_norm
+        
+        #reshape for inversion
         wd=expand_dims(wd,axis=1)
+        
+        #Apply weights to left hand side of the equation (the GFs)
+        W=empty(G.shape)
+        #W=tile(w,(G.shape[1],1)).T #why this and not a diagonal matrix??? ANSWER: they have the same effect, don;t rememebr why I chose to do it this way
+        W=diag(w)
+        
+        #Normalization effect
+        W = W/data_norm
+        WG=W.dot(G)
+
         #Clear up extraneous variables
         W=None
         w=None
@@ -576,7 +591,7 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
         print('Computing G\'G')
         K=(WG.T).dot(WG)
     else:
-        #Define inversion quantities if no weightd
+        #Define inversion quantities if no weighted
         x=G.transpose().dot(d)
         print('Computing G\'G')
         K=(G.T).dot(G)
