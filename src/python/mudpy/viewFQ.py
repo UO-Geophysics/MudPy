@@ -1374,6 +1374,9 @@ def pgd_2D_GOF(home,project_name,rupture_list='ruptures.list',Mw_lims=[7.8,9.5],
     #Get misfits             
     misfit=log(pgd_all/pgd_predicted_all)                    
    
+    
+   
+    
     #plotting
     bin_edges_x=linspace(Mw_all.min(),Mw_all.max(),n_mag_bins)
     bin_centers_x=zeros(len(bin_edges_x)-1)

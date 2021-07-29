@@ -108,7 +108,7 @@ font = {'family' : 'normal',
 matplotlib.rc('font', **font)
 
 
-def quick_model(rupt,s=5):
+def quick_model(rupt,s=5,slip_percent=0):
     '''
     Quick and dirty plot of a .rupt file. Shows map view of slip
     
@@ -127,6 +127,7 @@ def quick_model(rupt,s=5):
     num=f[:,0]
     all_ss=f[:,8]
     all_ds=f[:,9]
+    
     #Now parse for multiple rupture speeds
     unum=unique(num)
     ss=zeros(len(unum))
@@ -143,9 +144,18 @@ def quick_model(rupt,s=5):
     strike=f[0:len(unum),4]
     #Get projection of rake vector
     x,y=slip2geo(ss,ds,strike)
+    
+    #keep only appropriate slip
+    i=where(slip > slip_percent*slip.max())
+    slip=slip[i]
+    lon=lon[i]
+    lat=lat[i]
+    x=x[i]
+    y=y[i]
+    
     #Plot
     plt.figure(figsize=(5.2,10))
-    plt.scatter(lon,lat,marker='o',c=slip,s=s,cmap=whitejet)
+    plt.scatter(lon,lat,marker='o',c=slip,s=s,cmap=whitejet,vmin=0)
     plt.ylabel('Latitude')
     plt.xlabel('Longitude')
     cb=plt.colorbar()
@@ -516,7 +526,7 @@ def plot_insar(home,project_name,GF_list,los_min,los_max):
 
 def tile_slip(rupt,nstrike,ndip,slip_bounds,geographic=False,epicenter=0,epicenter_line=0,
               thresh=0,xlims=[-100,100],ylims=[-100,100],fig_size=(10, 3),cmap=whitejet,
-              afters=False,afters_file=None,histograms=False,size=250):
+              afters=False,afters_file=None,histograms=False,size=250,vertices=None):
     '''
     Detailed plot of a forward model or inversion result file
     
@@ -649,8 +659,12 @@ def tile_slip(rupt,nstrike,ndip,slip_bounds,geographic=False,epicenter=0,epicent
         rakess=rakess*slip
         rakeds=rakeds*slip
         plt.figure(num=None, figsize=fig_size, dpi=80)
-        plt.scatter(along_strike,depth,marker='s',linewidth=0.5,edgecolor='#CCCCCC',c=slip,s=size,cmap=cmap,vmin=slip_min,vmax=slip_max)
-        #plt.scatter(along_strike,depth,marker='s',linewidth=0.5,edgecolor='#CCCCCC',c=slip,s=250,cmap=plt.cm.afmhot_r,vmin=slip_min,vmax=slip_max)
+        if vertices != None:
+            plt.scatter(along_strike,depth,marker=vertices,linewidth=0.5,edgecolor='#CCCCCC',c=slip,s=size,cmap=cmap,vmin=slip_min,vmax=slip_max)
+        else:
+            plt.scatter(along_strike,depth,marker='s',linewidth=0.5,edgecolor='#CCCCCC',c=slip,s=size,cmap=cmap,vmin=slip_min,vmax=slip_max)
+       
+            #plt.scatter(along_strike,depth,marker='s',linewidth=0.5,edgecolor='#CCCCCC',c=slip,s=250,cmap=plt.cm.afmhot_r,vmin=slip_min,vmax=slip_max)
         #plt.scatter(along_strike,depth,marker='s',linewidth=0.5,edgecolor='#CCCCCC',c=slip,s=250,cmap=plt.cm.bone_r,vmin=slip_min,vmax=slip_max)
         #plt.scatter(along_strike,depth,marker='s',linewidth=0.5,edgecolor='#CCCCCC',c=slip,s=250,cmap=plt.cm.magma_r,vmin=slip_min,vmax=slip_max)
         cb=plt.colorbar()
