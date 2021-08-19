@@ -226,7 +226,9 @@ def run_parallel_generate_ruptures(home,project_name,run_name,fault_name,slab_na
             else:
                 hypocenter=whole_fault[shypo,1:4]
                 
-            t_onset=fakequakes.get_rupture_onset(home,project_name,slip,fault_array,model_name,hypocenter,rise_time_depths,M0,velmod,shear_wave_fraction_shallow,shear_wave_fraction_deep)
+            t_onset=fakequakes.get_rupture_onset(home,project_name,slip,fault_array,model_name,hypocenter,rise_time_depths,
+                                                 M0,velmod,shear_wave_fraction_shallow=shear_wave_fraction_shallow,
+                                                 shear_wave_fraction_deep=shear_wave_fraction_deep)
             fault_out[:,12]=0
             fault_out[ifaults,12]=t_onset
             

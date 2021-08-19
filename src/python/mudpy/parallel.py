@@ -579,6 +579,161 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
             DSdf.to_csv(green_path+'subfault'+num+'.DS.static.neu',sep='\t',index=False,header=False)
 
                       
+
+
+
+
+def run_parallel_teleseismics_green(home,project_name,time_epi,station_file,model_name,teleseismic_vel_mod,endtime,rank,size):
+    '''
+    Use green functions and compute synthetics at stations for a single source
+    and multiple stations. This code makes an external system call to syn.c first it
+    will make the external call for the strike-slip component then a second externall
+    call will be made for the dip-slip component. The unit amount of moment is 1e15
+    which corresponds to Mw=3.9333...
+    
+    IN:
+        source: 1-row numpy array containig informaiton aboutt he source, lat, lon, depth, etc...
+        station_file: File name with the station coordinates
+        green_path: Directopry where GFs are stored
+        model_file: File containing the Earth velocity structure
+        integrate: =0 if youw ant velocity waveforms, =1 if you want displacements
+        static: =0 if computing full waveforms, =1 if computing only the static field
+        subfault: String indicating the subfault being worked on
+        coord_type: =0 if problem is in cartesian coordinates, =1 if problem is in lat/lon
+        
+    OUT:
+        log: Sysytem standard output and standard error for log
+    '''
+
+    import os
+    import requests
+    from mudpy.forward import get_mu
+    from numpy import array,genfromtxt
+    from obspy import read
+    from mudpy.green import src2sta
+    
+    #What parameters are we using?
+    if rank==0:
+        out='''Running all processes with:
+        home = %s
+        project_name = %s
+        station_file = %s
+        model_name = %s
+        time_epi = %s
+        end_time = %s
+        ''' %(home,project_name,station_file,model_name,str(time_epi),str(endtime))
+        print(out)
+        
+    #url for web request
+    url='http://service.iris.edu/irisws/syngine/1/query'
+        
+    #Read your corresponding source file
+    mpi_source=genfromtxt(home+project_name+'/data/model_info/mpi_source.'+str(rank)+'.fault')
+    
+    #Constant parameters
+    rakeDS=90 #90 is thrust, -90 is normal
+    rakeSS=0 #0 is left lateral, 180 is right lateral
+    
+    #Load structure
+    model_file=home+project_name+'/structure/'+model_name
+    structure=genfromtxt(model_file)
+    
+    for ksource in range(len(mpi_source)):
+        
+        source=mpi_source[ksource,:]
+        
+        #Parse the soruce information
+        xs=source[1]
+        ys=source[2]
+        zs=source[3]
+        zs_in_meters=int(zs*1000)
+        strike=source[4]
+        dip=source[5]
+            
+        #check longitude because iris only allows +/-180
+        if xs > 180:
+            xs -= 360
+        
+        ss_length=source[8]
+        ds_length=source[9]
+        
+        strdepth='%.4f' % zs
+        subfault=str(int(source[0])).rjust(4,'0')
+        
+        #Where to save dynamic waveforms
+        green_path=home+project_name+'/GFs/dynamic/'+model_name+"_"+strdepth+".sub"+subfault+"/"
+       
+        #check if folder exists if not make it
+        if os.path.isdir(green_path) == False:
+            os.mkdir(green_path)
+       
+        staname=genfromtxt(station_file,dtype="U",usecols=0)
+        if staname.shape==(): #Single staiton file
+            staname=array([staname])
+        
+        #Compute distances and azimuths
+        d,az,lon_sta,lat_sta=src2sta(station_file,source,output_coordinates=True)
+        
+        #Get moment corresponding to 1 meter of slip on subfault
+        mu=get_mu(structure,zs)
+        Mo=mu*ss_length*ds_length*1.0
+        
+        #Move to output folder
+        os.chdir(green_path)
+        print('Processor '+str(rank)+' is working on subfault '+str(int(source[0]))+' and '+str(len(d))+' stations ')
+        
+        #This is looping over "sites"
+        for ksta in range(len(d)):
+            
+            #cehck longitude for valid range
+            if lon_sta[ksta] > 180:
+                lon_sta[ksta] -= 360
+            
+            #Form web request for SS syntehtic
+            parameters = {'model': teleseismic_vel_mod,
+                         'sourcelatitude':str(ys),
+                         'sourcelongitude':str(xs),
+                         'sourcedepthinmeters':str(zs_in_meters),
+                         'sourcedoublecouple':str(strike)+','+str(dip)+','+str(rakeSS)+','+str(Mo),
+                         'receiverlatitude':str(lat_sta[ksta]),
+                         'receiverlongitude':str(lon_sta[ksta]),
+                         'format':'miniseed',
+                         'origintime':str(time_epi),
+                         'endtime':str(endtime)}
+                
+            web_request = requests.get(url, params = parameters)
+            
+            #Filename for temporary write
+            out=green_path+staname[ksta]+'.subfault'+subfault+'.SS.mseed'
+            f=open(out,'wb')
+            f.write(web_request.content)
+            
+            
+            #Form web request for DS syntehtic
+            parameters = {'model': teleseismic_vel_mod,
+                         'sourcelatitude':str(ys),
+                         'sourcelongitude':str(xs),
+                         'sourcedepthinmeters':str(zs_in_meters),
+                         'sourcedoublecouple':str(strike)+','+str(dip)+','+str(rakeDS)+','+str(Mo),
+                         'receiverlatitude':str(lat_sta[ksta]),
+                         'receiverlongitude':str(lon_sta[ksta]),
+                         'format':'miniseed',
+                         'origintime':str(time_epi),
+                         'endtime':str(endtime)}
+                
+            web_request = requests.get(url, params = parameters)
+            
+            #Filename for temporary write
+            out=green_path+staname[ksta]+'.subfault'+subfault+'.DS.mseed'
+            f=open(out,'wb')
+            f.write(web_request.content)
+        
+
+
+
+
+
+
                                             
                                                                   
 def run_parallel_synthetics_mt3d(home,project_name,station_file,model_name,forceMT,mt,insar,rank,size):
@@ -996,6 +1151,7 @@ if __name__ == '__main__':
         elif insar=='False':
             insar=False
         run_parallel_green(home,project_name,station_file,model_name,dt,NFFT,static,dk,pmin,pmax,kmax,tsunami,insar,rank,size)
+    
     elif sys.argv[1]=='run_parallel_synthetics':
         #Parse command line arguments
         home=sys.argv[2]
@@ -1026,6 +1182,18 @@ if __name__ == '__main__':
         mu_okada=float(sys.argv[15])
 
         run_parallel_synthetics(home,project_name,station_file,model_name,integrate,static,tsunami,time_epi,beta,custom_stf,impulse,rank,size,insar,okada,mu_okada)
+    
+    elif sys.argv[1]=='run_parallel_teleseismics_green':
+        home=sys.argv[2]
+        project_name=sys.argv[3]
+        time_epi=UTCDateTime(sys.argv[4])
+        station_file=sys.argv[5]
+        model_name=sys.argv[6]
+        teleseismic_vel_mod=sys.argv[7]
+        endtime=sys.argv[8]
+    
+        run_parallel_teleseismics_green(home,project_name,time_epi,station_file,model_name,teleseismic_vel_mod,endtime,rank,size)
+    
     elif sys.argv[1]=='run_parallel_synthetics_mt3d':
         #Parse command line arguments
         home=sys.argv[2]

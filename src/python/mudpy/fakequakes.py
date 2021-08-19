@@ -800,6 +800,8 @@ def get_rise_times(M0,slip,fault_array,rise_time_depths,stoc_rake,rise_time_std=
     
 def get_rupture_onset(home,project_name,slip,fault_array,model_name,hypocenter,
         rise_time_depths,M0,velmod,sigma_rise_time=0.2,shear_wave_fraction_shallow=0.49,shear_wave_fraction_deep=0.8):
+    
+    home,project_name,slip,fault_array,model_name,hypocenter,rise_time_depths,M0,velmod,shear_wave_fraction_shallow,shear_wave_fraction_deep
     '''
     Using a custom built tvel file ray trace from hypocenter to determine rupture
     onset times
@@ -834,6 +836,7 @@ def get_rupture_onset(home,project_name,slip,fault_array,model_name,hypocenter,
 #    rupture_multiplier[i]=slope*depth_to_top[i]+intercept
     
     
+    
     #Get rupture speed shear-wave multipliers
     rupture_multiplier=zeros(len(vel))
     # Shallow 
@@ -847,7 +850,6 @@ def get_rupture_onset(home,project_name,slip,fault_array,model_name,hypocenter,
     slope=(shear_wave_fraction_deep-shear_wave_fraction_shallow)/(rise_time_depths[1]-rise_time_depths[0])
     intercept=shear_wave_fraction_deep-slope*rise_time_depths[1]
     rupture_multiplier[i]=slope*depth_to_top[i]+intercept
-    
     
     
     #Perturb depths of the hypocenter so that faults at the same depth are not zero onset

@@ -324,6 +324,57 @@ def waveforms_fakequakes(home,project_name,fault_name,rupture_list,GF_list,
         #Write output
         write_fakequakes_waveforms(home,project_name,rupture_name,waveforms,GF_list,NFFT,time_epi,dt)
         
+        
+        
+        
+def tele_waveforms(home,project_name,fault_name,rupture_list,GF_list_teleseismic,
+                model_name,run_name,G_from_file,G_name,source_time_function='dreger',zeta=0.2,
+                stf_falloff_rate=4.0,rupture_name=None,epicenter=None,time_epi=None,
+                hot_start=0,decimation_factor=1):
+    '''
+
+    '''
+    from numpy import genfromtxt,array
+    import datetime
+    
+    print('Solving for kinematic problem(s)')
+    #Time for log file
+    now=datetime.datetime.now()
+    now=now.strftime('%b-%d-%H%M')
+    
+    #load source names
+    if rupture_list==None: 
+        all_sources=array([rupture_name])  
+    else:
+        all_sources=genfromtxt(home+project_name+'/data/'+rupture_list,dtype='U')
+    
+    #Load all synthetics
+    print('... loading all synthetics into memory')
+    Nss,Ess,Zss,Nds,Eds,Zds=load_fakequakes_tele_synthetics(home,project_name,fault_name,model_name,GF_list_teleseismic,G_from_file,G_name,decimation_factor)
+    print('... ... done')
+    
+    Npoints=Nss[0].stats.npts
+    dt=Nss[0].stats.delta
+    #Now loop over rupture models
+    for ksource in range(hot_start,len(all_sources)):
+        print('... solving for source '+str(ksource)+' of '+str(len(all_sources)))
+        rupture_name=all_sources[ksource]
+        print(rupture_name)
+        
+        if rupture_list!=None:
+            #Get epicentral time
+            epicenter,time_epi=read_fakequakes_hypo_time(home,project_name,rupture_name)
+            forward=False
+        else:
+            forward=True #This controls where we look for the rupture file
+        
+        # Put in matrix
+        m,G=get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_name,time_epi,GF_list_teleseismic,epicenter,Npoints,source_time_function,stf_falloff_rate,zeta,forward=forward)
+        # Solve
+        waveforms=G.dot(m)
+        #Write output
+        write_fakequakes_waveforms(home,project_name,rupture_name,waveforms,GF_list_teleseismic,Npoints,time_epi,dt)
+        
 
 
 def waveforms_fakequakes_dynGF(home,project_name,fault_name,rupture_list,GF_list,dynamic_GFlist,dist_threshold,
@@ -880,6 +931,115 @@ def load_fakequakes_synthetics(home,project_name,fault_name,model_name,GF_list,G
 
 
 
+def load_fakequakes_tele_synthetics(home,project_name,fault_name,model_name,GF_list_teleseismic,G_from_file,G_name,decimation_factor):
+    ''''
+    Load the miniseed files with all the synthetics
+    '''
+    from numpy import genfromtxt,loadtxt
+    from obspy import read,Stream
+
+    if G_from_file==True: #load from file
+        Eds=read(home+project_name+'/GFs/matrices/'+G_name+'.Eds.tele.mseed')
+        Nds=read(home+project_name+'/GFs/matrices/'+G_name+'.Nds.tele.mseed')
+        Zds=read(home+project_name+'/GFs/matrices/'+G_name+'.Zds.tele.mseed')
+        Ess=read(home+project_name+'/GFs/matrices/'+G_name+'.Ess.tele.mseed')
+        Nss=read(home+project_name+'/GFs/matrices/'+G_name+'.Nss.tele.mseed')
+        Zss=read(home+project_name+'/GFs/matrices/'+G_name+'.Zss.tele.mseed')
+    else: #assemble G one data type at a time, just displacememnt right now
+        #Load station info
+        station_file=home+project_name+'/data/station_info/'+GF_list_teleseismic
+        staname=genfromtxt(station_file,dtype="U",usecols=0)
+        Nsta=len(staname)
+        #Load fault model
+        source=loadtxt(home+project_name+'/data/model_info/'+fault_name,ndmin=2)
+        Nfaults=source.shape[0] #Number of subfaults
+        kindex=0
+        
+        for ksta in range(Nsta):
+            
+            print('Reading green functions for station #'+str(ksta+1)+' of '+str(Nsta))
+            
+            for kfault in range(Nfaults):
+                
+                #Get subfault GF directory
+                nsub='sub'+str(int(source[kfault,0])).rjust(4,'0')
+                nfault='subfault'+str(int(source[kfault,0])).rjust(4,'0')
+                strdepth='%.4f' % source[kfault,3]
+                syn_path=home+project_name+'/GFs/dynamic/'+model_name+'_'+strdepth+'.'+nsub+'/'
+                
+                #Get synthetics
+                if kfault==0 and ksta==0: #It's the first one, initalize stream object
+                    SS=read(syn_path+staname[ksta]+'.'+nfault+'.SS.mseed')
+                    DS=read(syn_path+staname[ksta]+'.'+nfault+'.DS.mseed')
+                    
+                    for trace in SS:
+                        
+                        if decimation_factor >1:
+                            trace.decimate(factor=decimation_factor)    
+                        
+                        
+                        if trace.stats.channel=='BXE':
+                            Ess=Stream(trace)
+                        if trace.stats.channel=='BXN':
+                            Nss=Stream(trace)
+                        if trace.stats.channel=='BXZ':
+                            Zss=Stream(trace)
+                        
+                    for trace in DS:
+                        
+                        if decimation_factor >1:
+                            trace.decimate(factor=decimation_factor)    
+                        
+                        if trace.stats.channel=='BXE':
+                            Eds=Stream(trace)
+                        if trace.stats.channel=='BXN':
+                            Nds=Stream(trace)
+                        if trace.stats.channel=='BXZ':
+                            Zds=Stream(trace)
+                            
+
+                else: #Just add to stream object
+                   
+                    SS=read(syn_path+staname[ksta]+'.'+nfault+'.SS.mseed')
+                    DS=read(syn_path+staname[ksta]+'.'+nfault+'.DS.mseed')
+                    
+                    for trace in SS:
+                        
+                        if decimation_factor >1:
+                            trace.decimate(factor=decimation_factor)  
+                        
+                        if trace.stats.channel=='BXE':
+                            Ess+=trace
+                        if trace.stats.channel=='BXN':
+                            Nss+=trace
+                        if trace.stats.channel=='BXZ':
+                            Zss+=trace
+                        
+                    for trace in DS:
+                        
+                        if decimation_factor >1:
+                            trace.decimate(factor=decimation_factor)  
+                        
+                        if trace.stats.channel=='BXE':
+                            Eds+=trace
+                        if trace.stats.channel=='BXN':
+                            Nds+=trace
+                        if trace.stats.channel=='BXZ':
+                            Zds+=trace
+                kindex+=1
+        print('Writting synthetics to miniSEED, hang on this might take a minute or two.')
+        Ess.write(home+project_name+'/GFs/matrices/'+G_name+'.Ess.tele.mseed',format='MSEED')
+        Nss.write(home+project_name+'/GFs/matrices/'+G_name+'.Nss.tele.mseed',format='MSEED')
+        Zss.write(home+project_name+'/GFs/matrices/'+G_name+'.Zss.tele.mseed',format='MSEED')
+        Eds.write(home+project_name+'/GFs/matrices/'+G_name+'.Eds.tele.mseed',format='MSEED')
+        Nds.write(home+project_name+'/GFs/matrices/'+G_name+'.Nds.tele.mseed',format='MSEED')
+        Zds.write(home+project_name+'/GFs/matrices/'+G_name+'.Zds.tele.mseed',format='MSEED')
+    return Nss,Ess,Zss,Nds,Eds,Zds
+
+
+
+
+
 def get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_name,time_epi,GF_list,epicenter,NFFT,
                 source_time_function,stf_falloff_rate,zeta=0.2,forward=False):
     '''
@@ -938,6 +1098,9 @@ def get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_nam
         
         for ksource in range(len(i_non_zero)):
 
+            if ksource % 50 == 0:
+                print('... ... ... subfault %d of %d' % (ksource,len(i_non_zero)))
+            
             #Get synthetics
             nss=Nss[read_start+i_non_zero[ksource]].copy()
             ess=Ess[read_start+i_non_zero[ksource]].copy()

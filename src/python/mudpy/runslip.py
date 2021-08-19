@@ -245,6 +245,74 @@ def make_parallel_green(home,project_name,station_file,fault_name,model_name,dt,
         mpi=split(mpi)
         p=subprocess.Popen(mpi)
         p.communicate()
+        
+        
+        
+        
+        
+def make_parallel_teleseismics_green(home,project_name,station_file,fault_name,model_name,teleseismic_vel_mod,time_epi,endtime,ncpus,hot_start=0):
+    '''
+    This routine set's up the computation of GFs for each subfault to all stations.
+    The GFs are impulse sources, they don't yet depend on strike and dip.
+    
+    IN:
+        home: Home directory
+        project_name: Name fo the problem
+        station_file: File with coordinates of stations
+        fault_name: Name of fault file
+        model_Name: Name of Earth structure model file
+        dt: Desired sampling itnerval for waveforms
+        NFFT: No. of samples requested in waveform (must be power of 2)
+        static: =0 if computing full waveforms, =1 if computing only the static field
+        hot_start: =k if you want to start computations at k-th subfault, =0 to compute all
+
+        
+    OUT:
+        Nothing
+    '''
+    from numpy import arange,savetxt,genfromtxt
+    from os import path,makedirs,environ
+    from shlex import split
+    import subprocess
+    
+    
+    green_path=home+project_name+'/GFs/'
+    station_file=home+project_name+'/data/station_info/'+station_file 
+    fault_file=home+project_name+'/data/model_info/'+fault_name  
+    #Load source model for station-event distance computations
+    source=genfromtxt(fault_file)
+   
+    #Create all output folders
+    for k in range(len(source)):
+        
+        strdepth='%.4f' % source[k,3]
+        subfault=str(k+1).rjust(4,'0')
+        
+        subfault_folder=green_path+'dynamic/'+model_name+'_'+strdepth+'.sub'+subfault
+        if path.exists(subfault_folder)==False:
+            #It doesn't, make it, don't be lazy
+            makedirs(subfault_folder)               
+
+    #Create individual source files
+    for k in range(ncpus):
+        i=arange(k+hot_start,len(source),ncpus)
+        mpi_source=source[i,:]
+        fmt='%d\t%10.6f\t%10.6f\t%.8f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f'
+        savetxt(home+project_name+'/data/model_info/mpi_source.'+str(k)+'.fault',mpi_source,fmt=fmt)
+    
+    #Make mpi system call
+    print("MPI: Starting GFs computation on", ncpus, "CPUs\n")
+    mud_source=environ['MUD']+'/src/python/mudpy/'
+
+
+    mpi='mpiexec -n '+str(ncpus)+' python '+mud_source+'parallel.py run_parallel_teleseismics_green '+home+' '+project_name+' '+str(time_epi)+' '+station_file+' '+model_name+' '+teleseismic_vel_mod+' '+str(endtime)
+    print(mpi)
+    mpi=split(mpi)
+    p=subprocess.Popen(mpi)
+    p.communicate()
+        
+        
+
 
    
 
@@ -523,7 +591,50 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
             make_parallel_synthetics(home,project_name,station_file,fault_name,model_name,integrate,static,tsunami,beta,hot_start,time_epi,ncpus,custom_stf,impulse,insar)
     
                     
-                                
+  
+
+
+
+#Compute GFs for the ivenrse problem            
+def teleseismicGFs(home,project_name,GF_list_teleseismic,fault_name,model_name,teleseismic_vel_mod,time_epi,endtime,ncpus):
+    '''
+    This routine will read a .gflist file and compute the required GF type for each station
+    '''
+    from numpy import genfromtxt,shape,floor
+    from os import remove
+    
+    #Read in GFlist and decide what to compute
+    gf_file=home+project_name+'/data/station_info/'+GF_list_teleseismic
+    stations=genfromtxt(gf_file,usecols=0,dtype='U')
+    lonlat=genfromtxt(gf_file,usecols=[1,2,])
+    fault_file=home+project_name+'/data/model_info/'+fault_name  
+    source=genfromtxt(fault_file)
+    num_faults=shape(source)[0]
+    
+    if num_faults/ncpus < 2:
+        ncpus=int(floor(num_faults/2.))
+        print('Cutting back to ' + str(ncpus) + ' cpus for ' + str(num_faults) + ' subfaults')
+    # GFs can be computed all at the same time
+    station_file='temp.sta'
+    try:
+        remove(home+project_name+'/data/station_info/'+station_file) #Cleanup
+    except:
+        pass
+    
+    print('Teleseismic GFs requested...')
+    f=open(home+project_name+'/data/station_info/'+station_file,'w')
+    for k in range(len(stations)): #Write temp .sta file
+        out=stations[k]+'\t'+repr(lonlat[k,0])+'\t'+repr(lonlat[k,1])+'\n'
+        f.write(out)
+    f.close()
+
+    make_parallel_teleseismics_green(home,project_name,station_file,fault_name,model_name,teleseismic_vel_mod,time_epi,endtime,ncpus)
+ 
+
+
+
+
+                              
                                                         
 def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_from_file,G_name,epicenter,
                 rupture_speed,num_windows,reg_spatial,reg_temporal,nfaults,beta,decimate,bandpass,

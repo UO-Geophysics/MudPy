@@ -445,7 +445,7 @@ def plot_LW_scaling(home,project_name,run_name):
     return L,W,Mw
  
     
-def analyze_sources(home,project_name,run_name,Mw_lims=[7.75,9.35],return_values=False):
+def analyze_sources(rupture_folder,Mw_lims=[7.75,9.35],return_values=False):
     '''
     Basic parameters of the sources
     '''
@@ -456,8 +456,8 @@ def analyze_sources(home,project_name,run_name,Mw_lims=[7.75,9.35],return_values
     from matplotlib.ticker import MultipleLocator
     
     plt.rcParams.update({'font.size': 12})
-    logs=sort(glob(home+project_name+'/output/ruptures/'+run_name+'*.log'))
-    ruptures=sort(glob(home+project_name+'/output/ruptures/'+run_name+'*.rupt'))
+    logs=sort(glob(rupture_folder+'*.log'))
+    ruptures=sort(glob(rupture_folder+'*.rupt'))
 
     L=zeros(len(logs))
     W=zeros(len(logs))
@@ -498,7 +498,7 @@ def analyze_sources(home,project_name,run_name,Mw_lims=[7.75,9.35],return_values
     
     plt.subplot(331)
     Mw_synth=arange(7.8,9.3,0.1)
-    plt.plot(Mw_synth,10**(-2.37+0.57*Mw_synth),c='k',lw=2)
+    # plt.plot(Mw_synth,10**(-2.37+0.57*Mw_synth),c='k',lw=2)
     plt.scatter(Mw_actual,L,marker='+')
     plt.xlim(Mw_lims)
     plt.ylim([70,1100])
@@ -521,7 +521,7 @@ def analyze_sources(home,project_name,run_name,Mw_lims=[7.75,9.35],return_values
     
     
     plt.subplot(332)
-    plt.plot(Mw_synth,10**(-1.86+0.46*Mw_synth),c='k',lw=2)
+    # plt.plot(Mw_synth,10**(-1.86+0.46*Mw_synth),c='k',lw=2)
     plt.scatter(Mw_actual,W,marker='+')
     plt.xlim(Mw_lims)
     plt.ylim([9,300])
@@ -574,11 +574,11 @@ def analyze_sources(home,project_name,run_name,Mw_lims=[7.75,9.35],return_values
     ax.tick_params(which='major',length=7,width=1)
     ax.tick_params(which='minor',length=4,width=1) 
     #Allen Hayes scaling lines
-    plt.plot([7.0,9.6],[0.4,21.1],c='k',lw=2)
-    plt.plot([7.0,9.6],[0.4,7.87],c='r',lw=2)
-    plt.plot([7.0,9.6],[0.55,10.71],c='orange',lw=2)
-    plt.plot([7.0,9.6],[1.20,23.33],c='g',lw=2)
-    plt.plot([7.0,9.27],[1.08,39.16],c='violet',lw=2)
+    # plt.plot([7.0,9.6],[0.4,21.1],c='k',lw=2)
+    # plt.plot([7.0,9.6],[0.4,7.87],c='r',lw=2)
+    # plt.plot([7.0,9.6],[0.55,10.71],c='orange',lw=2)
+    # plt.plot([7.0,9.6],[1.20,23.33],c='g',lw=2)
+    # plt.plot([7.0,9.27],[1.08,39.16],c='violet',lw=2)
         
     plt.subplot(335)
     plt.scatter(Mw_actual,slip_max,marker='+')
@@ -598,8 +598,8 @@ def analyze_sources(home,project_name,run_name,Mw_lims=[7.75,9.35],return_values
     ax.tick_params(which='major',length=7,width=1)
     ax.tick_params(which='minor',length=4,width=1) 
     #Allen Hayes scaling lines
-    plt.plot([7.0,9.6],[1.07,75],c='k',lw=2)
-    plt.plot([7.0,9.6],[3.21,225],c='k',lw=2)
+    # plt.plot([7.0,9.6],[1.07,75],c='k',lw=2)
+    # plt.plot([7.0,9.6],[3.21,225],c='k',lw=2)
     
     plt.subplot(336)
     plt.scatter(Mw_actual,slip_stdev,marker='+')

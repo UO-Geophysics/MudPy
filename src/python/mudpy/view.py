@@ -2721,7 +2721,7 @@ def dtopo_slices(dtopo_file,fault_file,out):
         plt.close("all")
         
 
-def plot_grd(grdfile,zlims,cmap,flip_lon=False,return_data=False,z_variable=None):
+def plot_grd(grdfile,zlims,cmap,flip_lon=False,return_data=False,z_variable=None,contours=None):
     '''
     Quick plot of any GMT grd file, this will only work for NETCDF4 files, 
     i.e. if you use GMT5. If you are outdated and use NETCDF3 you can edit this
@@ -2754,6 +2754,10 @@ def plot_grd(grdfile,zlims,cmap,flip_lon=False,return_data=False,z_variable=None
     plt.title(grdfile)
     plt.pcolormesh(X,Y,z,vmin=zlims[0],vmax=zlims[1],cmap=cmap)
     plt.colorbar()
+    
+    if contours != None:
+        plt.contour(X,Y,z,levels=coqntours)
+    
     plt.xlabel('Longitude')
     plt.ylabel('Latitude')
     plt.show()

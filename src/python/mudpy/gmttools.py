@@ -718,7 +718,7 @@ def read_neic_param(fault_file):
                 
 
 
-def triangular_rupt_2_gmt(meshfile,slipfile,outfile,kinematic_out_folder=None):
+def triangular_rupt_2_gmt(meshfile,slipfile,outfile,kinematic_out_folder=None,percentage=0):
     
     '''
     DM Note: Modified from Brendan's script because he refused to do a pull request :)
@@ -815,11 +815,12 @@ def triangular_rupt_2_gmt(meshfile,slipfile,outfile,kinematic_out_folder=None):
     #Total slip model
     moment = 0
     fso = open(outfile,'w')
+    slip_threshold=(percentage/100)*TOTS.max()
     for i in range(0, numpy.amax(MESN)):
         a1 = numpy.where(MESN[i] == INVN)[0]
         totslip = numpy.sum(TOTS[a1])
 #        print (i+1,totslip*100)
-        if (totslip >= 0.0):
+        if (totslip >= slip_threshold):
             moment = moment+FA[i]*1000*1000*numpy.mean(RIG[a1])*totslip
             lon1 = "{0:.4f}".format(meshlon1[i])
             lon2 = "{0:.4f}".format(meshlon2[i])
