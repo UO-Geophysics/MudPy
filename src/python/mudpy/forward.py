@@ -2366,7 +2366,32 @@ def highpass(data,fcorner,fsample,order,zerophase=True,cascading=True):
             data_filt=lfilter(b,a,data)
     
     return data_filt
+ 
+def bandstop(data,fcorner,fsample,order,zerophase=True,cascading=True):
+    '''
+    Make a lowpass zero phase filter
+    '''
+    from scipy.signal import butter,filtfilt,lfilter,sosfiltfilt,sosfilt
+    from numpy import array
     
+
+    fnyquist=fsample/2
+    
+    if cascading==True:
+        sos = butter(order, array(fcorner)/(fnyquist),'bandstop',output='sos')
+        if zerophase==True:
+            data_filt=sosfiltfilt(sos,data)
+        else:
+            data_filt=sosfilt(sos,data)
+    
+    else:
+        b, a = butter(order, array(fcorner)/(fnyquist),'bandstop')
+        if zerophase==True:
+            data_filt=filtfilt(b,a,data)
+        else:
+            data_filt=lfilter(b,a,data)
+        
+    return data_filt   
 
     
 def inv2coulomb(rupt,epicenter,fout,zeroslip=False,offset=0):

@@ -2452,7 +2452,7 @@ def make_tgf_dtopo_static(home,project_name,model_name,tgf_file,fault_name,
     
     '''
     import datetime
-    from numpy import genfromtxt,zeros,arange,meshgrid,ones,c_,savetxt,argmin,nan,where,mean
+    from numpy import genfromtxt,zeros,arange,meshgrid,ones,c_,savetxt,argmin,nan,where,mean,expand_dims
     from obspy import read
     from netCDF4 import Dataset
     from scipy.interpolate import griddata
@@ -2495,38 +2495,28 @@ def make_tgf_dtopo_static(home,project_name,model_name,tgf_file,fault_name,
         sub=str(ksub+1).rjust(4,'0')
         #Subfault dir
         subdir=green_dir+model_name+'_'+strdepth+'.sub'+sub+'/'
-        for ksta in range(len(sta)):
-            if ksta%500==0:
-                print('... ... working on seafloor grid point '+str(ksta)+' of '+str(len(sta)))
             
-            ds=genfromtxt(subdir+staname[ksta]+'.subfault'+sub+'.DS.static.neu')
-            ss=genfromtxt(subdir+staname[ksta]+'.subfault'+sub+'.SS.static.neu')
-            
-            eds=ds[0]
-            nds=ds[1]
-            uds=ds[2]
-            ess=ss[0]
-            nss=ss[1]
-            uss=ss[2]
+        ds=genfromtxt(subdir+'subfault'+sub+'.DS.static.neu')
+        ss=genfromtxt(subdir+'subfault'+sub+'.SS.static.neu')
+        
+        eds=ds[:,2]
+        nds=ds[:,1]
+        uds=ds[:,3]
+        ess=ss[:,2]
+        nss=ss[:,1]
+        uss=ss[:,3]
 
-            #Initalize matrices
-            if ksta==0:
-                eDS=zeros((1,len(sta)))
-                eSS=eDS.copy()
-                nDS=eDS.copy()
-                nSS=eDS.copy()
-                uDS=eDS.copy()
-                uSS=eDS.copy()
-            #Populate matrix
-            eDS[0,ksta]=eds
-            nDS[0,ksta]=nds
-            uDS[0,ksta]=uds
-            eSS[0,ksta]=ess
-            nSS[0,ksta]=nss
-            uSS[0,ksta]=uss
+
+        #Populate matrix
+        eDS=expand_dims(eds,1).T
+        nDS=expand_dims(nds,1).T
+        uDS=expand_dims(uds,1).T
+        eSS=expand_dims(ess,1).T
+        nSS=expand_dims(nss,1).T
+        uSS=expand_dims(uss,1).T
 
         #Now go one epoch at a time, and interpolate all fields
-        print('... interpolating coseismic offsets to a regular grid')
+        print('... ... interpolating coseismic offsets to a regular grid')
         
         
         nds=griddata((lon,lat),nDS[0,:],(loni,lati),method='linear',fill_value=0)
@@ -2557,7 +2547,7 @@ def make_tgf_dtopo_static(home,project_name,model_name,tgf_file,fault_name,
         dtopo_ds[numel:,1:4]=xyz_ds
         dtopo_ss[numel:,1:4]=xyz_ss
 
-        print('... writting dtopo files')
+        print('... ... writting dtopo files')
         savetxt(subdir+'DS.dtopo',dtopo_ds,fmt='%i\t%.6f\t%.6f\t%.4e')
         savetxt(subdir+'SS.dtopo',dtopo_ss,fmt='%i\t%.6f\t%.6f\t%.4e')
         
