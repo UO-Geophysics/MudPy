@@ -34,7 +34,7 @@
 
 int main(int argc, char **argv) {
   int	i,j,k,nn,ns,npt,error,intg,diff,src_type, filter;
-  char	nam[128],outnm[128],*ccc,com[3]={'z','r','t'};
+  char	nam[512],outnm[128],*ccc,com[3]={'z','r','t'};
   int	dynamic=1;
   float	coef,rad[4][3],m0,az,*grn,*syn[3],*src,*pt,disp[3],mt[3][3];
   float cmpinc[3]={0,90.,90.}, cmpaz[3];
