@@ -639,8 +639,8 @@ def get_attenuation(f,structure,ray,Qexp,Qtype='S'):
 
     
     #get frequency dependence
-    #Q=exp(-pi*weightedQ*f**(-Qexp))
-    Q=exp(-0.5*omega*weightedQ*(f**(Qexp)))
+    Q=exp(-pi*weightedQ*f**(-Qexp))
+    # Q=exp(-0.5*omega*weightedQ*(f**(Qexp)))
     
     return Q
 

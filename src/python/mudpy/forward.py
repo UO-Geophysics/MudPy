@@ -336,6 +336,7 @@ def tele_waveforms(home,project_name,fault_name,rupture_list,GF_list_teleseismic
     '''
     from numpy import genfromtxt,array
     import datetime
+    import gc
     
     print('Solving for kinematic problem(s)')
     #Time for log file
@@ -374,6 +375,10 @@ def tele_waveforms(home,project_name,fault_name,rupture_list,GF_list_teleseismic
         waveforms=G.dot(m)
         #Write output
         write_fakequakes_waveforms(home,project_name,rupture_name,waveforms,GF_list_teleseismic,Npoints,time_epi,dt)
+        
+        #Delete variables and garbage collect
+        del G
+        gc.collect()
         
 
 
@@ -1066,6 +1071,7 @@ def get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_nam
     '''
     
     from numpy import genfromtxt,convolve,where,zeros,arange,unique
+    import gc
 
 
     if forward==True:
@@ -1160,6 +1166,10 @@ def get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_nam
             G[matrix_pos+NFFT:matrix_pos+2*NFFT,2*ksource+1]=eds.data
             G[matrix_pos+2*NFFT:matrix_pos+3*NFFT,2*ksource]=zss.data
             G[matrix_pos+2*NFFT:matrix_pos+3*NFFT,2*ksource+1]=zds.data
+            
+            #Having some sort of memory issue delete streams and garbage collect to avoid it
+            del nss,ess,zss,nds,eds,zds
+            gc.collect()
             
         matrix_pos+=3*NFFT
         read_start+=Nfaults
@@ -3466,7 +3476,7 @@ def convolution_matrix(h):
     
     
 def build_source_time_function(rise_time,dt,total_time,stf_type='triangle',zeta=0.2,dreger_falloff_rate=4,
-                               scale=True,scale_value=None,time_offset=0,time_offset_gauss=0,quiet=False):
+                               scale=True,scale_value=1.0,time_offset=0,time_offset_gauss=0,quiet=False):
     '''
     Compute source time function for a given rise time
     '''
