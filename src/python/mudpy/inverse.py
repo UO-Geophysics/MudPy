@@ -191,7 +191,7 @@ def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epic
                     if onset_file==None: #There is no onset times file, caluclate them
                         tdelay=epi2subfault(epicenter,source,rupture_speed,trupt[krup])
                     else: #use provided onset times and add time window delay
-                        tdelay =  tdelay_constant+trupt[krup,:]
+                        tdelay =  tdelay_constant+trupt[krup]
                     if krup==0: #First rupture speed
                         first_window=True
                         Ess=[] ; Eds=[] ; Nss=[] ; Nds=[] ; Zss=[] ; Zds=[]
