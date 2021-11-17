@@ -330,12 +330,13 @@ def waveforms_fakequakes(home,project_name,fault_name,rupture_list,GF_list,
 def tele_waveforms(home,project_name,fault_name,rupture_list,GF_list_teleseismic,
                 model_name,run_name,G_from_file,G_name,source_time_function='dreger',zeta=0.2,
                 stf_falloff_rate=4.0,rupture_name=None,epicenter=None,time_epi=None,
-                hot_start=0,decimation_factor=1):
+                hot_start=0,decimation_factor=1,reconvolution=True):
     '''
 
     '''
     from numpy import genfromtxt,array
     import datetime
+    import gc
     
     print('Solving for kinematic problem(s)')
     #Time for log file
@@ -369,11 +370,15 @@ def tele_waveforms(home,project_name,fault_name,rupture_list,GF_list_teleseismic
             forward=True #This controls where we look for the rupture file
         
         # Put in matrix
-        m,G=get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_name,time_epi,GF_list_teleseismic,epicenter,Npoints,source_time_function,stf_falloff_rate,zeta,forward=forward)
+        m,G=get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_name,time_epi,GF_list_teleseismic,epicenter,Npoints,source_time_function,stf_falloff_rate,zeta,forward=forward,reconvolution=reconvolution)
         # Solve
         waveforms=G.dot(m)
         #Write output
         write_fakequakes_waveforms(home,project_name,rupture_name,waveforms,GF_list_teleseismic,Npoints,time_epi,dt)
+        
+        #Delete variables and garbage collect
+        del G
+        gc.collect()
         
 
 
@@ -1041,7 +1046,7 @@ def load_fakequakes_tele_synthetics(home,project_name,fault_name,model_name,GF_l
 
 
 def get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_name,time_epi,GF_list,epicenter,NFFT,
-                source_time_function,stf_falloff_rate,zeta=0.2,forward=False):
+                source_time_function,stf_falloff_rate,zeta=0.2,forward=False,reconvolution=False,old_stf='prem_i_2s'):
     '''
     Assemble Green functions matrix. If requested will parse all available synthetics on file and build the matrix.
     Otherwise, if it exists, it will be loaded from file 
@@ -1066,6 +1071,7 @@ def get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_nam
     '''
     
     from numpy import genfromtxt,convolve,where,zeros,arange,unique
+    import gc
 
 
     if forward==True:
@@ -1094,7 +1100,7 @@ def get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_nam
     matrix_pos=0 #tracks where in matrix synths are placed
     read_start=0  #Which trace to start reading from
     for ksta in range(Nsta):
-        print('... working on station '+str(ksta)+' of '+str(Nsta))
+        print('... working on station '+str(ksta+1)+' of '+str(Nsta))
         
         for ksource in range(len(i_non_zero)):
 
@@ -1118,15 +1124,41 @@ def get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_nam
             rise=round(rise/dt)*nss.stats.delta
             if rise<(2.*dt): #Otherwise get nan's in STF
                 rise=2.*dt
-            total_time=NFFT*dt
-            t_stf,stf=build_source_time_function(rise,dt,total_time,stf_type=source_time_function,zeta=zeta,dreger_falloff_rate=stf_falloff_rate)
+            
+            total_time=NFFT*dt-dt
+            
+            if reconvolution==False: #Do a straight up convolution with new slip rate function
+                
+                #Build the new slip rate function
+                t_stf,stf=build_source_time_function(rise,dt,total_time,stf_type=source_time_function,zeta=zeta,dreger_falloff_rate=stf_falloff_rate)
 
-            nss.data=convolve(nss.data,stf)[0:NFFT]
-            ess.data=convolve(ess.data,stf)[0:NFFT]
-            zss.data=convolve(zss.data,stf)[0:NFFT]
-            nds.data=convolve(nds.data,stf)[0:NFFT]
-            eds.data=convolve(eds.data,stf)[0:NFFT]
-            zds.data=convolve(zds.data,stf)[0:NFFT]
+                nss.data=convolve(nss.data,stf)[0:NFFT]
+                ess.data=convolve(ess.data,stf)[0:NFFT]
+                zss.data=convolve(zss.data,stf)[0:NFFT]
+                nds.data=convolve(nds.data,stf)[0:NFFT]
+                eds.data=convolve(eds.data,stf)[0:NFFT]
+                zds.data=convolve(zds.data,stf)[0:NFFT]
+            else: #reconvovleby using old stf
+            
+
+                
+                #Need old STF
+                old_rise_time = 2.1 #This is the prem_i_2s hard coded value
+                time_offset_gauss=100 #Hard coded for now. Long enough for any conceivable rise time
+                t_stf,old_stf=build_source_time_function(old_rise_time,dt,total_time,stf_type='gauss_prem_i_2s',time_offset_gauss=time_offset_gauss,scale=True,scale_value=1.0)
+                
+                #Now the new STF
+                t_stf,new_stf=build_source_time_function(rise,dt,total_time,stf_type='gauss_prem_i_2s',time_offset_gauss=time_offset_gauss,scale=True,scale_value=1.0,quiet=True)
+                
+                #Reconvolutions
+                nss.data=gauss_reconvolution(nss.data,new_stf,old_stf)
+                ess.data=gauss_reconvolution(ess.data,new_stf,old_stf)
+                zss.data=gauss_reconvolution(zss.data,new_stf,old_stf)
+                nds.data=gauss_reconvolution(nds.data,new_stf,old_stf)
+                eds.data=gauss_reconvolution(eds.data,new_stf,old_stf)
+                zds.data=gauss_reconvolution(zds.data,new_stf,old_stf)
+                
+                
             #Place in matrix
             G[matrix_pos:matrix_pos+NFFT,2*ksource]=nss.data
             G[matrix_pos:matrix_pos+NFFT,2*ksource+1]=nds.data
@@ -1134,6 +1166,10 @@ def get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_nam
             G[matrix_pos+NFFT:matrix_pos+2*NFFT,2*ksource+1]=eds.data
             G[matrix_pos+2*NFFT:matrix_pos+3*NFFT,2*ksource]=zss.data
             G[matrix_pos+2*NFFT:matrix_pos+3*NFFT,2*ksource+1]=zds.data
+            
+            #Having some sort of memory issue delete streams and garbage collect to avoid it
+            del nss,ess,zss,nds,eds,zds
+            gc.collect()
             
         matrix_pos+=3*NFFT
         read_start+=Nfaults
@@ -1145,6 +1181,31 @@ def get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_nam
     m[ids,0]=source[i_non_zero,9]
 
     return m,G
+
+
+
+
+def gauss_reconvolution(data,new_stf,old_stf):
+    
+    '''
+    Used if original slip rate function was NOT  an impulse, then you need to "reconvolve"
+    as per the SRL paper on Syngine/Instaseis (kirscher et al., 2017?). THis currently
+    will only work for teleseismics and the slip rate functions used by indtaseis
+    which are all Gaussians
+    '''
+    
+    from numpy import fft,real
+    
+    #fft STFs and data
+    Data=fft.fft(data) 
+    STF_new=fft.fft(new_stf)
+    STF_old=fft.fft(old_stf)
+    
+    #New seismogram
+    Data_new=(Data*STF_new)/STF_old
+    data_new=real(fft.ifft(Data_new))
+    
+    return data_new
 
 
 def get_fakequakes_G_and_m_dynGF(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_name,time_epi,STA,GF_list,epicenter,NFFT,
@@ -3414,11 +3475,12 @@ def convolution_matrix(h):
     return Hfinal
     
     
-def build_source_time_function(rise_time,dt,total_time,stf_type='triangle',zeta=0.2,dreger_falloff_rate=4,scale=True,time_offset=0):
+def build_source_time_function(rise_time,dt,total_time,stf_type='triangle',zeta=0.2,dreger_falloff_rate=4,
+                               scale=True,scale_value=1.0,time_offset=0,time_offset_gauss=0,quiet=False):
     '''
     Compute source time function for a given rise time
     '''
-    from numpy import zeros,arange,where,pi,cos,sin,isnan,exp
+    from numpy import zeros,arange,where,pi,cos,sin,isnan,exp,roll
     from scipy.integrate import trapz
     
     rise_time=float(rise_time)
@@ -3453,13 +3515,32 @@ def build_source_time_function(rise_time,dt,total_time,stf_type='triangle',zeta=
     elif stf_type=='dreger':
         tau=rise_time/dreger_falloff_rate
         Mdot=(t**zeta)*exp(-t/tau)
+    elif stf_type == 'gauss_prem_i_2s':  #The decay parameter for this is fixed by instaseis/syngine
+        decay=3.5 #Hard coded in syngine, good number for rise time to actually correspond to the function width
+        center_time = 3.5858 #Hard coded in syngine
+        min_rise_time = 2.1 #Rise times shorter than this are not allowed
+        if rise_time < min_rise_time:
+            if quiet==False:
+               print('... ... ...  WARNING: rise time requested is below minimum allowed of %.1fs, defaulting to minimum' % min_rise_time)
+            rise_time = min_rise_time
+    
+        Mdot = decay/(rise_time*pi**0.5)*exp(-((decay * (t - time_offset_gauss))/rise_time)**2)
+        #Here comes the tricky bit. Need to roll the slip rate function FORWARD
+        # By an ammount equal to half the new rise time minus half original rise time (2.1/2)
+        t_roll = rise_time/2 - min_rise_time/2
+        t_roll_samples = int(t_roll/dt)
+        Mdot = roll(Mdot,t_roll_samples)
     else:
         print('ERROR: unrecognized STF type '+stf_type)
         return
     #Area of STF must be equal to dt
     if scale==True:
+        if scale_value is None: #Re-scale to dt (for traditional convolution)
+            target=dt # this is the target scale value
+        else:
+            target=scale_value
         area=trapz(Mdot,t)
-        Mdot=Mdot*(dt/area)
+        Mdot=Mdot*(scale_value/area)
     #Check for errors
     if isnan(Mdot[0])==True:
         print('ERROR: woops, STF has nan values!')
