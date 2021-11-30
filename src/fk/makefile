@@ -1,6 +1,6 @@
 optimize=-O
-FFLAGS=$(optimize) -m64
-CFLAGS=$(optimize) -m64
+FFLAGS=$(optimize) 
+CFLAGS=$(optimize) 
 #if SAC library has been installed, uncomment the next two lines
 #CFLAGS=$(optimize) -DSAC_LIB -m32
 #SACLIB=-L/Users/dmelgarm/bin/sac/lib -lsac -lsacio
