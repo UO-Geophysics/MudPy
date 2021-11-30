@@ -638,7 +638,8 @@ def teleseismicGFs(home,project_name,GF_list_teleseismic,fault_name,model_name,t
                                                         
 def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_from_file,G_name,epicenter,
                 rupture_speed,num_windows,reg_spatial,reg_temporal,nfaults,beta,decimate,bandpass,
-                solver,bounds,weight=False,Ltype=2,target_moment=None,data_vector=None,weights_file=None,onset_file=None,GOD_inversion=False):
+                solver,bounds,weight=False,Ltype=2,target_moment=None,data_vector=None,weights_file=None,
+                onset_file=None,GOD_inversion=False):
     '''
     Assemble G and d, determine smoothing and run the inversion
     '''
@@ -672,8 +673,9 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
         print('Applying data weights')
         if weights_file==None:
             w=inv.get_data_weights(home,project_name,GF_list,d,decimate)
-        else:
-            w=genfromtxt(weights_file)
+        else:  # Remember weights are "uncertainties" alrger value is less trustworthy
+            w = genfromtxt(weights_file)
+            w = 1/w
         
         #apply data weights
         wd=w*d.squeeze()
