@@ -286,6 +286,7 @@ def waveforms_fakequakes(home,project_name,fault_name,rupture_list,GF_list,
     '''
     from numpy import genfromtxt,array
     import datetime
+    import time
     
     print('Solving for kinematic problem(s)')
     #Time for log file
@@ -304,11 +305,21 @@ def waveforms_fakequakes(home,project_name,fault_name,rupture_list,GF_list,
     Nss,Ess,Zss,Nds,Eds,Zds=load_fakequakes_synthetics(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name)
     print('... ... done')
     
+    print('... broadcast to G matrix')
+    # Need to know how many sites
+    station_file=home+project_name+'/data/station_info/'+GF_list
+    staname=genfromtxt(station_file,dtype="U",usecols=0)
+    Nsta=len(staname)
+    
+    #Now get the impulse response G for all sites and all subfaults
+    #Gimpulse_all = Nss,Ess,Zss,Nds,Eds,Zds=mseed2matrix(Nss,,Ess,Zss,Nds,Eds,Zds)
+    
+    
     #Now loop over rupture models
     for ksource in range(hot_start,len(all_sources)):
         print('... solving for source '+str(ksource)+' of '+str(len(all_sources)))
         rupture_name=all_sources[ksource]
-        print(rupture_name)
+        print('... ' + rupture_name)
         
         if rupture_list!=None:
             #Get epicentral time
@@ -318,11 +329,75 @@ def waveforms_fakequakes(home,project_name,fault_name,rupture_list,GF_list,
             forward=True #This controls where we look for the rupture file
         
         # Put in matrix
+        t1=time.time()
         m,G=get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_name,time_epi,GF_list,epicenter,NFFT,source_time_function,stf_falloff_rate,zeta,forward=forward)
+        t2=time.time()
+        print('... ... slip rate convolutions completed in {:.1f}s'.format(t2-t1))
         # Solve
         waveforms=G.dot(m)
         #Write output
         write_fakequakes_waveforms(home,project_name,rupture_name,waveforms,GF_list,NFFT,time_epi,dt)
+        
+    
+def stream2matrix(Nss,Ess,Zss,Nds,Eds,Zds,Nsta):
+    '''
+    
+    Converts stream objects to a properly formatted G matrix
+
+    Parameters
+    ----------
+    Nss,Ess ... : Stream objects with synthetics for each component of motion and
+                    for the ss and ds rake angles
+
+
+    Nsta : int, number of stations being processed
+
+
+    Returns
+    -------
+    G = [ Nss_sta1_sf1 Nds sta1_ sf1     Nss_sta1_sf2 Nds sta1_ sf2 ...
+          Ess_sta1_sf1 Eds sta1_ sf1     Nss_sta1_sf3 Nds sta1_ sf3 ...
+          Zss_sta1_sf1 Zds sta1_ sf1     Nss_sta1_sf3 Nds sta1_ sf3 ...
+          Nss_sta2_sf1 Nds sta2_ sf1
+          Ess_sta2_sf1 Eds sta2_ sf1
+          Zss_sta2_sf1 Zds sta2_ sf1
+          ...
+
+    '''    
+    
+    from numpy import ones
+    
+    #How many time points ins ytnethics
+    Npts = Nss[0].stats.npts
+    
+    #How many sources?
+    Nsources = int(len(Nss) / Nsta)
+    
+    #Initalize G matrix
+    G = ones((Npts*Nsta*3,2*Nsources))
+    
+    k=0
+    row_start = 0
+    row_end = Npts
+    for ksta in range(Nsta):
+        for ksub in range(Nsources):
+            
+            G[row_start:row_end,2*ksub] = Nss[k].data
+            G[row_start:row_end,2*ksub+1] = Nds[k].data
+            
+            G[row_start+Npts:row_end+Npts,2*ksub] = Ess[k].data
+            G[row_start+Npts:row_end+Npts,2*ksub+1] = Eds[k].data
+    
+            G[row_start+2*Npts:row_end+2*Npts,2*ksub] = Zss[k].data
+            G[row_start+2*Npts:row_end+2*Npts,2*ksub+1] = Zds[k].data
+            
+            k += 1
+    
+        row_start += 3*Npts
+        row_end += 3*Npts
+    
+    return G
+        
         
         
         
@@ -360,7 +435,7 @@ def tele_waveforms(home,project_name,fault_name,rupture_list,GF_list_teleseismic
     for ksource in range(hot_start,len(all_sources)):
         print('... solving for source '+str(ksource)+' of '+str(len(all_sources)))
         rupture_name=all_sources[ksource]
-        print(rupture_name)
+        print('... ... '+rupture_name)
         
         if rupture_list!=None:
             #Get epicentral time
@@ -885,6 +960,7 @@ def load_fakequakes_synthetics(home,project_name,fault_name,model_name,GF_list,G
 
     vord='disp'
     if G_from_file==True: #load from file
+        print('... reading synthetics from miniSEED')
         Eds=read(home+project_name+'/GFs/matrices/'+G_name+'.Eds.'+vord+'.mseed')
         Nds=read(home+project_name+'/GFs/matrices/'+G_name+'.Nds.'+vord+'.mseed')
         Zds=read(home+project_name+'/GFs/matrices/'+G_name+'.Zds.'+vord+'.mseed')
@@ -901,7 +977,7 @@ def load_fakequakes_synthetics(home,project_name,fault_name,model_name,GF_list,G
         Nfaults=source.shape[0] #Number of subfaults
         kindex=0
         for ksta in range(Nsta):
-            print('Reading green functions for station #'+str(ksta+1)+' of '+str(Nsta))
+            print('... ... reading green functions for station #'+str(ksta+1)+' of '+str(Nsta))
             for kfault in range(Nfaults):
                 #Get subfault GF directory
                 nsub='sub'+str(int(source[kfault,0])).rjust(4,'0')
@@ -924,7 +1000,7 @@ def load_fakequakes_synthetics(home,project_name,fault_name,model_name,GF_list,G
                     Nds+=read(syn_path+staname[ksta]+'.'+nfault+'.DS.'+vord+'.n')
                     Zds+=read(syn_path+staname[ksta]+'.'+nfault+'.DS.'+vord+'.z')
                 kindex+=1
-        print('Writting synthetics to miniSEED, hang on this might take a minute or two.')
+        print('... done, writting synthetics to miniSEED, hang on this might take a minute or two.')
         Ess.write(home+project_name+'/GFs/matrices/'+G_name+'.Ess.'+vord+'.mseed',format='MSEED')
         Nss.write(home+project_name+'/GFs/matrices/'+G_name+'.Nss.'+vord+'.mseed',format='MSEED')
         Zss.write(home+project_name+'/GFs/matrices/'+G_name+'.Zss.'+vord+'.mseed',format='MSEED')
@@ -1100,7 +1176,7 @@ def get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_nam
     matrix_pos=0 #tracks where in matrix synths are placed
     read_start=0  #Which trace to start reading from
     for ksta in range(Nsta):
-        print('... working on station '+str(ksta+1)+' of '+str(Nsta))
+        print('... ... working on station '+str(ksta+1)+' of '+str(Nsta))
         
         for ksource in range(len(i_non_zero)):
 
@@ -1264,7 +1340,7 @@ def get_fakequakes_G_and_m_dynGF(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,ruptu
     matrix_pos=0 #tracks where in matrix synths are placed
     #read_start=0  #Which trace to start reading from
     for ksta in range(Nsta):
-        print('... working on station '+str(ksta)+' of '+str(Nsta))
+        print('... ... working on station '+str(ksta)+' of '+str(Nsta))
         read_start=STA[staname[ksta]]*Nfaults #Which trace to start reading from. Depending on the original GF_list order
         for ksource in range(len(i_non_zero)):
 
