@@ -306,7 +306,8 @@ def waveforms_fakequakes(home,project_name,fault_name,rupture_list,GF_list,
     
     #Load all synthetics
     print('... loading all synthetics into memory')
-    Nss,Ess,Zss,Nds,Eds,Zds=load_fakequakes_synthetics(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name)
+    Nss,Ess,Zss,Nds,Eds,Zds=load_fakequakes_synthetics(home,project_name,fault_name,model_name,GF_list,
+                                                       G_from_file,G_name)
     print('... ... ... done')
     
 
@@ -362,7 +363,7 @@ def waveforms_fakequakes(home,project_name,fault_name,rupture_list,GF_list,
         # m,G=get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_name,time_epi,GF_list,epicenter,NFFT,source_time_function,stf_falloff_rate,zeta,forward=forward)
         m,G = get_fakequakes_G_and_m(Gimpulse_all,home,project_name,rupture_name,time_epi,GF_list,
                                    epicenter,NFFT,source_time_function,stf_falloff_rate,zeta=zeta,
-                                   forward=forward,dt=dt,ncpus=ncpus)
+                                   forward=forward,dt=dt,ncpus=ncpus,reconvolution=False)
         t2=time.time()
         print('... ... slip rate convolutions completed: wall time {:.1f}s'.format(t2-t1))
         # Solve
@@ -469,13 +470,14 @@ def stream2matrix(Nss,Ess,Zss,Nds,Eds,Zds,hypocenter_time,Nsta):
 def tele_waveforms(home,project_name,fault_name,rupture_list,GF_list_teleseismic,
                 model_name,run_name,G_from_file,G_name,source_time_function='dreger',zeta=0.2,
                 stf_falloff_rate=4.0,rupture_name=None,epicenter=None,time_epi=None,
-                hot_start=0,decimation_factor=1,reconvolution=True):
+                hot_start=0,decimation_factor=1,reconvolution=True,ncpus=1):
     '''
 
     '''
     from numpy import genfromtxt,array
     import datetime
     import gc
+    from obspy import UTCDateTime
     
     print('Solving for kinematic problem(s)')
     #Time for log file
@@ -493,8 +495,39 @@ def tele_waveforms(home,project_name,fault_name,rupture_list,GF_list_teleseismic
     Nss,Ess,Zss,Nds,Eds,Zds=load_fakequakes_tele_synthetics(home,project_name,fault_name,model_name,GF_list_teleseismic,G_from_file,G_name,decimation_factor)
     print('... ... done')
     
+    
+    # Need to know how many sites and delta t
+    station_file=home+project_name+'/data/station_info/'+GF_list_teleseismic
+    staname=genfromtxt(station_file,dtype="U",usecols=0)
+    Nsta=len(staname)
     Npoints=Nss[0].stats.npts
     dt=Nss[0].stats.delta
+    
+    # Need epicetrnal time from log file to trim synthetics
+    print('... reading epicentral time from log file. REMEMBER: All ruptures in ruptures.list should have a common epicentral time')
+    log_file = home + project_name + '/output/ruptures/' + all_sources[0].replace('.rupt','.log')
+    flog = open(log_file,'r')
+    while True:
+        line = flog.readline()
+        if 'Hypocenter time' in line:                
+            hypocenter_time = line.replace('Hypocenter time: ','')
+            hypocenter_time = UTCDateTime(hypocenter_time)
+            break
+        elif line == '':
+            break 
+    flog.close()
+    
+    #Now get the impulse response G for all sites and all subfaults
+    print('... broadcast to G matrix')
+    Gimpulse_all = stream2matrix(Nss,Ess,Zss,Nds,Eds,Zds,hypocenter_time,Nsta)
+    print('... ... done')
+    
+    #clean up
+    print('... clean up: removing obspy streams from memory')
+    del Nss,Ess,Zss,Nds,Eds,Zds
+    print('... ... done')
+    
+    
     #Now loop over rupture models
     for ksource in range(hot_start,len(all_sources)):
         print('... solving for source '+str(ksource)+' of '+str(len(all_sources)))
@@ -509,7 +542,9 @@ def tele_waveforms(home,project_name,fault_name,rupture_list,GF_list_teleseismic
             forward=True #This controls where we look for the rupture file
         
         # Put in matrix
-        m,G=get_fakequakes_G_and_m(Nss,Ess,Zss,Nds,Eds,Zds,home,project_name,rupture_name,time_epi,GF_list_teleseismic,epicenter,Npoints,source_time_function,stf_falloff_rate,zeta,forward=forward,reconvolution=reconvolution)
+        m,G = get_fakequakes_G_and_m(Gimpulse_all,home,project_name,rupture_name,time_epi,GF_list_teleseismic,
+                                   epicenter,Npoints,source_time_function,stf_falloff_rate,zeta=zeta,
+                                   forward=forward,dt=dt,ncpus=ncpus,reconvolution=True)
         # Solve
         waveforms=G.dot(m)
         #Write output
@@ -1074,6 +1109,15 @@ def load_fakequakes_synthetics(home,project_name,fault_name,model_name,GF_list,G
     return Nss,Ess,Zss,Nds,Eds,Zds
 
 
+def list2stream(st_list):
+    
+    from obspy import Stream
+    
+    st=Stream()
+    for k in range(len(st_list)):
+        st += st_list[k]
+    return st
+    
 
 
 def load_fakequakes_tele_synthetics(home,project_name,fault_name,model_name,GF_list_teleseismic,G_from_file,G_name,decimation_factor):
@@ -1222,6 +1266,13 @@ def get_fakequakes_G_and_m(Gimpulse,home,project_name,rupture_name,time_epi,GF_l
     rise_times=source[:,7]
     rupture_onset=source[:,12]
     
+    # Gaussian STF hard coded values    WARNING!!!!
+    old_rise_time = 2.1 #This is the prem_i_2s hard coded value
+    time_offset_gauss=100 #Hard coded for now. Long enough for any conceivable rise time
+    #####################
+    
+    
+    
     #How many unique faults?
     Nfaults=len(unique(source[:,0]))
     
@@ -1250,9 +1301,17 @@ def get_fakequakes_G_and_m(Gimpulse,home,project_name,rupture_name,time_epi,GF_l
     #and all subfaults simualtenously
     slip_rates = ones((NFFT,N_non_zero))
     
+    total_time = (NFFT-1) * dt
     for ksub in range(N_non_zero):
         tau_r = rise_times[ksub]
-        sr = build_source_time_function(tau_r,dt,NFFT-1,stf_type=source_time_function,zeta=zeta,dreger_falloff_rate=stf_falloff_rate)
+        
+        if reconvolution == False:
+            sr = build_source_time_function(tau_r,dt,total_time,stf_type=source_time_function,
+                            zeta=zeta,dreger_falloff_rate=stf_falloff_rate)
+        else:
+            sr = build_source_time_function(tau_r,dt,total_time,stf_type='gauss_prem_i_2s',
+                            time_offset_gauss=time_offset_gauss,scale=True,scale_value=1.0,quiet=True)
+               
         t_stf,slip_rates[:,ksub] = expand_dims(sr,1)
         
     #COnvert slip rates and onsets to dask array
@@ -1260,8 +1319,20 @@ def get_fakequakes_G_and_m(Gimpulse,home,project_name,rupture_name,time_epi,GF_l
     slip_rates = da.from_array(slip_rates,chunks = (NFFT,1))
     
     
+    #Are we reconvovling?
+    if reconvolution == True:
+        #Need old STF
+        t_stf,old_stf=build_source_time_function(old_rise_time,dt,total_time,
+                stf_type='gauss_prem_i_2s',time_offset_gauss=time_offset_gauss,
+                scale=True,scale_value=1.0)
+    else:
+        old_stf = None
+
+    
+    
     #Define block convolution and trim function to be mapped with DASK
-    def block_convolution_and_shift(gf_block,slip_rate_block,onset_block,NFFT):
+    def block_convolution_and_shift(gf_block,slip_rate_block,onset_block,NFFT,
+                    old_slip_rate_function = None,reconvolution = False):
         '''
         gf_block is the block from the impulse response GFs
         slip_rate_block  is the block from the slip rate functions
@@ -1269,6 +1340,12 @@ def get_fakequakes_G_and_m(Gimpulse,home,project_name,rupture_name,time_epi,GF_l
         
         start_row = 0 #These two track which bit of the array to extract
         end_row = NFFT
+        
+        
+        #Define slip rate functions
+        slip_rate_function = squeeze(slip_rate_block) #New STF
+        if reconvolution == True:
+             old_slip_rate_function = squeeze(old_slip_rate_function)
         
         Gout = ones(gf_block.shape)
         
@@ -1280,7 +1357,7 @@ def get_fakequakes_G_and_m(Gimpulse,home,project_name,rupture_name,time_epi,GF_l
                     
                     #remove extraneous dimensions
                     gf = squeeze(gf)
-                    slip_rate_function = squeeze(slip_rate_block)
+                   
                     
                     #Roll the gf forward by rupture_onset samples
                     gf = roll(gf,onset_block)
@@ -1290,7 +1367,11 @@ def get_fakequakes_G_and_m(Gimpulse,home,project_name,rupture_name,time_epi,GF_l
 
                     
                     #Convovle impulse resp and slip rate function
-                    gf = convolve(gf,slip_rate_function)[0:NFFT]
+                    if reconvolution == False :  #COnvovle new STF with impulse
+                        gf = convolve(gf,slip_rate_function)[0:NFFT]
+                    else:  #Reconvolution, need both new STF and old STF
+                        gf = gauss_reconvolution(gf,slip_rate_function,old_slip_rate_function)
+                        
         
                     #save for output
                     Gout[start_row:end_row,krake] = gf
@@ -1302,7 +1383,7 @@ def get_fakequakes_G_and_m(Gimpulse,home,project_name,rupture_name,time_epi,GF_l
         return Gout
     
     G = da.map_blocks(block_convolution_and_shift, Gimpulse, slip_rates,
-            rupture_onset,NFFT,chunks=(NFFT*Nsta*3,2),
+            rupture_onset,NFFT,old_stf,reconvolution,chunks=(NFFT*Nsta*3,2),
             dtype=float64).persist(num_workers=ncpus)
 
     
