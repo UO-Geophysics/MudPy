@@ -431,8 +431,8 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
     
     #Read in GFlist and decide what to compute
     gf_file=home+project_name+'/data/station_info/'+GF_list
-    stations=genfromtxt(gf_file,usecols=0,skip_header=1,dtype='U')
-    GF=genfromtxt(gf_file,usecols=[1,2,3,4,5,6,7],skip_header=1,dtype='f8')
+    stations=genfromtxt(gf_file,usecols=0,dtype='U')
+    GF=genfromtxt(gf_file,usecols=[1,2,3,4,5,6,7],dtype='f8')
     fault_file=home+project_name+'/data/model_info/'+fault_name  
     source=loadtxt(fault_file,ndmin=2)
     num_faults=shape(source)[0]

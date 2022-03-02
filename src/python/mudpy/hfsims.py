@@ -387,11 +387,13 @@ def stochastic_simulation(home,project_name,rupture_name,sta,sta_lon,sta_lat,com
                 #Get conically averaged radiation pattern terms
                 if component=='Z':
                     RP_vert=conically_avg_vert_radiation_pattern(strike,dip,rake,azimuth,take_off_angle_S)
+                    print(RP_vert)
                     #And finally multiply everything together to get the subfault amplitude spectrum
                     AS=CS*S*G_S*P*RP_vert   
                 else:
                     RP=conically_avg_radiation_pattern(strike,dip,rake,azimuth,take_off_angle_S,component_angle)
                     RP=abs(RP)
+                    print(RP)
                     #And finally multiply everything together to get the subfault amplitude spectrum
                     AS=CS*S*G_S*P*RP                
     
@@ -630,17 +632,18 @@ def get_attenuation(f,structure,ray,Qexp,Qtype='S'):
     
     for k in range(len(Qp)):
         Qp[k],Qs[k]=get_Q(structure,depth[k])
+
         
     #Get the travel tiem weighted sum
     if Qtype=='S':
         weightedQ=sum(time_in_layer/Qs)
+        
     else:
         weightedQ=sum(time_in_layer/Qp)
 
     
     #get frequency dependence
-    #Q=exp(-pi*weightedQ*f**(-Qexp))
-    Q=exp(-0.5*omega*weightedQ*(f**(-Qexp)))
+    Q=exp(-pi*weightedQ*f**(1-Qexp))
     
     return Q
 

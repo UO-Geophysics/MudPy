@@ -11,7 +11,7 @@ def run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,
     stress parameter is in bars
     '''
     
-    from numpy import genfromtxt,pi,logspace,log10,mean,where,exp,arange,zeros,argmin,rad2deg,arctan2,real
+    from numpy import genfromtxt,pi,logspace,log10,mean,where,exp,arange,zeros,argmin,rad2deg,arctan2,real,savetxt,c_
     from pyproj import Geod
     from obspy.geodetics import kilometer2degrees
     from obspy.taup import TauPyModel
@@ -25,33 +25,33 @@ def run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,
 
     rank=int(rank)
     
-#    if rank==0:
-#        #print out what's going on:
-#        out='''Running with input parameters:
-#        home = %s
-#        project_name = %s
-#        rupture_name = %s
-#        N = %s
-#        M0 = %s
-#        sta = %s
-#        sta_lon = %s
-#        sta_lat = %s
-#        model_name = %s
-#        rise_time_depths = %s
-#        moho_depth_in_km = %s
-#        total_duration = %s
-#        hf_dt = %s
-#        stress_parameter = %s
-#        kappa = %s
-#        Qexp = %s
-#        component = %s
-#        Pwave = %s
-#        Swave = %s
-#        high_stress_depth = %s
-#        '''%(home,project_name,rupture_name,str(N),str(M0),sta,str(sta_lon),str(sta_lat),model_name,str([rise_time_depths0,rise_time_depths1]),
-#        str(moho_depth_in_km),str(total_duration),str(hf_dt),str(stress_parameter),
-#        str(kappa),str(Qexp),str(component),str(Pwave),str(high_stress_depth))
-#        print out
+    if rank==0 and component=='N':
+        #print out what's going on:
+        out='''Running with input parameters:
+        home = %s
+        project_name = %s
+        rupture_name = %s
+        N = %s
+        M0 (N-m) = %s
+        sta = %s
+        sta_lon = %s
+        sta_lat = %s
+        model_name = %s
+        rise_time_depths = %s
+        moho_depth_in_km = %s
+        total_duration = %s
+        hf_dt = %s
+        stress_parameter = %s
+        kappa = %s
+        Qexp = %s
+        component = %s
+        Pwave = %s
+        Swave = %s
+        high_stress_depth = %s
+        '''%(home,project_name,rupture_name,str(N),str(M0/1e7),sta,str(sta_lon),str(sta_lat),model_name,str([rise_time_depths0,rise_time_depths1]),
+        str(moho_depth_in_km),str(total_duration),str(hf_dt),str(stress_parameter),
+        str(kappa),str(Qexp),str(component),str(Pwave),str(Swave),str(high_stress_depth))
+        print(out)
 
     if rank==0:
         out='''
@@ -67,6 +67,7 @@ def run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,
 
     #I don't condone it but this cleans up the warnings
     warnings.filterwarnings("ignore")
+    
     
     #Fix input formats:
     rise_time_depths=[rise_time_depths0,rise_time_depths1]
@@ -114,7 +115,7 @@ def run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,
     tau_perturb=0.1
     
     #Deep faults receive a higher stress
-    stress_multiplier=5
+    stress_multiplier=1
 
     #initalize output seismogram
     tr=Trace()
@@ -175,18 +176,18 @@ def run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,
             
             
             #smga4
-            radius_in_km=7.5  
-            smga_center_lon=-72.3923
-            smga_center_lat=-30.61
+            # radius_in_km=7.5  
+            # smga_center_lon=-72.3923
+            # smga_center_lat=-30.61
             
-            in_smga=is_subfault_in_smga(lon_source,lat_source,smga_center_lon,smga_center_lat,radius_in_km)
+            # in_smga=is_subfault_in_smga(lon_source,lat_source,smga_center_lon,smga_center_lat,radius_in_km)
             
-            ###Apply multiplier?
-            if in_smga==True:
-                stress=stress_parameter*stress_multiplier
-                print("%.4f,%.4f is in SMGA, stress is %d" % (lon_source,lat_source,stress))
-            else:
-                stress=stress_parameter
+            # ###Apply multiplier?
+            # if in_smga==True:
+            #     stress=stress_parameter*stress_multiplier
+            #     print("%.4f,%.4f is in SMGA, stress is %d" % (lon_source,lat_source,stress))
+            # else:
+            #     stress=stress_parameter
             
             #Apply multiplier?
             #if slip[kfault]>7.5:
@@ -226,9 +227,14 @@ def run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,
             beta=(beta/1000)*1e5 #to cm/s
             alpha=(alpha/1000)*1e5
             
+            # print('rho = '+str(rho))
+            # print('beta = '+str(beta))
+            # print('alpha = '+str(alpha))
+            
             #Verified this produces same value as in GP
             CS=(2*Spartition)/(4*pi*(rho)*(beta**3))
             CP=2/(4*pi*(rho)*(alpha**3))
+
             
             #Get local subfault rupture speed
             beta=beta/100 #to m/s
@@ -309,25 +315,44 @@ def run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,
                 #else:
                 #    mohoS=None
                 mohoS=Spaths[-1]
+                
+
                  
  
             #######         Build Direct P ray           ######
             if Pwave==True:
                 take_off_angle_P=directP.takeoff_angle
                 
-                #Get attenuation due to geometrical spreading (from the path length)
-                path_length_P=hfsims.get_path_length(directP,zs,dist_in_degs)
-                path_length_P=path_length_P*100 #to cm
+                # #Get attenuation due to geometrical spreading (from the path length)
+                # path_length_P=hfsims.get_path_length(directP,zs,dist_in_degs)
+                # path_length_P=path_length_P*100 #to cm
                 
-                #Get effect of intrinsic attenuation for that ray (path integrated)
-                Q_P=hfsims.get_attenuation(f,structure,directP,Qexp,Qtype='P')
+                # #Get effect of intrinsic attenuation for that ray (path integrated)
+                # #Q_P=hfsims.get_attenuation(f,structure,directP,Qexp,Qtype='P')   <- This causes problems and I don't know why underlying assumptions might be bad
+                # Q_P=hfsims.get_attenuation(f,structure,directS,Qexp,Qtype='S')
+                
+                # #get quarter wavelength amplificationf actors
+                # # pass rho in kg/m^3 (this units nightmare is what I get for following Graves' code)
+                # I_P=hfsims.get_amplification_factors(f,structure,zs,alpha,rho*1000)
+                
+                # #Build the entire path term
+                # G_P=(I_P*Q_P)/path_length_P
+                
+                #Get attenuation due to geometrical spreading (from the path length)
+                path_length_S=hfsims.get_path_length(directS,zs,dist_in_degs)
+                path_length_S=path_length_S*100 #to cm
+                
+                #Get effect of intrinsic aptimeenuation for that ray (path integrated)
+                Q_S=hfsims.get_attenuation(f,structure,directS,Qexp)
                 
                 #get quarter wavelength amplificationf actors
                 # pass rho in kg/m^3 (this units nightmare is what I get for following Graves' code)
-                I_P=hfsims.get_amplification_factors(f,structure,zs,alpha,rho*1000)
+                I_S=hfsims.get_amplification_factors(f,structure,zs,beta,rho*1000)
                 
                 #Build the entire path term
-                G_P=(I_P*Q_P)/path_length_P
+                G_S=(I_S*Q_S)/path_length_S
+                
+                
 
                 #Get conically averaged radiation pattern terms
                 RP=hfsims.conically_avg_P_radiation_pattern(strike,dip,rake,azimuth,take_off_angle_P)
@@ -344,7 +369,7 @@ def run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,
                     Ppartition=Epartition
                     
                 #And finally multiply everything together to get the subfault amplitude spectrum
-                AP=CP*S*G_P*P*RP*Ppartition           
+                AP=CP*S*G_S*P*RP*Ppartition           
 
                 #Generate windowed time series
                 duration=1./fc_subfault+0.09*(dist/1000)
@@ -352,6 +377,16 @@ def run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,
                 
                 #Go to frequency domain, apply amplitude spectrum and ifft for final time series
                 hf_seis_P=hfsims.apply_spectrum(w,AP,f,hf_dt)
+                
+                #save thigns to check
+                # if sta=='AL2H':
+                #     path_out = '/Users/dmelgarm/FakeQuakes/ONC_debug/analysis/frequency/Pwave/'
+                #     path_out = path_out+str(kfault)
+                #     # savetxt(path_out+'.all',c_[f,AP])
+                #     # savetxt(path_out+'.source',c_[f,CP*S])
+                #     # savetxt(path_out+'.path',c_[f,G_P])
+                #     # savetxt(path_out+'.site',c_[f,P])
+                
                 
                 #What time after OT should this time series start at?
                 time_insert=directP.path['time'][-1]+onset_times[kfault]
@@ -398,9 +433,11 @@ def run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,
                     RP_vert=hfsims.conically_avg_vert_radiation_pattern(strike,dip,rake,azimuth,take_off_angle_S)
                     #And finally multiply everything together to get the subfault amplitude spectrum
                     AS=CS*S*G_S*P*RP_vert   
+                    # print('... RP_vert = '+str(RP_vert))
                 else:
                     RP=hfsims.conically_avg_radiation_pattern(strike,dip,rake,azimuth,take_off_angle_S,component_angle)
                     RP=abs(RP)
+                    # print('... RP_horiz = '+str(RP))
                     #And finally multiply everything together to get the subfault amplitude spectrum
                     AS=CS*S*G_S*P*RP                
     
@@ -411,6 +448,16 @@ def run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,
                 
                 #Go to frequency domain, apply amplitude spectrum and ifft for final time series
                 hf_seis_S=hfsims.apply_spectrum(w,AS,f,hf_dt)
+                
+                #save thigns to check
+                # if sta=='AL2H':
+                #     path_out = '/Users/dmelgarm/FakeQuakes/ONC_debug/analysis/frequency/Swave/'
+                #     path_out = path_out+str(kfault)
+                #     # savetxt(path_out+'.soverp',c_[f,(CS*S)/(CP*S)])
+                #     savetxt(path_out+'.all',c_[f,AS])
+                #     savetxt(path_out+'.source',c_[f,CS*S])
+                #     savetxt(path_out+'.path',c_[f,G_S])
+                #     savetxt(path_out+'.site',c_[f,P])
                 
                 #What time after OT should this time series start at?
                 time_insert=directS.path['time'][-1]+onset_times[kfault]
