@@ -614,7 +614,54 @@ def get_path_length(ray,zs,dist_in_degs):
     return path_length
     
 
-def get_attenuation(f,structure,ray,Qexp,Qtype='S'):
+def get_attenuation(f,structure,ray,Qexp,Qtype='S',scattering='on',Qc_exp=0,baseline_Qc=100):
+    '''
+    Get effect of intrinsic aptimeenuation along the ray path
+    '''
+    
+    from numpy import diff,zeros,exp,pi,tile,sum
+    from mudpy.forward import get_Q
+    
+    time=ray.path['time']
+    time_in_layer=diff(time)
+    depth=ray.path['depth']
+    omega=2*pi*f
+    
+    Qp=zeros(len(time_in_layer))
+    Qs=zeros(len(time_in_layer))
+    
+    for k in range(len(Qp)):
+        Qp[k],Qs[k]=get_Q(structure,depth[k])
+
+    Qscatter = baseline_Qc*(f**Qc_exp) #From BSSA paper on CSZ Qcoda
+    Qscatter = tile(Qscatter,(len(time_in_layer),1))
+    Qs = tile(Qs,(len(f),1)).T
+    Qtotal = 1/(1/Qscatter + 1/Qs)
+    time_in_layer = tile(time_in_layer,(len(f),1)).T
+
+
+        
+    #Get the travel tiem weighted sum
+    if Qtype=='S':
+        # weightedQ=sum(time_in_layer/Qtotal)
+        if scattering=='on':
+            weightedQ=sum(time_in_layer/Qtotal,axis=0)
+            # print('on')
+        elif scattering=='off':
+            weightedQ=sum(time_in_layer[:,0]/Qs[:,0])
+        
+    else:
+        weightedQ=sum(time_in_layer/Qp)
+
+    
+    #get frequency dependence
+    Q=exp(-pi*weightedQ*f**(1-Qexp))
+    # Q=exp(-0.5*omega*weightedQ*(f**(-Qexp))) #old way
+    
+    return Q
+
+
+def get_attenuation_old(f,structure,ray,Qexp,Qtype='S'):
     '''
     Get effect of intrinsic aptimeenuation along the ray path
     '''
@@ -644,8 +691,74 @@ def get_attenuation(f,structure,ray,Qexp,Qtype='S'):
     
     #get frequency dependence
     Q=exp(-pi*weightedQ*f**(1-Qexp))
+    # Q=exp(-0.5*omega*weightedQ*(f**(-Qexp))) #old way
     
     return Q
+
+
+def get_attenuation_linear(f,structure,zs,dist,Qexp,Qtype='S'):
+    '''
+    Get effect of intrinsic aptimeenuation along the ray path
+    '''
+    
+    from numpy import zeros,exp,pi,sin,arctan,where,r_,array,tile,sum
+    from mudpy.forward import get_Q
+    
+    #get angle between source and site
+    theta = arctan((zs*1000)/dist)
+    
+    #These are the layers that teh source is BELOW
+    i=where(zs>structure[:,0].cumsum())[0]
+    
+    #
+    if len(i)==0: #It's int he top layer
+        path_lengths = array([structure[0,0]/sin(theta)])
+        Qp = structure[0,5]
+        Qs = structure[0,4]
+    elif (len(i)<len(structure)): #not in top and not in half space
+        #calcualte path length in those layers
+        path_lengths = structure[i,0]/sin(theta)
+        cumulative_depths = structure[i,0].sum()
+        dz = zs - cumulative_depths
+        path_lengths = r_[path_lengths,dz/sin(theta)]
+        Qp = structure[r_[i,i[-1]+1],5]
+        Qs = structure[r_[i,i[-1]+1],4]
+    elif (len(i) == len(structure)): #it's in final layer
+        print('a')
+        #calcualte path length in those layers
+        path_lengths = structure[0:-1,0]/sin(theta)
+        cumulative_depths = structure[0:-1,0].sum()
+        dz = zs - cumulative_depths
+        path_lengths = r_[path_lengths,dz/sin(theta)]
+        Qp = structure[:,5]
+        Qs = structure[:,4]
+
+    #calcualte times int hose layers
+    time_in_layer = path_lengths / structure[0:len(path_lengths),1]
+    
+    omega=2*pi*f
+    
+    #Experimental, add scattering Q using model from Farahbod et al. (2016)
+    Qscatter = 69*(f**0.94)
+    Qscatter = tile(Qscatter,(len(time_in_layer),1))
+    Qs = tile(Qs,(len(f),1)).T
+    Qtotal = 1/(1/Qscatter + 1/Qs)
+    time_in_layer = tile(time_in_layer,(len(f),1)).T
+    
+    #Get the travel tiem weighted sum
+    if Qtype=='S':
+        weightedQ=sum(time_in_layer/Qtotal,axis=0)
+        
+    else:
+        weightedQ=sum(time_in_layer/Qp)
+
+    
+    #get frequency dependence
+    Q=exp(-pi*weightedQ*f**(1-Qexp))
+    # Q=exp(-0.5*omega*weightedQ*(f**(-Qexp))) #old way
+    
+    return Q
+
 
 
 def windowed_gaussian(duration,hf_dt,window_type='saragoni_hart',M=5.0,dist_in_km=50.,std=1.0,ptime=10,stime=20):

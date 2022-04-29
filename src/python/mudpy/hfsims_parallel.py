@@ -4,7 +4,8 @@ Module for high frequency simulations in parallel
 
 def run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,component,model_name,
                         rise_time_depths0,rise_time_depths1,moho_depth_in_km,total_duration,
-                        hf_dt,stress_parameter,kappa,Qexp,Pwave,Swave,high_stress_depth,rank,size): 
+                        hf_dt,stress_parameter,kappa,Qexp,Pwave,Swave,high_stress_depth,
+                        Qmethod,scattering,Qc_exp,baseline_Qc,rank,size): 
     '''
     Run stochastic HF sims
     
@@ -48,9 +49,13 @@ def run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,
         Pwave = %s
         Swave = %s
         high_stress_depth = %s
+        Qmethod = %s
+        scattering = %s
+        Qc_exp = %s
+        baseline_Qc = %s
         '''%(home,project_name,rupture_name,str(N),str(M0/1e7),sta,str(sta_lon),str(sta_lat),model_name,str([rise_time_depths0,rise_time_depths1]),
-        str(moho_depth_in_km),str(total_duration),str(hf_dt),str(stress_parameter),
-        str(kappa),str(Qexp),str(component),str(Pwave),str(Swave),str(high_stress_depth))
+        str(moho_depth_in_km),str(total_duration),str(hf_dt),str(stress_parameter),str(kappa),str(Qexp),str(component),str(Pwave),str(Swave),
+        str(high_stress_depth),str(Qmethod),str(scattering),str(Qc_exp),str(baseline_Qc))
         print(out)
 
     if rank==0:
@@ -296,25 +301,75 @@ def run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,
             if len(Spaths)==0:
                 print('ERROR: I give up, no direct S in spite of multiple attempts at subfault '+str(kfault))
 
-            #Get direct s path and moho reflection
-            mohoS=None
-            directS=Spaths[0]
+            #Which ray should I keep? 
+            
+            #This is the fastest arriving P
             directP=Ppaths[0]
-            #print len(Spaths)
-            if len(Spaths)==1: #only direct S
-                pass
-            else:
-                #turn_depth=zeros(len(Spaths)-1) #turning depth of other non-direct rays
-                #for k in range(1,len(Spaths)):
-                #    turn_depth[k-1]=Spaths[k].path['depth'].max()
-                ##If there's a ray that turns within 2km of Moho, callt hat guy the Moho reflection
-                #deltaz=abs(turn_depth-moho_depth_in_km)
-                #i=argmin(deltaz)
-                #if deltaz[i]<2: #Yes, this is a moho reflection
-                #    mohoS=Spaths[i+1]
-                #else:
-                #    mohoS=None
-                mohoS=Spaths[-1]
+            
+            #Get moho depth from velmod
+            moho_depth  = velmod.model.moho_depth
+            
+            # In this method here are the rules:
+            #For S do not allow Moho turning rays, keep the fastest non Moho turning ray. If
+            #only Moho rays are available, then keep the one that turns the shallowest.
+            if Qmethod == 'no moho':
+            
+                #get turning depths and arrival times of S rays
+                turning_depths = zeros(len(Spaths))
+                S_ray_times = zeros(len(Spaths))
+                
+                for kray in range(len(Spaths)):
+                    turning_depths[kray] = Spaths[kray].path['depth'].max()
+                    S_ray_times[kray] = Spaths[kray].path['time'].max()
+                    
+                #Keep only rays that turn above Moho
+                i=where(turning_depths < moho_depth)[0]
+                
+                if len(i) == 0: #all rays turn below Moho, keep shallowest turning
+                    i_min_depth = argmin(turning_depths)
+                    directS = Spaths[i_min_depth]
+                
+                else:  #Keep fastest arriving ray that turns above Moho
+                    Spaths = [Spaths[j] for j in i]  #Rays turning above Moho, NOTE: I hate list comprehension
+                    S_ray_times = S_ray_times[i]
+                    i_min_time = argmin(S_ray_times)
+                    directS = Spaths[i_min_time]
+                    
+            elif Qmethod =='shallowest':
+                                
+                #get turning depths and arrival times of S rays
+                turning_depths = zeros(len(Spaths))
+                
+                for kray in range(len(Spaths)):
+                    turning_depths[kray] = Spaths[kray].path['depth'].max()
+
+                i_min_depth = argmin(turning_depths)
+                directS = Spaths[i_min_depth]
+                
+            elif Qmethod == 'fastest' or Qmethod=='direct':   #Pick first arriving S wave
+                
+                directS = Spaths[0]
+                
+                
+            
+            #directS=Spaths[0]  #this is the old way, kept fastest S
+            mohoS=None
+            
+            # #print len(Spaths)
+            # if len(Spaths)==1: #only direct S
+            #     pass
+            # else:
+            #     #turn_depth=zeros(len(Spaths)-1) #turning depth of other non-direct rays
+            #     #for k in range(1,len(Spaths)):
+            #     #    turn_depth[k-1]=Spaths[k].path['depth'].max()
+            #     ##If there's a ray that turns within 2km of Moho, callt hat guy the Moho reflection
+            #     #deltaz=abs(turn_depth-moho_depth_in_km)
+            #     #i=argmin(deltaz)
+            #     #if deltaz[i]<2: #Yes, this is a moho reflection
+            #     #    mohoS=Spaths[i+1]
+            #     #else:
+            #     #    mohoS=None
+            #     mohoS=Spaths[-1]
                 
 
                  
@@ -350,7 +405,8 @@ def run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,
                 I_S=hfsims.get_amplification_factors(f,structure,zs,beta,rho*1000)
                 
                 #Build the entire path term
-                G_S=(I_S*Q_S)/path_length_S
+                # G_S=(I_S*Q_S)/path_length_S
+                G_S=(1*Q_S)/path_length_S
                 
                 
 
@@ -419,7 +475,11 @@ def run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,
                 path_length_S=path_length_S*100 #to cm
                 
                 #Get effect of intrinsic aptimeenuation for that ray (path integrated)
-                Q_S=hfsims.get_attenuation(f,structure,directS,Qexp)
+                if Qmethod == 'direct':#No ray tracing use bulka ttenuation along path
+                    Q_S = hfsims.get_attenuation_linear(f,structure,zs,dist,Qexp,Qtype='S')
+                else: #Use ray tracing
+                    Q_S=hfsims.get_attenuation(f,structure,directS,Qexp,scattering=scattering,
+                                               Qc_exp=Qc_exp,baseline_Qc=baseline_Qc)
                 
                 #get quarter wavelength amplificationf actors
                 # pass rho in kg/m^3 (this units nightmare is what I get for following Graves' code)
@@ -427,6 +487,7 @@ def run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,
                 
                 #Build the entire path term
                 G_S=(I_S*Q_S)/path_length_S
+                # G_S=(1*Q_S)/path_length_S
     
                 #Get conically averaged radiation pattern terms
                 if component=='Z':
@@ -587,7 +648,14 @@ if __name__ == '__main__':
         if Swave=='True':
             Swave=True
         high_stress_depth=int(sys.argv[22])
-        run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,component,model_name,rise_time_depths0,rise_time_depths1,moho_depth_in_km,total_duration,hf_dt,stress_parameter,kappa,Qexp,Pwave,Swave,high_stress_depth,rank,size)
+        Qmethod=sys.argv[23]
+        scattering=sys.argv[24]
+        Qc_exp=float(sys.argv[25])
+        baseline_Qc=float(sys.argv[26])
+        run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,component,model_name,
+                            rise_time_depths0,rise_time_depths1,moho_depth_in_km,total_duration,hf_dt,
+                            stress_parameter,kappa,Qexp,Pwave,Swave,high_stress_depth,Qmethod,scattering,
+                            Qc_exp,baseline_Qc,rank,size)
     else:
         print("ERROR: You're not allowed to run "+sys.argv[1]+" from the shell or it does not exist")
         
