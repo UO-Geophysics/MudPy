@@ -254,7 +254,7 @@ def run_parallel_generate_ruptures(home,project_name,run_name,fault_name,slab_na
             #Write to file
             run_number=str(ncpus*realization+rank).rjust(6,'0')
             outfile=home+project_name+'/output/ruptures/'+run_name+'.'+run_number+'.rupt'
-            savetxt(outfile,fault_out,fmt='%d\t%10.6f\t%10.6f\t%8.4f\t%7.2f\t%7.2f\t%4.1f\t%5.2f\t%5.2f\t%5.2f\t%10.2f\t%10.2f\t%5.2f\t%.6e',header='No,lon,lat,z(km),strike,dip,rise,dura,ss-slip(m),ds-slip(m),ss_len(m),ds_len(m),rupt_time(s),rigidity(Pa)')
+            savetxt(outfile,fault_out,fmt='%d\t%10.6f\t%10.6f\t%8.4f\t%7.2f\t%7.2f\t%4.1f\t%5.2f\t%.4e\t%.4e\t%10.2f\t%10.2f\t%5.2f\t%.6e',header='No,lon,lat,z(km),strike,dip,rise,dura,ss-slip(m),ds-slip(m),ss_len(m),ds_len(m),rupt_time(s),rigidity(Pa)')
             
             #Write log file
             logfile=home+project_name+'/output/ruptures/'+run_name+'.'+run_number+'.log'
