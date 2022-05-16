@@ -99,7 +99,7 @@ def run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,
     #Create taup velocity model object, paste on top of iaspei91
     #taup_create.build_taup_model(home+project_name+'/structure/bbp_norcal.tvel',output_folder=home+project_name+'/structure/')
 #    velmod=TauPyModel(model=home+project_name+'/structure/iquique',verbose=True)
-    velmod = TauPyModel(model=home+project_name+'/structure/'+model_name.split('.')[0])
+    velmod = TauPyModel(model=home+project_name+'/structure/'+model_name.split('.')[0]+'.npz')
     
     #Get epicentral time
     epicenter,time_epi=read_fakequakes_hypo_time(home,project_name,rupture_name)
@@ -312,7 +312,7 @@ def run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,
             # In this method here are the rules:
             #For S do not allow Moho turning rays, keep the fastest non Moho turning ray. If
             #only Moho rays are available, then keep the one that turns the shallowest.
-            if Qmethod == 'no moho':
+            if Qmethod == 'no_moho':
             
                 #get turning depths and arrival times of S rays
                 turning_depths = zeros(len(Spaths))
