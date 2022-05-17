@@ -116,7 +116,7 @@ def run_parallel_generate_ruptures(home,project_name,run_name,fault_name,slab_na
                     mean_fault=genfromtxt(mean_slip_name)
                     mean_slip=(mean_fault[:,8]**2+mean_fault[:,9]**2)**0.5
                     
-                    #keep onlt faults that have man slip inside the fault_array seelcted faults
+                    #keep only faults that have mean slip inside the fault_array selected faults
                     mean_slip=mean_slip[ifaults]
                     
                     #get the area in those selected faults
