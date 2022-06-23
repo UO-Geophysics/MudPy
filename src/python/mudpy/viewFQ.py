@@ -2472,6 +2472,7 @@ def source_time_function(rupt,epicenter,dt=0.001,t_total=500,stf_type='dreger',p
     import matplotlib.pyplot as plt
     from numpy import genfromtxt,unique,log10,where,floor,argmin,r_,zeros
     from mudpy.forward import build_source_time_function
+    from scipy.integrate import trapz
     
     f=genfromtxt(rupt)
     num=f[:,0]
@@ -2500,10 +2501,12 @@ def source_time_function(rupt,epicenter,dt=0.001,t_total=500,stf_type='dreger',p
             faults_added+=1
             #get stf
             t,Mdot=build_source_time_function(rise_time[kfault],dt,t_total,stf_type=stf_type)
-            #What is the moment at this subfault?
+            #what is the moment from the building of the slip rate function?
+            synth_moment = trapz(Mdot,t)
+            #What is the moment needed at this subfault?
             moment=slip[kfault]*mu[kfault]*area[kfault]
             #Scale stf by this moment
-            scale_factor=moment/dt
+            scale_factor=moment/synth_moment
             Mdot=Mdot*scale_factor
             #Shift according to rupture onset time
             tdiff=t-trup[kfault]

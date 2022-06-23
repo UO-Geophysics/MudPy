@@ -337,6 +337,7 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tsunami,td
 
                 
                 #Place into G matrix
+                # print(nss)
                 Gtemp[0,2*kfault]=nss   ; Gtemp[0,2*kfault+1]=nds    #North
                 Gtemp[1,2*kfault]=ess ; Gtemp[1,2*kfault+1]=eds  #East
                 Gtemp[2,2*kfault]=zss ; Gtemp[2,2*kfault+1]=zds  #Up

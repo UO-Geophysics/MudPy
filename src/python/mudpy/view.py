@@ -1717,6 +1717,10 @@ def plot_data(home,project_name,gflist,vord,decimate,lowpass,t_lim,sort,scale,k_
     #plt.subplots_adjust(left=0.2, bottom=0.05, right=0.8, top=0.95, wspace=0, hspace=0)
     plt.subplots_adjust(left=0.2, bottom=0.15, right=0.8, top=0.85, wspace=0, hspace=0)
       
+    
+    
+    
+    
 def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpass,t_lim,
                sort,scale,k_or_g,uncert=False,waveforms_as_accel=False,units='m',uncerth=0.01,uncertv=0.03,
                tick_frequency=10,spoof_vel_as_disp=False):
@@ -1897,6 +1901,9 @@ def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpas
         axn.xaxis.set_minor_locator(MultipleLocator(tick_frequency))
         axe.xaxis.set_minor_locator(MultipleLocator(tick_frequency))
         axu.xaxis.set_minor_locator(MultipleLocator(tick_frequency))
+        axn.xaxis.set_major_locator(MultipleLocator(tick_frequency))
+        axe.xaxis.set_major_locator(MultipleLocator(tick_frequency))
+        axu.xaxis.set_major_locator(MultipleLocator(tick_frequency))
         
         if k==0:
             if vord.lower()=='d':
@@ -1947,9 +1954,9 @@ def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpas
 #            axn.set_xticks([20,40,60,80,100])
 #            axe.set_xticks([20,40,60,80,100])
 #            axu.set_xticks([20,40,60,80,100])
-            axn.set_xticks([30,60,90])
-            axe.set_xticks([30,60,90])
-            axu.set_xticks([30,60,90])
+            # axn.set_xticks([15,30,45])
+            # axe.set_xticks([15,30,45])
+            # axu.set_xticks([15,30,45])
 #            axn.xaxis.set_ticklabels(xticklabel)
 #            axe.xaxis.set_ticklabels(xticklabel)
 #            axu.xaxis.set_ticklabels(xticklabel)
@@ -2044,7 +2051,7 @@ def insar_residual(home,project_name,run_name,run_number,gflist,zlims):
     lon_all=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=[1],dtype='f')
     lat_all=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=[2],dtype='f')
     gf=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=[7],dtype='f')
-    gf_datapath=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=[12],dtype='S')
+    gf_datapath=genfromtxt(home+project_name+'/data/station_info/'+gflist,usecols=[12],dtype='U')
     #datapath=home+project_name+'/data/statics/'
     synthpath=home+project_name+'/output/inverse_models/statics/'
     #synthpath=home+project_name+'/output/forward_models/'

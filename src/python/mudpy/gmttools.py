@@ -718,7 +718,7 @@ def read_neic_param(fault_file):
                 
 
 
-def triangular_rupt_2_gmt(meshfile,slipfile,outfile,kinematic_out_folder=None,percentage=0):
+def triangular_rupt_2_gmt(meshfile,slipfile,outfile,kinematic_out_folder=None,percentage=0,is_total_model=True):
     
     '''
     DM Note: Modified from Brendan's script because he refused to do a pull request :)
@@ -795,7 +795,10 @@ def triangular_rupt_2_gmt(meshfile,slipfile,outfile,kinematic_out_folder=None,pe
             #rupttime.append(float(row[12]))
             risetime.append(float(row[6]))
             duration.append(float(row[7]))
-            rig.append(float(row[13]))
+            if is_total_model:
+                rig.append(float(row[12]))
+            else:
+                rig.append(float(row[13]))
     
     
     INVN = numpy.asarray(invnum)

@@ -3899,6 +3899,7 @@ def build_source_time_function(rise_time,dt,total_time,stf_type='triangle',zeta=
         tau=rise_time/dreger_falloff_rate
         Mdot=(t**zeta)*exp(-t/tau)
     elif stf_type == 'gauss_prem_i_2s':  #The decay parameter for this is fixed by instaseis/syngine
+    
         decay=3.5 #Hard coded in syngine, good number for rise time to actually correspond to the function width
         center_time = 3.5858 #Hard coded in syngine
         min_rise_time = 2.1 #Rise times shorter than this are not allowed
@@ -3907,12 +3908,20 @@ def build_source_time_function(rise_time,dt,total_time,stf_type='triangle',zeta=
                print('... ... ...  WARNING: rise time requested is below minimum allowed of %.1fs, defaulting to minimum' % min_rise_time)
             rise_time = min_rise_time
     
-        Mdot = decay/(rise_time*pi**0.5)*exp(-((decay * (t - time_offset_gauss))/rise_time)**2)
-        #Here comes the tricky bit. Need to roll the slip rate function FORWARD
-        # By an ammount equal to half the new rise time minus half original rise time (2.1/2)
-        t_roll = rise_time/2 - min_rise_time/2
-        t_roll_samples = int(t_roll/dt)
-        Mdot = roll(Mdot,t_roll_samples)
+        if time_offset_gauss == 0 : #regualr gaussian with no offset (for GNSS, strong motion, etc)
+            time_offset_gauss = rise_time/2
+            Mdot = decay/(rise_time*pi**0.5)*exp(-((decay * (t - time_offset_gauss))/rise_time)**2)
+            Mdot -= Mdot[0]
+            i = where(Mdot < 0)[0]
+            Mdot[i] = 0
+    
+        else: #regular gaussian with offset (for teleseismic, etc)
+            Mdot = decay/(rise_time*pi**0.5)*exp(-((decay * (t - time_offset_gauss))/rise_time)**2)
+            #Here comes the tricky bit. Need to roll the slip rate function FORWARD
+            # By an ammount equal to half the new rise time minus half original rise time (2.1/2)
+            t_roll = rise_time/2 - min_rise_time/2
+            t_roll_samples = int(t_roll/dt)
+            Mdot = roll(Mdot,t_roll_samples)
     else:
         print('ERROR: unrecognized STF type '+stf_type)
         return
