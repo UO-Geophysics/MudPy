@@ -73,11 +73,12 @@ def run_parallel_green(home,project_name,station_file,model_name,dt,NFFT,static,
         diststr=''
         for k in range(len(d)):
             diststr=diststr+' %.6f' % d[k] #Truncate distance to 6 decimal palces (meters)
-        # Keep the user informed, lest he get nervous
+        # Keep the user informed, lest they get nervous
         print('MPI: processor #',rank,'is now working on subfault',int(source[ksource,0]),'(',ksource+1,'/',len(source),')')
         #Make the calculation
         if static==0: #Compute full waveform
-            command=split("fk.pl -M"+model_name+"/"+depth+"/f -N"+str(NFFT)+"/"+str(dt)+'/1/'+repr(dk)+' -P'+repr(pmin)+'/'+repr(pmax)+'/'+repr(kmax)+diststr)
+            command = "fk.pl -M"+model_name+"/"+depth+"/f -N"+str(NFFT)+"/"+str(dt)+'/1/'+repr(dk)+' -P'+repr(pmin)+'/'+repr(pmax)+'/'+repr(kmax)+diststr
+            command=split(command)
             p=subprocess.Popen(command,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
             p.communicate() 
             # Move files up one level and delete folder created by fk

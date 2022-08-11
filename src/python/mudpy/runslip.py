@@ -197,7 +197,7 @@ def make_parallel_green(home,project_name,station_file,fault_name,model_name,dt,
     OUT:
         Nothing
     '''
-    from numpy import loadtxt,arange,savetxt
+    from numpy import arange,savetxt,genfromtxt
     from os import path,makedirs,environ
     from shlex import split
     import subprocess
@@ -207,7 +207,7 @@ def make_parallel_green(home,project_name,station_file,fault_name,model_name,dt,
     station_file=home+project_name+'/data/station_info/'+station_file 
     fault_file=home+project_name+'/data/model_info/'+fault_name  
     #Load source model for station-event distance computations
-    source=loadtxt(fault_file,ndmin=2)
+    source=genfromtxt(fault_file)
     #Create all output folders
     for k in range(len(source)):
         strdepth='%.4f' % source[k,3]
@@ -434,7 +434,7 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
     stations=genfromtxt(gf_file,usecols=0,dtype='U')
     GF=genfromtxt(gf_file,usecols=[1,2,3,4,5,6,7],dtype='f8')
     fault_file=home+project_name+'/data/model_info/'+fault_name  
-    source=loadtxt(fault_file,ndmin=2)
+    source=genfromtxt(fault_file)
     num_faults=shape(source)[0]
     if num_faults/ncpus < 2:
         ncpus=int(floor(num_faults/2.))

@@ -548,7 +548,7 @@ def select_faults(whole_fault,Dstrike,Ddip,target_Mw,num_modes,scaling_law,
         Leff=0.85*Lmax
         Weff=0.85*Wmax
         
-        return selected_faults,hypo_fault,Lmax,Wmax,Leff,Weff
+        return selected_faults,hypo_fault,Lmax,Wmax,Leff,Weff,0,0,0 #extra zeros after Yu-Sheng's updates, see return call below
         
     
     if force_area==False and no_random==True: #Use the Blasser medain L and W
@@ -763,6 +763,8 @@ def select_faults(whole_fault,Dstrike,Ddip,target_Mw,num_modes,scaling_law,
     #Convert to effective length/width
     Leff=0.85*Lmax
     Weff=0.85*Wmax
+    
+    
     return selected_faults,hypo_fault,Lmax,Wmax,Leff,Weff,option,length,width
 
     

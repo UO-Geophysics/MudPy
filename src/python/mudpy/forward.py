@@ -3859,7 +3859,8 @@ def convolution_matrix(h):
     
     
 def build_source_time_function(rise_time,dt,total_time,stf_type='triangle',zeta=0.2,dreger_falloff_rate=4,
-                               scale=True,scale_value=1.0,time_offset=0,time_offset_gauss=0,quiet=False):
+                               scale=True,scale_value=1.0,time_offset=0,time_offset_gauss=0,quiet=False,
+                               ji_fraction=0.2):
     '''
     Compute source time function for a given rise time
     '''
@@ -3922,6 +3923,26 @@ def build_source_time_function(rise_time,dt,total_time,stf_type='triangle',zeta=
             t_roll = rise_time/2 - min_rise_time/2
             t_roll_samples = int(t_roll/dt)
             Mdot = roll(Mdot,t_roll_samples)
+    elif stf_type == 'ji':
+        
+        tup = rise_time*ji_fraction
+        tdown = rise_time*(1-ji_fraction)
+    
+        #Up going cosine
+        s1 = (1./(tup+tdown))*(1-cos((pi*t)/tup))
+        i = where(t>tup)[0]
+        s1[i] = 0
+        
+        #Down going cosine
+        s2 = (1./(tup+tdown))*(1+cos((pi*(t-tup))/tdown))
+        i = where(t<=tup)[0]
+        s2[i] = 0 
+        i = where(t>tup+tdown)[0]
+        s2[i] = 0
+        
+        #add the two 
+        Mdot = s1+s2    
+    
     else:
         print('ERROR: unrecognized STF type '+stf_type)
         return
