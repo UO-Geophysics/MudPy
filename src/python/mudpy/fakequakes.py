@@ -519,7 +519,7 @@ def rectify_slip(slip_unrectified,percent_reject=10):
 
 def select_faults(whole_fault,Dstrike,Ddip,target_Mw,num_modes,scaling_law,
     force_area,no_shallow_epi=True,hypo_depth=10,param_norm=(0.0451,0.1681),no_random=False,
-    subfault_hypocenter=None,use_hypo_fraction=True):
+    subfault_hypocenter=None,use_hypo_fraction=True,option=0):
     '''
     Select a random fault to be the hypocenter then based on scaling laws and a 
     target magnitude select only faults within the expected area plus some 
@@ -767,7 +767,7 @@ def select_faults(whole_fault,Dstrike,Ddip,target_Mw,num_modes,scaling_law,
 
     
         
-def get_rise_times(M0,slip,fault_array,rise_time_depths,stoc_rake,rise_time,rise_time_std=0.1,option=0):
+def get_rise_times(M0,slip,fault_array,rise_time_depths,stoc_rake,rise_time='MH2017',rise_time_std=0.1,option=0):
     '''
     Calculate individual subfault rise times
     '''     
