@@ -1312,7 +1312,7 @@ def get_fakequakes_G_and_m(Gimpulse,home,project_name,rupture_name,time_epi,GF_l
         
         if reconvolution == False:
             sr = build_source_time_function(tau_r,dt,total_time,stf_type=source_time_function,
-                            zeta=zeta,dreger_falloff_rate=stf_falloff_rate)
+                            zeta=zeta,dreger_falloff_rate=stf_falloff_rate,scale=True,scale_value=dt)
         else:
             sr = build_source_time_function(tau_r,dt,total_time,stf_type='gauss_prem_i_2s',
                             time_offset_gauss=time_offset_gauss,scale=True,scale_value=1.0,quiet=True)
@@ -1741,7 +1741,7 @@ def write_fakequakes_waveforms(home,project_name,rupture_name,waveforms,GF_list,
         # Get PGD
         pgd=sqrt(n[0].data**2+e[0].data**2+z[0].data**2).max()
         # Summary file
-        line_out+='%s\t%10.4f\t%10.4f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\n' % (sta[ksta],lon[ksta],lat[ksta],n_offset,e_offset,z_offset,pgd)
+        line_out+='%s\t%10.4f\t%10.4f\t%.5e\t%.6e\t%.5e\t%.5e\n' % (sta[ksta],lon[ksta],lat[ksta],n_offset,e_offset,z_offset,pgd)
         # write to file
         n.write(directory+sta[ksta]+'.LYN.sac',format='SAC')
         e.write(directory+sta[ksta]+'.LYE.sac',format='SAC')
@@ -3952,7 +3952,10 @@ def build_source_time_function(rise_time,dt,total_time,stf_type='triangle',zeta=
             target=dt # this is the target scale value
         else:
             target=scale_value
+
         area=trapz(Mdot,t)
+        print(area)
+        print(scale_value)
         Mdot=Mdot*(scale_value/area)
     #Check for errors
     if isnan(Mdot[0])==True:

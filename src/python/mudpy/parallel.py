@@ -105,8 +105,8 @@ def run_parallel_green(home,project_name,station_file,model_name,dt,NFFT,static,
             #If file is empty run again
             
 
-def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,static,tsunami,time_epi,
-                beta,custom_stf,impulse,rank,size,insar=False,okada=False,mu_okada=45e9):
+def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,static,quasistatic2dynamic,tsunami,
+                            time_epi,beta,custom_stf,impulse,NFFT,dt,rank,size,insar=False,okada=False,mu_okada=45e9,):
     '''
     Use green functions and compute synthetics at stations for a single source
     and multiple stations. This code makes an external system call to syn.c first it
@@ -133,7 +133,7 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
     from pandas import DataFrame as df
     from mudpy.forward import get_mu
     from numpy import array,genfromtxt,loadtxt,savetxt,log10,zeros,sin,cos,ones,deg2rad
-    from obspy import read
+    from obspy import read,Stream,Trace
     from shlex import split
     from mudpy.green import src2sta,rt2ne,origin_time,okada_synthetics
     from glob import glob
@@ -150,6 +150,7 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
         integrate = %s
         static = %s
         tsunami = %s
+        quasi2dynamic = %s
         time_epi = %s
         beta = %d
         custom_stf = %s
@@ -157,7 +158,7 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
         insar = %s
         okada = %s
         mu = %.2e
-        ''' %(home,project_name,station_file,model_name,str(integrate),str(static),str(tsunami),str(time_epi),beta,custom_stf,impulse,insar,okada,mu_okada)
+        ''' %(home,project_name,station_file,model_name,str(integrate),str(static),str(tsunami),str(quasistatic2dynamic),str(time_epi),beta,custom_stf,impulse,insar,okada,mu_okada)
         print(out)
         
     #Read your corresponding source file
@@ -203,12 +204,25 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
         ds_length_in_km=ds_length/1000.
         strdepth='%.4f' % zs
         subfault=str(int(source[0])).rjust(4,'0')
-        if static==0 and tsunami==0:  #Where to save dynamic waveforms
+        
+        # print('static is ' +str(static))
+        # print('tsunami is ' +str(tsunami))
+        # print('quasi is ' +str(quasistatic2dynamic))
+        
+        if static==0 and tsunami==0 and quasistatic2dynamic==0:  #Where to save dynamic waveforms
             green_path=home+project_name+'/GFs/dynamic/'+model_name+"_"+strdepth+".sub"+subfault+"/"
-        if static==1 and tsunami==1:  #Where to save dynamic waveforms
+        if static==1 and tsunami==1 and quasistatic2dynamic==0:  #Where to save dynamic waveforms
             green_path=home+project_name+'/GFs/tsunami/'+model_name+"_"+strdepth+".sub"+subfault+"/"
-        if static==1 and tsunami==0:  #Where to save statics
+        if static==1 and tsunami==0 and quasistatic2dynamic==0:  #Where to save statics
             green_path=home+project_name+'/GFs/static/'+model_name+"_"+strdepth+".sub"+subfault+"/"
+        if static==0 and quasistatic2dynamic==1:
+            #Where to save quasistatic2dynamic "waveforms"
+            green_path=home+project_name+'/GFs/dynamic/'+model_name+"_"+strdepth+".sub"+subfault+"/"
+            #Where to read the statics from to spoof the waveforms
+            read_statics_path=home+project_name+'/GFs/static/'+model_name+"_"+strdepth+".sub"+subfault+"/"
+            
+
+            
         staname=genfromtxt(station_file,dtype="U",usecols=0)
         if staname.shape==(): #Single staiton file
             staname=array([staname])
@@ -220,14 +234,34 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
         Mo=mu*ss_length*ds_length*1.0
         Mw=(2./3)*(log10(Mo)-9.1)
         
-        #Move to output folder
+        #Move to output folder if it doesn't exist create it
+        #Check fist if folder exists
+        dir_exists = os.path.exists(green_path)
+        if dir_exists: #no need to do anything
+            pass
+        else: #This only happens in quasistatic2dyanmic case
+            os.makedirs(green_path)
+        
+        #ok now move there
         os.chdir(green_path)
         print('Processor '+str(rank)+' is working on subfault '+str(int(source[0]))+' and '+str(len(d))+' stations ')
+        
+        
+        #If we are doibng quasistatic2dynamic we only need to read the syntehtics file once per source
+        if static==0 and quasistatic2dynamic==1 : #Convert statics to ramp waveforms
+                
+                #read alls tations and statics
+                fileSS = 'subfault'+subfault +'.SS.static.neu'
+                fileDS = 'subfault'+subfault +'.DS.static.neu'
+  
+                station_names = genfromtxt(read_statics_path+fileSS,usecols=0,dtype='U')
+                SSstatics = genfromtxt(read_statics_path+fileSS)
+                DSstatics = genfromtxt(read_statics_path+fileDS)
         
         #This is looping over "sites"
         for k in range(len(d)):
             
-            if static==0: #Compute full waveforms
+            if static==0 and quasistatic2dynamic==0: #Compute full waveforms
                 diststr='%.6f' % d[k] #Need current distance in string form for external call
                 #Form the strings to be used for the system calls according to user desired options
                 if integrate==1: #Make displ.
@@ -387,6 +421,64 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
                         silentremove(staname[k]+".subfault"+num+'.DS.vel.ri')
                         silentremove(staname[k]+".subfault"+num+'.DS.vel.ti')
                         silentremove(staname[k]+".subfault"+num+'.DS.vel.zi')
+            
+            elif static==0 and quasistatic2dynamic==1 : #Convert statics to ramp waveforms
+            
+                #site name
+                sta_name = station_names[k]
+                
+                #offsets
+                nSS = SSstatics[k,1] * ones(NFFT)
+                eSS = SSstatics[k,2] * ones(NFFT)
+                zSS = SSstatics[k,3] * ones(NFFT)
+                
+                nDS = DSstatics[k,1] * ones(NFFT)
+                eDS = DSstatics[k,2] * ones(NFFT)
+                zDS = DSstatics[k,3] * ones(NFFT)
+                
+                #initalize streams
+                st_nSS = Stream(Trace()) ; st_nDS = Stream(Trace())
+                st_eSS = Stream(Trace()) ; st_eDS = Stream(Trace())
+                st_zSS = Stream(Trace()) ; st_zDS = Stream(Trace())
+                
+                #assign data and metadata
+                st_nSS[0].data = nSS
+                st_nSS[0].stats.delta = dt
+                st_nSS[0].stats.starttime = time_epi
+                
+                st_eSS[0].data = eSS
+                st_eSS[0].stats.delta = dt
+                st_eSS[0].stats.starttime = time_epi
+                
+                st_zSS[0].data = zSS
+                st_zSS[0].stats.delta = dt
+                st_zSS[0].stats.starttime = time_epi
+                
+                st_nDS[0].data = nDS
+                st_nDS[0].stats.delta = dt
+                st_nDS[0].stats.starttime = time_epi
+                
+                st_eDS[0].data = eDS
+                st_eDS[0].stats.delta = dt
+                st_eDS[0].stats.starttime = time_epi
+                
+                st_zDS[0].data = zDS
+                st_zDS[0].stats.delta = dt
+                st_zDS[0].stats.starttime = time_epi
+                
+                #Write files
+                ss_file_out = sta_name+'.subfault'+subfault+'.SS.disp.'
+                ds_file_out = sta_name+'.subfault'+subfault+'.DS.disp.'
+                
+                st_nSS.write(ss_file_out+'n',format='SAC')
+                st_eSS.write(ss_file_out+'e',format='SAC')
+                st_zSS.write(ss_file_out+'z',format='SAC')
+                
+                st_nDS.write(ds_file_out+'n',format='SAC')
+                st_eDS.write(ds_file_out+'e',format='SAC')
+                st_zDS.write(ds_file_out+'z',format='SAC')
+            
+            
             else: #Compute static synthetics
                 if okada==False:  #Layered earth model
                     
@@ -1161,28 +1253,31 @@ if __name__ == '__main__':
         model_name=sys.argv[5]
         integrate=int(sys.argv[6])
         static=int(sys.argv[7])
-        tsunami=sys.argv[8]=='True'
-        time_epi=UTCDateTime(sys.argv[9])
-        beta=float(sys.argv[10])
-        custom_stf=sys.argv[11]
-        impulse=sys.argv[12]
+        quasistatic2dynamic=int(sys.argv[8])
+        tsunami=sys.argv[9]=='True'
+        time_epi=UTCDateTime(sys.argv[10])
+        beta=float(sys.argv[11])
+        custom_stf=sys.argv[12]
+        impulse=sys.argv[13]
         if impulse=='True':
             impulse=True
         elif impulse=='False':
             impulse=False
-        insar=sys.argv[13]
+        insar=sys.argv[14]
         if insar=='True':
             insar=True
         elif insar=='False':
             insar=False
-        okada=sys.argv[14]
+        okada=sys.argv[15]
         if okada=='True':
             okada=True
         elif okada=='False':
             okada=False
-        mu_okada=float(sys.argv[15])
+        mu_okada=float(sys.argv[16])
+        NFFT = int(sys.argv[17])
+        dt = float(sys.argv[18])
 
-        run_parallel_synthetics(home,project_name,station_file,model_name,integrate,static,tsunami,time_epi,beta,custom_stf,impulse,rank,size,insar,okada,mu_okada)
+        run_parallel_synthetics(home,project_name,station_file,model_name,integrate,static,quasistatic2dynamic,tsunami,time_epi,beta,custom_stf,impulse,NFFT,dt,rank,size,insar,okada,mu_okada)
     
     elif sys.argv[1]=='run_parallel_teleseismics_green':
         home=sys.argv[2]
