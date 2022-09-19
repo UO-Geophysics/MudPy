@@ -647,7 +647,7 @@ if __name__ == '__main__':
         Swave=sys.argv[21]
         if Swave=='True':
             Swave=True
-        high_stress_depth=int(sys.argv[22])
+        high_stress_depth=float(sys.argv[22])
         Qmethod=sys.argv[23]
         scattering=sys.argv[24]
         Qc_exp=float(sys.argv[25])
