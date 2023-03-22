@@ -465,7 +465,7 @@ def run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,
                                                                   
                                                                                                                 
                           
-            #######         Build Direct S ray           ######
+            #######         Use already built S ray from above           ######
 
             if Swave==True:
                 take_off_angle_S=directS.takeoff_angle
@@ -478,7 +478,7 @@ def run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,
                 if Qmethod == 'direct':#No ray tracing use bulka ttenuation along path
                     Q_S = hfsims.get_attenuation_linear(f,structure,zs,dist,Qexp,Qtype='S')
                 else: #Use ray tracing
-                    Q_S=hfsims.get_attenuation(f,structure,directS,Qexp,scattering=scattering,
+                    Q_S = hfsims.get_attenuation(f,structure,directS,Qexp,scattering=scattering,
                                                Qc_exp=Qc_exp,baseline_Qc=baseline_Qc)
                 
                 #get quarter wavelength amplificationf actors

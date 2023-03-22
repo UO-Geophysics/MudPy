@@ -4,8 +4,6 @@ D. Melgar 02/2014
 Forward modeling routines
 '''
 
-from numba import jit
-
 
 
 def waveforms(home,project_name,rupture_name,station_file,model_name,run_name,integrate,tsunami,hot_start,resample,beta):
@@ -542,11 +540,17 @@ def tele_waveforms(home,project_name,fault_name,rupture_list,GF_list_teleseismic
             forward=True #This controls where we look for the rupture file
         
         # Put in matrix
+        if source_time_function == 'gauss_prem_i2s':
+            reconvolution = True
+        else:
+            reconvolution = False
+        
         m,G = get_fakequakes_G_and_m(Gimpulse_all,home,project_name,rupture_name,time_epi,GF_list_teleseismic,
                                    epicenter,Npoints,source_time_function,stf_falloff_rate,zeta=zeta,
-                                   forward=forward,dt=dt,ncpus=ncpus,reconvolution=True)
+                                   forward=forward,dt=dt,ncpus=ncpus,reconvolution=reconvolution)
         # Solve
         waveforms=G.dot(m)
+        print('... ... DONE! saving waveforms')
         #Write output
         write_fakequakes_waveforms(home,project_name,rupture_name,waveforms,GF_list_teleseismic,Npoints,time_epi,dt)
         
@@ -1269,6 +1273,7 @@ def get_fakequakes_G_and_m(Gimpulse,home,project_name,rupture_name,time_epi,GF_l
     else:
         source=genfromtxt(home+project_name+'/output/ruptures/'+rupture_name)
     rise_times=source[:,7]
+    fraction=source[:,6]
     rupture_onset=source[:,12]
     
     # Gaussian STF hard coded values    WARNING!!!!
@@ -1285,6 +1290,7 @@ def get_fakequakes_G_and_m(Gimpulse,home,project_name,rupture_name,time_epi,GF_l
     i_non_zero_original=where(rise_times>0)[0]
     N_non_zero=len(i_non_zero_original)
     rise_times = rise_times[i_non_zero_original]
+    fraction = fraction[i_non_zero_original]
     rupture_onset = rupture_onset[i_non_zero_original]
     
     #Convert rupture onsets to itneger number of samples
@@ -1308,11 +1314,14 @@ def get_fakequakes_G_and_m(Gimpulse,home,project_name,rupture_name,time_epi,GF_l
     
     total_time = (NFFT-1) * dt
     for ksub in range(N_non_zero):
+        
         tau_r = rise_times[ksub]
+        ji_fraction = fraction[ksub] 
         
         if reconvolution == False:
             sr = build_source_time_function(tau_r,dt,total_time,stf_type=source_time_function,
-                            zeta=zeta,dreger_falloff_rate=stf_falloff_rate,scale=True,scale_value=dt)
+                            zeta=zeta,dreger_falloff_rate=stf_falloff_rate,scale=True,scale_value=dt,
+                            ji_fraction = ji_fraction)
         else:
             sr = build_source_time_function(tau_r,dt,total_time,stf_type='gauss_prem_i_2s',
                             time_offset_gauss=time_offset_gauss,scale=True,scale_value=1.0,quiet=True)
@@ -1333,6 +1342,7 @@ def get_fakequakes_G_and_m(Gimpulse,home,project_name,rupture_name,time_epi,GF_l
     else:
         old_stf = None
 
+    print('... ... done calculating slip rate functions, block convolution is next')
     
     
     #Define block convolution and trim function to be mapped with DASK
@@ -1554,7 +1564,7 @@ def gauss_reconvolution(data,new_stf,old_stf):
     '''
     Used if original slip rate function was NOT  an impulse, then you need to "reconvolve"
     as per the SRL paper on Syngine/Instaseis (kirscher et al., 2017?). THis currently
-    will only work for teleseismics and the slip rate functions used by indtaseis
+    will only work for teleseismics and the slip rate functions used by instaseis
     which are all Gaussians
     '''
     
@@ -3411,19 +3421,27 @@ def usgs2fault(usgs_model,out_file,Dx,Dy,rise_time):
     savetxt(out_file,out,fmt='%d\t%10.4f\t%10.4f\t%8.4f\t%6.1f\t%6.1f\t%.1f\t%.1f\t%.1f\t%.1f')
     
     
-def usgs2rupt(usgs_model,out_file,Dx,Dy):
+def usgs2rupt(usgs_model,out_file,Dx,Dy,N_header_lines= 9,rise_time_multiplier=1):
     '''
     Convert USGS finite fault to .fault
     '''
     from numpy import genfromtxt,ones,arange,savetxt,c_,deg2rad,cos,sin,zeros
     
-    lon=genfromtxt(usgs_model,usecols=1)
-    lat=genfromtxt(usgs_model,usecols=0)
-    z=genfromtxt(usgs_model,usecols=2)
-    st=genfromtxt(usgs_model,usecols=5)
-    dip=genfromtxt(usgs_model,usecols=6)
-    rake=genfromtxt(usgs_model,usecols=4)
-    slip=genfromtxt(usgs_model,usecols=3)
+    lon=genfromtxt(usgs_model,usecols=1,skip_header = N_header_lines)
+    lat=genfromtxt(usgs_model,usecols=0,skip_header = N_header_lines)
+    z=genfromtxt(usgs_model,usecols=2,skip_header = N_header_lines)
+    st=genfromtxt(usgs_model,usecols=5,skip_header = N_header_lines)
+    dip=genfromtxt(usgs_model,usecols=6,skip_header = N_header_lines)
+    rake=genfromtxt(usgs_model,usecols=4,skip_header = N_header_lines)
+    slip=genfromtxt(usgs_model,usecols=3,skip_header = N_header_lines)
+    time=genfromtxt(usgs_model,usecols=7,skip_header = N_header_lines)
+    
+    tup = genfromtxt(usgs_model,usecols=8,skip_header = N_header_lines)
+    tdown = genfromtxt(usgs_model,usecols=9,skip_header = N_header_lines)
+    rise = tup + tdown
+    fraction = tup / rise
+    
+    rise = rise * rise_time_multiplier
     #Parse rake out into SS and DS
     ss=(slip/100)*cos(deg2rad(rake))
     ds=(slip/100)*sin(deg2rad(rake))
@@ -3431,13 +3449,10 @@ def usgs2rupt(usgs_model,out_file,Dx,Dy):
     no=arange(1,len(lon)+1)
     H=Dx*ones(len(lon))
     W=Dy*ones(len(lon))
-    tri=0.5*ones(len(lon))
-    rt=20*ones(len(lon))
-    time=zeros(len(lon))
     mu=zeros(len(lon))
 
-    out=c_[no,lon,lat,z,st,dip,tri,rt,ss,ds,H,W,time,mu]
-    savetxt(out_file,out,fmt='%d\t%10.4f\t%10.4f\t%8.4f\t%6.1f\t%6.1f\t%.1f\t%.1f\t%8.4f\t%8.4f\t%.1f\t%.1f\t%d\t%d')
+    out=c_[no,lon,lat,z,st,dip,fraction,rise,ss,ds,H,W,time,mu]
+    savetxt(out_file,out,fmt='%d\t%10.4f\t%10.4f\t%8.4f\t%6.1f\t%6.1f\t%6.4f\t%6.2f\t%8.4f\t%8.4f\t%.1f\t%.1f\t%.2f\t%d')
     
 def grid2xyz(home,project_name,sta_file,out_file):
     '''
@@ -3558,7 +3573,8 @@ def mudpy2sw4source(rupt,time_offset=0.0):
 
 
 
-def mudpy2srf(rupt,log_file,stf_dt=0.1,stf_type='triangle',Ndip=None,time_pad=5.0,minSTFpoints=16,integrate=False):
+def mudpy2srf(rupt,log_file,stf_dt=0.1,stf_type='triangle',inv_or_rupt='rupt',Ndip=None,
+              hypocenter=None,time_pad=5.0,minSTFpoints=16,integrate=False,Mw=None):
     '''
     Convert a mudpy .rupt or .inv file to SRF version 2 format
     
@@ -3570,17 +3586,23 @@ def mudpy2srf(rupt,log_file,stf_dt=0.1,stf_type='triangle',Ndip=None,time_pad=5.
     
     from numpy import genfromtxt,where,sin,deg2rad,array,argmin,sqrt,sign,arctan2,rad2deg,arange,ones,zeros,r_
     from pyproj import Geod
-    from string import replace
     from os import path
     from scipy.integrate import cumtrapz
     
     #Define paths to output files
     folder=path.dirname(rupt)
     basename=path.basename(rupt)
-    basename=replace(basename,'rupt','srf')
-    srf_file=folder+'/'+basename
-    basename=replace(basename,'srf','src')
-    src_file=folder+'/'+basename
+    
+    if inv_or_rupt == 'rupt':
+        basename=basename.replace('rupt','srf')
+        srf_file=folder+'/'+basename
+        basename=basename.replace('srf','src')
+        src_file=folder+'/'+basename
+    else:
+        basename=basename.replace('inv','srf')
+        srf_file=folder+'/'+basename
+        basename=basename.replace('srf','src')
+        src_file=folder+'/'+basename       
     
     #Read mudpy file
     f=genfromtxt(rupt)
@@ -3622,19 +3644,23 @@ def mudpy2srf(rupt,log_file,stf_dt=0.1,stf_type='triangle',Ndip=None,time_pad=5.
     #Depth to top of fault
     depth_top=fmin[0,3]-sin(deg2rad(dip))*(dx_dip/2)
     
-    #Location of hypocenter from log file and magnitude
-    flog=open(log_file,'r')
-    while True:
-        line=flog.readline()
-        if 'Hypocenter (lon,lat,z[km])' in line:                
-            s=replace(line.split(':')[-1],'(','')
-            s=replace(s,')','')
-            hypocenter=array(s.split(',')).astype('float')
-        if 'Actual magnitude' in line:
-            Mw=float(line.split()[-1])
-        elif line=='':
-            break 
-    flog.close()
+    if inv_or_rupt == 'rupt':
+        #Location of hypocenter from log file and magnitude
+        flog=open(log_file,'r')
+        while True:
+            line=flog.readline()
+            if 'Hypocenter (lon,lat,z[km])' in line:                
+                s=line.split(':')[-1]
+                s=s.replace('(','')
+                s=s.replace(')','')
+                hypocenter=array(s.split(',')).astype('float')
+            if 'Actual magnitude' in line:
+                Mw=float(line.split()[-1])
+            elif line=='':
+                break 
+        flog.close()
+    else:
+        pass
     
     #Down dip location with regards to top of fault
     dip_hypo_position=(hypocenter[2]-depth_top)/sin(deg2rad(dip))
@@ -3691,6 +3717,7 @@ def mudpy2srf(rupt,log_file,stf_dt=0.1,stf_type='triangle',Ndip=None,time_pad=5.
     # Note mudpy works in mks SRF is cgs so must convert accordingly
     minNTstf=99999
     for kfault in range(len(f)):
+        print(kfault)
         zero_slip=False
         #Get values for "Headers" for this subfault
         lon=f[kfault,1]
@@ -3711,10 +3738,12 @@ def mudpy2srf(rupt,log_file,stf_dt=0.1,stf_type='triangle',Ndip=None,time_pad=5.
         #If subfault has zero rise time make it have tiny slip rate
         if slip==0:
             zero_slip=True
+            stf = zeros(int(total_time/stf_dt))
             print('Zero slip at '+str(kfault))
         elif rise_time==0:
             slip=0
             zero_slip=True
+            stf = zeros(int(total_time/stf_dt))
             print('Zero rise time at '+str(kfault))
         else:
             tstf,stf=build_source_time_function(rise_time,stf_dt,total_time,stf_type=stf_type,zeta=0.2,scale=True)
@@ -3790,6 +3819,8 @@ def mudpy2srf(rupt,log_file,stf_dt=0.1,stf_type='triangle',Ndip=None,time_pad=5.
     # And done
     print('minNTstf is: '+str(minNTstf))
     fout.close()
+    
+
 
 
 
@@ -3860,7 +3891,7 @@ def convolution_matrix(h):
     
 def build_source_time_function(rise_time,dt,total_time,stf_type='triangle',zeta=0.2,dreger_falloff_rate=4,
                                scale=True,scale_value=1.0,time_offset=0,time_offset_gauss=0,quiet=False,
-                               ji_fraction=0.2):
+                               ji_fraction=0.5):
     '''
     Compute source time function for a given rise time
     '''
@@ -3948,14 +3979,8 @@ def build_source_time_function(rise_time,dt,total_time,stf_type='triangle',zeta=
         return
     #Area of STF must be equal to dt
     if scale==True:
-        if scale_value is None: #Re-scale to dt (for traditional convolution)
-            target=dt # this is the target scale value
-        else:
-            target=scale_value
 
         area=trapz(Mdot,t)
-        print(area)
-        print(scale_value)
         Mdot=Mdot*(scale_value/area)
     #Check for errors
     if isnan(Mdot[0])==True:

@@ -1260,7 +1260,7 @@ def tile_moment(rupt,epicenter,nstrike,ndip,covfile,beta=0,vfast=0,vslow=0,shade
     return tout,Mout
 
 
-def source_time_function(rupt,epicenter,plot=True,xlim=None,ylim=None):
+def source_time_function(rupt,epicenter,plot=True,xlim=None,ylim=None,normalize=True):
     '''
     Plot source time function of complete rupture
     '''
@@ -1306,7 +1306,11 @@ def source_time_function(rupt,epicenter,plot=True,xlim=None,ylim=None):
             t1,M1=add2stf(t1,M1,t2,M2)
     #Get power
     exp=floor(log10(M1.max()))
-    M1=M1/(10**exp)
+    if normalize == True:
+        M1=M1/(10**exp)
+    else:
+        pass
+    
     if plot==True:
         plt.figure()
         plt.fill(t1,M1,'b',alpha=0.5)
@@ -1723,7 +1727,7 @@ def plot_data(home,project_name,gflist,vord,decimate,lowpass,t_lim,sort,scale,k_
     
 def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpass,t_lim,
                sort,scale,k_or_g,uncert=False,waveforms_as_accel=False,units='m',uncerth=0.01,uncertv=0.03,
-               tick_frequency=10,spoof_vel_as_disp=False):
+               tick_frequency=10,spoof_vel_as_disp=False,return_vectors=False):
     '''
     Plot synthetics vs real data
     
@@ -1731,7 +1735,7 @@ def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpas
     datapath
     '''
     from obspy import read
-    from numpy import genfromtxt,where,argsort,zeros
+    from numpy import genfromtxt,where,argsort,zeros,array,r_
     import matplotlib.pyplot as plt
     import matplotlib
     from mudpy.green import stdecimate 
@@ -1772,6 +1776,8 @@ def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpas
         i=i[j]
     nsta=len(i)
     fig, axarr = plt.subplots(nsta, 3)  
+    dvector=array([])
+    dsvector=array([])
     for k in range(len(i)):
         n=read(datapath+sta[i[k]]+'.'+datasuffix+'.n')
         e=read(datapath+sta[i[k]]+'.'+datasuffix+'.e')
@@ -1819,6 +1825,10 @@ def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpas
             axn=axarr[0]
             axe=axarr[1]
             axu=axarr[2]
+            
+        #add to output vector
+        dvector = r_[dvector,n[0].data,e[0].data,u[0].data]
+        dsvector = r_[dsvector,ns[0].data,es[0].data,us[0].data]
         
         axn.plot(n[0].times(),n[0].data,'k',ns[0].times(),ns[0].data,'r')
         axn.grid(which='both')
@@ -1887,12 +1897,12 @@ def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpas
         #axn.annotate(nsmax,xy=(t_lim[1]-0.3*trange,nlims[0]+0.7*nrange),fontsize=12,color='red')
         #axe.annotate(esmax,xy=(t_lim[1]-0.3*trange,elims[0]+0.7*erange),fontsize=12,color='red')
         #axu.annotate(usmax,xy=(t_lim[1]-0.3*trange,ulims[0]+0.7*urange),fontsize=12,color='red')
-        axn.annotate(nmax,xy=(t_lim[1]-0.25*trange,nlims[0]+0.02*nrange),fontsize=10)
-        axe.annotate(emax,xy=(t_lim[1]-0.25*trange,elims[0]+0.02*erange),fontsize=10)
-        axu.annotate(umax,xy=(t_lim[1]-0.25*trange,ulims[0]+0.02*urange),fontsize=10)
-        axn.annotate(nsmax,xy=(t_lim[1]-0.25*trange,nlims[0]+0.7*nrange),fontsize=10,color='red')
-        axe.annotate(esmax,xy=(t_lim[1]-0.25*trange,elims[0]+0.7*erange),fontsize=10,color='red')
-        axu.annotate(usmax,xy=(t_lim[1]-0.25*trange,ulims[0]+0.7*urange),fontsize=10,color='red')
+        axn.annotate(nmax,xy=(t_lim[1]-0.25*trange,nlims[0]+0.02*nrange),fontsize=11)
+        axe.annotate(emax,xy=(t_lim[1]-0.25*trange,elims[0]+0.02*erange),fontsize=11)
+        axu.annotate(umax,xy=(t_lim[1]-0.25*trange,ulims[0]+0.02*urange),fontsize=11)
+        axn.annotate(nsmax,xy=(t_lim[1]-0.25*trange,nlims[0]+0.7*nrange),fontsize=11,color='red')
+        axe.annotate(esmax,xy=(t_lim[1]-0.25*trange,elims[0]+0.7*erange),fontsize=11,color='red')
+        axu.annotate(usmax,xy=(t_lim[1]-0.25*trange,ulims[0]+0.7*urange),fontsize=11,color='red')
         #Station name
         #axn.set_ylabel(sta[i[k]],rotation=90)
         axn.set_ylabel(sta[i[k]],rotation=0,labelpad=20)
@@ -1966,6 +1976,10 @@ def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpas
     #plt.subplots_adjust(left=0.2, bottom=0.05, right=0.8, top=0.95, wspace=0, hspace=0)
     plt.subplots_adjust(left=0.2, bottom=0.15, right=0.8, top=0.85, wspace=0, hspace=0)
     plt.show()
+    
+    if return_vectors == True:
+        
+        return dvector,dsvector
 
 def static_synthetics(home,project_name,run_name,run_number,gflist,qscale,xl=None,yl=None):
     '''
@@ -2207,12 +2221,12 @@ def tsunami_synthetics(home,project_name,run_name,run_number,gflist,t_lim,sort,s
     nsta=len(i)
     
     fig, axarr = plt.subplots(nsta,1)  
-    if size(sta)==1:
+    if len(i)==1:
         axarr=array([axarr])
     for k in range(len(i)):
         #tsun=read(datapath+sta[i[k]]+'.tsun')
-#        tsun=read(datapath+sta[i[k]]+'.sac')
-        tsun=read(datapath+'D43413.sac')
+        tsun=read(datapath+sta[i[k]]+'.sac')
+        # tsun=read(datapath+'D43413.sac')
         tsun_synth=read(synthpath+run_name+'.'+run_number+'.'+sta[i[k]]+'.tsun')
         
         dt=tsun_synth[0].stats.starttime - tsun[0].stats.starttime
