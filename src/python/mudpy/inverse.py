@@ -736,14 +736,14 @@ def getdata(home,project_name,GF_list,decimate,bandpass,quiet=False):
             
             ###########   CUSTOM BANDPASS
             
-            # print('CAREFUL!!!!! Custom bandpass fitler hardcoded')
+            # # print('CAREFUL!!!!! Custom bandpass fitler hardcoded')
         
-            if ksta<11:   #12 for M7.8
-                displacement_bandpass = array([0.4])
-                print(displacement_bandpass)
-            else:
-                print(displacement_bandpass)
-                displacement_bandpass = array([1/20,0.4])
+            # if ksta<11:   #12 for M7.8
+            #     displacement_bandpass = array([0.4])
+            #     print(displacement_bandpass)
+            # else:
+            #     print(displacement_bandpass)
+            #     displacement_bandpass = array([1/20,0.4])
             ####################################################
             
             fsample=1./n[0].stats.delta
