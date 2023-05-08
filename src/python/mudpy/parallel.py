@@ -661,7 +661,10 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
             SSdf.e=staticsSS[:,1]
             SSdf.u=staticsSS[:,2]
             SSdf.beta=staticsSS[:,3]
-            SSdf.to_csv(green_path+'subfault'+num+'.SS.static.neu',sep='\t',index=False,header=False)
+            if insar == False: # GNSS statics file
+                SSdf.to_csv(green_path+'subfault'+num+'.SS.static.neu',sep='\t',index=False,header=False)
+            else:  # InSAR file
+                SSdf.to_csv(green_path+'subfault'+num+'.SS.insar.neu',sep='\t',index=False,header=False)
             
             DSdf = df(data=None, index=None, columns=['staname','n','e','u','beta'])     
             DSdf.staname=staname
@@ -669,7 +672,10 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
             DSdf.e=staticsDS[:,1]
             DSdf.u=staticsDS[:,2]
             DSdf.beta=staticsDS[:,3]
-            DSdf.to_csv(green_path+'subfault'+num+'.DS.static.neu',sep='\t',index=False,header=False)
+            if insar == False: # GNSS statics file
+                DSdf.to_csv(green_path+'subfault'+num+'.DS.static.neu',sep='\t',index=False,header=False)
+            else:
+                DSdf.to_csv(green_path+'subfault'+num+'.DS.insar.neu',sep='\t',index=False,header=False)
 
                       
 

@@ -616,7 +616,8 @@ def get_path_length(ray,zs,dist_in_degs):
 
 def get_attenuation(f,structure,ray,Qexp,Qtype='S',scattering='on',Qc_exp=0,baseline_Qc=100):
     '''
-    Get effect of intrinsic aptimeenuation along the ray path
+    Get effect of intrinsic  and scattering aptimeenuation along the ray path.
+    The scattering attenuation is only applied to S packet, not to P.
     '''
     
     from numpy import diff,zeros,exp,pi,tile,sum
@@ -696,7 +697,7 @@ def get_attenuation_old(f,structure,ray,Qexp,Qtype='S'):
     return Q
 
 
-def get_attenuation_linear(f,structure,zs,dist,Qexp,Qtype='S'):
+def get_attenuation_linear(f,structure,zs,dist,Qexp,Qtype='S',scattering='on',Qc_exp=0,baseline_Qc=100):
     '''
     Get effect of intrinsic aptimeenuation along the ray path
     '''
@@ -738,8 +739,8 @@ def get_attenuation_linear(f,structure,zs,dist,Qexp,Qtype='S'):
     
     omega=2*pi*f
     
-    #Experimental, add scattering Q using model from Farahbod et al. (2016)
-    Qscatter = 69*(f**0.94)
+    #Add scattering Q 
+    Qscatter = baseline_Qc*(f**Qc_exp) #From BSSA paper on CSZ Qcoda
     Qscatter = tile(Qscatter,(len(time_in_layer),1))
     Qs = tile(Qs,(len(f),1)).T
     Qtotal = 1/(1/Qscatter + 1/Qs)
@@ -747,7 +748,12 @@ def get_attenuation_linear(f,structure,zs,dist,Qexp,Qtype='S'):
     
     #Get the travel tiem weighted sum
     if Qtype=='S':
-        weightedQ=sum(time_in_layer/Qtotal,axis=0)
+        # weightedQ=sum(time_in_layer/Qtotal)
+        if scattering=='on':
+            weightedQ=sum(time_in_layer/Qtotal,axis=0)
+            # print('on')
+        elif scattering=='off':
+            weightedQ=sum(time_in_layer[:,0]/Qs[:,0])
         
     else:
         weightedQ=sum(time_in_layer/Qp)

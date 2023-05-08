@@ -60,6 +60,7 @@ def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epic
         #is there an onset times file?
         if onset_file is not None:
             tdelay_constant=genfromtxt(home+project_name+'/data/model_info/'+onset_file)
+            print('... using a custom onset times file')
         
         #Read in GFlist and decide what to compute
         gf_file=home+project_name+'/data/station_info/'+GF_list
@@ -251,7 +252,8 @@ def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epic
     return G
     
     
-def makeG(home,project_name,fault_name,model_name,station_file,gftype,tsunami,tdelay,decimate,bandpass,first_window,Ess,Eds,Nss,Nds,Zss,Zds):
+def makeG(home,project_name,fault_name,model_name,station_file,gftype,tsunami,tdelay,
+          decimate,bandpass,first_window,Ess,Eds,Nss,Nds,Zss,Zds):
     '''
     This routine is called from getG and will assemble the GFs from available synthetics
     depending on data type requested (statics, dispalcement or velocity waveforms).
@@ -370,9 +372,9 @@ def makeG(home,project_name,fault_name,model_name,station_file,gftype,tsunami,td
                     print('... working on subfault '+str(kfault)+' of '+str(Nfaults))
                 nfault='subfault'+str(int(source[kfault,0])).rjust(4,'0')
                 
-                coseis_ss=loadtxt(syn_path+nfault+'.SS.static.neu',usecols=[1,2,3])
-                coseis_ds=loadtxt(syn_path+nfault+'.DS.static.neu',usecols=[1,2,3])
-                coseis_sta=loadtxt(syn_path+nfault+'.SS.static.neu',usecols=0,dtype='U')
+                coseis_ss=loadtxt(syn_path+nfault+'.SS.insar.neu',usecols=[1,2,3])
+                coseis_ds=loadtxt(syn_path+nfault+'.DS.insar.neu',usecols=[1,2,3])
+                coseis_sta=loadtxt(syn_path+nfault+'.SS.insar.neu',usecols=0,dtype='U')
                 
                 #Find row corresponding to station
                 ista=where(coseis_sta==staname[ksta])[0]
@@ -731,6 +733,19 @@ def getdata(home,project_name,GF_list,decimate,bandpass,quiet=False):
         e=read(GFfiles[i[ksta],kgf]+'.e')
         u=read(GFfiles[i[ksta],kgf]+'.u')
         if displacement_bandpass is not None: #Apply low pass filter to data
+            
+            ###########   CUSTOM BANDPASS
+            
+            # # print('CAREFUL!!!!! Custom bandpass fitler hardcoded')
+        
+            # if ksta<11:   #12 for M7.8
+            #     displacement_bandpass = array([0.4])
+            #     print(displacement_bandpass)
+            # else:
+            #     print(displacement_bandpass)
+            #     displacement_bandpass = array([1/20,0.4])
+            ####################################################
+            
             fsample=1./n[0].stats.delta
             n[0].data=lfilt(n[0].data,displacement_bandpass,fsample,2)
             e[0].data=lfilt(e[0].data,displacement_bandpass,fsample,2)
