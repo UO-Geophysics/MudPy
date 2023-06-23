@@ -1167,7 +1167,9 @@ def pgd_magnitude_misfit(home,project_name,hist=True,rupture_list='ruptures.list
     plt.show()        
    
          
-def pgd_2D_misfit(home,project_name,rupture_list='ruptures.list',Mw_lims=[7.8,9.5],dist_lims=[10,1000],A=-4.434,B=1.047,C=-0.138,misfit_lims=[-3,3],n_mag_bins=10,n_dist_bins=10):
+def pgd_2D_misfit(home,project_name,rupture_list='ruptures.list',Mw_lims=[7.8,9.5],dist_lims=[10,1000],
+                  A=-4.434,B=1.047,C=-0.138,misfit_lims=[-3,3],n_mag_bins=10,n_dist_bins=10,
+                  add_noise=False):
     '''
     Plot misfit as a function of both distance and magnitude
     '''
@@ -1175,15 +1177,16 @@ def pgd_2D_misfit(home,project_name,rupture_list='ruptures.list',Mw_lims=[7.8,9.
     from numpy import genfromtxt,array,zeros,logspace,linspace,r_,log,genfromtxt,log10,ones,where,arange,median,mean
     from matplotlib import pyplot as plt
     from matplotlib import cm
-    from string import replace
     from matplotlib.ticker import MultipleLocator,LogLocator,MaxNLocator
+    from mudpy.forward import make_gnss_noise
+    from numpy.random import choice
     
     xmajorLocator = LogLocator(base=10.0, subs=[1])
     xminorLocator = MultipleLocator(1)
     ymajorLocator = MultipleLocator(1)
     yminorLocator = MultipleLocator(0.2)
     
-    ruptures=genfromtxt(home+project_name+'/data/'+rupture_list,dtype='S')
+    ruptures=genfromtxt(home+project_name+'/data/'+rupture_list,dtype='U')
     pgd_all=array([])
     d_all=array([])
     Mw_all=array([])
@@ -1197,6 +1200,20 @@ def pgd_2D_misfit(home,project_name,rupture_list='ruptures.list',Mw_lims=[7.8,9.
         lonlat=genfromtxt(summary_file,usecols=[1,2])
         pgd=genfromtxt(summary_file,usecols=[6])*100
         
+        if add_noise == True: #Add synthetic noise
+        
+            pgd_noise = zeros(len(pgd))
+        
+            for k in range(len(pgd)):
+                
+                e,n,z = make_gnss_noise()
+                random_time = choice(arange(len(e)), size=1)
+                pgd_noise[k] = (e[random_time]**2 + n[random_time]**2 + z[random_time]**2)**0.5
+                pgd_noise[k] *= 100
+                print('pgd noise is %f cm' % pgd_noise[k])
+            
+            pgd = pgd + pgd_noise
+        
         # Get hypocenter or centroid
         event_log=home+project_name+'/output/ruptures/'+run_name+'.'+run_number+'.log'
         f=open(event_log,'r')
@@ -1204,8 +1221,9 @@ def pgd_2D_misfit(home,project_name,rupture_list='ruptures.list',Mw_lims=[7.8,9.
         while loop_go:
             line=f.readline()
             if 'Centroid (lon,lat,z[km])' in line:                
-                s=replace(line.split(':')[-1],'(','')
-                s=replace(s,')','')
+                s=line.split(':')[-1]
+                s=s.replace('(','')
+                s=s.replace(')','')
                 hypo=array(s.split(',')).astype('float')
                 loop_go=False       
             if 'Actual magnitude' in line:

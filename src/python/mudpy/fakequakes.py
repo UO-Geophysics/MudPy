@@ -893,23 +893,7 @@ def get_rupture_onset(home,project_name,slip,fault_array,model_name,hypocenter,
         
     # Convert from thickness to depth to bottom of layer
     depth_to_top=r_[0,vel[:,0].cumsum()[0:-1]]
-    
-    #Get rupture speed shear-wave multipliers
-    rupture_multiplier=zeros(len(vel))
-    # Shallow 
-    i=where(depth_to_top<=rise_time_depths[0])[0]
-    rupture_multiplier[i]=0.56
-    # Deep 
-    i=where(depth_to_top>=rise_time_depths[1])[0]
-    rupture_multiplier[i]=0.8
-    # Transition 
-    i=where((depth_to_top<rise_time_depths[1]) & (depth_to_top>rise_time_depths[0]))[0]
-    slope=(0.8-0.56)/(rise_time_depths[1]-rise_time_depths[0])
-    intercept=0.8-slope*rise_time_depths[1]
-    rupture_multiplier[i]=slope*depth_to_top[i]+intercept
-    
-    
-    
+        
     #Get rupture speed shear-wave multipliers
     rupture_multiplier=zeros(len(vel))
     # Shallow 

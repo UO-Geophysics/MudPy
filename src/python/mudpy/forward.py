@@ -3992,6 +3992,59 @@ def build_source_time_function(rise_time,dt,total_time,stf_type='triangle',zeta=
     return t,Mdot
     
     
+    
+def make_gnss_noise(percentile=50,dt=1,duration=600):
+    
+    """
+    Generate synthetic GNSS noise time series data.
+    
+    Parameters
+    ----------
+    percentile : float, optional
+        The percentile level to use when generating the power spectra for the noise data.
+        The default value is 50.
+    dt : float, optional
+        The time step (in seconds) to use when generating the noise data.
+        The default value is 1.
+    duration : float, optional
+        The total duration (in seconds) of the noise time series to generate.
+        The default value is 600.
+    
+    Returns
+    -------
+    tuple
+        A tuple of three arrays containing the noise time series data for the
+        eastward, northward, and upward components of motion, respectively.
+    
+    """
+    
+    from mudpy.hfsims import windowed_gaussian,apply_spectrum
+    
+    # build white noise time series
+    std=1.0 # this is a dummy parameter give it any value
+    E_noise=windowed_gaussian(duration,dt,std=std,window_type=None)
+    N_noise=windowed_gaussian(duration,dt,std=std,window_type=None)
+    Z_noise=windowed_gaussian(duration,dt,std=std,window_type=None)
+    
+    # Now get the power spectra for each component of motion of noise at the 
+    # specified percentile level
+    f,Epsd,Npsd,Zpsd=gnss_psd(level=percentile,return_as_frequencies=True,return_as_db=False)
+    
+    #Covnert PSDs to amplitude spectrum
+    Epsd = Epsd**0.5
+    Npsd = Npsd**0.5
+    Zpsd = Zpsd**0.5
+    
+    #apply the spectrum to the noise time series
+    E_noise=apply_spectrum(E_noise,Epsd,f,dt,is_gnss=True)
+    N_noise=apply_spectrum(N_noise,Npsd,f,dt,is_gnss=True)
+    Z_noise=apply_spectrum(Z_noise,Zpsd,f,dt,is_gnss=True)
+    
+    return E_noise,N_noise,Z_noise
+    
+    
+    
+    
 def read_fakequakes_hypo_time(home,project_name,rupture_name,get_Mw=False):
     '''
     Read a fakequkaes log file and extrat hypocentral time

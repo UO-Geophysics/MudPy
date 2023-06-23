@@ -108,7 +108,7 @@ font = {'family' : 'normal',
 matplotlib.rc('font', **font)
 
 
-def quick_model(rupt,s=5,slip_percent=0):
+def quick_model(rupt,s=5,slip_percent=0,facecolor='r'):
     '''
     Quick and dirty plot of a .rupt file. Shows map view of slip
     
@@ -155,7 +155,7 @@ def quick_model(rupt,s=5,slip_percent=0):
     
     #Plot
     plt.figure(figsize=(5.2,10))
-    plt.scatter(lon,lat,marker='o',c=slip,s=s,cmap=whitejet,vmin=0)
+    plt.scatter(lon,lat,marker='o',c=slip,s=s,cmap=whitejet,vmin=0,facecolor=facecolor)
     plt.ylabel('Latitude')
     plt.xlabel('Longitude')
     cb=plt.colorbar()
@@ -2909,6 +2909,50 @@ def plot_velmod(vel_mod_file1,vel_mod_file2=None,zmax=60,label1='Cascadia',label
     plt.show()
 
     
+
+def plot_mesh(mesh,lw=0.5,zaspect=0.2):
+    
+    """
+    Plots a mesh given as a NumPy array of vertices.
+    
+    Args:
+        mesh (numpy.ndarray): A NumPy array of vertices, where each row contains
+            the coordinates of three vertices that form a triangle.
+        lw (float, optional): The line width of the mesh. Default is 0.5.
+        zaspect (float, optional): The aspect ratio of the z-axis relative to the
+            x- and y-axes. Default is 0.2.
+    
+    Returns:
+        None
+    
+    Example:
+        >>> import numpy as np
+        >>> mesh = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [1, 1, 0]])
+        >>> plot_mesh(mesh)
+    """
+        
+    
+    import matplotlib.pyplot as plt
+    
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    
+    for k in range(len(mesh)):
+        
+        x = [mesh[k,4],mesh[k,7],mesh[k,10],mesh[k,4]]
+        y = [mesh[k,5],mesh[k,8],mesh[k,11],mesh[k,5]]
+        z = [mesh[k,6],mesh[k,9],mesh[k,12],mesh[k,6]]
+        
+        plt.plot(x,y,z,lw=lw,c='b')
+        
+    ax.set_box_aspect((1,1,zaspect))
+
+    ax.set_xlabel('lon')
+    ax.set_ylabel('lat')
+    ax.set_zlabel('depth (km)')
+
+
+
 
 
 #########                  Supporting tools                       ##############

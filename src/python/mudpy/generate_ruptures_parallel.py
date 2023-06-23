@@ -237,9 +237,11 @@ def run_parallel_generate_ruptures(home,project_name,run_name,fault_name,slab_na
             #     shear_wave_fraction_shallow=1/60/60/24*2*(3.5/L_rescale)**2
             #     shear_wave_fraction_deep=   1/60/60/24*2*(3.5/L_rescale)**2
             #     print("m")
-            if rise_time=='SSE':
+            if rise_time=='SSE':  #For moedling SSes
                 shear_wave_fraction_shallow=1/60/60/24*2
                 shear_wave_fraction_deep=   1/60/60/24*2
+            else: #regular EQs, do nothing
+                pass
             
             
             
