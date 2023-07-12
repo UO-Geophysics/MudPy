@@ -883,7 +883,6 @@ def get_rupture_onset(home,project_name,slip,fault_array,model_name,hypocenter,
     # swf_r=randint(1,11)
     # shear_wave_fraction_shallow=1/60/60/24*swf_r
     # shear_wave_fraction_deep=1/60/60/24*swf_r
-    print(shear_wave_fraction_deep*86400)
     
     #I don't condone it but this cleans up the warnings
     warnings.filterwarnings("ignore")
