@@ -258,7 +258,7 @@ def run_parallel_generate_ruptures(home,project_name,run_name,fault_name,slab_na
             
             #Calculate average risetime
             rise = fault_out[:,7]
-            avg_rise = np.mean(rise)
+            avg_rise = np.mean(rise[np.where(rise>0)[0]])
             
             # Calculate average rupture velocity
             lon_array = fault_out[:,1]
