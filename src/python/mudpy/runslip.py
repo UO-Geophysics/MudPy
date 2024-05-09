@@ -746,30 +746,30 @@ def run_inversion(home,project_name,run_name,fault_name,model_name,GF_list,G_fro
     # G[:,iss_zone] = 0
     # G[:,ids_zone] = 0
     
-    print('Keep Zone 3')
-    p = genfromtxt('/Users/dmelgarm/Coalcoman2022/kml/zone3.txt')
-    zone_poly = path.Path(p)
+    # print('Keep Zone 3')
+    # p = genfromtxt('/Users/dmelgarm/Coalcoman2022/kml/zone3.txt')
+    # zone_poly = path.Path(p)
     
-    #Find indices of faults INSIDE polygon
-    fault_geometry = genfromtxt('/Users/dmelgarm/Slip_inv/Coalcoman2022/output/inverse_models/_old/models/gnss_sm_dart_insar_v3.0.0005.inv')
-    # The above is horrible form so I should explain. It's easier to read an alreayd existing 
-    # ivnersion that has the N windows already assigned and find the faults that are in the 
-    # polygon that way. I know. It's gross. Don;t look at me that way.
-    #izone = where(zone_poly.contains_points(fault_geometry[:,1:3])==True)[0]  # <- if IN poly
-    izone = where(zone_poly.contains_points(fault_geometry[:,1:3])==False)[0]  # <- if OUT of poly
+    # #Find indices of faults INSIDE polygon
+    # fault_geometry = genfromtxt('/Users/dmelgarm/Slip_inv/Coalcoman2022/output/inverse_models/_old/models/gnss_sm_dart_insar_v3.0.0005.inv')
+    # # The above is horrible form so I should explain. It's easier to read an alreayd existing 
+    # # ivnersion that has the N windows already assigned and find the faults that are in the 
+    # # polygon that way. I know. It's gross. Don;t look at me that way.
+    # #izone = where(zone_poly.contains_points(fault_geometry[:,1:3])==True)[0]  # <- if IN poly
+    # izone = where(zone_poly.contains_points(fault_geometry[:,1:3])==False)[0]  # <- if OUT of poly
 
-    #Double indices because of ss and ds coordiante system
-    iss_zone3 = 2*izone
-    ids_zone3 = 2*izone + 1
+    # #Double indices because of ss and ds coordiante system
+    # iss_zone3 = 2*izone
+    # ids_zone3 = 2*izone + 1
     
-    #Zero out those GFs
-    G[:,iss_zone3] = 0
-    G[:,ids_zone3] = 0
-    
-    
+    # #Zero out those GFs
+    # G[:,iss_zone3] = 0
+    # G[:,ids_zone3] = 0
     
     
-    print(' DANGER WILL ROBINSON: Forcing faults in polygon to have GFs = 0')
+    
+    
+    #print(' DANGER WILL ROBINSON: Forcing faults in polygon to have GFs = 0')
     
 
     
