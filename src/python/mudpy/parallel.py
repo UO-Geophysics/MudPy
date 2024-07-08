@@ -205,8 +205,13 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
         xs=source[1]
         ys=source[2]
         zs=source[3]
-        strike=source[4]
-        dip=source[5]
+        if single_force==True:
+            strikeSS=0
+            strikeDS=90
+            dip=0
+        else:
+            strike=source[4]
+            dip=source[5]
         rise=source[6]
         if impulse==True:
             duration=0
@@ -243,13 +248,14 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
         #Compute distances and azimuths
         d,az,lon_sta,lat_sta=src2sta(station_file,source,output_coordinates=True)
         
-        #Get moment corresponding to 1 meter of slip on subfault
-        mu=get_mu(structure,zs)
-        Mo=mu*ss_length*ds_length*1.0
-        Mw=(2./3)*(log10(Mo)-9.1)
-
-        #Force of a square meter from a landslide in Dyne Allstadt 2013 on Mt. Meager in dyne
-        Mag=6e11
+        if single_force==True:
+            #Force of a square meter from a landslide in Dyne Allstadt 2013 on Mt. Meager in dyne
+            Mag=6e11
+        else:
+            #Get moment corresponding to 1 meter of slip on subfault
+            mu=get_mu(structure,zs)
+            Mo=mu*ss_length*ds_length*1.0
+            Mw=(2./3)*(log10(Mo)-9.1)
         
         #Move to output folder if it doesn't exist create it
         #Check fist if folder exists
@@ -285,11 +291,11 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
                     #First Stike-Slip GFs
                     if custom_stf==None:
                         if single_force==True:
-                            commandSS="syn -I -M"+str(Mag)+"/"+str(strike)+"/"+str(dip)+" -D"+str(duration)+ \
+                            commandSS="syn -I -M"+str(Mag)+"/"+str(strikeSS)+"/"+str(dip)+" -D"+str(duration)+ \
                                 "/"+str(rise)+" -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".SS.disp.x -G"+green_path+diststr+".grn.0"
                             commandSS=split(commandSS) #Split string into lexical components for system call
                             #Now dip slip
-                            commandDS="syn -I -M"+str(Mag)+"/"+str(strike)+"/"+str(dip)+" -D"+str(duration)+ \
+                            commandDS="syn -I -M"+str(Mag)+"/"+str(strikeDS)+"/"+str(dip)+" -D"+str(duration)+ \
                                 "/"+str(rise)+" -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".DS.disp.x -G"+green_path+diststr+".grn.0"
                             commandDS=split(commandDS)
                         else:
@@ -302,11 +308,11 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
                             commandDS=split(commandDS)
                     else:
                         if single_force==True:
-                            commandSS="syn -I -M"+str(Mag)+"/"+str(strike)+"/"+str(dip)+" -S"+custom_stf+ \
+                            commandSS="syn -I -M"+str(Mag)+"/"+str(strikess)+"/"+str(dip)+" -S"+custom_stf+ \
                                 " -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".SS.disp.x -G"+green_path+diststr+".grn.0"
                             commandSS=split(commandSS) #Split string into lexical components for system call
                             #Now dip slip
-                            commandDS="syn -I -M"+str(Mag)+"/"+str(strike)+"/"+str(dip)+" -S"+custom_stf+ \
+                            commandDS="syn -I -M"+str(Mag)+"/"+str(strikeDS)+"/"+str(dip)+" -S"+custom_stf+ \
                                 " -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".DS.disp.x -G"+green_path+diststr+".grn.0"
                             commandDS=split(commandDS)
                         else:
@@ -321,11 +327,11 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
                     #First Stike-Slip GFs
                     if custom_stf==None:
                         if single_force==True:
-                            commandSS="syn -M"+str(Mag)+"/"+str(strike)+"/"+str(dip)+" -D"+str(duration)+ \
+                            commandSS="syn -M"+str(Mag)+"/"+str(strikeSS)+"/"+str(dip)+" -D"+str(duration)+ \
                             "/"+str(rise)+" -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".SS.vel.x -G"+green_path+diststr+".grn.0"
                             commandSS=split(commandSS)
                             #Now dip slip
-                            commandDS="syn -M"+str(Mag)+"/"+str(strike)+"/"+str(dip)+" -D"+str(duration)+ \
+                            commandDS="syn -M"+str(Mag)+"/"+str(strikeDS)+"/"+str(dip)+" -D"+str(duration)+ \
                             "/"+str(rise)+" -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".DS.vel.x -G"+green_path+diststr+".grn.0"
                             commandDS=split(commandDS)
                         else:
@@ -338,11 +344,11 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
                             commandDS=split(commandDS)
                     else:
                         if single_force==True:    
-                            commandSS="syn -M"+str(Mag)+"/"+str(strike)+"/"+str(dip)+" -S"+custom_stf+ \
+                            commandSS="syn -M"+str(Mag)+"/"+str(strikeSS)+"/"+str(dip)+" -S"+custom_stf+ \
                                 " -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".SS.vel.x -G"+green_path+diststr+".grn.0"
                             commandSS=split(commandSS)
                             #Now dip slip
-                            commandDS="syn -M"+str(Mag)+"/"+str(strike)+"/"+str(dip)+" -S"+custom_stf+ \
+                            commandDS="syn -M"+str(Mag)+"/"+str(strikeDS)+"/"+str(dip)+" -S"+custom_stf+ \
                                 " -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".DS.vel.x -G"+green_path+diststr+".grn.0"
                             commandDS=split(commandDS)
                         else:

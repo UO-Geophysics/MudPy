@@ -1,6 +1,6 @@
 '''
 Diego Melgar, 01/2014
-Runtime file for forward modeling and inverse kinematic slip inversions
+Runtime file for forward modeling and in verse kinematic slip inversions
 '''
 
 
