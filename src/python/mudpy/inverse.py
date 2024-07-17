@@ -700,7 +700,7 @@ def getdata(home,project_name,GF_list,decimate,bandpass,quiet=False):
     #Read gf file and decide what needs to get loaded
     gf_file=home+project_name+'/data/station_info/'+GF_list
     GF=genfromtxt(gf_file,usecols=[3,4,5,6,7],skip_header=1,dtype='f8')
-    GFfiles=genfromtxt(gf_file,usecols=[8,9,10,11,12],dtype='U')  
+    GFfiles=genfromtxt(gf_file,usecols=[8,9,10,11,12],dtype='U')
     stations=genfromtxt(gf_file,usecols=0,dtype='U')  
     
     #Parse out filtering pass bands
@@ -728,7 +728,6 @@ def getdata(home,project_name,GF_list,decimate,bandpass,quiet=False):
     for ksta in range(len(i)):
         if quiet==False:  
             print('Assembling displacement waveforms from '+str(stations[i[ksta]])+' into data vector.')
-        #print(str(GFfiles[i[ksta],kgf]))
         n=read(GFfiles[i[ksta],kgf]+'.n')
         e=read(GFfiles[i[ksta],kgf]+'.e')
         u=read(GFfiles[i[ksta],kgf]+'.u')
@@ -769,6 +768,7 @@ def getdata(home,project_name,GF_list,decimate,bandpass,quiet=False):
     for ksta in range(len(i)):
         if quiet==False:  
             print('Assembling acceleration waveforms from '+stations[i[ksta]]+' into data vector.')
+            print(GFfiles[i[ksta]],kgf)
         n=read(GFfiles[i[ksta],kgf]+'.n')
         e=read(GFfiles[i[ksta],kgf]+'.e')
         u=read(GFfiles[i[ksta],kgf]+'.u')
