@@ -299,6 +299,8 @@ def waveforms_fakequakes(home,project_name,fault_name,rupture_list,GF_list,
         all_sources=array([rupture_name])  
     else:
         all_sources=genfromtxt(home+project_name+'/data/'+rupture_list,dtype='U')
+        all_sources = array(all_sources, ndmin=1)  # in case only 1 entry
+
     
     
     
