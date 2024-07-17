@@ -9,8 +9,6 @@ jobs:
   dispatch:
     runs-on: ubuntu-latest    
     steps:
-    
-	# Send a signal to on_demand_fakequakes repo that MudPys been updated
       - name: Send repository dispatch event
         run: |
           curl -L \
