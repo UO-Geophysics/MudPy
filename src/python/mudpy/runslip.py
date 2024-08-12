@@ -583,7 +583,8 @@ def inversionGFs(home,project_name,GF_list,tgf_file,fault_name,model_name,
             #Make dummy station file
             f=open(home+project_name+'/data/station_info/'+station_file,'w')
             for k in range(len(i)):
-                out=stations[i[k]]+'\t'+repr(GF[i[k],0])+'\t'+repr(GF[i[k],1])+'\n'
+                #out=stations[i[k]]+'\t'+repr(GF[i[k],0])+'\t'+repr(GF[i[k],1])+'\n'
+                out='%s\t%.8f\t%.8f\n' % (stations[i[k]],GF[i[k],0],GF[i[k],1])
                 f.write(out)
             f.close()
             integrate=0
