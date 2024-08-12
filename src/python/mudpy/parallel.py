@@ -1250,6 +1250,7 @@ if __name__ == '__main__':
         elif insar=='False':
             insar=False
         run_parallel_green(home,project_name,station_file,model_name,dt,NFFT,static,dk,pmin,pmax,kmax,tsunami,insar,rank,size)
+
     
     elif sys.argv[1]=='run_parallel_synthetics':
         #Parse command line arguments
