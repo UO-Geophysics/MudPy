@@ -11,14 +11,14 @@ def run_parallel_generate_ruptures(home,project_name,run_name,fault_name,slab_na
         num_modes,Nrealizations,rake,rise_time,rise_time_depths0,rise_time_depths1,time_epi,max_slip,
         source_time_function,lognormal,slip_standard_deviation,scaling_law,ncpus,force_magnitude,
         force_area,mean_slip_name,hypocenter,slip_tol,force_hypocenter,
-        no_random,shypo,use_hypo_fraction,shear_wave_fraction_shallow,shear_wave_fraction_deep,
+        no_random,use_hypo_fraction,shear_wave_fraction_shallow,shear_wave_fraction_deep,
         max_slip_rule,rank,size):
     
     '''
     Depending on user selected flags parse the work out to different functions
     '''
     
-    from numpy import load,save,genfromtxt,log10,cos,sin,deg2rad,savetxt,zeros,where
+    from numpy import load,save,genfromtxt,log10,cos,sin,deg2rad,savetxt,zeros,where,argmin
     from time import gmtime, strftime
     from numpy.random import shuffle
     from mudpy import fakequakes
@@ -38,12 +38,11 @@ def run_parallel_generate_ruptures(home,project_name,run_name,fault_name,slab_na
     else:
         time_epi=UTCDateTime(time_epi)
     rise_time_depths=[rise_time_depths0,rise_time_depths1]
-    #hypocenter=[hypocenter_lon,hypocenter_lat,hypocenter_dep]
     tMw=tMw.split(',')
     target_Mw=zeros(len(tMw))
     for rMw in range(len(tMw)):
         target_Mw[rMw]=float(tMw[rMw])
-    
+        
 
     #Should I calculate or load the distances?
     if load_distances==1:  
@@ -63,6 +62,18 @@ def run_parallel_generate_ruptures(home,project_name,run_name,fault_name,slab_na
     
     #Get TauPyModel
     velmod = TauPyModel(model=home+project_name+'/structure/'+model_name.split('.')[0])
+    
+    # Define the subfault hypocenter (if hypocenter is prescribed)
+    if hypocenter is None:
+        shypo=None
+    else:
+        dist=((whole_fault[:,1]-hypocenter[0])**2+(whole_fault[:,2]-hypocenter[1])**2)**0.5
+        shypo=argmin(dist)
+        
+        # Re-define hypocenter as the coordinates of the hypocenter subfault in
+        # case the original hypocenter did not perfectly align with a subfault
+        hypocenter = whole_fault[shypo,1:4]
+    
 
     #Now loop over the number of realizations
     realization=0
@@ -88,7 +99,6 @@ def run_parallel_generate_ruptures(home,project_name,run_name,fault_name,slab_na
                 current_target_Mw=target_Mw[kmag]
                 ifaults,hypo_fault,Lmax,Wmax,Leff,Weff,option,Lmean,Wmean=fakequakes.select_faults(whole_fault,Dstrike,Ddip,current_target_Mw,num_modes,scaling_law,
                                     force_area,no_shallow_epi=False,no_random=no_random,subfault_hypocenter=shypo,use_hypo_fraction=use_hypo_fraction)
-                print(option)
                 fault_array=whole_fault[ifaults,:]
                 Dstrike_selected=Dstrike[ifaults,:][:,ifaults]
                 Ddip_selected=Ddip[ifaults,:][:,ifaults]
@@ -224,8 +234,7 @@ def run_parallel_generate_ruptures(home,project_name,run_name,fault_name,slab_na
             #Calculate rupture onset times
             if force_hypocenter==False: #Use random hypo, otehrwise force hypo to user specified
                 hypocenter=whole_fault[hypo_fault,1:4]
-            else:
-                hypocenter=whole_fault[shypo,1:4]
+
             
             # edit ...
             # if rise_time==2:
@@ -243,9 +252,7 @@ def run_parallel_generate_ruptures(home,project_name,run_name,fault_name,slab_na
             else: #regular EQs, do nothing
                 pass
             
-            
-            
-            t_onset,length2fault=fakequakes.get_rupture_onset(home,project_name,slip,fault_array,model_name,hypocenter,rise_time_depths,
+            t_onset,length2fault=fakequakes.get_rupture_onset(home,project_name,slip,fault_array,model_name,hypocenter,shypo,rise_time_depths,
                                                  M0,velmod,shear_wave_fraction_shallow=shear_wave_fraction_shallow,
                                                  shear_wave_fraction_deep=shear_wave_fraction_deep)
             fault_out[:,12]=0
@@ -260,7 +267,7 @@ def run_parallel_generate_ruptures(home,project_name,run_name,fault_name,slab_na
             
             #Calculate average risetime
             rise = fault_out[:,7]
-            avg_rise = np.mean(rise)
+            avg_rise = np.mean(rise[np.where(rise>0)[0]])
             
             # Calculate average rupture velocity
             lon_array = fault_out[:,1]
@@ -397,19 +404,14 @@ if __name__ == '__main__':
             no_random=True
         elif no_random=='False':
             no_random=False
-        shypo=sys.argv[36]
-        if shypo=='None':
-            shypo=None
-        else:
-            shypo=int(shypo)
-        use_hypo_fraction=sys.argv[37]
+        use_hypo_fraction=sys.argv[36]
         if use_hypo_fraction=='True':
             use_hypo_fraction=True
         if use_hypo_fraction=='False':
             use_hypo_fraction=False
-        shear_wave_fraction_shallow=float(sys.argv[38])
-        shear_wave_fraction_deep=float(sys.argv[39])
-        max_slip_rule=sys.argv[40]
+        shear_wave_fraction_shallow=float(sys.argv[37])
+        shear_wave_fraction_deep=float(sys.argv[38])
+        max_slip_rule=sys.argv[39]
         if max_slip_rule=='True':
             max_slip_rule=True
         if max_slip_rule=='False':
@@ -420,7 +422,7 @@ if __name__ == '__main__':
         num_modes,Nrealizations,rake,rise_time,rise_time_depths0,rise_time_depths1,time_epi,max_slip,
         source_time_function,lognormal,slip_standard_deviation,scaling_law,ncpus,force_magnitude,
         force_area,mean_slip_name,hypocenter,slip_tol,force_hypocenter,
-        no_random,shypo,use_hypo_fraction,shear_wave_fraction_shallow,shear_wave_fraction_deep,
+        no_random,use_hypo_fraction,shear_wave_fraction_shallow,shear_wave_fraction_deep,
         max_slip_rule,rank,size)
     else:
         print("ERROR: You're not allowed to run "+sys.argv[1]+" from the shell or it does not exist")

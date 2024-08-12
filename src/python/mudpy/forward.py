@@ -299,6 +299,8 @@ def waveforms_fakequakes(home,project_name,fault_name,rupture_list,GF_list,
         all_sources=array([rupture_name])  
     else:
         all_sources=genfromtxt(home+project_name+'/data/'+rupture_list,dtype='U')
+        all_sources = array(all_sources, ndmin=1)  # in case only 1 entry
+
     
     
     
@@ -806,7 +808,8 @@ def make_parallel_hfsims(home,project_name,rupture_name,ncpus,sta,sta_lon,sta_la
     for k in range(ncpus):
         i=arange(k,len(fault),ncpus)
         mpi_source=fault[i,:]
-        fmt='%d\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6E'
+        #fmt='%d\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6f\t%10.6E' #old
+        fmt='%d\t%10.6f\t%10.6f\t%10.4f\t%10.2f\t%10.2f\t%10.6f\t%10.6E\t%10.6E\t%10.6E\t%10.6f\t%10.6f\t%10.6E\t%10.6E\t%10.6E' #new
         savetxt(home+project_name+'/output/ruptures/mpi_rupt.'+str(k)+'.'+rupture_name,mpi_source,fmt=fmt)
     #Make mpi system call
     print("MPI: Starting Stochastic High Frequency Simulation on ", ncpus, "CPUs")
