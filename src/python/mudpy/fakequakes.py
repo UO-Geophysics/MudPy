@@ -114,7 +114,7 @@ def subfault_distances_3D(home,project_name,fault_name,slab_name,projection_zone
 
     """
 
-    from numpy import sqrt,sin,cos,deg2rad,zeros,meshgrid,linspace,where,c_,unravel_index,sort,diff,genfromtxt,sign,argmin
+    from numpy import sqrt,sin,cos,deg2rad,zeros,meshgrid,linspace,where,c_,unravel_index,sort,diff,genfromtxt,sign,argmin,atleast_2d
     from scipy.interpolate import griddata
     from matplotlib import pyplot as plt
     from scipy.spatial.distance import cdist
@@ -124,6 +124,9 @@ def subfault_distances_3D(home,project_name,fault_name,slab_name,projection_zone
     if slab_name==None:
         #Read fault geometry data
         fault=genfromtxt(home+project_name+'/data/model_info/'+fault_name)
+
+        # make fault be at least 2d
+        fault = atleast_2d(fault)
         
         #Initalize distance output arrays
         nsubfaults = len(fault)

@@ -764,6 +764,10 @@ def hf_waveforms(home,project_name,fault_name,rupture_list,GF_list,model_name,ru
         comp=['N','E','Z']  #components to loop through
         
         #Now loop over stations
+        # TODO: don't loop but run these in parallel
+        # if there are more stations than faults, go for station ncpu and
+        # if there are more fault than stations go for fault ncpu
+        # or if there are more components, then go for that.
         for ksta in range(len(sta)):
             #Now loop over components N,E,Z
             
@@ -790,7 +794,7 @@ def make_parallel_hfsims(home,project_name,rupture_name,ncpus,sta,sta_lon,sta_la
     '''
     Set up for MPI calculation of HF stochastics
     '''
-    from numpy import savetxt,arange,genfromtxt,where
+    from numpy import savetxt,arange,genfromtxt,where,atleast_2d
     from os import environ
     import subprocess
     from shlex import split
@@ -798,6 +802,7 @@ def make_parallel_hfsims(home,project_name,rupture_name,ncpus,sta,sta_lon,sta_la
     #Calculate the necessary full-fault parameters before splitting up the faults over your ncpus
     rupture=home+project_name+'/output/ruptures/'+rupture_name
     fault=genfromtxt(rupture)
+    fault = atleast_2d(fault)
     slip=(fault[:,8]**2+fault[:,9]**2)**0.5
     subfault_M0=slip*fault[:,10]*fault[:,11]*fault[:,13]
     subfault_M0=subfault_M0*1e7 #to dyne-cm
@@ -1267,7 +1272,7 @@ def get_fakequakes_G_and_m(Gimpulse,home,project_name,rupture_name,time_epi,GF_l
         G: Fully assembled GF matrix
     '''
     
-    from numpy import genfromtxt,convolve,where,zeros,arange,unique,r_,sort,ones
+    from numpy import genfromtxt,convolve,where,zeros,arange,unique,r_,sort,ones,atleast_2d
     from numpy import expand_dims,squeeze,roll,float64,array
     import dask.array as da
 
@@ -1275,6 +1280,9 @@ def get_fakequakes_G_and_m(Gimpulse,home,project_name,rupture_name,time_epi,GF_l
         source=genfromtxt(home+project_name+'/forward_models/'+rupture_name)
     else:
         source=genfromtxt(home+project_name+'/output/ruptures/'+rupture_name)
+
+
+    source = atleast_2d(source)
     rise_times=source[:,7]
     fraction=source[:,6]
     rupture_onset=source[:,12]

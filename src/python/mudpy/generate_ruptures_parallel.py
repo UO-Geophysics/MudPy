@@ -18,7 +18,7 @@ def run_parallel_generate_ruptures(home,project_name,run_name,fault_name,slab_na
     Depending on user selected flags parse the work out to different functions
     '''
     
-    from numpy import load,save,genfromtxt,log10,cos,sin,deg2rad,savetxt,zeros,where,argmin
+    from numpy import load,save,genfromtxt,log10,cos,sin,deg2rad,savetxt,zeros,where,argmin,atleast_2d
     from time import gmtime, strftime
     from numpy.random import shuffle
     from mudpy import fakequakes
@@ -56,6 +56,8 @@ def run_parallel_generate_ruptures(home,project_name,run_name,fault_name,slab_na
 
     #Read fault and prepare output variable
     whole_fault=genfromtxt(home+project_name+'/data/model_info/'+fault_name)
+    whole_fault = atleast_2d(whole_fault)
+
     
     #Get structure model
     vel_mod_file=home+project_name+'/structure/'+model_name

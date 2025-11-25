@@ -21,7 +21,7 @@ def run_parallel_green(home,project_name,station_file,model_name,dt,NFFT,static,
     import subprocess
     from os import chdir
     from shutil import copy,rmtree
-    from numpy import genfromtxt,zeros
+    from numpy import genfromtxt,zeros,atleast_2d
     from shlex import split
     from shutil import copy
     from glob import glob
@@ -48,7 +48,9 @@ def run_parallel_green(home,project_name,station_file,model_name,dt,NFFT,static,
         print(out)
     #read your corresponding source file
     source=genfromtxt(home+project_name+'/data/model_info/mpi_source.'+str(rank)+'.fault')
-    for ksource in range(len(source)):
+    source = atleast_2d(source)
+
+    for ksource in range(len(source[:,0])):
         #Where should I be working boss?
         depth='%.4f' % source[ksource,3]
         subfault=str(int(source[ksource,0])).rjust(4,'0')
@@ -132,7 +134,7 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
     import subprocess
     from pandas import DataFrame as df
     from mudpy.forward import get_mu
-    from numpy import array,genfromtxt,loadtxt,savetxt,log10,zeros,sin,cos,ones,deg2rad
+    from numpy import array,genfromtxt,loadtxt,savetxt,log10,zeros,sin,cos,ones,deg2rad,atleast_2d
     from obspy import read,Stream,Trace
     from shlex import split
     from mudpy.green import src2sta,rt2ne,origin_time,okada_synthetics
@@ -163,7 +165,8 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
         
     #Read your corresponding source file
     mpi_source=genfromtxt(home+project_name+'/data/model_info/mpi_source.'+str(rank)+'.fault')
-    
+    mpi_source = atleast_2d(mpi_source)
+
     #Constant parameters
     rakeDS=90+beta #90 is thrust, -90 is normal
     rakeSS=0+beta #0 is left lateral, 180 is right lateral
