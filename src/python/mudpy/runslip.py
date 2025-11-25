@@ -197,7 +197,7 @@ def make_parallel_green(home,project_name,station_file,fault_name,model_name,dt,
     OUT:
         Nothing
     '''
-    from numpy import arange,savetxt,genfromtxt
+    from numpy import arange,savetxt,genfromtxt,atleast_2d
     from os import path,makedirs,environ
     from shlex import split
     import subprocess
@@ -208,6 +208,8 @@ def make_parallel_green(home,project_name,station_file,fault_name,model_name,dt,
     fault_file=home+project_name+'/data/model_info/'+fault_name  
     #Load source model for station-event distance computations
     source=genfromtxt(fault_file)
+    source = atleast_2d(source)
+
     #Create all output folders
     for k in range(len(source)):
         strdepth='%.4f' % source[k,3]
@@ -228,6 +230,10 @@ def make_parallel_green(home,project_name,station_file,fault_name,model_name,dt,
                 #It doesn't, make it, don't be lazy
                 makedirs(subfault_folder)
     #Create individual source files
+    num_faults = len(source)
+    if num_faults < ncpus:
+        ncpus=len(source)
+        print(print('Cutting back to ' + str(ncpus) + ' cpus for ' + str(num_faults) + ' subfaults'))
     for k in range(ncpus):
         i=arange(k+hot_start,len(source),ncpus)
         mpi_source=source[i,:]
@@ -401,6 +407,10 @@ def make_parallel_synthetics(home,project_name,station_file,fault_name,model_nam
     #First read fault model file
     source=loadtxt(fault_file,ndmin=2)
     #Create individual source files
+    num_faults = len(source)
+    if num_faults < ncpus:
+        ncpus=len(source)
+        print(print('Cutting back to ' + str(ncpus) + ' cpus for ' + str(num_faults) + ' subfaults'))
     for k in range(ncpus):
         i=arange(k+hot_start,len(source),ncpus)
         mpi_source=source[i,:]
