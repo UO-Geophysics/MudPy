@@ -7,7 +7,7 @@ def stochastic_simulation(home,project_name,rupture_name,sta,sta_lon,sta_lat,com
     stress parameter is in bars
     '''
     
-    from numpy import genfromtxt,pi,logspace,log10,mean,where,exp,arange,zeros,argmin,rad2deg,arctan2,real
+    from numpy import genfromtxt,pi,logspace,log10,mean,where,exp,arange,zeros,argmin,rad2deg,arctan2,real,atleast_2d
     from pyproj import Geod
     from obspy.geodetics import kilometer2degrees
     from obspy.taup import TauPyModel
@@ -55,6 +55,7 @@ def stochastic_simulation(home,project_name,rupture_name,sta,sta_lon,sta_lat,com
     fault=genfromtxt(home+project_name+'/output/ruptures/'+rupture_name)    
     
     #Onset times for each subfault
+    fault = atleast_2d(fault)
     onset_times=fault[:,12]
     
     #load velocity structure

@@ -12,7 +12,7 @@ def run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,
     stress parameter is in bars
     '''
     
-    from numpy import genfromtxt,pi,logspace,log10,mean,where,exp,arange,zeros,argmin,rad2deg,arctan2,real,savetxt,c_
+    from numpy import genfromtxt,pi,logspace,log10,mean,where,exp,arange,zeros,argmin,rad2deg,arctan2,real,savetxt,c_,atleast_2d
     from pyproj import Geod
     from obspy.geodetics import kilometer2degrees
     from obspy.taup import TauPyModel
@@ -81,6 +81,7 @@ def run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,
     fault=genfromtxt(mpi_rupt)  
     
     #Onset times for each subfault
+    fault = atleast_2d(fault)
     onset_times=fault[:,12]
     
     #load velocity structure
