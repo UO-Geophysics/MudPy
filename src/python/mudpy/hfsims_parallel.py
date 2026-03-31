@@ -269,7 +269,11 @@ def run_parallel_hfsims(home,project_name,rupture_name,N,M0,sta,sta_lon,sta_lat,
             rake=rad2deg(arctan2(ds,ss))
             
             #Get ray paths for all direct P arrivals
-            Ppaths=velmod.get_ray_paths(zs,dist_in_degs,phase_list=['P','p'])
+            try:
+                Ppaths=velmod.get_ray_paths(zs,dist_in_degs,phase_list=['P','p'])
+            except:
+                zs = zs+0.0001
+                Ppaths=velmod.get_ray_paths(zs,dist_in_degs,phase_list=['P','p'])
             
             #Get ray paths for all direct S arrivals
             try:
@@ -647,7 +651,7 @@ if __name__ == '__main__':
         Swave=sys.argv[21]
         if Swave=='True':
             Swave=True
-        high_stress_depth=int(sys.argv[22])
+        high_stress_depth=float(sys.argv[22])
         Qmethod=sys.argv[23]
         scattering=sys.argv[24]
         Qc_exp=float(sys.argv[25])

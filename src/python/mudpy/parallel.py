@@ -3,7 +3,7 @@ Module for routines that use paralell computing
 '''
 
 
-def run_parallel_green(home,project_name,station_file,model_name,dt,NFFT,static,dk,pmin,pmax,kmax,tsunami,insar,rank,size):
+def run_parallel_green(home,project_name,station_file,model_name,dt,NFFT,static,dk,pmin,pmax,kmax,tsunami,insar,rank,size,single_force,tb=50,smth=1):
     '''
     Compute GFs using Zhu & Rivera code for a given velocity model, source depth
     and station file. This function will make an external system call to fk.pl
@@ -44,7 +44,10 @@ def run_parallel_green(home,project_name,station_file,model_name,dt,NFFT,static,
         pmax = %.3f
         kmax = %.3f
         insar = %s
-        ''' %(home,project_name,station_file,model_name,str(static),str(tsunami),dt,NFFT,dk,pmin,pmax,kmax,str(insar))
+        single = %s
+        tb = %s
+        smth = %s
+        ''' %(home,project_name,station_file,model_name,str(static),str(tsunami),dt,NFFT,dk,pmin,pmax,kmax,str(insar),str(single_force),str(tb),str(smth))
         print(out)
     #read your corresponding source file
     source=genfromtxt(home+project_name+'/data/model_info/mpi_source.'+str(rank)+'.fault')
@@ -77,16 +80,28 @@ def run_parallel_green(home,project_name,station_file,model_name,dt,NFFT,static,
         print('MPI: processor #',rank,'is now working on subfault',int(source[ksource,0]),'(',ksource+1,'/',len(source),')')
         #Make the calculation
         if static==0: #Compute full waveform
-            command = "fk.pl -M"+model_name+"/"+depth+"/f -N"+str(NFFT)+"/"+str(dt)+'/1/'+repr(dk)+' -P'+repr(pmin)+'/'+repr(pmax)+'/'+repr(kmax)+diststr
-            command=split(command)
-            p=subprocess.Popen(command,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
-            p.communicate() 
-            # Move files up one level and delete folder created by fk
-            files_list=glob(subfault_folder+'/'+model_name+'_'+depth+'/*.grn*')
-            for f in files_list:
-                newf=subfault_folder+'/'+f.split('/')[-1]
-                copy(f,newf)
-            rmtree(subfault_folder+'/'+model_name+'_'+depth)
+            if single_force==1: #compute for a single force and not coupled
+                command = "fk.pl -M"+model_name+"/"+depth+"/f -S1 -T"+str(tb)+" -G15 -N"+str(NFFT)+"/"+str(dt)+'/'+str(smth)+'/'+repr(dk)+' -P'+repr(pmin)+'/'+repr(pmax)+'/'+repr(kmax)+diststr
+                command=split(command)
+                p=subprocess.Popen(command,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+                p.communicate() 
+                # Move files up one level and delete folder created by fk
+                files_list=glob(subfault_folder+'/'+model_name+'_'+depth+'/*.grn*')
+                for f in files_list:
+                    newf=subfault_folder+'/'+f.split('/')[-1]
+                    copy(f,newf)
+                rmtree(subfault_folder+'/'+model_name+'_'+depth)
+            else:
+                command = "fk.pl -M"+model_name+"/"+depth+"/f -T"+str(tb)+" -N"+str(NFFT)+"/"+str(dt)+'/'+str(smth)+'/'+repr(dk)+' -P'+repr(pmin)+'/'+repr(pmax)+'/'+repr(kmax)+diststr
+                command=split(command)
+                p=subprocess.Popen(command,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+                p.communicate() 
+                # Move files up one level and delete folder created by fk
+                files_list=glob(subfault_folder+'/'+model_name+'_'+depth+'/*.grn*')
+                for f in files_list:
+                    newf=subfault_folder+'/'+f.split('/')[-1]
+                    copy(f,newf)
+                rmtree(subfault_folder+'/'+model_name+'_'+depth)
         else: #Compute only statics
             if insar==True:
                 suffix='insar'
@@ -106,7 +121,7 @@ def run_parallel_green(home,project_name,station_file,model_name,dt,NFFT,static,
             
 
 def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,static,quasistatic2dynamic,tsunami,
-                            time_epi,beta,custom_stf,impulse,NFFT,dt,rank,size,insar=False,okada=False,mu_okada=45e9,):
+                            time_epi,beta,custom_stf,impulse,NFFT,dt,rank,size,single_force=False,insar=False,okada=False,mu_okada=45e9,tb=50,smth=1):
     '''
     Use green functions and compute synthetics at stations for a single source
     and multiple stations. This code makes an external system call to syn.c first it
@@ -158,7 +173,10 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
         insar = %s
         okada = %s
         mu = %.2e
-        ''' %(home,project_name,station_file,model_name,str(integrate),str(static),str(tsunami),str(quasistatic2dynamic),str(time_epi),beta,custom_stf,impulse,insar,okada,mu_okada)
+        single = %s
+        tb = %s
+        smth = %s
+        ''' %(home,project_name,station_file,model_name,str(integrate),str(static),str(tsunami),str(quasistatic2dynamic),str(time_epi),beta,custom_stf,impulse,insar,okada,mu_okada,single_force,tb,smth)
         print(out)
         
     #Read your corresponding source file
@@ -167,7 +185,7 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
     #Constant parameters
     rakeDS=90+beta #90 is thrust, -90 is normal
     rakeSS=0+beta #0 is left lateral, 180 is right lateral
-    tb=50 #Number of samples before first arrival (should be 50, NEVER CHANGE, if you do then adjust in fk.pl)
+    tb=tb #Number of samples before first arrival (should be 50, NEVER CHANGE, if you do then adjust in fk.pl) ##Update from jk 12/3/2025 now can be changed with this input
     
     #Figure out custom STF
     if custom_stf.lower()!='none':
@@ -191,8 +209,13 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
         xs=source[1]
         ys=source[2]
         zs=source[3]
-        strike=source[4]
-        dip=source[5]
+        if single_force==True:
+            strikeSS=0
+            strikeDS=90
+            dip=0
+        else:
+            strike=source[4]
+            dip=source[5]
         rise=source[6]
         if impulse==True:
             duration=0
@@ -229,10 +252,15 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
         #Compute distances and azimuths
         d,az,lon_sta,lat_sta=src2sta(station_file,source,output_coordinates=True)
         
-        #Get moment corresponding to 1 meter of slip on subfault
-        mu=get_mu(structure,zs)
-        Mo=mu*ss_length*ds_length*1.0
-        Mw=(2./3)*(log10(Mo)-9.1)
+        if single_force==True:
+            #Force of a square meter from a landslide in Dyne Allstadt 2013 on Mt. Meager in dyne
+            Mag=1e16
+
+        else:
+            #Get moment corresponding to 1 meter of slip on subfault
+            mu=get_mu(structure,zs)
+            Mo=mu*ss_length*ds_length*1.0
+            Mw=(2./3)*(log10(Mo)-9.1)
         
         #Move to output folder if it doesn't exist create it
         #Check fist if folder exists
@@ -267,39 +295,96 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
                 if integrate==1: #Make displ.
                     #First Stike-Slip GFs
                     if custom_stf==None:
-                        commandSS="syn -I -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeSS)+" -D"+str(duration)+ \
-                            "/"+str(rise)+" -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".SS.disp.x -G"+green_path+diststr+".grn.0"
-                        commandSS=split(commandSS) #Split string into lexical components for system call
-                        #Now dip slip
-                        commandDS="syn -I -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeDS)+" -D"+str(duration)+ \
-                            "/"+str(rise)+" -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".DS.disp.x -G"+green_path+diststr+".grn.0"
-                        commandDS=split(commandDS)
+                        if single_force==True:
+                            #North Force
+                            commandSS="syn -I -M"+str(Mag)+"/"+str(strikeSS)+"/"+str(dip)+" -D"+str(duration)+ \
+                                "/"+str(rise)+" -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".SS.disp.x -G"+green_path+diststr+".grn.0"
+                            commandSS=split(commandSS) #Split string into lexical components for system call
+                            #East Force
+                            commandDS="syn -I -M"+str(Mag)+"/"+str(strikeDS)+"/"+str(dip)+" -D"+str(duration)+ \
+                                "/"+str(rise)+" -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".DS.disp.x -G"+green_path+diststr+".grn.0"
+                            commandDS=split(commandDS)
+                            #Vertical force
+                            commandZF="syn -I -M"+str(Mag)+"/0/-90 -D"+str(duration)+ \
+                                "/"+str(rise)+" -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".ZF.disp.x -G"+green_path+diststr+".grn.0"
+                            commandZF=split(commandSS) #Split string into lexical components for system call
+
+                        else:
+                            commandSS="syn -I -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeSS)+" -D"+str(duration)+ \
+                                "/"+str(rise)+" -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".SS.disp.x -G"+green_path+diststr+".grn.0"
+                            commandSS=split(commandSS) #Split string into lexical components for system call
+                            #Now dip slip
+                            commandDS="syn -I -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeDS)+" -D"+str(duration)+ \
+                                "/"+str(rise)+" -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".DS.disp.x -G"+green_path+diststr+".grn.0"
+                            commandDS=split(commandDS)
                     else:
-                        commandSS="syn -I -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeSS)+" -S"+custom_stf+ \
-                            " -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".SS.disp.x -G"+green_path+diststr+".grn.0"
-                        commandSS=split(commandSS) #Split string into lexical components for system call
-                        #Now dip slip
-                        commandDS="syn -I -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeDS)+" -S"+custom_stf+ \
-                            " -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".DS.disp.x -G"+green_path+diststr+".grn.0"
-                        commandDS=split(commandDS)
+                        if single_force==True:
+                            #North Force
+                            commandSS="syn -I -M"+str(Mag)+"/"+str(strikess)+"/"+str(dip)+" -S"+custom_stf+ \
+                                " -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".SS.disp.x -G"+green_path+diststr+".grn.0"
+                            commandSS=split(commandSS) #Split string into lexical components for system call
+                            #East Force
+                            commandDS="syn -I -M"+str(Mag)+"/"+str(strikeDS)+"/"+str(dip)+" -S"+custom_stf+ \
+                                " -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".DS.disp.x -G"+green_path+diststr+".grn.0"
+                            commandDS=split(commandDS)
+                            #Vertical Force
+                            commandZF="syn -I -M"+str(Mag)+"/0/-90 -S"+custom_stf+ \
+                                " -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".ZF.disp.x -G"+green_path+diststr+".grn.0"
+                            commandZF=split(commandZF)
+                        else:
+                            commandSS="syn -I -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeSS)+" -S"+custom_stf+ \
+                                " -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".SS.disp.x -G"+green_path+diststr+".grn.0"
+                            commandSS=split(commandSS) #Split string into lexical components for system call
+                            #Now dip slip
+                            commandDS="syn -I -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeDS)+" -S"+custom_stf+ \
+                                " -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".DS.disp.x -G"+green_path+diststr+".grn.0"
+                            commandDS=split(commandDS)
                 else: #Make vel.
                     #First Stike-Slip GFs
                     if custom_stf==None:
-                        commandSS="syn -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeSS)+" -D"+str(duration)+ \
-                            "/"+str(rise)+" -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".SS.vel.x -G"+green_path+diststr+".grn.0"
-                        commandSS=split(commandSS)
-                        #Now dip slip
-                        commandDS="syn -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeDS)+" -D"+str(duration)+ \
-                            "/"+str(rise)+" -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".DS.vel.x -G"+green_path+diststr+".grn.0"
-                        commandDS=split(commandDS)
+                        if single_force==True:
+                            #North Force
+                            commandSS="syn -M"+str(Mag)+"/"+str(strikeSS)+"/"+str(dip)+" -D"+str(duration)+ \
+                                "/"+str(rise)+" -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".SS.vel.x -G"+green_path+diststr+".grn.0"
+                            commandSS=split(commandSS)
+                            #East Force
+                            commandDS="syn -M"+str(Mag)+"/"+str(strikeDS)+"/"+str(dip)+" -D"+str(duration)+ \
+                                "/"+str(rise)+" -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".DS.vel.x -G"+green_path+diststr+".grn.0"
+                            commandDS=split(commandDS)
+                            #Vertical Force
+                            commandZF="syn -M"+str(Mag)+"/0/-90 -D"+str(duration)+ \
+                                "/"+str(rise)+" -A"+str(az[k])+"- O"+staname[k]+".subfault"+num+".ZF.vel.x -G"+green_path+diststr+".grn.0"
+                            commandZF=split(commandZF)
+                        else:
+                            commandSS="syn -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeSS)+" -D"+str(duration)+ \
+                                "/"+str(rise)+" -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".SS.vel.x -G"+green_path+diststr+".grn.0"
+                            commandSS=split(commandSS)
+                            #Now dip slip
+                            commandDS="syn -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeDS)+" -D"+str(duration)+ \
+                                "/"+str(rise)+" -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".DS.vel.x -G"+green_path+diststr+".grn.0"
+                            commandDS=split(commandDS)
                     else:
-                        commandSS="syn -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeSS)+" -S"+custom_stf+ \
-                            " -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".SS.vel.x -G"+green_path+diststr+".grn.0"
-                        commandSS=split(commandSS)
-                        #Now dip slip
-                        commandDS="syn -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeDS)+" -S"+custom_stf+ \
-                            " -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".DS.vel.x -G"+green_path+diststr+".grn.0"
-                        commandDS=split(commandDS)
+                        if single_force==True:    
+                            #North Force
+                            commandSS="syn -M"+str(Mag)+"/"+str(strikeSS)+"/"+str(dip)+" -S"+custom_stf+ \
+                                " -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".SS.vel.x -G"+green_path+diststr+".grn.0"
+                            commandSS=split(commandSS)
+                            #East Force
+                            commandDS="syn -M"+str(Mag)+"/"+str(strikeDS)+"/"+str(dip)+" -S"+custom_stf+ \
+                                " -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".DS.vel.x -G"+green_path+diststr+".grn.0"
+                            commandDS=split(commandDS)
+                            #Vertical Force
+                            commandZF="syn -M"+str(Mag)+"/0/-90 -S"+custom_stf+ \
+                                "-A"+str(az[k])+" -O"+statname[k]+".subfault"+num+".ZF.vel.x -G"+green_path+diststr+".grn.0"
+                            commandZF=split(commandZF)
+                        else:
+                            commandSS="syn -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeSS)+" -S"+custom_stf+ \
+                                " -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".SS.vel.x -G"+green_path+diststr+".grn.0"
+                            commandSS=split(commandSS)
+                            #Now dip slip
+                            commandDS="syn -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeDS)+" -S"+custom_stf+ \
+                                " -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".DS.vel.x -G"+green_path+diststr+".grn.0"
+                            commandDS=split(commandDS)
                 #Run the strike- and dip-slip commands (make system calls)
                 p=subprocess.Popen(commandSS)
                 p.communicate() 
@@ -327,9 +412,9 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
                     n[0].data[0:tb]=0
                     e[0].data[0:tb]=0
                     z[0].data[0:tb]=0
-                    n=origin_time(n,time_epi,tb)
-                    e=origin_time(e,time_epi,tb)
-                    z=origin_time(z,time_epi,tb)
+                    n=origin_time(n,time_epi,tb,dt)
+                    e=origin_time(e,time_epi,tb,dt)
+                    z=origin_time(z,time_epi,tb,dt)
                     n.write(staname[k]+".subfault"+num+'.SS.disp.n',format='SAC')
                     e.write(staname[k]+".subfault"+num+'.SS.disp.e',format='SAC')
                     z.write(staname[k]+".subfault"+num+'.SS.disp.z',format='SAC')
@@ -354,9 +439,9 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
                     e=t.copy()
                     e[0].data=etemp/100
                     z[0].data=z[0].data/100
-                    n=origin_time(n,time_epi,tb)
-                    e=origin_time(e,time_epi,tb)
-                    z=origin_time(z,time_epi,tb)
+                    n=origin_time(n,time_epi,tb,dt)
+                    e=origin_time(e,time_epi,tb,dt)
+                    z=origin_time(z,time_epi,tb,dt)
                     n.write(staname[k]+".subfault"+num+'.DS.disp.n',format='SAC')
                     e.write(staname[k]+".subfault"+num+'.DS.disp.e',format='SAC')
                     z.write(staname[k]+".subfault"+num+'.DS.disp.z',format='SAC')
@@ -382,9 +467,9 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
                     e=t.copy()
                     e[0].data=etemp/100
                     z[0].data=z[0].data/100
-                    n=origin_time(n,time_epi,tb)
-                    e=origin_time(e,time_epi,tb)
-                    z=origin_time(z,time_epi,tb)
+                    n=origin_time(n,time_epi,tb,dt)
+                    e=origin_time(e,time_epi,tb,dt)
+                    z=origin_time(z,time_epi,tb,dt)
                     n.write(staname[k]+".subfault"+num+'.SS.vel.n',format='SAC')
                     e.write(staname[k]+".subfault"+num+'.SS.vel.e',format='SAC')
                     z.write(staname[k]+".subfault"+num+'.SS.vel.z',format='SAC')
@@ -409,9 +494,9 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
                     e=t.copy()
                     e[0].data=etemp/100
                     z[0].data=z[0].data/100
-                    n=origin_time(n,time_epi,tb)
-                    e=origin_time(e,time_epi,tb)
-                    z=origin_time(z,time_epi,tb)
+                    n=origin_time(n,time_epi,tb,dt)
+                    e=origin_time(e,time_epi,tb,dt)
+                    z=origin_time(z,time_epi,tb,dt)
                     n.write(staname[k]+".subfault"+num+'.DS.vel.n',format='SAC')
                     e.write(staname[k]+".subfault"+num+'.DS.vel.e',format='SAC')
                     z.write(staname[k]+".subfault"+num+'.DS.vel.z',format='SAC')
@@ -537,7 +622,7 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
                         r_dd = u_dd.copy()
                         r_ds = u_ds.copy()
                         r_ss = u_ss.copy()
-                        
+                        10.1785/BSSA0830010130
                         #terms for t component
                         t_dd = zeros(Nsites)
                         t_ds = cstk*srak*cdip2+sstk*crak*cdip
@@ -597,8 +682,13 @@ def run_parallel_synthetics(home,project_name,station_file,model_name,integrate,
                         
                         
                         #Now define the scalng based on magnitude this is variable
-                        #"coef" in the syn.c original source code
-                        scale = 10**(1.5*Mw+16.1-20) #definition used in syn.c
+                        #"coef" in the syn.c original source code ############JUSTIN EDITS############
+                        if single_force==True:
+                            scale = Mag*1e-15 #definition used in syn.c line 139
+                            print(f'this is the {scale}')
+                        ############## END OF EDITS ###################
+                        else:
+                            scale = 10**(1.5*Mw+16.1-20) #definition used in syn.c
                         
                         #Scale radiation patterns accordingly
                         radiation_pattern_ss *= scale
@@ -835,7 +925,7 @@ def run_parallel_teleseismics_green(home,project_name,time_epi,station_file,mode
 
                                             
                                                                   
-def run_parallel_synthetics_mt3d(home,project_name,station_file,model_name,forceMT,mt,insar,rank,size):
+def run_parallel_synthetics_mt3d(home,project_name,station_file,model_name,forceMT,mt,insar,rank,size,single_force=False,tb=50):
     '''
     Use green functions and compute synthetics at stations for a single source
     and multiple stations. This code makes an external system call to syn.c first it
@@ -901,7 +991,7 @@ def run_parallel_synthetics_mt3d(home,project_name,station_file,model_name,force
     mpi_source=genfromtxt(home+project_name+'/data/model_info/mpi_source.'+str(rank)+'.fault')
     
     #Constant parameters
-    tb=50 #Number of samples before first arrival (should be 50, NEVER CHANGE, if you do then adjust in fk.pl)
+    tb=tb #Number of samples before first arrival (should be 50, NEVER CHANGE, if you do then adjust in fk.pl) ##tb can be adjusted in fk now 12/3/2025 jk
     
     #Load structure
     model_file=home+project_name+'/structure/'+model_name
@@ -1249,7 +1339,15 @@ if __name__ == '__main__':
             insar=True
         elif insar=='False':
             insar=False
-        run_parallel_green(home,project_name,station_file,model_name,dt,NFFT,static,dk,pmin,pmax,kmax,tsunami,insar,rank,size)
+        single_force=sys.argv[15]
+        if single_force=='True':
+            single_force=True
+        elif single_force=='False':
+            single_force=False
+        tb=int(sys.argv[16])
+        smth=int(sys.argv[17])
+        run_parallel_green(home,project_name,station_file,model_name,dt,NFFT,static,dk,pmin,pmax,kmax,tsunami,insar,rank,size,single_force,tb,smth)
+
     
     elif sys.argv[1]=='run_parallel_synthetics':
         #Parse command line arguments
@@ -1282,8 +1380,15 @@ if __name__ == '__main__':
         mu_okada=float(sys.argv[16])
         NFFT = int(sys.argv[17])
         dt = float(sys.argv[18])
+        single_force=sys.argv[19]
+        if single_force=='True':
+            single_force=True
+        elif single_force=='False':
+            single_force=False
+        tb=int(sys.argv[20])
+        smth=int(sys.argv[21])
 
-        run_parallel_synthetics(home,project_name,station_file,model_name,integrate,static,quasistatic2dynamic,tsunami,time_epi,beta,custom_stf,impulse,NFFT,dt,rank,size,insar,okada,mu_okada)
+        run_parallel_synthetics(home,project_name,station_file,model_name,integrate,static,quasistatic2dynamic,tsunami,time_epi,beta,custom_stf,impulse,NFFT,dt,rank,size,single_force,insar,okada,mu_okada,tb,smth)
     
     elif sys.argv[1]=='run_parallel_teleseismics_green':
         home=sys.argv[2]

@@ -287,7 +287,7 @@ def quick_static(gflist,datapath,scale=1):
     plt.show()
 
 
-def slip3D(rupt,marker_size=60,clims=None,plot_onset=False,cmap=whitejet):
+def slip3D(rupt,marker_size=60,clims=None,plot_onset=False,cmap=whitejet,show=False):
     '''
     For complex fault geometries make a quick 3D plot of the rupture model
     
@@ -352,7 +352,8 @@ def slip3D(rupt,marker_size=60,clims=None,plot_onset=False,cmap=whitejet):
         cb.set_label('Onset time (s)')
     plt.subplots_adjust(left=0.1, bottom=0.1, right=1.0, top=0.9, wspace=0, hspace=0)
     plt.title(rupt)
-    plt.show()
+    if show:
+        plt.show()
 
 
 
@@ -1110,12 +1111,13 @@ def panel_tile_slip(home,project_name,sliprate_path,nstrike,ndip,slip_min,slip_m
                     
                             
                        
-def tile_moment(rupt,epicenter,nstrike,ndip,covfile,beta=0,vfast=0,vslow=0,shade=False):
+def tile_moment(rupt,epicenter,nstrike,ndip,covfile,beta=0,vfast=0,vslow=0,shade=False,single_force=0):
     '''
     Tile plot of subfault source-time functions
     '''
     import matplotlib.pyplot as plt
     from matplotlib import cm
+    import numpy as np
     from numpy import genfromtxt,unique,zeros,where,meshgrid,linspace,load,arange,expand_dims,squeeze,tile,r_
     from mudpy.forward import get_source_time_function,add2stf
     from mudpy.inverse import d2epi,ds2rot
@@ -1128,8 +1130,8 @@ def tile_moment(rupt,epicenter,nstrike,ndip,covfile,beta=0,vfast=0,vslow=0,shade
     all_ss=f[:,8]
     all_ds=f[:,9]
     all=zeros(len(all_ss)*2)
-    iss=2*arange(0,len(all)/2,1)
-    ids=2*arange(0,len(all)/2,1)+1
+    iss=2*arange(0,len(all)/2,1).astype(int)
+    ids=2*arange(0,len(all)/2,1).astype(int)+1
     all[iss]=all_ss
     all[ids]=all_ds
     rot=ds2rot(expand_dims(all,1),beta)
@@ -1186,17 +1188,17 @@ def tile_moment(rupt,epicenter,nstrike,ndip,covfile,beta=0,vfast=0,vslow=0,shade
             slip_plus=slipCIplus[i]
             slip_minus=slipCIminus[i]
         #Get first source time function
-        t1,M1=get_source_time_function(mu[kfault],area[kfault],rise_time[kfault],trup[0],slip[0])
+        t1,M1=get_source_time_function(mu[kfault],area[kfault],rise_time[kfault],trup[0],slip[0],single_force=single_force)
         if covfile !=None:
-            t1plus,M1plus=get_source_time_function(mu[kfault],area[kfault],rise_time[kfault],trup[0],slip_plus[0])
-            t1minus,M1minus=get_source_time_function(mu[kfault],area[kfault],rise_time[kfault],trup[0],slip_minus[0])
+            t1plus,M1plus=get_source_time_function(mu[kfault],area[kfault],rise_time[kfault],trup[0],slip_plus[0],single_force=single_force)
+            t1minus,M1minus=get_source_time_function(mu[kfault],area[kfault],rise_time[kfault],trup[0],slip_minus[0],single_force=single_force)
         #Loop over windows
         for kwin in range(nwin-1):
             #Get next source time function
-            t2,M2=get_source_time_function(mu[kfault],area[kfault],rise_time[kfault],trup[kwin+1],slip[kwin+1])
+            t2,M2=get_source_time_function(mu[kfault],area[kfault],rise_time[kfault],trup[kwin+1],slip[kwin+1],single_force=single_force)
             if covfile !=None:
-                t2plus,M2plus=get_source_time_function(mu[kfault],area[kfault],rise_time[kfault],trup[kwin+1],slip_plus[kwin+1])
-                t2minus,M2minus=get_source_time_function(mu[kfault],area[kfault],rise_time[kfault],trup[kwin+1],slip_minus[kwin+1])
+                t2plus,M2plus=get_source_time_function(mu[kfault],area[kfault],rise_time[kfault],trup[kwin+1],slip_plus[kwin+1],single_force=single_force)
+                t2minus,M2minus=get_source_time_function(mu[kfault],area[kfault],rise_time[kfault],trup[kwin+1],slip_minus[kwin+1],single_force=single_force)
             #Add the soruce time functions
             t1,M1=add2stf(t1,M1,t2,M2)
             if covfile !=None:
@@ -1213,7 +1215,8 @@ def tile_moment(rupt,epicenter,nstrike,ndip,covfile,beta=0,vfast=0,vslow=0,shade
         Mmax=max(Mmax,M1.max())
         #Done now plot them
         #get current axis
-        ax=axarr[int(idip[kfault]), int(istrike[kfault])]
+        ax=axarr[int(istrike[kfault])]
+        #ax=axarr[int(idip[kfault]), int(istrike[kfault])] ###############################################
         if shade:
             #Make contourf
             Mc=linspace(0,0.98*max(M1),100)
@@ -1230,6 +1233,11 @@ def tile_moment(rupt,epicenter,nstrike,ndip,covfile,beta=0,vfast=0,vslow=0,shade
                 ax.plot(t1,M1plus,color='black')
                 ax.plot(t1,M1minus,color='white',lw=2)
         #Plot curve
+##########################################
+        #plt.figure(kfault)
+        #plt.title(f'{kfault}')
+        #plt.plot(t1,M1)
+#######################################
         ax.plot(t1, M1,color='k')
         
         ax.grid()
@@ -1240,7 +1248,8 @@ def tile_moment(rupt,epicenter,nstrike,ndip,covfile,beta=0,vfast=0,vslow=0,shade
     #Go back and rescale all subplots by maximum moment
     for k in range(ndip):
         for k2 in range(nstrike):
-            ax=axarr[k,k2]
+            ax=axarr[k]
+            #ax=axarr[k,k2]###########################################
             ax.set_ylim([0,Mmax])
     #Fix subplot arrangement
     plt.subplots_adjust(left=0.02, bottom=0.02, right=0.9, top=0.98, wspace=0, hspace=0)
@@ -1260,7 +1269,7 @@ def tile_moment(rupt,epicenter,nstrike,ndip,covfile,beta=0,vfast=0,vslow=0,shade
     return tout,Mout
 
 
-def source_time_function(rupt,epicenter,plot=True,xlim=None,ylim=None,normalize=True):
+def source_time_function(rupt,epicenter,plot=True,xlim=None,ylim=None,normalize=True,single_force=0):
     '''
     Plot source time function of complete rupture
     '''
@@ -1288,8 +1297,7 @@ def source_time_function(rupt,epicenter,plot=True,xlim=None,ylim=None,normalize=
     for kfault in range(nfault):
         if kfault%10==0:
             print('... working on subfault '+str(kfault)+' of '+str(nfault))
-        #Get rupture times for subfault windows
-        i=where(num==unum[kfault])[0]
+
         trup=f[i,12]
         #Get slips on windows
         ss=all_ss[i]
@@ -1297,11 +1305,11 @@ def source_time_function(rupt,epicenter,plot=True,xlim=None,ylim=None,normalize=
         #Add it up
         slip=(ss**2+ds**2)**0.5
         if kfault==0:#Get first source time function
-            t1,M1=get_source_time_function(mu[kfault],area[kfault],rise_time[kfault],trup[0],slip[0])
+            t1,M1=get_source_time_function(mu[kfault],area[kfault],rise_time[kfault],trup[0],slip[0],single_force=single_force)
         #Loop over windows
         for kwin in range(nwin-1):
             #Get next source time function
-            t2,M2=get_source_time_function(mu[kfault],area[kfault],rise_time[kfault],trup[kwin+1],slip[kwin+1])
+            t2,M2=get_source_time_function(mu[kfault],area[kfault],rise_time[kfault],trup[kwin+1],slip[kwin+1],single_force=single_force)
             #Add the soruce time functions
             t1,M1=add2stf(t1,M1,t2,M2)
     #Get power
@@ -1317,7 +1325,10 @@ def source_time_function(rupt,epicenter,plot=True,xlim=None,ylim=None,normalize=
         plt.plot(t1,M1,color='k')
         plt.grid()
         plt.xlabel('Time(s)')
-        plt.ylabel('Moment Rate ('+r'$\times 10^{'+str(int(exp))+r'}$Nm/s)')
+        if single_force == 1:
+            plt.ylabel(f'Force Rate {exp} (Dyne or Newton/s)')
+        else:
+            plt.ylabel('Moment Rate ('+r'$\times 10^{'+str(int(exp))+r'}$Nm/s)')
         plt.subplots_adjust(left=0.3, bottom=0.3, right=0.7, top=0.7, wspace=0, hspace=0)
         if xlim!=None:
             plt.xlim(xlim)
@@ -1727,7 +1738,8 @@ def plot_data(home,project_name,gflist,vord,decimate,lowpass,t_lim,sort,scale,k_
     
 def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpass,t_lim,
                sort,scale,k_or_g,uncert=False,waveforms_as_accel=False,units='m',uncerth=0.01,uncertv=0.03,
-               tick_frequency=10,spoof_vel_as_disp=False,return_vectors=False):
+               tick_frequency=10,spoof_vel_as_disp=False,return_vectors=False,same_channel_amplitude=True,
+               show=False):
     '''
     Plot synthetics vs real data
     
@@ -1855,6 +1867,15 @@ def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpas
         axe.yaxis.set_ticks([])
         axu.yaxis.set_ticks([])
         
+        if same_channel_amplitude == True:
+            ymax = max(abs(n[0].data.max()), abs(ns[0].data.max()), 
+                       abs(e[0].data.max()), abs(es[0].data.max()), 
+                       abs(u[0].data.max()), abs(us[0].data.max()))
+            ymin = -ymax
+            axn.set_ylim([ymin,ymax])
+            axe.set_ylim([ymin,ymax])
+            axu.set_ylim([ymin,ymax])
+
         #Annotations
         trange=t_lim[1]-t_lim[0]
         sign=1.
@@ -1975,7 +1996,8 @@ def synthetics(home,project_name,run_name,run_number,gflist,vord,decimate,lowpas
             #axu.xaxis.set_ticks(xtick)
     #plt.subplots_adjust(left=0.2, bottom=0.05, right=0.8, top=0.95, wspace=0, hspace=0)
     plt.subplots_adjust(left=0.2, bottom=0.15, right=0.8, top=0.85, wspace=0, hspace=0)
-    plt.show()
+    if show:
+        plt.show()
     
     if return_vectors == True:
         
@@ -2093,7 +2115,8 @@ def insar_residual(home,project_name,run_name,run_number,gflist,zlims):
     plt.grid()
     
     
-def insar_results(home,project_name,run_name,run_number,gflist,zlims,cmap,figsize=(8,5),title=None,interpolate=True,method='linear',npts=100):
+def insar_results(home,project_name,run_name,run_number,gflist,zlims,cmap,figsize=(8,5),title=None,interpolate=True,method='linear',npts=100,
+                  show=False):
     '''
     Plot insar observed in one panel and insar modeled in the other
     
@@ -2179,6 +2202,9 @@ def insar_results(home,project_name,run_name,run_number,gflist,zlims,cmap,figsiz
         plt.xlabel('Longitude')
         plt.grid()
         plt.suptitle(title)
+
+    if show:
+        plt.show()
     
 def tsunami_synthetics(home,project_name,run_name,run_number,gflist,t_lim,sort,scale):
     '''

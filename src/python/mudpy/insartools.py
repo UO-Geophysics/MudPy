@@ -43,7 +43,7 @@ def quadtree2mudpy(home,project_name,quadtree_file,gflist_file,prefix):
     
     
     
-def un_nanify(infile,outfile):
+def un_nanify(infile,outfile):        
     from numpy import genfromtxt,savetxt,where,nan
     insar=genfromtxt(infile)
     i=where(infile[:,2]!=nan)[0] 

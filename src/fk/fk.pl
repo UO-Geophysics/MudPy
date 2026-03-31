@@ -53,8 +53,10 @@ my ($model, $s_depth);
     taper applies a low-pass cosine filter at fc=(1-taper)*f_Niquest ($taper).
 -P: specify the min. and max. slownesses in term of 1/vs_at_the_source ($pmin/$pmax)
     and optionally kmax at zero frequency in term of 1/hs ($kmax).
+-G: specify sigma, small imaginary frequency in 1/T ($sigma).
 -R: receiver depth ($r_depth).
 -S: 0=explosion; 1=single force; 2=double couple ($src).
+-T: specify the number of samples before the first arrival ($tb).
 -U: 1=down-going wave only; -1=up-going wave only ($updn).
 -X: dump the input to cmd for debug ($fk).
 Examples
@@ -73,6 +75,8 @@ foreach (grep(/^-/,@ARGV)) {
    my @value = split(/\//,substr($_,2));
    if ($opt eq "D") {
      $deg2km = 6371*3.14159/180.;
+   } elsif ($opt eq "G") {
+     $sigma = $value[0];
    } elsif ($opt eq "H") {
      $f1 = $value[0]; $f2 = $value[1];
    } elsif ($opt eq "M") {
@@ -96,6 +100,8 @@ foreach (grep(/^-/,@ARGV)) {
      $rdep = "_$r_depth";
    } elsif ($opt eq "S") {
      $src = $value[0];
+   } elsif ($opt eq "T") {
+     $tb = $value[0];
    } elsif ($opt eq "U") {
      $updn = $value[0];
    } elsif ($opt eq "X") {

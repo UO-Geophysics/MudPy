@@ -718,7 +718,7 @@ def read_neic_param(fault_file):
                 
 
 
-def triangular_rupt_2_gmt(meshfile,slipfile,outfile,kinematic_out_folder=None,percentage=0,is_total_model=True):
+def triangular_rupt_2_gmt(meshfile,slipfile,outfile,kinematic_out_folder=None,percentage=0,is_total_model=True,output_variable='slip'):
     
     '''
     DM Note: Modified from Brendan's script because he refused to do a pull request :)
@@ -783,7 +783,7 @@ def triangular_rupt_2_gmt(meshfile,slipfile,outfile,kinematic_out_folder=None,pe
     risetime = list()
     duration = list()
     rig = list()
-    
+    onset_time = list() 
     
     with open(slipfile, 'r') as f:
         next(f)
@@ -798,6 +798,7 @@ def triangular_rupt_2_gmt(meshfile,slipfile,outfile,kinematic_out_folder=None,pe
             if is_total_model:
                 rig.append(float(row[12]))
             else:
+                onset_time.append(float(row[12]))
                 rig.append(float(row[13]))
     
     
@@ -813,16 +814,25 @@ def triangular_rupt_2_gmt(meshfile,slipfile,outfile,kinematic_out_folder=None,pe
     TOTS = numpy.sqrt(numpy.power(SS,2)+numpy.power(DS,2))
     FA = numpy.asarray(faultarea)
     RIG = numpy.asarray(rig)
-    
+    ONSET = numpy.asarray(onset_time)
+
     
     #Total slip model
     moment = 0
     fso = open(outfile,'w')
     slip_threshold=(percentage/100)*TOTS.max()
-    for i in range(0, numpy.amax(MESN)):
+
+    print(len(MESN))
+    print(len(ONSET))
+
+    for i in range(0, len(MESN)):
         a1 = numpy.where(MESN[i] == INVN)[0]
         totslip = numpy.sum(TOTS[a1])
-#        print (i+1,totslip*100)
+        totonset = ONSET[i]
+        #print(a1)
+        #print(ONSET)
+        # print('Onset time is %.f' % (totonset))
+
         if (totslip >= slip_threshold):
             moment = moment+FA[i]*1000*1000*numpy.mean(RIG[a1])*totslip
             lon1 = "{0:.4f}".format(meshlon1[i])
@@ -834,7 +844,10 @@ def triangular_rupt_2_gmt(meshfile,slipfile,outfile,kinematic_out_folder=None,pe
             dep1 = "{0:.4f}".format(meshdep1[i])
             dep2 = "{0:.4f}".format(meshdep2[i])
             dep3 = "{0:.4f}".format(meshdep3[i])
-            ts = "{0:.4f}".format(totslip)
+            if output_variable=='slip':
+                ts = "{0:.4f}".format(totslip)
+            elif output_variable == 'onset_time':
+                ts = "{0:.4f}".format(totonset)
             fso.write('> -Z'+ts+'\n')
             fso.write(lon1+' '+lat1+' '+dep1+'\n')
             fso.write(lon2+' '+lat2+' '+dep2+'\n')

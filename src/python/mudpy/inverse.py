@@ -242,9 +242,6 @@ def getG(home,project_name,fault_name,model_name,GF_list,G_from_file,G_name,epic
                     Ginsar_nwin=c_[Ginsar_nwin,Ginsar]
                 Ginsar=Ginsar_nwin.copy()
                 Ginsar_nwin=None #Release memory
-            print(Gstatic.shape)
-            print(Gvel.shape)
-            print(Ginsar.shape)
             G=concatenate([g for g in [Gstatic,Gdisp,Gvel,Gtsun,Ginsar] if g.size > 0])
         print('Saving GF matrix to '+G_name+' this might take just a second...')
         save(G_name,G)
@@ -700,7 +697,7 @@ def getdata(home,project_name,GF_list,decimate,bandpass,quiet=False):
     #Read gf file and decide what needs to get loaded
     gf_file=home+project_name+'/data/station_info/'+GF_list
     GF=genfromtxt(gf_file,usecols=[3,4,5,6,7],skip_header=1,dtype='f8')
-    GFfiles=genfromtxt(gf_file,usecols=[8,9,10,11,12],dtype='U')  
+    GFfiles=genfromtxt(gf_file,usecols=[8,9,10,11,12],dtype='U')
     stations=genfromtxt(gf_file,usecols=0,dtype='U')  
     
     #Parse out filtering pass bands
@@ -728,7 +725,6 @@ def getdata(home,project_name,GF_list,decimate,bandpass,quiet=False):
     for ksta in range(len(i)):
         if quiet==False:  
             print('Assembling displacement waveforms from '+str(stations[i[ksta]])+' into data vector.')
-        #print(str(GFfiles[i[ksta],kgf]))
         n=read(GFfiles[i[ksta],kgf]+'.n')
         e=read(GFfiles[i[ksta],kgf]+'.e')
         u=read(GFfiles[i[ksta],kgf]+'.u')
@@ -1616,7 +1612,7 @@ def get_stats(WG,sol,wd,Ls):
     '''
     
     from numpy.linalg import norm
-    
+
     wds=WG.dot(sol)
     L2=norm(wds-wd)
     Lm=norm(Ls.dot(sol))

@@ -5,7 +5,7 @@ Green functions routines for source models
 
 
         
-def run_green(source,station_file,model_name,dt,NFFT,static,dk,pmin,pmax,kmax):
+def run_green(source,station_file,model_name,dt,NFFT,static,dk,pmin,pmax,kmax,smth):
     '''
     Compute GFs using Zhu & Rivera code for a given velocity model, source depth
     and station file. This function will make an external system call to fk.pl
@@ -33,15 +33,15 @@ def run_green(source,station_file,model_name,dt,NFFT,static,dk,pmin,pmax,kmax):
     for k in range(len(d)):
         diststr=diststr+' %.3f' % d[k] #Truncate distance to 3 decimal palces (meters)
     if static==0: #Compute full waveform
-        command=split("fk.pl -M"+model_name+"/"+depth+"/f -N"+str(NFFT)+"/"+str(dt)+'/1/'+repr(dk)+' -P'+repr(pmin)+'/'+repr(pmax)+'/'+repr(kmax)+diststr)
-        print("fk.pl -M"+model_name+"/"+depth+"/f -N"+str(NFFT)+"/"+str(dt)+'/1/'+repr(dk)+' -P'+repr(pmin)+'/'+repr(pmax)+'/'+repr(kmax)+diststr)
-        #print(command)
+        command=split("fk.pl -M"+model_name+"/"+depth+"/f -N"+str(NFFT)+"/"+str(dt)+'/'+str(smth)+'/'+repr(dk)+' -P'+repr(pmin)+'/'+repr(pmax)+'/'+repr(kmax)+diststr)
+        print("fk.pl -M"+model_name+"/"+depth+"/f -N"+str(NFFT)+"/"+str(dt)+'/'+str(smth)+'/'+repr(dk)+' -P'+repr(pmin)+'/'+repr(pmax)+'/'+repr(kmax)+diststr)
+        print(command)
         p=subprocess.Popen(command,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
         out,err=p.communicate()
     else: #Compute only statics
         command=split("fk.pl -M"+model_name+"/"+depth+"/f -N1 "+diststr)
         print("fk.pl -M"+model_name+"/"+depth+"/f -N1 "+diststr)
-        #print(command)
+        print(command)
         p=subprocess.Popen(command,stdout=open('staticgf','w'),stderr=subprocess.PIPE)
         out,err=p.communicate()
     #Log output
@@ -56,297 +56,6 @@ def run_green(source,station_file,model_name,dt,NFFT,static,dk,pmin,pmax,kmax):
     
     
     
-def run_syn(home,project_name,source,station_file,green_path,model_name,integrate,static,tsunami,
-        subfault,time_epi,beta,impulse=False,okada=False,okada_mu=45e9,insar=False):
-    '''
-    Use green functions and compute synthetics at stations for a single source
-    and multiple stations. This code makes an external system call to syn.c first it
-    will make the external call for the strike-slip component then a second externall
-    call will be made for the dip-slip component. The unit amount of moment is 1e15
-    which corresponds to Mw=3.9333...
-    
-    IN:
-        source: 1-row numpy array containig informaiton aboutt he source, lat, lon, depth, etc...
-        station_file: File name with the station coordinates
-        green_path: Directopry where GFs are stored
-        model_file: File containing the Earth velocity structure
-        integrate: =0 if youw ant velocity waveforms, =1 if you want displacements
-        static: =0 if computing full waveforms, =1 if computing only the static field
-        subfault: String indicating the subfault being worked on
-        coord_type: =0 if problem is in cartesian coordinates, =1 if problem is in lat/lon
-        
-    OUT:
-        log: Sysytem standard output and standard error for log
-    '''
-
-    import os
-    import subprocess
-    from mudpy.forward import get_mu
-    from numpy import array,genfromtxt,loadtxt,savetxt,log10,argmin
-    from obspy import read
-    from shlex import split
-    
-    #Constant parameters
-    rakeDS=90+beta #90 is thrust, -90 is normal
-    rakeSS=0+beta #0 is left lateral, 180 is right lateral
-    tb=50 #Number of samples before first arrival
-    #Load structure
-    model_file=home+project_name+'/structure/'+model_name
-    structure=loadtxt(model_file,ndmin=2)
-    #Parse the soruce information
-    num=str(int(source[0])).rjust(4,'0')
-    xs=source[1]
-    ys=source[2]
-    zs=source[3]
-    strike=source[4]
-    dip=source[5]
-    rise=source[6]
-    if impulse==True:  #Impulse GFs or apply rise time
-        duration=0
-    else:
-        duration=source[7]
-    ss_length=source[8]
-    ds_length=source[9]
-    ss_length_in_km=ss_length/1000.
-    ds_length_in_km=ds_length/1000.
-    strdepth='%.4f' % zs
-    if static==0 and tsunami==0:  #Where to save dynamic waveforms
-        green_path=green_path+'dynamic/'+model_name+"_"+strdepth+".sub"+subfault+"/"
-    if static==0 and tsunami==1:  #Where to save dynamic waveforms
-        green_path=green_path+'tsunami/'+model_name+"_"+strdepth+".sub"+subfault+"/"
-    print("--> Computing synthetics at stations for the source at ("+str(xs)+" , "+str(ys)+")")
-    staname=genfromtxt(station_file,dtype="U",usecols=0)
-    if staname.shape==(): #Single staiton file
-        staname=array([staname])
-    #Compute distances and azimuths
-    d,az,lon_sta,lat_sta=src2sta(station_file,source,output_coordinates=True)
-    #Get moment corresponding to 1 meter of slip on subfault
-    mu=get_mu(structure,zs)
-    Mo=mu*ss_length*ds_length*1
-    Mw=(2./3)*(log10(Mo)-9.1)
-    #Move to output folder
-    log='' #Initalize log
-    os.chdir(green_path)
-    for k in range(len(d)):
-        if static==0: #Compute full waveforms
-            diststr='%.3f' % d[k] #Need current distance in string form for external call
-            #Form the strings to be used for the system calls according to suer desired options
-            if integrate==1: #Make displ.
-                #First Stike-Slip GFs
-                commandSS="syn -I -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeSS)+" -D"+str(duration)+ \
-                    "/"+str(rise)+" -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".SS.disp.x -G"+green_path+diststr+".grn.0"
-                print(commandSS) #Output to screen so I know we're underway
-                log=log+commandSS+'\n' #Append to log
-                commandSS=split(commandSS) #Split string into lexical components for system call
-                #Now dip slip
-                commandDS="syn -I -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeDS)+" -D"+str(duration)+ \
-                    "/"+str(rise)+" -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".DS.disp.x -G"+green_path+diststr+".grn.0"
-                print(commandDS)
-                log=log+commandDS+'\n'
-                commandDS=split(commandDS)
-            else: #Make vel.
-                #First Stike-Slip GFs
-                commandSS="syn -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeSS)+" -D"+str(duration)+ \
-                    "/"+str(rise)+" -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".SS.vel.x -G"+green_path+diststr+".grn.0"
-                print(commandSS)
-                log=log+commandSS+'\n'
-                commandSS=split(commandSS)
-                #Now dip slip
-                commandDS="syn -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeDS)+" -D"+str(duration)+ \
-                    "/"+str(rise)+" -A"+str(az[k])+" -O"+staname[k]+".subfault"+num+".DS.vel.x -G"+green_path+diststr+".grn.0"
-                print(commandDS)
-                log=log+commandDS+'\n'
-                commandDS=split(commandDS)
-            #Run the strike- and dip-slip commands (make system calls)
-            p=subprocess.Popen(commandSS,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
-            out,err=p.communicate() 
-            p=subprocess.Popen(commandDS,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
-            out,err=p.communicate()
-            #Result is in RTZ system (+Z is down) rotate to NEZ with +Z up and scale to m or m/s
-            if integrate==1: #'tis displacememnt
-                #Strike slip
-                if duration>0: #Is there a source time fucntion? Yes!
-                    r=read(staname[k]+".subfault"+num+'.SS.disp.r')
-                    t=read(staname[k]+".subfault"+num+'.SS.disp.t')
-                    z=read(staname[k]+".subfault"+num+'.SS.disp.z')
-                else: #No! This is the impulse response!
-                    r=read(staname[k]+".subfault"+num+'.SS.disp.ri')
-                    t=read(staname[k]+".subfault"+num+'.SS.disp.ti')
-                    z=read(staname[k]+".subfault"+num+'.SS.disp.zi')
-                ntemp,etemp=rt2ne(r[0].data,t[0].data,az[k])
-                #Scale to m and overwrite with rotated waveforms
-                n=r.copy()
-                n[0].data=ntemp/100
-                e=t.copy()
-                e[0].data=etemp/100
-                z[0].data=z[0].data/100
-                n=origin_time(n,time_epi,tb)
-                e=origin_time(e,time_epi,tb)
-                z=origin_time(z,time_epi,tb)
-                n.write(staname[k]+".subfault"+num+'.SS.disp.n',format='SAC')
-                e.write(staname[k]+".subfault"+num+'.SS.disp.e',format='SAC')
-                z.write(staname[k]+".subfault"+num+'.SS.disp.z',format='SAC')
-                silentremove(staname[k]+".subfault"+num+'.SS.disp.r')
-                silentremove(staname[k]+".subfault"+num+'.SS.disp.t')
-                if impulse==True:
-                    silentremove(staname[k]+".subfault"+num+'.SS.disp.ri')
-                    silentremove(staname[k]+".subfault"+num+'.SS.disp.ti')
-                    silentremove(staname[k]+".subfault"+num+'.SS.disp.zi')
-                #Dip Slip
-                if duration>0:
-                    r=read(staname[k]+".subfault"+num+'.DS.disp.r')
-                    t=read(staname[k]+".subfault"+num+'.DS.disp.t')
-                    z=read(staname[k]+".subfault"+num+'.DS.disp.z')
-                else:
-                    r=read(staname[k]+".subfault"+num+'.DS.disp.ri')
-                    t=read(staname[k]+".subfault"+num+'.DS.disp.ti')
-                    z=read(staname[k]+".subfault"+num+'.DS.disp.zi')
-                ntemp,etemp=rt2ne(r[0].data,t[0].data,az[k])
-                n=r.copy()
-                n[0].data=ntemp/100
-                e=t.copy()
-                e[0].data=etemp/100
-                z[0].data=z[0].data/100
-                n=origin_time(n,time_epi,tb)
-                e=origin_time(e,time_epi,tb)
-                z=origin_time(z,time_epi,tb)
-                n.write(staname[k]+".subfault"+num+'.DS.disp.n',format='SAC')
-                e.write(staname[k]+".subfault"+num+'.DS.disp.e',format='SAC')
-                z.write(staname[k]+".subfault"+num+'.DS.disp.z',format='SAC')
-                silentremove(staname[k]+".subfault"+num+'.DS.disp.r')
-                silentremove(staname[k]+".subfault"+num+'.DS.disp.t')
-                if impulse==True:
-                    silentremove(staname[k]+".subfault"+num+'.DS.disp.ri')
-                    silentremove(staname[k]+".subfault"+num+'.DS.disp.ti')
-                    silentremove(staname[k]+".subfault"+num+'.DS.disp.zi')
-            else: #Waveforms are velocity, as before, rotate from RT-Z to NE+Z and scale to m/s
-                #Strike slip
-                if duration>0: #Is there a source time fucntion? Yes!
-                    r=read(staname[k]+".subfault"+num+'.SS.vel.r')
-                    t=read(staname[k]+".subfault"+num+'.SS.vel.t')
-                    z=read(staname[k]+".subfault"+num+'.SS.vel.z')
-                else: #No! This is the impulse response!
-                    r=read(staname[k]+".subfault"+num+'.SS.vel.ri')
-                    t=read(staname[k]+".subfault"+num+'.SS.vel.ti')
-                    z=read(staname[k]+".subfault"+num+'.SS.vel.zi')
-                ntemp,etemp=rt2ne(r[0].data,t[0].data,az[k])
-                n=r.copy()
-                n[0].data=ntemp/100
-                e=t.copy()
-                e[0].data=etemp/100
-                z[0].data=z[0].data/100
-                n=origin_time(n,time_epi,tb)
-                e=origin_time(e,time_epi,tb)
-                z=origin_time(z,time_epi,tb)
-                n.write(staname[k]+".subfault"+num+'.SS.vel.n',format='SAC')
-                e.write(staname[k]+".subfault"+num+'.SS.vel.e',format='SAC')
-                z.write(staname[k]+".subfault"+num+'.SS.vel.z',format='SAC')
-                silentremove(staname[k]+".subfault"+num+'.SS.vel.r')
-                silentremove(staname[k]+".subfault"+num+'.SS.vel.t')
-                if impulse==True:
-                    silentremove(staname[k]+".subfault"+num+'.SS.vel.ri')
-                    silentremove(staname[k]+".subfault"+num+'.SS.vel.ti')
-                    silentremove(staname[k]+".subfault"+num+'.SS.vel.zi')
-                #Dip Slip
-                if duration>0:
-                    r=read(staname[k]+".subfault"+num+'.DS.vel.r')
-                    t=read(staname[k]+".subfault"+num+'.DS.vel.t')
-                    z=read(staname[k]+".subfault"+num+'.DS.vel.z')
-                else:
-                    r=read(staname[k]+".subfault"+num+'.DS.vel.ri')
-                    t=read(staname[k]+".subfault"+num+'.DS.vel.ti')
-                    z=read(staname[k]+".subfault"+num+'.DS.vel.zi')
-                ntemp,etemp=rt2ne(r[0].data,t[0].data,az[k])
-                n=r.copy()
-                n[0].data=ntemp/100
-                e=t.copy()
-                e[0].data=etemp/100
-                z[0].data=z[0].data/100
-                n=origin_time(n,time_epi,tb)
-                e=origin_time(e,time_epi,tb)
-                z=origin_time(z,time_epi,tb)
-                n.write(staname[k]+".subfault"+num+'.DS.vel.n',format='SAC')
-                e.write(staname[k]+".subfault"+num+'.DS.vel.e',format='SAC')
-                z.write(staname[k]+".subfault"+num+'.DS.vel.z',format='SAC')
-                silentremove(staname[k]+".subfault"+num+'.DS.vel.r')
-                silentremove(staname[k]+".subfault"+num+'.DS.vel.t')
-                if impulse==True:
-                    silentremove(staname[k]+".subfault"+num+'.DS.vel.ri')
-                    silentremove(staname[k]+".subfault"+num+'.DS.vel.ti')
-                    silentremove(staname[k]+".subfault"+num+'.DS.vel.zi')
-        else: #Compute static synthetics
-            os.chdir(green_path+'static/') #Move to appropriate dir
-            if okada==False:
-                diststr='%.1f' % d[k] #Need current distance in string form for external call
-                
-                
-                if insar==True:
-                    green_file=model_name+".static."+strdepth+".sub"+subfault+'.insar' #Output dir
-                else: #GPS
-                    green_file=model_name+".static."+strdepth+".sub"+subfault+'.gps' #Output dir
-                
-                
-                print(green_file)
-                log=log+green_file+'\n' #Append to log
-                statics=loadtxt(green_file) #Load GFs
-                #Print static GFs into a pipe and pass into synthetics command
-                station_index=argmin(abs(statics[:,0]-d[k])) #Look up by distance
-                try:
-                    temp_pipe=statics[station_index,:]
-                except:
-                    temp_pipe=statics
-                inpipe=''
-                for j in range(len(temp_pipe)):
-                    inpipe=inpipe+' %.6e' % temp_pipe[j]
-                #Form command for external call
-                commandDS="syn -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeDS)+\
-                        " -A"+str(az[k])+" -P"
-                commandSS="syn -M"+str(Mw)+"/"+str(strike)+"/"+str(dip)+"/"+str(rakeSS)+\
-                        " -A"+str(az[k])+" -P"
-                print(staname[k])
-                print(commandSS)
-                print(commandDS)
-                log=log+staname[k]+'\n'+commandSS+'\n'+commandDS+'\n' #Append to log
-                commandSS=split(commandSS) #Lexical split
-                commandDS=split(commandDS)
-                #Make system calls, one for DS, one for SS, and save log
-                ps=subprocess.Popen(['printf',inpipe],stdout=subprocess.PIPE,stderr=subprocess.PIPE)  #This is the statics pipe, pint stdout to syn's stdin
-                p=subprocess.Popen(commandSS,stdin=ps.stdout,stdout=open(staname[k]+'.subfault'+num+'.SS.static.rtz','w'),stderr=subprocess.PIPE)     
-                out,err=p.communicate()  
-                log=log+str(out)+str(err)
-                ps=subprocess.Popen(['printf',inpipe],stdout=subprocess.PIPE,stderr=subprocess.PIPE)  #This is the statics pipe, pint stdout to syn's stdin
-                p=subprocess.Popen(commandDS,stdin=ps.stdout,stdout=open(staname[k]+'.subfault'+num+'.DS.static.rtz','w'),stderr=subprocess.PIPE)     
-                out,err=p.communicate() 
-                log=log+str(out)+str(err)       
-                #Rotate radial/transverse to East/North, correct vertical and scale to m
-                statics=loadtxt(staname[k]+'.subfault'+num+'.SS.static.rtz')
-                u=statics[2]/100
-                r=statics[3]/100
-                t=statics[4]/100
-                ntemp,etemp=rt2ne(array([r,r]),array([t,t]),az[k])
-                n=ntemp[0]
-                e=etemp[0]
-                savetxt(staname[k]+'.subfault'+num+'.SS.static.neu',(n,e,u,beta),header='north(m),east(m),up(m),beta(degs)')
-                statics=loadtxt(staname[k]+'.subfault'+num+'.DS.static.rtz')
-                u=statics[2]/100
-                r=statics[3]/100
-                t=statics[4]/100
-                ntemp,etemp=rt2ne(array([r,r]),array([t,t]),az[k])
-                n=ntemp[0]
-                e=etemp[0]
-                savetxt(staname[k]+'.subfault'+num+'.DS.static.neu',(n,e,u,beta),header='north(m),east(m),up(m),beta(degs)')
-            else:
-                #SS
-                n,e,u=okada_synthetics(strike,dip,rakeSS,ss_length_in_km,ds_length_in_km,xs,ys,
-                    zs,lon_sta[k],lat_sta[k],okada_mu)
-                savetxt(staname[k]+'.subfault'+num+'.SS.static.neu',(n,e,u,beta),header='north(m),east(m),up(m),beta(degs)')
-                #DS
-                n,e,u=okada_synthetics(strike,dip,rakeDS,ss_length_in_km,ds_length_in_km,xs,ys,
-                    zs,lon_sta[k],lat_sta[k],okada_mu)
-                savetxt(staname[k]+'.subfault'+num+'.DS.static.neu',(n,e,u,beta),header='north(m),east(m),up(m),beta(degs)')
-    return log
-
-
 def okada_synthetics(strike,dip,rake,length,width,lon_source,lat_source,
                     depth_source,lon_obs,lat_obs,mu):
     '''
@@ -466,7 +175,7 @@ def src2sta(station_file,source,output_coordinates=False):
     
     
 
-def origin_time(st,time_epi,tb):
+def origin_time(st,time_epi,tb,dt):
     '''
     Make start time of synthetics correspond with epicentral time
     
@@ -483,13 +192,10 @@ def origin_time(st,time_epi,tb):
     '''
     
     from datetime import timedelta
-    
-    t1=st[0].stats.starttime  #Waveform starttime
-    td=timedelta(seconds=st[0].stats.delta*tb)  #Shift due to pre-first arrival samples
-    #Shift forward
-    t1=t1+td
-    #Shift to oring time
-    t1=time_epi+timedelta(minutes=t1.minute,seconds=t1.second,microseconds=t1.microsecond)-td
+
+    p_wave_time = dt * tb + st[0].stats.sac.b #fk calculated time for p wave arrival time
+    padding = dt * tb #padding time input
+    t1 = time_epi + p_wave_time - padding #adjusted time for event, based on p wave arrival time and zero padding
     st[0].stats.starttime=t1
     #Set default sac headers to avoid invalid SAC write
     st[0].stats.sac['nzyear'] = t1.year
