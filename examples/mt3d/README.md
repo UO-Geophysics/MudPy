@@ -149,7 +149,105 @@ are the existing NumPy/SciPy, ObsPy, and pyproj stack. No MPI or new package is
 required. The committed Okada fixture removes the need to load an optional
 reference solver during normal validation.
 
-## Checks
+## Layered responses and off-grid recovery
+
+Run the bounded layered/off-grid study in a new project:
+
+```sh
+python -B examples/mt3d/validate.py --layered --project /absolute/existing-parent/new-project
+```
+
+This mode always uses the TOML runner. Named experiments share one project,
+receiver geometry, and verified response matrices. Core scientific algorithms
+are the existing FK/full-tensor/identity-damped methods.
+Run the driver as the sole owner of its new project: it updates shared inputs
+between separately locked `mt3d.run` calls.
+
+The experiment has 49 receiver locations on a 7-by-7 grid spanning north/east
+coordinates from -6 to +6 km, with two representative LOS directions per point.
+The homogeneous control uses `Vp=6 km/s`, `Vs=6/sqrt(3) km/s`, and density
+`2.7 g/cm³`. Its identical-layer counterpart introduces a boundary at 2 km
+without a material contrast. The contrasted model instead has a 2 km upper
+layer with `Vp=4.3 km/s`, `Vs=2.4 km/s`, and density `2.4 g/cm³` over the
+homogeneous half-space. Earth flattening is disabled throughout.
+
+Forward checks include all six components at two sources, homogeneous-layer
+equivalence, integration-spacing values `dk=[0.2,0.1,0.05,0.025]` at `kmax=35`,
+and cutoff values `kmax=[15,25,35]` at `dk=0.025`. The finest computation is a
+numerical reference, not an exact solution. The identical-layer limit and the
+two finest spacings/cutoffs must agree within an initial `1e-3` relative L2
+bound for every matrix column. Direct prescribed shear, positive/negative
+isotropic, and mixed tensors additionally test superposition and sign reversal
+in the genuinely layered medium. This is a pipeline/convergence check; an
+independent layered-Earth physical benchmark remains outstanding.
+
+Off-grid truth locations are `[-0.4,0.35,3.6]` and `[0.55,-0.25,4.4]` in
+north/east/depth km. Inversion candidates lie at north/east coordinates ±1 km
+and depths 3 and 5 km: eight sources and 48 full-tensor unknowns. IDs are
+deliberately reverse ordered. None coincides with a true location.
+
+Pure shear, inflation, and deflation activate only the first truth location;
+the mixed case has shear at the first and isotropic expansion at the second.
+Pure-source scalar moment is `10**16.6 N m`; the mixed isotropic contribution
+is 0.6 times that value. Truth remains integrated point moment, not moment
+density, pressure, or physical volume change.
+
+Each case is run noiselessly and with one reproducible iid Gaussian noise
+vector, sigma 0.3 mm and seed 20261106. The same realization is reused across
+mechanisms for a controlled comparison. This is not a realistic correlated
+InSAR uncertainty model. The bounded damping sweep is `[0,0.01,0.1,1,10]`, using
+the existing raw six-component identity penalty and weights `1/sigma`.
+No automated hyperparameter selection is performed. The example-map damping
+value of 1 is fixed before computing recovery errors.
+
+The known-grid control checks algebraic prediction consistency. For every
+solution, the example verifies source IDs, recomposition of saved predictions
+from saved tensors, stationarity of the stated quadratic objective, and the
+expected increase in data residual/decrease in model norm with damping.
+Noiseless inflation/deflation solutions must have opposite signs. These
+acceptance checks do not require a good off-grid reconstruction: ambiguity,
+excess inferred moment, and source spreading are scientific findings.
+
+Recovery diagnostics include clean-displacement error, weighted data RMS,
+scalar-moment-weighted centroid and spread, aggregate tensor error and angle,
+and summed scalar moment relative to truth. The `cancellation_ratio` field is
+`sum(M0_i)/M0(sum(M_i))`: it reflects differing tensor orientations as well as
+opposing-source cancellation, and must be interpreted against the known truth.
+Aggregate tensor/centroid agreement does not establish correct mechanisms at
+individual source locations. Zero models have undefined centroid, spread,
+angle, and scalar-to-net ratio, recorded as JSON nulls. The configured truth
+models all have nonzero aggregate tensors.
+
+Outputs include:
+
+| Location | Result |
+| --- | --- |
+| `analysis/layered_offgrid.json` | Forward acceptance results, every recovery metric, condition number, noise specification, driver hash, timings, and limitations |
+| `analysis/validate.executed.py` | Exact driver snapshot corresponding to `driver_sha256` |
+| `analysis/<forward-run>.G.npy` | Preserved matrices for numerical comparisons after shared text tables change |
+| `analysis/<inversion-run>.data.npy` | Exact observation vector used by that run |
+| `analysis/synthetic_truth.npz` | Source/receiver coordinates, LOS directions, prescribed tensors, and noise realization |
+| `analysis/grid_prepare.prof`, `analysis/mixed_noisy.prof` | Standard-library profiles of library construction and an inversion sweep |
+| `plots/layered_convergence.{png,pdf}` | Integration-spacing/cutoff checks |
+| `plots/layered_response.{png,pdf}` | Homogeneous/layered displacement and their difference |
+| `plots/offgrid_tradeoffs.{png,pdf}` | Fit, centroid, aggregate tensor, and total-moment behavior |
+| `plots/offgrid_example.{png,pdf}` | Mixed noisy observations, prediction/residual, and inferred source moments |
+
+Working `.los` files contain the last dataset written. Earlier inputs are
+preserved in the per-run observation arrays; the common receiver list and
+`synthetic_truth.npz` provide the ordering/directions needed to reconstruct
+their `.los` files with the driver's `%.12e` formatting. Re-running the whole
+example into a fresh project reproduces the deterministic sequence without
+overwriting earlier named results. These datasets use the same FK backend and
+Earth model for truth and inversion, with different source discretizations;
+they do not test Earth-model error, finite-source mismatch, real imagery,
+correlated atmospheric errors, or topography.
+
+The execution driver hash identifies the numerical run. If figures are later
+rendered again after layout-only edits, retain that snapshot/hash and record
+the plotting driver's hash separately as `plot_driver_sha256` in the summary.
+
+## Homogeneous reference checks
 
 - Generate both DC and explosion GFs, with Earth flattening disabled for the
   homogeneous flat half-space benchmark. In the API, `flat=True` retains the
@@ -228,7 +326,8 @@ DC+EX responses. No storage backend or general observation schema has been adopt
 
 This example checks two LOS views. Simple horizontal offset-direction projections
 are also checked, but production radar/optical pixel-offset ingestion remains to
-be designed. Layered-Earth benchmarks, finite-source/grid mismatch, correlated
-noise, nuisance terms, real imagery, MPI, and numerical topography remain later
-validation work. Pure isotropic/zero tensors have undefined DC nodal planes,
+be designed. The layered mode adds numerical convergence, off-grid point sources,
+and iid noise. Independent layered-Earth benchmarks, finite-source mismatch,
+correlated noise, nuisance terms, real imagery, MPI, and numerical topography
+remain later validation work. Pure isotropic/zero tensors have undefined DC nodal planes,
 which are written as NaNs; other reported planes describe a best fitting DC only.
