@@ -3,7 +3,7 @@ Module for routines that use paralell computing
 '''
 
 
-def run_parallel_green(home,project_name,station_file,model_name,dt,NFFT,static,dk,pmin,pmax,kmax,tsunami,insar,rank,size):
+def run_parallel_green(home,project_name,station_file,model_name,dt,NFFT,static,dk,pmin,pmax,kmax,tsunami,insar,rank,size,full_mt=False,flat=True):
     '''
     Compute GFs using Zhu & Rivera code for a given velocity model, source depth
     and station file. This function will make an external system call to fk.pl
@@ -27,6 +27,48 @@ def run_parallel_green(home,project_name,station_file,model_name,dt,NFFT,static,
     from glob import glob
     from mudpy.green import src2sta
     import os
+
+    if full_mt:
+        # This branch belongs to mt3d. The existing slip-GF path below is unchanged.
+        from pathlib import Path
+        from io import StringIO
+        from numpy import loadtxt, savetxt, hstack, isfinite, allclose
+
+        if static != 1 or tsunami:
+            raise ValueError('Full tensor Green functions require static, non-tsunami mode')
+        project = Path(home) / project_name
+        sources = loadtxt(project / ('data/model_info/mpi_source.%d.fault' % rank),ndmin=2)
+        for source in sources:
+            depth = '%.4f' % source[3]
+            subfault = str(int(source[0])).zfill(4)
+            folder = project / 'GFs/static' / (model_name+'_'+depth+'.sub'+subfault)
+            folder.mkdir(exist_ok=True)
+            copy(project / 'structure' / model_name,folder / model_name)
+            distances, _ = src2sta(station_file,source)
+            command = ['fk.pl','-M'+model_name+'/'+depth+('/f' if flat else ''),
+                       '-N1/1/1/'+str(dk),'-P%s/%s/%s' % (pmin,pmax,kmax)]
+            command += ['%.6f' % distance for distance in distances]
+            responses = []
+            for source_type, columns in ((2,10),(0,4)):
+                result = subprocess.run(command[:3]+['-S'+str(source_type)]+command[3:],
+                    cwd=folder,stdout=subprocess.PIPE,stderr=subprocess.PIPE,
+                    text=True,check=True)
+                if not result.stdout.strip():
+                    raise RuntimeError('FK produced no static response: '+result.stderr)
+                response = loadtxt(StringIO(result.stdout),ndmin=2)
+                if (response.shape != (len(distances),columns) or not isfinite(response).all()
+                        or not allclose(response[:,0],distances,rtol=0,atol=0.00051)):
+                    raise ValueError('Invalid FK response shape, values, or receiver ordering: '+result.stderr)
+                responses.append(response)
+            if not allclose(responses[0][:,0],responses[1][:,0],rtol=0,atol=0):
+                raise ValueError('DC and explosion receiver distances differ')
+            suffix = 'insar' if insar else 'gps'
+            output = project / 'GFs/static' / (model_name+'.static.'+depth+'.sub'+subfault+'.'+suffix)
+            savetxt(output,hstack(responses),fmt='%.10e',
+                    header='DC: distance_km Z0 R0 T0 Z1 R1 T1 Z2 R2 T2; '+
+                           'EX: distance_km Zex Rex Tex; source_id='+subfault+
+                           '; earth_flattening='+str(flat))
+        return
 
     #What parameters are we using?
     if rank==0:
@@ -836,390 +878,68 @@ def run_parallel_teleseismics_green(home,project_name,time_epi,station_file,mode
                                             
                                                                   
 def run_parallel_synthetics_mt3d(home,project_name,station_file,model_name,forceMT,mt,insar,rank,size):
-    '''
-    Use green functions and compute synthetics at stations for a single source
-    and multiple stations. This code makes an external system call to syn.c first it
-    will make the external call for the strike-slip component then a second externall
-    call will be made for the dip-slip component. The unit amount of moment is 1e15
-    which corresponds to Mw=3.9333...
-    
-    IN:
-        source: 1-row numpy array containig informaiton aboutt he source, lat, lon, depth, etc...
-        station_file: File name with the station coordinates
-        green_path: Directopry where GFs are stored
-        model_file: File containing the Earth velocity structure
-        integrate: =0 if youw ant velocity waveforms, =1 if you want displacements
-        static: =0 if computing full waveforms, =1 if computing only the static field
-        subfault: String indicating the subfault being worked on
-        coord_type: =0 if problem is in cartesian coordinates, =1 if problem is in lat/lon
-        
-    OUT:
-        log: Sysytem standard output and standard error for log
-    '''
+    """Convert complete static DC+EX responses to tensor NEU/projection tables.
 
-    import os
+    Components use NED tensor coordinates; displacement/projection vectors use
+    NEU. Rank-owned outputs are overwritten, and process cwd is never changed.
+    Callers must own the project exclusively while generating/merging tables.
+    """
+    from numpy import atleast_1d, atleast_2d
+    from pathlib import Path
+    from contextlib import ExitStack
     import subprocess
-    from mudpy.forward import get_mu
-    from numpy import array,genfromtxt,loadtxt,savetxt,log10
-    from obspy import read
-    from shlex import split
-    from mudpy.green import src2sta,rt2ne,origin_time,okada_synthetics
-    from glob import glob
-    from mudpy.green import silentremove
-    from os import remove
-    
-    #What parameters are we using?
-    if rank==0:
-        out='''Running all processes with:
-        home = %s
-        project_name = %s
-        station_file = %s
-        model_name = %s
-        forceMT = %s
-        mt = %s
-        insar = %s
-        ''' %(home,project_name,station_file,model_name,str(forceMT),str(mt),str(insar))
-        print(out)
-        
-    #temporary outoput files to be merged later, these will hold every soruce this process runs
-    tmp_Mxx='tmp_Mxx_process'+str(rank)
-    tmp_Mxy='tmp_Mxy_process'+str(rank)
-    tmp_Mxz='tmp_Mxz_process'+str(rank)
-    tmp_Myy='tmp_Myy_process'+str(rank)
-    tmp_Myz='tmp_Myz_process'+str(rank)
-    tmp_Mzz='tmp_Mzz_process'+str(rank)
-    
-    #temproary throw away files that will contain only one source
-    tmp_small_Mxx='tMxx_proc'+str(rank)
-    tmp_small_Mxy='tMxy_proc'+str(rank)
-    tmp_small_Mxz='tMxz_proc'+str(rank)
-    tmp_small_Myy='tMyy_proc'+str(rank)
-    tmp_small_Myz='tMyz_proc'+str(rank)
-    tmp_small_Mzz='tMzz_proc'+str(rank)    
-        
-    #Read your corresponding source file
-    mpi_source=genfromtxt(home+project_name+'/data/model_info/mpi_source.'+str(rank)+'.fault')
-    
-    #Constant parameters
-    tb=50 #Number of samples before first arrival (should be 50, NEVER CHANGE, if you do then adjust in fk.pl)
-    
-    #Load structure
-    model_file=home+project_name+'/structure/'+model_name
-    structure=loadtxt(model_file,ndmin=2)
-    
-    #Where the data
-    green_path=home+project_name+'/GFs/static/'
-    
-    #delete files from rpevious runs
-    try:
-        remove(green_path+tmp_Mxx)
-    except:
-        pass
-    try:
-        remove(green_path+tmp_Mxy)
-    except:
-        pass
-    try:
-        remove(green_path+tmp_Mxz)
-    except:
-        pass
-    try:
-        remove(green_path+tmp_Myy)
-    except:
-        pass
-    try:
-        remove(green_path+tmp_Myz)
-    except:
-        pass
-    try:
-        remove(green_path+tmp_Mzz)
-    except:
-        pass
-    
-    
-    #Create output files
-    f_Mxx=open(green_path+tmp_Mxx,'a+')
-    f_Mxy=open(green_path+tmp_Mxy,'a+')
-    f_Mxz=open(green_path+tmp_Mxz,'a+')
-    f_Myy=open(green_path+tmp_Myy,'a+')
-    f_Myz=open(green_path+tmp_Myz,'a+')
-    f_Mzz=open(green_path+tmp_Mzz,'a+')
-    
-    #Make moment tensor components
-    if forceMT==True:
-        Mxx=mt[0] ; Mxy=mt[1] ; Mxz=mt[2] ;Myy=mt[3]; Myz=mt[4]; Mzz=mt[5]
-    
-    #Off we go now
-    for ksource in range(len(mpi_source)):
-        
-        source=mpi_source[ksource,:]
-        
-        #Parse the soruce information
-        num=str(int(source[0])).rjust(4,'0')
-        xs=source[1]
-        ys=source[2]
-        zs=source[3]
- 
-        strdepth='%.4f' % zs
-        subfault=str(int(source[0])).rjust(4,'0')
-        staname=genfromtxt(station_file,dtype="U",usecols=0)
-        
-        if staname.shape==(): #Single staiton file
-            staname=array([staname])
-        
-        #Compute distances and azimuths
-        d,az,lon_sta,lat_sta=src2sta(station_file,source,output_coordinates=True)
-        
-        #Get moment corresponding to 1 meter of slip on subfault
-        Mw=5.0
-        M0=10**(5.0*1.5+9.1)*1e7 #to dyne-cm
-        
-        #Load LOS vector for projection
-        los_path=home+project_name+'/data/statics/'
-        
-        #Move to output folder
-        os.chdir(green_path)
-        print('Processor '+str(rank)+' is working on subfault '+str(int(source[0]))+' and '+str(len(d))+' stations ')
-        
-        #Go one station at a time for that subfault
-        for k in range(len(d)):
-            
-            #Read los vector for this subfault
-            if insar==True:
-                los=genfromtxt(los_path+staname[k]+'.los')
-                los=los[1:]
-            
-            # Load the GFs
-            if insar==False:
-                green_file=model_name+".static."+strdepth+".sub"+subfault+'.gps' #Output dir
-            else:
-                green_file=model_name+".static."+strdepth+".sub"+subfault+'.insar' #Output dir
-            statics=loadtxt(green_file) #Load GFs
-            if len(statics)<1:
-                print('ERROR: Empty GF file')
-                break
-            
-            #Print static GFs into a pipe and pass into synthetics command
-            try:
-                temp_pipe=statics[k,:]
-            except:
-                temp_pipe=statics
-            inpipe=''
-            for j in range(len(temp_pipe)):
-                inpipe=inpipe+' %.6e' % temp_pipe[j]
-            
-            #Form command for external call (remember syn.c and mudpy coordiante systems are not the same)
-            # order of elelments in syn.c is M0/Mxx/Mxy/Mxz/Myy/Myz/Mzz
-            
-            if forceMT==True: #Only run one thing
-                command_Mxx="syn -M"+str(M0)+"/"+str(Mxx)+"/"+str(Mxy)+"/"+str(Mxz)+"/"+str(Myy)+"/"+str(Myz)+"/"+str(Mzz)+\
-                    " -A"+str(az[k])+" -P"  
-                    
-                command_Mxx=split(command_Mxx) #Lexical split
-            
-                #Make system calls, one for each MT component (rememebr to delete file when youa re done
-                ps=subprocess.Popen(['printf',inpipe],stdout=subprocess.PIPE)  #This is the statics pipe, pint stdout to syn's stdin
-                p=subprocess.Popen(command_Mxx,stdin=ps.stdout,stdout=open(tmp_small_Mxx,'w'))     
-                p.communicate()  
-                p.wait()        
-                
-                #Rotate radial/transverse to East/North, correct vertical and scale to m
-                statics=loadtxt(tmp_small_Mxx)
-                u=statics[2]/100
-                r=statics[3]/100
-                t=statics[4]/100
-                ntemp,etemp=rt2ne(array([r,r]),array([t,t]),az[k])
-                #now project onto LOS if doing insar
-                if insar==True:
-                    los_mt=los.dot(array([ntemp[0],etemp[0],u]))
-                    line='%s\t%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\n' % (staname[k],str(subfault).rjust(5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,los_mt)
-                else:
-                    n=ntemp[0]
-                    e=etemp[0]
-                    line='%s\t%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\t%.4e\t%.4e\n' % (staname[k],str(subfault).rjust(5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,n,e,u)
-                #write to file
-                f_Mxx.write(line)      
-            
-            else: #Stuff to dow he computing entire MT
-                Mxx=1 ; Myy=0 ; Mzz=0 ;Mxy=0; Mxz=0; Myz=0
-                command_Mxx="syn -M"+str(M0)+"/"+str(Mxx)+"/"+str(Mxy)+"/"+str(Mxz)+"/"+str(Myy)+"/"+str(Myz)+"/"+str(Mzz)+\
-                        " -A"+str(az[k])+" -P"
-                
-                Mxx=0 ; Myy=0 ; Mzz=0 ;Mxy=1; Mxz=0; Myz=0
-                command_Mxy="syn -M"+str(M0)+"/"+str(Mxx)+"/"+str(Mxy)+"/"+str(Mxz)+"/"+str(Myy)+"/"+str(Myz)+"/"+str(Mzz)+\
-                        " -A"+str(az[k])+" -P"
-                        
-                Mxx=0 ; Myy=0 ; Mzz=0 ;Mxy=0; Mxz=1; Myz=0
-                command_Mxz="syn -M"+str(M0)+"/"+str(Mxx)+"/"+str(Mxy)+"/"+str(Mxz)+"/"+str(Myy)+"/"+str(Myz)+"/"+str(Mzz)+\
-                        " -A"+str(az[k])+" -P"
-                       
-                Mxx=0 ; Myy=1 ; Mzz=0 ;Mxy=0; Mxz=0; Myz=0
-                command_Myy="syn -M"+str(M0)+"/"+str(Mxx)+"/"+str(Mxy)+"/"+str(Mxz)+"/"+str(Myy)+"/"+str(Myz)+"/"+str(Mzz)+\
-                        " -A"+str(az[k])+" -P"
-                        
-                Mxx=0 ; Myy=0 ; Mzz=0 ;Mxy=0; Mxz=0; Myz=1
-                command_Myz="syn -M"+str(M0)+"/"+str(Mxx)+"/"+str(Mxy)+"/"+str(Mxz)+"/"+str(Myy)+"/"+str(Myz)+"/"+str(Mzz)+\
-                        " -A"+str(az[k])+" -P"
-                        
-                Mxx=0 ; Myy=0 ; Mzz=1 ;Mxy=0; Mxz=0; Myz=0
-                command_Mzz="syn -M"+str(M0)+"/"+str(Mxx)+"/"+str(Mxy)+"/"+str(Mxz)+"/"+str(Myy)+"/"+str(Myz)+"/"+str(Mzz)+\
-                        " -A"+str(az[k])+" -P"
-                        
-                command_Mxx=split(command_Mxx) #Lexical split
-                command_Mxy=split(command_Mxy)
-                command_Mxz=split(command_Mxz)
-                command_Myy=split(command_Myy)
-                command_Myz=split(command_Myz)
-                command_Mzz=split(command_Mzz)
-            
-                #Make system calls, one for each MT component (rememebr to delete file when youa re done
-                ps=subprocess.Popen(['printf',inpipe],stdout=subprocess.PIPE)  #This is the statics pipe, pint stdout to syn's stdin
-                p=subprocess.Popen(command_Mxx,stdin=ps.stdout,stdout=open(tmp_small_Mxx,'w'))     
-                p.communicate()  
-                p.wait()
-    
-                ps=subprocess.Popen(['printf',inpipe],stdout=subprocess.PIPE)  #This is the statics pipe, pint stdout to syn's stdin
-                p=subprocess.Popen(command_Mxy,stdin=ps.stdout,stdout=open(tmp_small_Mxy,'w'))     
-                p.communicate()  
-                p.wait()
-    
-                ps=subprocess.Popen(['printf',inpipe],stdout=subprocess.PIPE)  #This is the statics pipe, pint stdout to syn's stdin
-                p=subprocess.Popen(command_Mxz,stdin=ps.stdout,stdout=open(tmp_small_Mxz,'w'))     
-                p.communicate()  
-                p.wait()
-    
-                ps=subprocess.Popen(['printf',inpipe],stdout=subprocess.PIPE)  #This is the statics pipe, pint stdout to syn's stdin
-                p=subprocess.Popen(command_Myy,stdin=ps.stdout,stdout=open(tmp_small_Myy,'w'))     
-                p.communicate()  
-                p.wait()
-    
-                ps=subprocess.Popen(['printf',inpipe],stdout=subprocess.PIPE)  #This is the statics pipe, pint stdout to syn's stdin
-                p=subprocess.Popen(command_Myz,stdin=ps.stdout,stdout=open(tmp_small_Myz,'w'))     
-                p.communicate()  
-                p.wait()
-    
-                ps=subprocess.Popen(['printf',inpipe],stdout=subprocess.PIPE)  #This is the statics pipe, pint stdout to syn's stdin
-                p=subprocess.Popen(command_Mzz,stdin=ps.stdout,stdout=open(tmp_small_Mzz,'w'))     
-                p.communicate()  
-                p.wait()
-                                
-                
-                #Rotate radial/transverse to East/North, correct vertical and scale to m
-                statics=loadtxt(tmp_small_Mxx)
-                u=statics[2]/100
-                r=statics[3]/100
-                t=statics[4]/100
-                ntemp,etemp=rt2ne(array([r,r]),array([t,t]),az[k])
-                #now project onto LOS if doing insar
-                if insar==True:
-                    los_mt=los.dot(array([ntemp[0],etemp[0],u]))
-                    line='%s\t%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\n' % (staname[k],str(subfault).rjust(5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,los_mt)
-                else:
-                    n=ntemp[0]
-                    e=etemp[0]
-                    line='%s\t%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\t%.4e\t%.4e\n' % (staname[k],str(subfault).rjust(5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,n,e,u)
-                #write to file
-                f_Mxx.write(line)
-            
-                statics=loadtxt(tmp_small_Mxy)
-                u=statics[2]/100
-                r=statics[3]/100
-                t=statics[4]/100
-                ntemp,etemp=rt2ne(array([r,r]),array([t,t]),az[k])
-                n=ntemp[0]
-                e=etemp[0]
-                #now project onto LOS if doing insar
-                if insar==True:
-                    los_mt=los.dot(array([ntemp[0],etemp[0],u]))
-                    line='%s\t%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\n' % (staname[k],str(subfault).rjust(5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,los_mt)
-                else:
-                    n=ntemp[0]
-                    e=etemp[0]
-                    line='%s\t%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\t%.4e\t%.4e\n' % (staname[k],str(subfault).rjust(5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,n,e,u)
-                #write to file
-                f_Mxy.write(line)
-                
-                statics=loadtxt(tmp_small_Mxz)
-                u=statics[2]/100
-                r=statics[3]/100
-                t=statics[4]/100
-                ntemp,etemp=rt2ne(array([r,r]),array([t,t]),az[k])
-                n=ntemp[0]
-                e=etemp[0]
-                #now project onto LOS if doing insar
-                if insar==True:
-                    los_mt=los.dot(array([ntemp[0],etemp[0],u]))
-                    line='%s\t%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\n' % (staname[k],str(subfault).rjust(5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,los_mt)
-                else:
-                    n=ntemp[0]
-                    e=etemp[0]
-                    line='%s\t%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\t%.4e\t%.4e\n' % (staname[k],str(subfault).rjust(5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,n,e,u)
-                #write to file
-                f_Mxz.write(line)
-            
-                statics=loadtxt(tmp_small_Myy)
-                u=statics[2]/100
-                r=statics[3]/100
-                t=statics[4]/100
-                ntemp,etemp=rt2ne(array([r,r]),array([t,t]),az[k])
-                n=ntemp[0]
-                e=etemp[0]
-                #now project onto LOS if doing insar
-                if insar==True:
-                    los_mt=los.dot(array([ntemp[0],etemp[0],u]))
-                    line='%s\t%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\n' % (staname[k],str(subfault).rjust(5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,los_mt)
-                else:
-                    n=ntemp[0]
-                    e=etemp[0]
-                    line='%s\t%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\t%.4e\t%.4e\n' % (staname[k],str(subfault).rjust(5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,n,e,u)
-                #write to file
-                f_Myy.write(line)
-            
-                statics=loadtxt(tmp_small_Myz)
-                u=statics[2]/100
-                r=statics[3]/100
-                t=statics[4]/100
-                ntemp,etemp=rt2ne(array([r,r]),array([t,t]),az[k])
-                n=ntemp[0]
-                e=etemp[0]
-                #now project onto LOS if doing insar
-                if insar==True:
-                    los_mt=los.dot(array([ntemp[0],etemp[0],u]))
-                    line='%s\t%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\n' % (staname[k],str(subfault).rjust(5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,los_mt)
-                else:
-                    n=ntemp[0]
-                    e=etemp[0]
-                    line='%s\t%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\t%.4e\t%.4e\n' % (staname[k],str(subfault).rjust(5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,n,e,u)
-                #write to file
-                f_Myz.write(line)
-                
-                statics=loadtxt(tmp_small_Mzz)
-                u=statics[2]/100
-                r=statics[3]/100
-                t=statics[4]/100
-                ntemp,etemp=rt2ne(array([r,r]),array([t,t]),az[k])
-                n=ntemp[0]
-                e=etemp[0]
-                #now project onto LOS if doing insar
-                if insar==True:
-                    los_mt=los.dot(array([ntemp[0],etemp[0],u]))
-                    line='%s\t%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\n' % (staname[k],str(subfault).rjust(5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,los_mt)
-                else:
-                    n=ntemp[0]
-                    e=etemp[0]
-                    line='%s\t%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4e\t%.4e\t%.4e\n' % (staname[k],str(subfault).rjust(5,'0'),lon_sta[k],lat_sta[k],xs,ys,zs,n,e,u)
-                #write to file
-                f_Mzz.write(line)
-                      
-    f_Mxx.close()
-    f_Mxy.close()
-    f_Mxz.close()
-    f_Myy.close()
-    f_Myz.close()
-    f_Mzz.close()        
-    
-            
-                            
+    from numpy import loadtxt, genfromtxt, eye, asarray, fromstring, isfinite, allclose
+    from mudpy.green import src2sta, rt2ne
+
+    project = Path(home) / project_name
+    sources = loadtxt(project / ('data/model_info/mpi_source.%d.fault' % rank),ndmin=2)
+    stations = atleast_1d(genfromtxt(station_file,usecols=0,dtype='U'))
+    if len(set(stations)) != len(stations):
+        raise ValueError('Observation identifiers must be unique')
+    components = ('Mxx',) if forceMT else ('Mxx','Mxy','Mxz','Myy','Myz','Mzz')
+    mechanisms = asarray(mt,dtype=float).reshape(1,-1) if forceMT else eye(6)
+    if mechanisms.shape != (len(components),6) or not isfinite(mechanisms).all():
+        raise ValueError('Expected six finite tensor components')
+    projections = None
+    if insar:
+        observations = [loadtxt(project / 'data/statics' / (sta+'.los')) for sta in stations]
+        if any(value.shape != (4,) or not isfinite(value).all() for value in observations):
+            raise ValueError('Each imagery file must contain displacement_m, north, east, up')
+        projections = asarray([value[1:] for value in observations])
+        if not allclose((projections*projections).sum(axis=1),1,rtol=0,atol=1e-6):
+            raise ValueError('Imagery measurement directions must be unit vectors in NEU')
+    folder = project / 'GFs/static'
+    with ExitStack() as stack:
+        outputs = [stack.enter_context((folder / ('tmp_%s_process%d' % (component,rank))).open('w'))
+                   for component in components]
+        for source in sources:
+            subfault = str(int(source[0])).zfill(4)
+            suffix = 'insar' if insar else 'gps'
+            gf_file = folder / (model_name+'.static.%.4f.sub%s.%s' % (source[3],subfault,suffix))
+            statics = loadtxt(gf_file,ndmin=2)
+            distances, azimuths, lon, lat = src2sta(station_file,source,output_coordinates=True)
+            if (statics.shape != (len(stations),14) or not isfinite(statics).all()
+                    or not allclose(statics[:,0],statics[:,10],rtol=0,atol=0)
+                    or not allclose(statics[:,0],distances,rtol=0,atol=0.00051)):
+                raise ValueError('Expected matching complete DC+EX responses for every receiver in '+str(gf_file))
+            for k, station in enumerate(stations):
+                payload = ' '.join('%.10e' % value for value in statics[k])
+                for mechanism, output in zip(mechanisms,outputs):
+                    command = ['syn','-M'+str(10**23.6)+'/'+ '/'.join(map(str,mechanism)),
+                               '-A'+str(azimuths[k]),'-P']
+                    result = subprocess.run(command,input=payload,stdout=subprocess.PIPE,
+                                            stderr=subprocess.PIPE,text=True,check=True)
+                    values = fromstring(result.stdout,sep=' ')
+                    if values.shape != (5,) or not isfinite(values).all():
+                        raise ValueError('Invalid syn displacement: '+result.stdout+' '+result.stderr)
+                    north,east = rt2ne(values[3]/100,values[4]/100,azimuths[k])
+                    neu = asarray([north,east,values[2]/100])
+                    displacement = [projections[k].dot(neu)] if insar else neu
+                    row = [lon[k],lat[k],*source[1:4],*displacement]
+                    output.write(station+' '+str(int(source[0]))+' '+
+                                 ' '.join('%.10e' % value for value in row)+'\n')
+
+
 #If main entry point
 if __name__ == '__main__':
     import sys

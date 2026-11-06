@@ -7,658 +7,233 @@ Apr 4th 2017
 
 
 
-#Compute GFs for the ivenrse problem            
+from contextlib import contextmanager
+
+
+@contextmanager
+def _project_lock(home, project_name):
+    """Fail before mutation if another top-level mt3d run owns the project."""
+    from pathlib import Path
+    lock = Path(home) / project_name / '.mt3d.lock'
+    with lock.open('x'):
+        try:
+            yield
+        finally:
+            lock.unlink()
+
+
 def inversionGFs(home,project_name,GF_list,source_name,model_name,
-        green_flag,synth_flag,dk,pmin,pmax,kmax,hot_start,ncpus,forceMT,mt):
-    '''
-    This routine will read a .gflist file and compute the required GF type for each station
-    '''
-    from numpy import genfromtxt,where
-    from os import remove
-    from gc import collect
-    
-    #Read in GFlist and decide what to compute
-    gf_file=home+project_name+'/data/station_info/'+GF_list
-    stations=genfromtxt(gf_file,usecols=0,skip_header=1,dtype='U')
-    GF=genfromtxt(gf_file,usecols=[1,2,3,4,5,6,7],skip_header=1,dtype='f8')
-    
-    #Parameters not used but needed in function call
-    dt=1.0
-    NFFT=64
-    
-    # GFs can be computed all at the same time
-    station_file='temp.sta'
-    try:
-        remove(home+project_name+'/data/station_info/'+station_file) #Cleanup
-    except:
-        pass
-    if green_flag==1:
-        #decide what GF computation is required for this station
-        i=where(GF[:,2]==1)[0]
-        
-        if len(i)>0: #Static offset
-            print('Static GFs requested...')
-            f=open(home+project_name+'/data/station_info/'+station_file,'w')
-            for k in range(len(i)): #Write temp .sta file
-                out=stations[i[k]]+'\t'+repr(GF[i[k],0])+'\t'+repr(GF[i[k],1])+'\n'
-                f.write(out)
-            f.close()
-            make_parallel_green(home,project_name,station_file,source_name,model_name,dt,NFFT,
-                            hot_start,dk,pmin,pmax,kmax,ncpus,insar=False)
-        
-        i=where(GF[:,6]==1)[0]
-        if len(i)>0: #InSAR LOS
-            print('InSAR GFs requested...')
-            f=open(home+project_name+'/data/station_info/'+station_file,'w')
-            for k in range(len(i)): #Write temp .sta file
-                out=stations[i[k]]+'\t'+repr(GF[i[k],0])+'\t'+repr(GF[i[k],1])+'\n'
-                f.write(out)
-            f.close()
-            make_parallel_green(home,project_name,station_file,source_name,model_name,dt,NFFT,
-                            hot_start,dk,pmin,pmax,kmax,ncpus,insar=True)
+        green_flag,synth_flag,dk,pmin,pmax,kmax,hot_start,ncpus,forceMT,mt,flat=True):
+    """Compute tensor responses serially; one run owns the project at a time.
 
-            collect()   
-    
-    # Synthetics
-    if synth_flag==1:
+    ``flat`` retains the historical FK Earth-flattening option. Set False for
+    a flat homogeneous half-space benchmark. Static GNSS is not implemented.
+    """
+    from numpy import atleast_1d, atleast_2d
+    from pathlib import Path
+    from numpy import genfromtxt, where, isfinite
 
-        station_file='temp.sta'
-        #Decide which synthetics are required
-        
-        i=where(GF[:,2]==1)[0]
-        if len(i)>0: #Static offset
-            print('Static synthetics requested')
-            #Make dummy station file
-            f=open(home+project_name+'/data/station_info/'+station_file,'w')
-            for k in range(len(i)):
-                out=stations[i[k]]+'\t'+repr(GF[i[k],0])+'\t'+repr(GF[i[k],1])+'\n'
-                f.write(out)
-            f.close()
-            make_parallel_synthetics(home,project_name,station_file,source_name,model_name,hot_start,ncpus,forceMT,mt,insar=False)
-
-        #Decide which synthetics are required
-        i=where(GF[:,6]==1)[0]
-        if len(i)>0: # InSAR LOS
-            print('InSAR synthetics requested')
-            #Make dummy station file
-            f=open(home+project_name+'/data/station_info/'+station_file,'w')
-            for k in range(len(i)):
-                out=stations[i[k]]+'\t'+repr(GF[i[k],0])+'\t'+repr(GF[i[k],1])+'\n'
-                f.write(out)
-            f.close()
-            make_parallel_synthetics(home,project_name,station_file,source_name,model_name,hot_start,ncpus,forceMT,mt,insar=True)
-
-
-
+    if ncpus != 1:
+        raise NotImplementedError('mt3d currently requires ncpus=1; MPI execution is not validated')
+    project = Path(home) / project_name
+    gf_file = project / 'data/station_info' / GF_list
+    stations = atleast_1d(genfromtxt(gf_file, usecols=0, dtype='U'))
+    flags = atleast_2d(genfromtxt(gf_file, usecols=range(1,8)))
+    if not isfinite(flags).all() or not ((flags[:,2:] == 0) | (flags[:,2:] == 1)).all():
+        raise ValueError('Observation flags must be finite and binary')
+    if flags[:,2:6].any():
+        raise NotImplementedError('mt3d currently supports scalar imagery projections only, not GNSS or waveforms')
+    selected = where(flags[:,6] == 1)[0]
+    if not len(selected):
+        raise ValueError('No imagery observations requested')
+    if len(set(stations)) != len(stations):
+        raise ValueError('Observation identifiers must be unique')
+    station_file = project / 'data/station_info/temp.sta'
+    # Exclusive creation makes concurrent top-level runs fail before writing inputs.
+    with _project_lock(home,project_name):
+        with station_file.open('x') as stream:
+            for k in selected:
+                stream.write('%s %.9f %.9f\n' % (stations[k], flags[k,0], flags[k,1]))
+        try:
+            if green_flag:
+                make_parallel_green(home,project_name,station_file.name,source_name,
+                    model_name,1.0,64,hot_start,dk,pmin,pmax,kmax,ncpus,
+                    insar=True,flat=flat)
+            if synth_flag:
+                make_parallel_synthetics(home,project_name,station_file.name,source_name,
+                    model_name,hot_start,ncpus,forceMT,mt,insar=True)
+        finally:
+            station_file.unlink()
 
 
 def make_parallel_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,
-            hot_start,dk,pmin,pmax,kmax,ncpus,insar=False):
-    '''
-    This routine set's up the computation of GFs for each subfault to all stations.
-    The GFs are impulse sources, they don't yet depend on strike and dip.
-    
-    IN:
-        home: Home directory
-        project_name: Name fo the problem
-        station_file: File with coordinates of stations
-        fault_name: Name of fault file
-        model_Name: Name of Earth structure model file
-        dt: Desired sampling itnerval for waveforms
-        NFFT: No. of samples requested in waveform (must be power of 2)
-        static: =0 if computing full waveforms, =1 if computing only the static field
-        hot_start: =k if you want to start computations at k-th subfault, =0 to compute all
+        hot_start,dk,pmin,pmax,kmax,ncpus,insar=False,flat=True):
+    """Generate complete DC+EX static GFs using the existing worker, serially.
 
-        
-    OUT:
-        Nothing
-    '''
-    from numpy import loadtxt,arange,savetxt
-    from os import path,makedirs,environ
-    from shlex import split
-    import subprocess
-    
-    
-    green_path=home+project_name+'/GFs/'
-    station_file=home+project_name+'/data/station_info/'+station_file 
-    fault_file=home+project_name+'/data/model_info/'+fault_name  
-    #Load source model for station-event distance computations
-    source=loadtxt(fault_file,ndmin=2)
+    Direct callers must own the project exclusively; inversionGFs enforces this.
+    """
+    from pathlib import Path
+    from numpy import loadtxt, savetxt, isfinite, unique
+    from mudpy.parallel import run_parallel_green
 
-    #Create individual source files
-    for k in range(ncpus):
-        i=arange(k+hot_start,len(source),ncpus)
-        mpi_source=source[i,:]
-        fmt='%d\t%10.6f\t%10.6f\t%10.6f'
-        savetxt(home+project_name+'/data/model_info/mpi_source.'+str(k)+'.fault',mpi_source,fmt=fmt)
-    #Make mpi system call
-    print("MPI: Starting GFs computation on", ncpus, "CPUs\n")
-    mud_source=environ['MUD']+'/src/python/mudpy/'
+    if ncpus != 1:
+        raise NotImplementedError('mt3d currently requires ncpus=1')
+    project = Path(home) / project_name
+    source = loadtxt(project / 'data/model_info' / fault_name, ndmin=2)
+    if source.shape[1] != 4 or not isfinite(source).all():
+        raise ValueError('Expected finite source rows: ID, longitude, latitude, depth_km')
+    ids = source[:,0]
+    if (ids <= 0).any() or (ids != ids.astype(int)).any() or len(unique(ids)) != len(ids):
+        raise ValueError('Source IDs must be positive unique integers')
+    if (source[:,3] <= 0).any() or not 0 <= hot_start < len(source):
+        raise ValueError('Sources must be buried and hot_start must select a source')
+    savetxt(project / 'data/model_info/mpi_source.0.fault', source[hot_start:],
+            fmt=['%d','%.9f','%.9f','%.9f'])
+    run_parallel_green(home,project_name,str(project / 'data/station_info' / station_file),
+        model_name,dt,NFFT,1,dk,pmin,pmax,kmax,False,insar,0,1,
+        full_mt=True,flat=flat)
 
-    #Parameters that are not used but neede by function call
-    static=1
-    tsunami=False
-    
-    #Make mpi call
-    mpi='mpiexec -n '+str(ncpus)+' python '+mud_source+'parallel.py run_parallel_green '+home+' '+project_name+' '+station_file+' '+model_name+' '+str(dt)+' '+str(NFFT)+' '+str(static)+' '+str(dk)+' '+str(pmin)+' '+str(pmax)+' '+str(kmax)+' '+str(tsunami)+' '+str(insar)
-    mpi=split(mpi)
-    p=subprocess.Popen(mpi)
-    p.communicate()
-    
-    
-    
-    
-#Now make synthetics for source/station pairs
+
 def make_parallel_synthetics(home,project_name,station_file,source_name,model_name,
-                    hot_start,ncpus,forceMT,mt,insar=False):
-    '''
-    This routine will take the impulse response (GFs) and pass it into the routine that will
-    convovle them with the source time function according to each subfaults strike and dip.
-    The result fo this computation is a time series dubbed a "synthetic"
-    
-    IN:
-        home: Home directory
-        project_name: Name fo the problem
-        station_file: File with coordinates of stations
-        fault_name: Name of fault file
-        model_Name: Name of Earth structure model file
-        integrate: =0 if you want output to be velocity, =1 if you want output to be displacement
-        static: =0 if computing full waveforms, =1 if computing only the static field
-        hot_start: =k if you want to start computations at k-th subfault, =0 to compute all
-        coord_type: =0 if problem is in cartesian coordinates, =1 if problem is in lat/lon
-        
-    OUT:
-        Nothing
-    '''
-    from numpy import arange,savetxt
-    import datetime
-    from numpy import loadtxt
-    import subprocess
-    from shlex import split
-    from os import environ
-    
-    station_file=home+project_name+'/data/station_info/'+station_file
-    fault_file=home+project_name+'/data/model_info/'+source_name
-    synth_path=home+project_name+'/GFs/static/'
-    #Time for log file
-    now=datetime.datetime.now()
-    now=now.strftime('%b-%d-%H%M')
-    #First read fault model file
-    source=loadtxt(fault_file,ndmin=2)
-    #Create individual source files
-    for k in range(ncpus):
-        i=arange(k+hot_start,len(source),ncpus)
-        mpi_source=source[i,:]
-        fmt='%d\t%10.6f\t%10.6f\t%10.6f'
-        savetxt(home+project_name+'/data/model_info/mpi_source.'+str(k)+'.fault',mpi_source,fmt=fmt)
-    
-    if forceMT==False:
-        mt=[0,0,0,0,0,0]
-    
-    #Make mpi system call
-    print("MPI: Starting synthetics computation on", ncpus, "CPUs\n")
-    mud_source=environ['MUD']+'/src/python/mudpy/'
-    mpi='mpiexec -n '+str(ncpus)+' python '+mud_source+'parallel.py run_parallel_synthetics_mt3d '+home+' '+project_name+' '+station_file+' '+model_name+' '+str(forceMT)+' '+str(mt[0])+' '+str(mt[1])+' '+str(mt[2])+' '+str(mt[3])+' '+str(mt[4])+' '+str(mt[5])+' '+str(insar)
-    mpi=split(mpi)
-    p=subprocess.Popen(mpi)
-    p.communicate()
-    
-    #Now merge files (loop over MT components
-    #Make list of files to be merged
-    filenames_Mxx=[]
-    filenames_Mxy=[]
-    filenames_Mxz=[]
-    filenames_Myy=[]
-    filenames_Myz=[]
-    filenames_Mzz=[]
-    
-    #List of file names to cocnatenate
-    for kfile in range(ncpus):
-        filenames_Mxx.append(synth_path+'tmp_Mxx_process'+str(int(kfile)))
-        filenames_Mxy.append(synth_path+'tmp_Mxy_process'+str(int(kfile)))
-        filenames_Mxz.append(synth_path+'tmp_Mxz_process'+str(int(kfile)))
-        filenames_Myy.append(synth_path+'tmp_Myy_process'+str(int(kfile)))
-        filenames_Myz.append(synth_path+'tmp_Myz_process'+str(int(kfile)))
-        filenames_Mzz.append(synth_path+'tmp_Mzz_process'+str(int(kfile)))
+        hot_start,ncpus,forceMT,mt,insar=False):
+    """Generate and assemble tensor responses serially, in existing text formats.
 
-    
-    #Make final output files for GPS
-    if forceMT==True:
-        if insar==False:
-            with open(synth_path+'_Mxx.neu', 'w') as outfile:
-                outfile.write('# sta_name,src_num,lon_sta,lat_sta,lon_src,lat_src,z_src(km),n(m),e(m),u(m)\n')
-                for fname in filenames_Mxx:
-                    with open(fname) as infile:
-                        for line in infile:
-                            outfile.write(line)
-    
-        else: #Output for Insar
-            with open(synth_path+'_Mxx.los', 'w') as outfile:
-                outfile.write('# sta_name,src_num,lon_sta,lat_sta,lon_src,lat_src,z_src(km),los(m)\n')
-                for fname in filenames_Mxx:
-                    with open(fname) as infile:
-                        for line in infile:
-                            outfile.write(line)
-                            
+    Direct callers must own the project exclusively; inversionGFs enforces this.
+    """
+    from pathlib import Path
+    from numpy import loadtxt, savetxt
+    from mudpy.parallel import run_parallel_synthetics_mt3d
 
-        
-    else: #Stuff to do when you want all 6 MT components
-        if insar==False:
-            with open(synth_path+'_Mxx.neu', 'w') as outfile:
-                outfile.write('# sta_name,src_num,lon_sta,lat_sta,lon_src,lat_src,z_src(km),n(m),e(m),u(m)\n')
-                for fname in filenames_Mxx:
-                    with open(fname) as infile:
-                        for line in infile:
-                            outfile.write(line)
-                            
-            with open(synth_path+'_Mxy.neu', 'w') as outfile:
-                outfile.write('# sta_name,src_num,lon_sta,lat_sta,lon_src,lat_src,z_src(km),n(m),e(m),u(m)\n') 
-                for fname in filenames_Mxy:
-                    with open(fname) as infile:
-                        for line in infile:
-                            outfile.write(line)
-                            
-            with open(synth_path+'_Mxz.neu', 'w') as outfile:
-                outfile.write('# sta_name,src_num,lon_sta,lat_sta,lon_src,lat_src,z_src(km),n(m),e(m),u(m)\n')
-                for fname in filenames_Mxz:
-                    with open(fname) as infile:
-                        for line in infile:
-                            outfile.write(line)
-                            
-            with open(synth_path+'_Myy.neu', 'w') as outfile:
-                outfile.write('# sta_name,src_num,lon_sta,lat_sta,lon_src,lat_src,z_src(km),n(m),e(m),u(m)\n')
-                for fname in filenames_Myy:
-                    with open(fname) as infile:
-                        for line in infile:
-                            outfile.write(line)
-                            
-            with open(synth_path+'_Myz.neu', 'w') as outfile:
-                outfile.write('# sta_name,src_num,lon_sta,lat_sta,lon_src,lat_src,z_src(km),n(m),e(m),u(m)\n')
-                for fname in filenames_Myz:
-                    with open(fname) as infile:
-                        for line in infile:
-                            outfile.write(line)
-                            
-            with open(synth_path+'_Mzz.neu', 'w') as outfile:
-                outfile.write('# sta_name,src_num,lon_sta,lat_sta,lon_src,lat_src,z_src(km),n(m),e(m),u(m)\n')
-                for fname in filenames_Mzz:
-                    with open(fname) as infile:
-                        for line in infile:
-                            outfile.write(line)
-        
-    
-        else: #Output for Insar
-            with open(synth_path+'_Mxx.los', 'w') as outfile:
-                outfile.write('# sta_name,src_num,lon_sta,lat_sta,lon_src,lat_src,z_src(km),los(m)\n')
-                for fname in filenames_Mxx:
-                    with open(fname) as infile:
-                        for line in infile:
-                            outfile.write(line)
-                            
-            with open(synth_path+'_Mxy.los', 'w') as outfile:
-                outfile.write('# sta_name,src_num,lon_sta,lat_sta,lon_src,lat_src,z_src(km),los(m)\n') 
-                for fname in filenames_Mxy:
-                    with open(fname) as infile:
-                        for line in infile:
-                            outfile.write(line)
-                            
-            with open(synth_path+'_Mxz.los', 'w') as outfile:
-                outfile.write('# sta_name,src_num,lon_sta,lat_sta,lon_src,lat_src,z_src(km),los(m)\n')
-                for fname in filenames_Mxz:
-                    with open(fname) as infile:
-                        for line in infile:
-                            outfile.write(line)
-                            
-            with open(synth_path+'_Myy.los', 'w') as outfile:
-                outfile.write('# sta_name,src_num,lon_sta,lat_sta,lon_src,lat_src,z_src(km),los(m)\n')
-                for fname in filenames_Myy:
-                    with open(fname) as infile:
-                        for line in infile:
-                            outfile.write(line)
-                            
-            with open(synth_path+'_Myz.los', 'w') as outfile:
-                outfile.write('# sta_name,src_num,lon_sta,lat_sta,lon_src,lat_src,z_src(km),los(m)\n')
-                for fname in filenames_Myz:
-                    with open(fname) as infile:
-                        for line in infile:
-                            outfile.write(line)
-                            
-            with open(synth_path+'_Mzz.los', 'w') as outfile:
-                outfile.write('# sta_name,src_num,lon_sta,lat_sta,lon_src,lat_src,z_src(km),los(m)\n')
-                for fname in filenames_Mzz:
-                    with open(fname) as infile:
-                        for line in infile:
-                            outfile.write(line)
-                        
-    
+    if ncpus != 1:
+        raise NotImplementedError('mt3d currently requires ncpus=1')
+    project = Path(home) / project_name
+    source = loadtxt(project / 'data/model_info' / source_name, ndmin=2)
+    if not 0 <= hot_start < len(source):
+        raise ValueError('hot_start must select a source')
+    savetxt(project / 'data/model_info/mpi_source.0.fault', source[hot_start:],
+            fmt=['%d','%.9f','%.9f','%.9f'])
+    run_parallel_synthetics_mt3d(home,project_name,
+        str(project / 'data/station_info' / station_file),model_name,forceMT,mt,insar,0,1)
+    suffix = 'los' if insar else 'neu'
+    components = ('Mxx',) if forceMT else ('Mxx','Mxy','Mxz','Myy','Myz','Mzz')
+    for component in components:
+        folder = project / 'GFs/static'
+        with (folder / ('_'+component+'.'+suffix)).open('w') as output:
+            output.write('# station source_id lon_sta lat_sta lon_src lat_src depth_km '+
+                         ('projection_m' if insar else 'north_m east_m up_m')+'\n')
+            output.write((folder / ('tmp_'+component+'_process0')).read_text())
+
 
 def getG(home,project_name,source_name,model_name,GF_list,G_from_file,G_name,forceMT):
-    '''
-    Build the G matrix
-    '''
-    from numpy import arange,genfromtxt,where,loadtxt,array,c_,concatenate,save,load,size,tile,expand_dims
-    from os import remove
-    from os.path import split
-    from mudpy import inverse as inv
-    
-    G_name=home+project_name+'/GFs/matrices/'+G_name
-    if G_from_file==True: #load from file
-        print('Loading G from file '+G_name)
-        G=load(G_name+'.npy')
-    else: #assemble G one data type at a time
-        print('Assembling G from synthetic computations...')
-        #Read in GFlist and decide what to compute
-        gf_file=home+project_name+'/data/station_info/'+GF_list
-        mini_station=home+project_name+'/data/station_info/tempG.sta'
-        stations=genfromtxt(gf_file,usecols=0,dtype='U')
-        GF=genfromtxt(gf_file,usecols=[1,2,3,4,5,6,7],dtype='f8')
-        GFfiles=genfromtxt(gf_file,usecols=[8,9,10,11,12],dtype='S')
-        #Check for single station sized arrays
-        if GF.ndim==1: #One station
-            GF=expand_dims(GF,0)
-            GFfiles=expand_dims(GFfiles,0)
-            stations=array([stations])
-        
-        #static field GFs
-        kgf=2 
-        Gstatic=array([])
-        if GF[:,kgf].sum()>0:
-            try:
-                remove(mini_station) #Cleanup  
-            except:
-                pass
-            #Make mini station file 
-            i=where(GF[:,kgf]==1)[0]
-            if len(i)>0: #There's actually something to do
-                inv.mini_station_file(mini_station,stations[i],GF[i,0],GF[i,1],GFfiles[i,0])
-                gftype='static'
-                Gstatic= makeG(home,project_name,source_name,model_name,split(mini_station)[1],gftype,forceMT)
-                remove(mini_station) #Cleanup  
+    """Assemble scalar imagery responses in observation and source-file order.
 
-        #static field GFs
-        kgf=6 
-        Ginsar=array([])
-        if GF[:,kgf].sum()>0:
-            try:
-                remove(mini_station) #Cleanup  
-            except:
-                pass
-            #Make mini station file 
-            i=where(GF[:,kgf]==1)[0]
-            if len(i)>0: #There's actually something to do
-                inv.mini_station_file(mini_station,stations[i],GF[i,0],GF[i,1],GFfiles[i,0])
-                gftype='insar'
-                Ginsar= makeG(home,project_name,source_name,model_name,split(mini_station)[1],gftype,forceMT)
-                remove(mini_station) #Cleanup  
-        
-        #Done, concat, save to file, release the memory
-        print(Gstatic.shape)
-        print(Ginsar.shape)
-        G=concatenate([g for g in [Gstatic,Ginsar] if g.size > 0])
-        print('Saving GF matrix to '+G_name+' this might take just a second...')
-        save(G_name,G)
+    The legacy .npy cache has no provenance validation. Use G_from_file=False
+    after any source, geometry, Earth-model, or response change. Direct callers
+    must own the project exclusively; run_inversion enforces this.
+    """
+    from numpy import atleast_1d, atleast_2d
+    from pathlib import Path
+    from numpy import genfromtxt, loadtxt, load, save, isfinite
+
+    project = Path(home) / project_name
+    gf_file = project / 'data/station_info' / GF_list
+    stations = atleast_1d(genfromtxt(gf_file,usecols=0,dtype='U'))
+    flags = atleast_2d(genfromtxt(gf_file,usecols=range(1,8)))
+    if not isfinite(flags).all() or not ((flags[:,2:] == 0) | (flags[:,2:] == 1)).all():
+        raise ValueError('Observation flags must be finite and binary')
+    if flags[:,2:6].any():
+        raise NotImplementedError('mt3d supports scalar imagery projections only')
+    selected = flags[:,6] == 1
+    if not selected.any() or len(set(stations)) != len(stations):
+        raise ValueError('Expected imagery observations with unique identifiers')
+    sources = loadtxt(project / 'data/model_info' / source_name,ndmin=2)
+    expected = (int(selected.sum()),len(sources)*(1 if forceMT else 6))
+    matrix_file = project / 'GFs/matrices' / (G_name+'.npy')
+    if G_from_file:
+        G = load(matrix_file)
+    else:
+        mini = project / 'data/station_info/tempG.sta'
+        with mini.open('x') as stream:
+            for sta, row in zip(stations[selected],flags[selected]):
+                stream.write('%s %.9f %.9f unused\n' % (sta,row[0],row[1]))
+        try:
+            G = makeG(home,project_name,source_name,model_name,mini.name,'insar',forceMT)
+        finally:
+            mini.unlink()
+        save(matrix_file,G)
+    if G.shape != expected or not isfinite(G).all():
+        raise ValueError('Response matrix has wrong shape or nonfinite entries')
     return G
 
 
-
 def makeG(home,project_name,source_name,model_name,station_file,gftype,forceMT):
-    '''
-    This routine is called from getG and will assemble the GFs from available synthetics
-    depending on data type requested 
-    
-    IN:
-        home: Home directory
-        project_name: Name of the problem
-        fault_name: Name of fault description file
-        model_name: Name of velocity structure file
-        station_file: File with coordinates of stations and data types
-        gftype: ='static' if assembling static field GFs
-       
-    OUT:
-        G: Partially assembled GF with all synthetics from a particular data type
-    '''
-    
-    from numpy import genfromtxt,loadtxt,zeros,array,inf,where,unique,argsort,arange
+    """Assemble complete response rows, preserving explicit source-file order."""
+    from numpy import atleast_1d, atleast_2d
+    from pathlib import Path
+    from numpy import genfromtxt, loadtxt, zeros, isfinite, unique
 
-    
-    #Load fault model
-    source=loadtxt(home+project_name+'/data/model_info/'+source_name,ndmin=2)
-    Nfaults=source.shape[0] #Number of subfaults
-    #Load station info
-    station_file=home+project_name+'/data/station_info/'+station_file
-    staname=genfromtxt(station_file,dtype="U",usecols=0)
-    datafiles=genfromtxt(station_file,dtype="S",usecols=3)
-    syn_path=home+project_name+'/GFs/static/'
-    
-    #Deal with one station issue
-    try:
-        Nsta=len(staname)
-    except:
-        Nsta=1
-        staname=array([staname])
-        datafiles=array([datafiles])
-    
-    #Initalize G for faster assignments
-    if forceMT==True:
-        Ncomponents=1
+    if gftype.lower() != 'insar':
+        raise NotImplementedError('GNSS tensor assembly is unfinished; zero response rows are not permitted')
+    project = Path(home) / project_name
+    source = loadtxt(project / 'data/model_info' / source_name,ndmin=2)
+    if source.shape[1] != 4 or not isfinite(source).all():
+        raise ValueError('Expected finite four-column source rows')
+    source_ids = source[:,0]
+    if (source_ids != source_ids.astype(int)).any() or len(unique(source_ids)) != len(source_ids):
+        raise ValueError('Source IDs must be unique integers')
+    stations = atleast_1d(genfromtxt(project / 'data/station_info' / station_file,
+                         dtype='U',usecols=0))
+    if len(set(stations)) != len(stations):
+        raise ValueError('Observation identifiers must be unique')
+    coordinates = loadtxt(project / 'data/station_info' / station_file,usecols=(1,2),ndmin=2)
+    components = ('Mxx',) if forceMT else ('Mxx','Mxy','Mxz','Myy','Myz','Mzz')
+    G = zeros((len(stations),len(source)*len(components)))
+    for component_index, component in enumerate(components):
+        path = project / 'GFs/static' / ('_'+component+'.los')
+        names = atleast_1d(genfromtxt(path,usecols=0,dtype='U'))
+        values = loadtxt(path,usecols=range(1,8),ndmin=2)
+        if not isfinite(values).all():
+            raise ValueError('Nonfinite response in '+str(path))
+        for row, station in enumerate(stations):
+            matches = values[names == station]
+            if len(matches) != len(source) or set(matches[:,0]) != set(source_ids):
+                raise ValueError('Missing, duplicate, or unknown source responses for '+station+' in '+str(path))
+            if not (abs(matches[:,1:3]-coordinates[row]) < 1e-6).all():
+                raise ValueError('Response receiver coordinates do not match observation ID')
+            by_id = {item[0]:item for item in matches}
+            ordered = [by_id[source_id] for source_id in source_ids]
+            # Responses contain source longitude, latitude, depth after station coordinates.
+            for source_row, response in zip(source,ordered):
+                if not all(abs(response[3:6]-source_row[1:4]) < 1e-6):
+                    raise ValueError('Response source coordinates do not match source ID')
+            G[row,component_index::len(components)] = [item[6] for item in ordered]
+    return G
+
+
+def get_moment(home,project_name,source_name,sol,forceMT,mt=None):
+    """Return nonnegative tensor moments in N m and aggregate Mw.
+
+    Coefficients scale the Mw-5 reference component amplitude. A zero total
+    moment has Mw=-inf. A fixed tensor's norm is required for normalization.
+    """
+    from numpy import asarray, sqrt, log10, isfinite
+
+    coefficients = asarray(sol,dtype=float).reshape(-1)
+    if forceMT:
+        mechanism = asarray(mt,dtype=float)
+        if mechanism.shape != (6,) or not isfinite(mechanism).all():
+            raise ValueError('Fixed tensor requires six finite components')
+        tensors = coefficients[:,None]*mechanism
     else:
-        Ncomponents=6
-        
-    if gftype.lower()=='static': #Initialize output matrix
-        G=zeros((Nsta*3,Nfaults*Ncomponents))
-    elif gftype.lower()=='insar': #Initialize output matrix
-        G=zeros((Nsta,Nfaults*Ncomponents))
-        
-    if gftype.lower()=='static': #Make matrix of static GFs
-        #Load the synthetics files
-        Mxx=genfromtxt(syn_path+'_Mxx.neu')
-        Mxy=genfromtxt(syn_path+'_Mxy.neu')
-        Mxz=genfromtxt(syn_path+'_Mxz.neu')
-        Myy=genfromtxt(syn_path+'_Myy.neu')
-        Myz=genfromtxt(syn_path+'_Myz.neu')
-        Mzz=genfromtxt(syn_path+'_Mzz.neu')
-        Mxx_sta=genfromtxt(syn_path+'_Mxx.neu',usecols=0,dtype='S')
-        Mxy_sta=genfromtxt(syn_path+'_Mxy.neu',usecols=0,dtype='S')
-        Mxz_sta=genfromtxt(syn_path+'_Mxz.neu',usecols=0,dtype='S')
-        Myy_sta=genfromtxt(syn_path+'_Myy.neu',usecols=0,dtype='S')
-        Myz_sta=genfromtxt(syn_path+'_Myz.neu',usecols=0,dtype='S')
-        Mzz_sta=genfromtxt(syn_path+'_Mzz.neu',usecols=0,dtype='S')
-        
-        for ksta in range(Nsta):
-            
-            #Loop over stations
-            if ksta%10==0:
-                print('... working on station '+str(ksta)+' of '+str(Nsta))
-            
-            #Initalize output variable
-            if forceMT==False:
-                Gtemp=zeros([3,Nfaults*6])
-            else:
-                Gtemp=zeros([3,Nfaults])
-                
-            #what am I working on
-            sta=staname[ksta]
-            
-            #Find the position ine ach file of allsubfaults for this station
-            i=where(Mxx_sta==sta)[0]
-            isort=argsort(Mxx[i,1])
-            neu_xx=Mxx[i[isort],7:10]
-            
-            i=where(Mxy_sta==sta)[0]
-            isort=argsort(Mxy[i,1])
-            neu_xy=Mxy[i[isort],7:10]
-            
-            i=where(Mxz_sta==sta)[0]
-            isort=argsort(Mxz[i,1])
-            neu_xz=Mxz[i[isort],7:10]
-            
-            i=where(Myy_sta==sta)[0]
-            isort=argsort(Myy[i,1])
-            neu_yy=Myy[i[isort],7:10]
-            
-            i=where(Myz_sta==sta)[0]
-            isort=argsort(Myz[i,1])
-            neu_yz=Myz[i[isort],7:10]
-            
-            i=where(Mzz_sta==sta)[0]
-            isort=argsort(Mzz[i,1])
-            neu_zz=Mzz[i[isort],7:10]
-            
-            ##Needs work
-            ##Place into G matrix
-            #if forceMT==False:
-            #    #North
-            #    Gtemp[0,6*kfault]=neu_xx[0,0]   ; Gtemp[0,6*kfault+1]=neu_xy[0,0] ; Gtemp[0,6*kfault+2]=neu_xz[0,0]
-            #    Gtemp[0,6*kfault+3]=neu_yy[0,0] ; Gtemp[0,6*kfault+4]=neu_yz[0,0] ; Gtemp[0,6*kfault+5]=neu_zz[0,0]
-            #    
-            #    #East
-            #    Gtemp[1,6*kfault]=neu_xx[0,1]   ; Gtemp[1,6*kfault+1]=neu_xy[0,1] ; Gtemp[1,6*kfault+2]=neu_xz[0,1]
-            #    Gtemp[1,6*kfault+3]=neu_yy[0,1] ; Gtemp[1,6*kfault+4]=neu_yz[0,1] ; Gtemp[1,6*kfault+5]=neu_zz[0,1]
-            #    
-            #    #Up
-            #    Gtemp[2,6*kfault]=neu_xx[0,2]   ; Gtemp[2,6*kfault+1]=neu_xy[0,2] ; Gtemp[2,6*kfault+2]=neu_xz[0,2]
-            #    Gtemp[2,6*kfault+3]=neu_yy[0,2] ; Gtemp[2,6*kfault+4]=neu_yz[0,2] ; Gtemp[2,6*kfault+5]=neu_zz[0,2]
-            #else:
-            #    #North
-            #    Gtemp[0,kfault]=neu_xx[0,0]
-            #    #East
-            #    Gtemp[1,kfault]=neu_xx[0,1]                 
-            #    #Up
-            #    Gtemp[2,kfault]=neu_xx[0,2]
-            #    
-            ##Append to output matrix
-            #G[ksta*3:ksta*3+3,:]=Gtemp   
-        return G   
-    
-    elif gftype.lower()=='insar': #Make matrix of insar LOS GFs
-        #Load the synthetics files
-        print('... loading Mxx')
-        Mxx=genfromtxt(syn_path+'_Mxx.los')
-        Mxx_sta=genfromtxt(syn_path+'_Mxx.los',usecols=0,dtype='S')
-        if forceMT==False:
-            print('... loading Mxy')
-            Mxy=genfromtxt(syn_path+'_Mxy.los')
-            Mxy_sta=genfromtxt(syn_path+'_Mxy.los',usecols=0,dtype='S')
-            print('... loading Mxz')
-            Mxz=genfromtxt(syn_path+'_Mxz.los')
-            Mxz_sta=genfromtxt(syn_path+'_Mxz.los',usecols=0,dtype='S')
-            print('... loading Myy')
-            Myy=genfromtxt(syn_path+'_Myy.los')
-            Myy_sta=genfromtxt(syn_path+'_Myy.los',usecols=0,dtype='S')
-            print('... loading Myz')
-            Myz=genfromtxt(syn_path+'_Myz.los')
-            Myz_sta=genfromtxt(syn_path+'_Myz.los',usecols=0,dtype='S')
-            print('... loading Mzz')
-            Mzz=genfromtxt(syn_path+'_Mzz.los')
-            Mzz_sta=genfromtxt(syn_path+'_Mzz.los',usecols=0,dtype='S')     
-        
-        
-        for ksta in range(Nsta):
-            #Loop over stations
-            if ksta%10==0:
-                print('... working on station '+str(ksta)+' of '+str(Nsta))
-            
-            #Initalize output variable
-            if forceMT==False:
-                Gtemp=zeros([1,Nfaults*6])
-            else:
-                Gtemp=zeros([1,Nfaults])
-                
-            #what am I working on
-            sta=staname[ksta]
-            
-            #Find the position ine ach file of allsubfaults for this station
-            i=where(Mxx_sta==sta)[0]
-            isort=argsort(Mxx[i,1])
-            neu_xx=Mxx[i[isort],7]
-            
-            i=where(Mxy_sta==sta)[0]
-            isort=argsort(Mxy[i,1])
-            neu_xy=Mxy[i[isort],7]
-            
-            i=where(Mxz_sta==sta)[0]
-            isort=argsort(Mxz[i,1])
-            neu_xz=Mxz[i[isort],7]
-            
-            i=where(Myy_sta==sta)[0]
-            isort=argsort(Myy[i,1])
-            neu_yy=Myy[i[isort],7]
-            
-            i=where(Myz_sta==sta)[0]
-            isort=argsort(Myz[i,1])
-            neu_yz=Myz[i[isort],7]
-            
-            i=where(Mzz_sta==sta)[0]
-            isort=argsort(Mzz[i,1])
-            neu_zz=Mzz[i[isort],7]
-                    
-            #Place into G matrix
-            # LOS
-            if forceMT==False:
-                ixx=arange(0,Nfaults*6,6)
-                ixy=arange(1,Nfaults*6,6)
-                ixz=arange(2,Nfaults*6,6)
-                iyy=arange(3,Nfaults*6,6)
-                iyz=arange(4,Nfaults*6,6)
-                izz=arange(5,Nfaults*6,6)
-                Gtemp[0,ixx]=neu_xx   ; Gtemp[0,ixy]=neu_xy ; Gtemp[0,ixz]=neu_xz
-                Gtemp[0,iyy]=neu_yy ; Gtemp[0,iyz]=neu_yz ; Gtemp[0,izz]=neu_zz
-            else:
-                Gtemp[0,kfault]=neu_xx
-
-                
-            #Append to output matrix
-            G[ksta,:]=Gtemp   
-        return G   
-
-
-def get_moment(home,project_name,source_name,sol,forceMT):
-    '''
-    Compute total moment from an inversion
-    '''
-    from numpy import log10,genfromtxt,loadtxt,arange,zeros,array
-    from mudpy.forward import get_mu
-    from numpy.linalg import eig
-   
-    unitMw=5.0
-    unitM0=10**(unitMw*1.5+9.1) #Keep it in N-m
-   
-    if forceMT==True: 
-        M0=sol*unitM0  
-    
-    else:
-        #Open model file
-        f=genfromtxt(home+project_name+'/data/model_info/'+source_name)
-    
-        #Get mt components
-        ixx=6*arange(len(sol)/6)
-        ixy=6*arange(len(sol)/6)+1
-        ixz=6*arange(len(sol)/6)+2
-        iyy=6*arange(len(sol)/6)+3
-        iyz=6*arange(len(sol)/6)+4
-        izz=6*arange(len(sol)/6)+5
-        
-        mt_xx=sol[ixx,0]
-        mt_xy=sol[ixy,0]
-        mt_xz=sol[ixz,0]
-        mt_yy=sol[iyy,0]
-        mt_yz=sol[iyz,0]
-        mt_zz=sol[izz,0]
-        
-        #Get total moment
-        M0=zeros(len(mt_xx))
-        for k in range(len(mt_xx)):
-            M=array([[mt_xx[k],mt_xy[k],mt_xz[k]],[mt_xy[k],mt_yy[k],mt_yz[k]],[mt_xz[k],mt_yz[k],mt_zz[k]]])
-            M=M*unitM0
-            eigVal,eigVec=eig(M)
-            M0[k]=(0.5*sum(eigVal**2))**0.5
-        
-    
-    #Total up and copute magnitude
-    M0total=M0.sum()
-    Mw=(2./3)*(log10(M0total)-9.1)
-    
-    return M0total,M0,Mw
+        if len(coefficients) % 6:
+            raise ValueError('Full tensor model must have six components per source')
+        tensors = coefficients.reshape(-1,6)
+    if not isfinite(tensors).all():
+        raise ValueError('Model contains nonfinite tensor components')
+    M0 = sqrt((tensors*tensors*[1,2,2,1,2,1]).sum(axis=1)/2)*10**16.6
+    total = M0.sum()
+    Mw = (2./3)*(log10(total)-9.1) if total > 0 else -float('inf')
+    return total,M0,Mw
 
 
 def write_log(home,project_name,run_name,k,lambda_spatial,
@@ -711,200 +286,80 @@ def write_log(home,project_name,run_name,k,lambda_spatial,
 
 
 def write_model(home,project_name,run_name,source_name,model_name,sol,num,forceMT,mt):
-    '''
-    Write inversion results to .inv file
-    
-    IN:
-        home: Home directory location
-        project_name: Name of the problem
-        run_name: Name of inversion run
-        fault_name: Name of fault description file
-        model_name: Name of velocity structure file
-        rupture_speed: Fastest rupture speed allowed in the problem
-        num_windows: Number of temporal rupture windows allowed
-        epicenter: Epicenter coordinates
-        sol: The solution vector from the inversion
-        num: ID number of the inversion
-        GF_list: Name of GF control file
-    OUT:
-        Nothing
-    '''
-    
-    from numpy import genfromtxt,loadtxt,arange,zeros,c_,savetxt,r_,array
-    from mudpy.forward import get_mu
-    from numpy.linalg import eig
-    from mudpy import analysis
-   
-    #Open model file
-    f=genfromtxt(home+project_name+'/data/model_info/'+source_name)
-    
-    unitMw=5.0
-    unitM0=10**(unitMw*1.5+9.1) #Keep it in N-m
-    
-    #Get MT components and MT related quantities (moment, strike dip, etc)-
-    ixx=6*arange(len(sol)/6)
-    ixy=6*arange(len(sol)/6)+1
-    ixz=6*arange(len(sol)/6)+2
-    iyy=6*arange(len(sol)/6)+3
-    iyz=6*arange(len(sol)/6)+4
-    izz=6*arange(len(sol)/6)+5
-    
-    if forceMT==True:
-        mt_xx=mt[0]*sol*unitM0
-        mt_xy=mt[1]*sol*unitM0
-        mt_xz=mt[2]*sol*unitM0
-        mt_yy=mt[3]*sol*unitM0
-        mt_yz=mt[4]*sol*unitM0
-        mt_zz=mt[5]*sol*unitM0
-    
-    else: 
-        mt_xx=sol[ixx,0]*unitM0
-        mt_xy=sol[ixy,0]*unitM0
-        mt_xz=sol[ixz,0]*unitM0
-        mt_yy=sol[iyy,0]*unitM0
-        mt_yz=sol[iyz,0]*unitM0
-        mt_zz=sol[izz,0]*unitM0
-    
-    #Get total moment
-    M0=zeros(len(mt_xx))
-    strike1=zeros(len(mt_xx))
-    dip1=zeros(len(mt_xx))
-    rake1=zeros(len(mt_xx))
-    strike2=zeros(len(mt_xx))
-    dip2=zeros(len(mt_xx))
-    rake2=zeros(len(mt_xx))
-    for k in range(len(mt_xx)):
-        mt=analysis.MT(mt_xx[k],mt_xy[k],mt_xz[k],mt_yy[k],mt_yz[k],mt_zz[k],1,1,1,mt_style='xyz')
-        mt.get_nodal_planes()
-        NP1=mt.nodal_plane1
-        NP2=mt.nodal_plane2
-        M0[k]=mt.moment()
-        strike1[k]=NP1[0]
-        dip1[k]=NP1[1]
-        rake1[k]=NP1[2]
-        strike2[k]=NP2[0]
-        dip2[k]=NP2[1]
-        rake2[k]=NP2[2]
-    
+    """Write tensors in N m; nodal planes describe the best fitting DC only.
 
-    #Prepare for output
-    out=c_[f,mt_xx,mt_xy,mt_xz,mt_yy,mt_yz,mt_zz,strike1,dip1,rake1,strike2,dip2,rake2,M0]
-    outdir=home+project_name+'/output/inverse_models/models/'+run_name+'.'+str(num).rjust(4,'0')+'.inv'
-    #CHANGE this to rupture definition as #No  x            y        z(km)      str     dip      rake       rise    dura     slip    ss_len  ds_len rupt_time
-    fmtout='%6i\t%11.4f\t%11.4f\t%11.4f\t%13.4e\t%13.4e\t%13.4e\t%13.4e\t%13.4e\t%13.4e\t%7.2f\t%7.2f\t%7.2f\t%7.2f\t%7.2f\t%7.2f\t%13.4e'
-    print('... writing model results to file '+outdir)
-    savetxt(outdir,out,fmtout,header='No,lon,lat,z(km),Mxx(Nm),Mxy(Nm),Mxz(Nm),Myy(Nm),Myz(Nm),Mzz(Nm),strike1,dip1,rake1,strike2,dip2,rake2,M0(Nm)')
+    Isotropic and zero tensors have undefined nodal planes, written as NaNs.
+    """
+    from pathlib import Path
+    from numpy import loadtxt, asarray, full, c_, savetxt
+    from mudpy.analysis import MT
 
+    project = Path(home) / project_name
+    source = loadtxt(project / 'data/model_info' / source_name,ndmin=2)
+    coefficients = asarray(sol).reshape(-1)
+    tensors = (coefficients[:,None]*asarray(mt) if forceMT else coefficients.reshape(-1,6))
+    if len(tensors) != len(source):
+        raise ValueError('Model and source counts differ')
+    _, moments, _ = get_moment(home,project_name,source_name,sol,forceMT,mt)
+    tensors = tensors*10**16.6
+    planes = full((len(source),6),float('nan'))
+    for k, tensor in enumerate(tensors):
+        mechanism = MT(*tensor,*source[k,1:4],mt_style='xyz')
+        mechanism.get_nodal_planes()
+        planes[k,:3] = mechanism.nodal_plane1
+        planes[k,3:] = mechanism.nodal_plane2
+    output = project / 'output/inverse_models/models' / (run_name+'.'+str(num).zfill(4)+'.inv')
+    savetxt(output,c_[source,tensors,planes,moments],
+            fmt=['%d']+['%.10e']*16,
+            header='No lon lat depth_km Mxx_Nm Mxy_Nm Mxz_Nm Myy_Nm Myz_Nm Mzz_Nm '+
+                   'DC_strike1 DC_dip1 DC_rake1 DC_strike2 DC_dip2 DC_rake2 M0_Nm')
 
 
 def run_inversion(home,project_name,run_name,source_name,model_name,GF_list,G_from_file,G_name,
         reg_spatial,nsources,solver,forceMT,mt,weight=False,Ltype=0):
-    '''
-    Assemble G and d, determine smoothing and run the inversion
-    '''
+    """Minimize ||W(Gm-d)||^2 + lambda^2 ||m||^2 in data space.
+
+    Identity damping is the only supported penalty. NNLS imposes componentwise
+    nonnegativity only when explicitly requested; signed tensors use lstsq.
+    """
     from mudpy import inverse as inv
-    from mudpy.forward import get_mu_and_area
-    from numpy import zeros,dot,array,squeeze,expand_dims,empty,tile,eye,ones,arange,load
-    from numpy.linalg import lstsq
-    from scipy.sparse import csr_matrix as sparse
+    from numpy import asarray, isfinite, eye, vstack, zeros, loadtxt
+    from numpy.linalg import lstsq, norm
     from scipy.optimize import nnls
-    from datetime import datetime
-    import gc
-    
-    
 
-    t1=datetime.now()
-    #Get data vector
-    d=inv.getdata(home,project_name,GF_list,decimate=None,bandpass=None)
-
-    #Get GFs
-    G=getG(home,project_name,source_name,model_name,GF_list,G_from_file,G_name,forceMT)
-    
-    #Get data weights
-    if weight==True:
-        print('Applying data weights')
-        w=inv.get_data_weights(home,project_name,GF_list,d,None)
-        W=empty(G.shape)
-        W=tile(w,(G.shape[1],1)).T
-        WG=empty(G.shape)
-        WG=W*G
-        wd=w*d.squeeze()
-        wd=expand_dims(wd,axis=1)
-        #Clear up extraneous variables
-        W=None
-        w=None
-        #Define inversion quantities
-        x=WG.transpose().dot(wd)
-        print('Computing G\'G')
-        K=(WG.T).dot(WG)
-        #And cleanup
-        W=None
-        WG=None
-        wd=None
-    else:
-        #Define inversion quantities if no weightd
-        x=G.transpose().dot(d)
-        print('Computing G\'G')
-        K=(G.T).dot(G)
-    
-    #Cleanup
-    #G=None 
-    
-    #Get regularization matrices (set to 0 matrix if not needed)
-    if forceMT==False:
-        Ls=eye(nsources*6) 
-    else:
-        Ls=eye(nsources)
-    print('Nsources: '+str(nsources))
-    Ninversion=len(reg_spatial)
-
-    #Make L's sparse
-    Ls=sparse(Ls)
-    #Get regularization tranposes for ABIC
-    LsLs=Ls.transpose().dot(Ls)
-    #inflate
-    Ls=Ls.todense()
-    LsLs=LsLs.todense()
-
-    #off we go
-    dt=datetime.now()-t1
-    print('Preprocessing wall time was '+str(dt))
-    print('\n--- RUNNING INVERSIONS ---\n')
-    ttotal=datetime.now()
-    kout=0
-    
-    for ks in range(len(reg_spatial)):
-        
-        t1=datetime.now()
-        lambda_spatial=reg_spatial[ks]
-        print('Running inversion '+str(kout+1)+' of '+str(Ninversion)+' at regularization levels: ls ='+repr(lambda_spatial))
-        
-        Kinv=K+(lambda_spatial**2)*LsLs
-        
-        if solver=='lstsq':
-            sol,res,rank,s=lstsq(Kinv,x)
-        elif solver=='nnls':
-            sol,res=nnls(Kinv,squeeze(x.T))
-
-        #Compute synthetics
-        ds=dot(G,sol)
-        
-        #Get stats
-        L2,Lmodel=inv.get_stats(Kinv,sol,x)
-        VR=inv.get_VR(home,project_name,GF_list,sol,d,ds,None)
-
-        #Get moment
-        M0total,M0,Mw=get_moment(home,project_name,source_name,sol,forceMT)
-
-        #Write log
-        write_log(home,project_name,run_name,kout,lambda_spatial,
-            L2,Lmodel,VR,M0total,Mw,model_name,source_name,G_name,GF_list)
-        
-        #Write output to file
-        inv.write_synthetics(home,project_name,run_name,GF_list,G,sol,ds,kout,None)
-        write_model(home,project_name,run_name,source_name,model_name,sol,kout,forceMT,mt)
-        
-        kout+=1
-        dt1=datetime.now()-t1
-        dt2=datetime.now()-ttotal
-        print('... inversion wall time was '+str(dt1)+', total wall time elapsed is '+str(dt2))
+    if Ltype != 0:
+        raise NotImplementedError('Only identity damping is implemented')
+    if solver not in ('lstsq','nnls'):
+        raise ValueError('Unknown solver: '+str(solver))
+    regularization = asarray(reg_spatial,dtype=float).reshape(-1)
+    if not len(regularization) or not isfinite(regularization).all() or (regularization < 0).any():
+        raise ValueError('Damping values must be finite and nonnegative')
+    with _project_lock(home,project_name):
+        G = getG(home,project_name,source_name,model_name,GF_list,G_from_file,G_name,forceMT)
+        source = loadtxt(home+project_name+'/data/model_info/'+source_name,ndmin=2)
+        if len(source) != nsources:
+            raise ValueError('nsources does not match source file')
+        d = inv.getdata(home,project_name,GF_list,decimate=None,bandpass=[None,None,None],quiet=True)
+        if d.shape != (G.shape[0],1) or not isfinite(d).all():
+            raise ValueError('Data and matrix rows differ or observations are nonfinite')
+        if weight:
+            w = inv.get_data_weights(home,project_name,GF_list,d,None)
+            if w.shape != (len(d),) or not isfinite(w).all() or (w <= 0).any():
+                raise ValueError('Observation standard deviations must be positive and finite')
+            WG,wd = G*w[:,None],d*w[:,None]
+        else:
+            WG,wd = G,d
+        for k, damping in enumerate(regularization):
+            A,b = WG,wd
+            if damping:
+                A = vstack((WG,damping*eye(G.shape[1])))
+                b = vstack((wd,zeros((G.shape[1],1))))
+            sol = (lstsq(A,b,rcond=None)[0] if solver == 'lstsq' else nnls(A,b[:,0])[0][:,None])
+            ds = G.dot(sol)
+            L2,Lmodel = norm(WG.dot(sol)-wd),norm(sol)
+            VR,_ = inv.get_VR(home,project_name,GF_list,sol,d,ds,None,WG,wd)
+            total,_,magnitude = get_moment(home,project_name,source_name,sol,forceMT,mt)
+            write_log(home,project_name,run_name,k,damping,L2,Lmodel,VR,total,magnitude,
+                      model_name,source_name,G_name,GF_list)
+            inv.write_synthetics(home,project_name,run_name,GF_list,G,sol,ds,k,None)
+            write_model(home,project_name,run_name,source_name,model_name,sol,k,forceMT,mt)
