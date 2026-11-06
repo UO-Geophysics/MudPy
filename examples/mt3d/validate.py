@@ -15,14 +15,57 @@ from pyproj import Geod
 from mudpy import mt3d
 
 
-def validate_single_receiver(project):
+def run_with_toml(project, name, steps, mechanism=None, matrix_mode='assemble', matrix_name=None):
+    """Write an explicit experiment configuration for this reference case."""
+    source_model = 'fixed_tensor' if mechanism is not None else 'full_tensor'
+    text = '''schema_version = 1
+[project]
+directory = ".."
+[run]
+name = %s
+steps = %s
+[inputs]
+sources = "cloud.sources"
+earth_model = "halfspace.mod"
+observations = "imagery.gflist"
+[forward]
+backend = "fk"
+earth_flattening = false
+dk = 0.05
+pmin = 0.0
+pmax = 1.0
+kmax = 25.0
+[inversion]
+source_model = %s
+solver = "lstsq"
+weighting = "diagonal"
+damping = [0.0]
+%s
+[matrix]
+name = %s
+mode = %s
+[execution]
+processes = 1
+''' % (json.dumps(name), json.dumps(steps), json.dumps(source_model),
+       'fixed_tensor = '+json.dumps(list(mechanism)) if mechanism is not None else '',
+       json.dumps(matrix_name or 'toml_'+name), json.dumps(matrix_mode))
+    path = project/'configs'/(name+'.toml')
+    with path.open('x') as stream:
+        stream.write(text)
+    return mt3d.run(path)
+
+
+def validate_single_receiver(project, use_toml=False):
     """Exercise real one-source/one-observation files and project exclusion."""
     single = project / 'single_receiver'
-    single.mkdir()
-    for directory in ('data/model_info', 'data/station_info', 'data/statics',
-                      'structure', 'GFs/static', 'GFs/matrices',
-                      'output/inverse_models/models', 'output/inverse_models/statics'):
-        (single / directory).mkdir(parents=True)
+    if use_toml:
+        mt3d.init_project(single)
+    else:
+        single.mkdir()
+        for directory in ('data/model_info', 'data/station_info', 'data/statics',
+                          'structure', 'GFs/static', 'GFs/matrices',
+                          'output/inverse_models/models', 'output/inverse_models/statics'):
+            (single / directory).mkdir(parents=True)
     source = np.loadtxt(project / 'data/model_info/cloud.sources', ndmin=2)[:1]
     np.savetxt(single / 'data/model_info/cloud.sources', source,
                fmt=['%d', '%.9f', '%.9f', '%.9f'])
@@ -37,14 +80,20 @@ def validate_single_receiver(project):
     home, name = str(single.parent)+'/', single.name
     mechanism = [1, 0, 0, 1, 0, 1]
     cwd = Path.cwd()
-    mt3d.inversionGFs(home, name, 'imagery.gflist', 'cloud.sources', 'halfspace.mod',
-                     1, 1, .05, 0, 1, 25, 0, 1, True, mechanism, flat=False)
+    if use_toml:
+        run_with_toml(single, 'prepare', ['greens', 'synthetics'], mechanism)
+    else:
+        mt3d.inversionGFs(home, name, 'imagery.gflist', 'cloud.sources', 'halfspace.mod',
+                         1, 1, .05, 0, 1, 25, 0, 1, True, mechanism, flat=False)
     G = mt3d.getG(home, name, 'cloud.sources', 'halfspace.mod', 'imagery.gflist', False, 'single', True)
     assert G.shape == (1, 1)
     np.savetxt(observation, np.r_[-.5*G[0, 0], look])
     arguments = (home, name, 'contraction', 'cloud.sources', 'halfspace.mod',
                  'imagery.gflist', False, 'single', [0], 1, 'lstsq', True, mechanism)
-    mt3d.run_inversion(*arguments, weight=True)
+    if use_toml:
+        run_with_toml(single, 'contraction', ['invert'], mechanism)
+    else:
+        mt3d.run_inversion(*arguments, weight=True)
     result = np.loadtxt(single / 'output/inverse_models/models/contraction.0000.inv', ndmin=2)
     np.testing.assert_allclose(result[:, 4:10]/10**16.6, [-.5*np.array(mechanism)], atol=1e-10)
     with mt3d._project_lock(home, name):
@@ -59,14 +108,17 @@ def validate_single_receiver(project):
     return float(abs(result[0, 4]/10**16.6+.5)/.5)
 
 
-def main(project):
+def main(project, use_toml=False):
     reference = json.loads(Path(__file__).with_name('okada_reference.json').read_text())
     project = project.resolve()
-    project.mkdir()  # Refuse to overwrite a previous experiment.
-    for directory in ('data/model_info', 'data/station_info', 'data/statics',
-                      'structure', 'GFs/static', 'GFs/matrices',
-                      'output/inverse_models/models', 'output/inverse_models/statics'):
-        (project / directory).mkdir(parents=True)
+    if use_toml:
+        mt3d.init_project(project)
+    else:
+        project.mkdir()  # Refuse to overwrite a previous experiment.
+        for directory in ('data/model_info', 'data/station_info', 'data/statics',
+                          'structure', 'GFs/static', 'GFs/matrices',
+                          'output/inverse_models/models', 'output/inverse_models/statics'):
+            (project / directory).mkdir(parents=True)
     home, name = str(project.parent)+'/', project.name
     # Deliberately reverse numeric IDs to detect accidental sorting.
     sources = np.array([[2, 13., 43., 3.], [1, 13.02, 43.01, 5.]])
@@ -103,8 +155,11 @@ def main(project):
         for (station, lon, lat), path in zip(receivers, observations):
             stream.write(' '.join([station, str(lon), str(lat), '0', '0', '0', '0', '1']+
                                   ['unused']*4+[str(path)]+['1']*10+['0.001']+['1']*4)+'\n')
-    mt3d.inversionGFs(home, name, gf_list.name, 'cloud.sources', 'halfspace.mod',
-                     1, 1, .05, 0, 1, 25, 0, 1, False, None, flat=False)
+    if use_toml:
+        run_with_toml(project, 'prepare', ['greens', 'synthetics'])
+    else:
+        mt3d.inversionGFs(home, name, gf_list.name, 'cloud.sources', 'halfspace.mod',
+                         1, 1, .05, 0, 1, 25, 0, 1, False, None, flat=False)
     G = mt3d.getG(home, name, 'cloud.sources', 'halfspace.mod', gf_list.name,
                  False, 'imagery', False)
     assert G.shape == (48, 12)
@@ -150,9 +205,12 @@ def main(project):
     amplitudes = np.array([1., -.4])
     for path, value, look in zip(observations, fixed.dot(amplitudes), directions):
         np.savetxt(path, np.r_[value, look], fmt='%.12e')
-    mt3d.run_inversion(home, name, 'fixed', 'cloud.sources', 'halfspace.mod',
-                      gf_list.name, False, 'fixed', [0], len(sources),
-                      'lstsq', True, mechanism, weight=True)
+    if use_toml:
+        run_with_toml(project, 'fixed', ['synthetics', 'invert'], mechanism)
+    else:
+        mt3d.run_inversion(home, name, 'fixed', 'cloud.sources', 'halfspace.mod',
+                          gf_list.name, False, 'fixed', [0], len(sources),
+                          'lstsq', True, mechanism, weight=True)
     fixed_output = np.loadtxt(project / 'output/inverse_models/models/fixed.0000.inv', ndmin=2)
     np.testing.assert_allclose(fixed_output[:, 4:10]/10**16.6,
                                amplitudes[:, None]*mechanism, rtol=1e-7, atol=1e-10)
@@ -169,9 +227,14 @@ def main(project):
         data = G.dot(model.reshape(-1))
         for path, value, look in zip(observations, data, directions):
             np.savetxt(path, np.r_[value, look], fmt='%.12e')
-        mt3d.run_inversion(home, name, run, 'cloud.sources', 'halfspace.mod',
-                          gf_list.name, False, 'imagery', [0], len(sources),
-                          'lstsq', False, None, weight=True)
+        if use_toml:
+            run_with_toml(project, run, ['synthetics', 'invert'] if run == 'mixed' else ['invert'],
+                          matrix_mode='assemble' if run == 'mixed' else 'reuse',
+                          matrix_name='toml_mixed')
+        else:
+            mt3d.run_inversion(home, name, run, 'cloud.sources', 'halfspace.mod',
+                              gf_list.name, False, 'imagery', [0], len(sources),
+                              'lstsq', False, None, weight=True)
         output = np.loadtxt(project / 'output/inverse_models/models' / (run+'.0000.inv'), ndmin=2)
         recovered = output[:, 4:10]/10**16.6
         errors[run] = float(np.linalg.norm(recovered-model)/np.linalg.norm(model))
@@ -192,7 +255,7 @@ def main(project):
     np.testing.assert_allclose(mt3d.get_moment(home, name, 'cloud.sources', [-1], True,
                                              [1, 0, 0, 1, 0, 1])[1],
                                [np.sqrt(1.5)*10**16.6])
-    single_error = validate_single_receiver(project)
+    single_error = validate_single_receiver(project, use_toml)
     summary = {'observations': 48, 'source_ids': sources[:, 0].tolist(),
                'matrix_rank': int(np.linalg.matrix_rank(G)),
                'matrix_condition': float(np.linalg.cond(G)),
@@ -205,6 +268,7 @@ def main(project):
                                  for module in ('mt3d', 'parallel', 'inverse', 'analysis')},
                'recovery_relative_errors': errors,
                'single_receiver_recovery_relative_error': single_error,
+               'toml_runner': use_toml,
                'limitations': ['same-grid noiseless recovery', 'one homogeneous material',
                                'serial execution', 'no real imagery or production pixel-offset ingestion']}
     (project / 'validation.json').write_text(json.dumps(summary, indent=2)+'\n')
@@ -214,4 +278,6 @@ def main(project):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--project', type=Path, required=True)
-    main(parser.parse_args().project)
+    parser.add_argument('--toml', action='store_true', help='Exercise project initialization and the TOML runner')
+    args = parser.parse_args()
+    main(args.project, args.toml)

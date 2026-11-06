@@ -1,0 +1,225 @@
+"""Configuration, ownership, provenance, and legacy-layout compatibility."""
+from dataclasses import FrozenInstanceError
+import hashlib
+import json
+import os
+from pathlib import Path
+import tempfile
+import unittest
+from unittest.mock import patch
+
+import numpy as np
+
+from mudpy import mt3d, runslip
+from mudpy.mt3d_config import RunConfig, _inputs, _signatures, _record_cache, _require_cache
+
+
+class ConfigTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.parent = Path(self.temporary.name).resolve()
+        self.project = self.parent/'site'
+        self.config_file = mt3d.init_project(self.project)
+        self.original = self.config_file.read_text()
+
+    def configure(self, *changes):
+        text = self.original
+        for before, after in changes:
+            self.assertIn(before, text)
+            text = text.replace(before, after)
+        self.config_file.write_text(text)
+        return RunConfig.load(self.config_file)
+
+    def products(self, config):
+        source, _, geometry, _ = _inputs(config)
+        code = {'source_sha256': {name: 'code' for name in ('mt3d', 'parallel', 'green')}}
+        return _signatures(config, source, geometry, code, {})
+
+    def test_initializer_refuses_existing_project_and_templates_are_valid(self):
+        config = RunConfig.load(self.config_file)
+        self.assertEqual(config.project, self.project.resolve())
+        self.assertEqual(config.steps, ('greens', 'synthetics', 'invert'))
+        self.assertEqual(_inputs(config)[0].shape, (1, 4))
+        with self.assertRaises(FrozenInstanceError):
+            config.name = 'different'
+        self.assertEqual(np.loadtxt(self.project/'data/model_info/template.sources').shape, (4,))
+        with self.assertRaises(FileExistsError):
+            mt3d.init_project(self.project)
+        self.assertEqual(self.config_file.read_text(), self.original)
+        self.assertTrue((self.project/'GFs/dynamic').is_dir())
+        self.assertTrue((self.project/'analysis/frequency').is_dir())
+
+    def test_strict_schema_values_and_cross_field_validation(self):
+        invalid = (
+            ('schema_version = 1', 'schema_version = 2'),
+            ('schema_version = 1', 'schema_version = true'),
+            ('backend = "fk"', 'bakend = "fk"'),
+            ('source_model = "full_tensor"', 'source_model = "fixed_tensor"'),
+            ('source_model = "full_tensor"', 'source_model = "full_tensor"\nfixed_tensor = [1,0,0,1,0,1]'),
+            ('processes = 1', 'processes = true'),
+            ('processes = 1', 'processes = 2'),
+            ('earth_flattening = false', 'earth_flattening = "false"'),
+            ('dk = 0.05', 'dk = -1'),
+            ('pmax = 1.0', 'pmax = 0.0'),
+            ('damping = [0.0]', 'damping = [true]'),
+            ('damping = [0.0]', 'damping = [-1.0]'),
+            ('damping = [0.0]', 'damping = [inf]'),
+            ('name = "example"', 'name = "../escape"'),
+            ('sources = "template.sources"', 'sources = "../template.sources"'),
+            ('steps = ["greens", "synthetics", "invert"]', 'steps = ["invert", "greens"]'),
+            ('steps = ["greens", "synthetics", "invert"]', 'steps = ["greens", "invert"]'),
+            ('mode = "assemble"', 'mode = "reuse"'),
+        )
+        for before, after in invalid:
+            with self.subTest(change=after), self.assertRaises(ValueError):
+                self.configure((before, after))
+        self.config_file.write_text(self.original+'\n[unknown]\nvalue = 1\n')
+        with self.assertRaisesRegex(ValueError, 'Unknown root'):
+            RunConfig.load(self.config_file)
+        self.assertEqual(list((self.project/'output/inverse_models/models').iterdir()), [])
+        for exponent in (-1000, 1000):
+            with self.assertRaises(FloatingPointError):
+                self.configure(('damping = [0.0]', 'damping = {log10_min=%d, log10_max=%d, count=2}' %
+                                (exponent, exponent)))
+
+    def test_logspace_defaults_fixed_tensor_and_path_independence(self):
+        config = self.configure(('damping = [0.0]', 'damping = {log10_min=-3, log10_max=-1, count=3}'),
+                                ('source_model = "full_tensor"',
+                                 'source_model = "fixed_tensor"\nfixed_tensor = [1,0,0,1,0,1]'))
+        np.testing.assert_allclose(config.damping, [.001, .01, .1])
+        self.assertEqual(config.fixed_tensor, (1, 0, 0, 1, 0, 1))
+        cwd = Path.cwd()
+        os.chdir(self.parent)
+        try:
+            self.assertEqual(RunConfig.load(self.config_file).project, self.project.resolve())
+            _, rows, _, _ = _inputs(config)
+            self.assertEqual(Path(rows[0][12]), self.project/'data/statics/template.los')
+        finally:
+            os.chdir(cwd)
+        config = self.configure(('name = "example"', 'name = "new_experiment"'))
+        self.assertEqual(config.matrix_name, 'new_experiment')
+
+    def test_invalid_input_and_stale_cache_fail_before_run_artifacts(self):
+        config = self.configure(('steps = ["greens", "synthetics", "invert"]', 'steps = ["invert"]'))
+        with self.assertRaisesRegex(ValueError, 'Missing cache record'):
+            mt3d.run(self.config_file)
+        self.assertEqual(list((self.project/'output/inverse_models/models').iterdir()), [])
+        self.assertFalse((self.project/'.mt3d.lock').exists())
+        data = self.project/'data/statics/template.los'
+        data.write_text('0\n0\n0\n0\n')
+        with self.assertRaisesRegex(ValueError, 'unit NEU'):
+            mt3d.run(self.config_file)
+        self.assertEqual(list((self.project/'output/inverse_models/models').iterdir()), [])
+
+    def test_cache_signatures_separate_values_weights_geometry_and_mechanisms(self):
+        config = RunConfig.load(self.config_file)
+        greens, responses, matrix = self.products(config)
+        product = matrix[2][0]
+        np.save(product, np.array([[1.]]))
+        _record_cache(self.project, matrix)
+        _require_cache(self.project, matrix)
+        observation = self.project/'data/statics/template.los'
+        observation.write_text(observation.read_text().replace('0.001', '0.002'))
+        self.assertEqual(self.products(config)[2][1], matrix[1])
+        station_list = self.project/'data/station_info/template.gflist'
+        station_list.write_text(station_list.read_text().replace(' 0.001 ', ' 0.002 '))
+        self.assertEqual(self.products(config)[2][1], matrix[1])
+        observation.write_text('0.002\n0\n1\n0\n')
+        changed = self.products(config)
+        self.assertEqual(changed[0][1], greens[1])
+        self.assertNotEqual(changed[1][1], responses[1])
+        with self.assertRaisesRegex(ValueError, 'do not match'):
+            _require_cache(self.project, changed[2])
+        np.save(product, np.array([[2.]]))
+        with self.assertRaisesRegex(ValueError, 'changed cached product'):
+            _require_cache(self.project, matrix)
+
+    def test_snapshot_normalization_and_exclusion_survive_working_file_edits(self):
+        config = self.configure(('steps = ["greens", "synthetics", "invert"]', 'steps = ["greens"]'))
+        exact = self.config_file.read_bytes()
+
+        def worker(*args):
+            folder = self.project/'output/inverse_models/models'
+            self.assertEqual((folder/'example.config.toml').read_bytes(), exact)
+            self.assertTrue((self.project/'.mt3d.lock').exists())
+            with self.assertRaises(FileExistsError):
+                mt3d.run(self.config_file)
+            for product in self.products(config)[0][2]:
+                product.write_text('verified-test-product\n')
+
+        with patch.object(mt3d, '_inversion_gfs', side_effect=worker) as execute:
+            resolved = mt3d.run(self.config_file)
+            self.assertEqual(execute.call_count, 1)
+        record = json.loads(resolved.read_text())
+        self.assertEqual(record['configuration_sha256'], hashlib.sha256(exact).hexdigest())
+        self.assertEqual(record['source_count'], 1)
+        self.assertEqual(record['settings']['execution']['processes'], 1)
+        self.assertEqual(len(record['input_sha256']), 4)
+        normalized = Path(record['normalized_observations'])
+        self.assertIn(str(self.project/'data/statics/template.los'), normalized.read_text())
+        self.config_file.write_text(self.config_file.read_text()+'\n# Later edit\n')
+        self.assertEqual(resolved.with_name('example.config.toml').read_bytes(), exact)
+        self.assertEqual(json.loads(resolved.read_text()), record)
+        with self.assertRaisesRegex(FileExistsError, 'already exists'):
+            mt3d.run(self.config_file)
+        self.assertFalse((self.project/'.mt3d.lock').exists())
+
+    def test_computation_failure_retains_snapshot_and_propagates(self):
+        self.configure(('steps = ["greens", "synthetics", "invert"]', 'steps = ["greens"]'))
+        with patch.object(mt3d, '_inversion_gfs', side_effect=RuntimeError('FK failed')):
+            with self.assertRaisesRegex(RuntimeError, 'FK failed'):
+                mt3d.run(self.config_file)
+        self.assertTrue((self.project/'output/inverse_models/models/example.config.toml').is_file())
+        self.assertFalse((self.project/'.mt3d.lock').exists())
+
+    def test_input_changes_during_computation_do_not_get_a_cache_record(self):
+        config = self.configure(('steps = ["greens", "synthetics", "invert"]', 'steps = ["greens"]'))
+
+        def worker(*args):
+            for product in self.products(config)[0][2]:
+                product.write_text('test product\n')
+            (self.project/'data/statics/template.los').write_text('0.002\n0\n1\n0\n')
+
+        with patch.object(mt3d, '_inversion_gfs', side_effect=worker):
+            with self.assertRaisesRegex(RuntimeError, 'Input changed'):
+                mt3d.run(self.config_file)
+        self.assertFalse((self.project/'GFs/static/_mt3d_greens.json').exists())
+        self.assertFalse((self.project/'.mt3d.lock').exists())
+
+
+class LegacyInitializationTests(unittest.TestCase):
+    def test_exact_legacy_directories_templates_and_declined_reinitialization(self):
+        # This fixture specifies the pre-refactor tree independently of its helper.
+        expected = {'GFs', 'GFs/static', 'GFs/dynamic', 'GFs/matrices', 'GFs/tsunami', 'GFs/STFs',
+                    'data', 'data/waveforms', 'data/statics', 'data/station_info', 'data/model_info',
+                    'structure', 'plots', 'scripts', 'forward_models', 'output', 'output/inverse_models',
+                    'output/inverse_models/statics', 'output/inverse_models/waveforms',
+                    'output/inverse_models/models', 'output/forward_models', 'logs', 'analysis', 'analysis/frequency'}
+        repo = Path(runslip.__file__).resolve().parents[3]
+        with tempfile.TemporaryDirectory() as folder, patch.dict(os.environ, {'MUD': str(repo)}):
+            runslip.init(folder+'/', 'legacy')
+            project = Path(folder)/'legacy'
+            self.assertEqual({str(path.relative_to(project)) for path in project.rglob('*') if path.is_dir()}, expected)
+            for filename, destination in (('template.fault', 'data/model_info'), ('template.gflist', 'data/station_info'),
+                                          ('template.sta', 'data/station_info'), ('template.mod', 'structure')):
+                self.assertEqual((project/destination/filename).read_bytes(), (repo/'run'/filename).read_bytes())
+            sentinel = project/'keep.txt'
+            sentinel.write_text('keep')
+            with patch('builtins.input', return_value='n') as prompt:
+                runslip.init(folder+'/', 'legacy')
+                self.assertEqual(prompt.call_count, 1)
+            self.assertEqual(sentinel.read_text(), 'keep')
+            with patch('builtins.input', side_effect=['y', 'n']) as prompt:
+                runslip.init(folder+'/', 'legacy')
+                self.assertEqual(prompt.call_count, 2)
+            self.assertEqual(sentinel.read_text(), 'keep')
+            with patch('builtins.input', side_effect=['y', 'y']) as prompt:
+                runslip.init(folder+'/', 'legacy')
+                self.assertEqual(prompt.call_count, 2)
+            self.assertFalse(sentinel.exists())
+            self.assertEqual({str(path.relative_to(project)) for path in project.rglob('*') if path.is_dir()}, expected)
+
+
+if __name__ == '__main__':
+    unittest.main()

@@ -1,0 +1,2 @@
+# station lon lat static disp vel tsunami insar static_file disp_file vel_file tsunami_file los_file sigma_n sigma_e sigma_u sigma_dn sigma_de sigma_du sigma_vn sigma_ve sigma_vu sigma_tsun sigma_los unused unused unused unused
+template 0.01 0.0 0 0 0 0 1 unused unused unused unused data/statics/template.los 1 1 1 1 1 1 1 1 1 1 0.001 1 1 1 1

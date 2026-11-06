@@ -24,6 +24,18 @@ def _project_lock(home, project_name):
 
 def inversionGFs(home,project_name,GF_list,source_name,model_name,
         green_flag,synth_flag,dk,pmin,pmax,kmax,hot_start,ncpus,forceMT,mt,flat=True):
+    """Generate tensor responses with exclusive project ownership.
+
+    flat=True retains historical Earth flattening; use False for a homogeneous
+    flat half-space benchmark. The current tensor path requires ncpus=1.
+    """
+    with _project_lock(home,project_name):
+        return _inversion_gfs(home,project_name,GF_list,source_name,model_name,
+            green_flag,synth_flag,dk,pmin,pmax,kmax,hot_start,ncpus,forceMT,mt,flat)
+
+
+def _inversion_gfs(home,project_name,GF_list,source_name,model_name,
+        green_flag,synth_flag,dk,pmin,pmax,kmax,hot_start,ncpus,forceMT,mt,flat=True):
     """Compute tensor responses serially; one run owns the project at a time.
 
     ``flat`` retains the historical FK Earth-flattening option. Set False for
@@ -50,20 +62,19 @@ def inversionGFs(home,project_name,GF_list,source_name,model_name,
         raise ValueError('Observation identifiers must be unique')
     station_file = project / 'data/station_info/temp.sta'
     # Exclusive creation makes concurrent top-level runs fail before writing inputs.
-    with _project_lock(home,project_name):
-        with station_file.open('x') as stream:
-            for k in selected:
-                stream.write('%s %.9f %.9f\n' % (stations[k], flags[k,0], flags[k,1]))
-        try:
-            if green_flag:
-                make_parallel_green(home,project_name,station_file.name,source_name,
-                    model_name,1.0,64,hot_start,dk,pmin,pmax,kmax,ncpus,
-                    insar=True,flat=flat)
-            if synth_flag:
-                make_parallel_synthetics(home,project_name,station_file.name,source_name,
-                    model_name,hot_start,ncpus,forceMT,mt,insar=True)
-        finally:
-            station_file.unlink()
+    with station_file.open('x') as stream:
+        for k in selected:
+            stream.write('%s %.9f %.9f\n' % (stations[k], flags[k,0], flags[k,1]))
+    try:
+        if green_flag:
+            make_parallel_green(home,project_name,station_file.name,source_name,
+                model_name,1.0,64,hot_start,dk,pmin,pmax,kmax,ncpus,
+                insar=True,flat=flat)
+        if synth_flag:
+            make_parallel_synthetics(home,project_name,station_file.name,source_name,
+                model_name,hot_start,ncpus,forceMT,mt,insar=True)
+    finally:
+        station_file.unlink()
 
 
 def make_parallel_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,
@@ -237,7 +248,7 @@ def get_moment(home,project_name,source_name,sol,forceMT,mt=None):
 
 
 def write_log(home,project_name,run_name,k,lambda_spatial,
-        L2,Lm,VR,Mo,Mw,velmod,source,g_name,gflist):
+        L2,Lm,VR,Mo,Mw,velmod,source,g_name,gflist,provenance=None):
     '''
     Write inversion sumamry to .log file
     
@@ -281,6 +292,9 @@ def write_log(home,project_name,run_name,k,lambda_spatial,
     f.write('Lm = '+repr(Lm)+'\n')
     f.write('M0(N-m) = '+repr(Mo)+'\n')
     f.write('Mw = '+repr(Mw)+'\n')
+    if provenance is not None:
+        for key,value in provenance.items():
+            f.write(str(key)+': '+str(value)+'\n')
     f.close()
 
 
@@ -317,6 +331,14 @@ def write_model(home,project_name,run_name,source_name,model_name,sol,num,forceM
 
 def run_inversion(home,project_name,run_name,source_name,model_name,GF_list,G_from_file,G_name,
         reg_spatial,nsources,solver,forceMT,mt,weight=False,Ltype=0):
+    """Solve the weighted, identity-damped objective with exclusive ownership."""
+    with _project_lock(home,project_name):
+        return _run_inversion(home,project_name,run_name,source_name,model_name,
+            GF_list,G_from_file,G_name,reg_spatial,nsources,solver,forceMT,mt,weight,Ltype)
+
+
+def _run_inversion(home,project_name,run_name,source_name,model_name,GF_list,G_from_file,G_name,
+        reg_spatial,nsources,solver,forceMT,mt,weight=False,Ltype=0,*,provenance=None):
     """Minimize ||W(Gm-d)||^2 + lambda^2 ||m||^2 in data space.
 
     Identity damping is the only supported penalty. NNLS imposes componentwise
@@ -334,32 +356,43 @@ def run_inversion(home,project_name,run_name,source_name,model_name,GF_list,G_fr
     regularization = asarray(reg_spatial,dtype=float).reshape(-1)
     if not len(regularization) or not isfinite(regularization).all() or (regularization < 0).any():
         raise ValueError('Damping values must be finite and nonnegative')
-    with _project_lock(home,project_name):
-        G = getG(home,project_name,source_name,model_name,GF_list,G_from_file,G_name,forceMT)
-        source = loadtxt(home+project_name+'/data/model_info/'+source_name,ndmin=2)
-        if len(source) != nsources:
-            raise ValueError('nsources does not match source file')
-        d = inv.getdata(home,project_name,GF_list,decimate=None,bandpass=[None,None,None],quiet=True)
-        if d.shape != (G.shape[0],1) or not isfinite(d).all():
-            raise ValueError('Data and matrix rows differ or observations are nonfinite')
-        if weight:
-            w = inv.get_data_weights(home,project_name,GF_list,d,None)
-            if w.shape != (len(d),) or not isfinite(w).all() or (w <= 0).any():
-                raise ValueError('Observation standard deviations must be positive and finite')
-            WG,wd = G*w[:,None],d*w[:,None]
-        else:
-            WG,wd = G,d
-        for k, damping in enumerate(regularization):
-            A,b = WG,wd
-            if damping:
-                A = vstack((WG,damping*eye(G.shape[1])))
-                b = vstack((wd,zeros((G.shape[1],1))))
-            sol = (lstsq(A,b,rcond=None)[0] if solver == 'lstsq' else nnls(A,b[:,0])[0][:,None])
-            ds = G.dot(sol)
-            L2,Lmodel = norm(WG.dot(sol)-wd),norm(sol)
-            VR,_ = inv.get_VR(home,project_name,GF_list,sol,d,ds,None,WG,wd)
-            total,_,magnitude = get_moment(home,project_name,source_name,sol,forceMT,mt)
-            write_log(home,project_name,run_name,k,damping,L2,Lmodel,VR,total,magnitude,
-                      model_name,source_name,G_name,GF_list)
-            inv.write_synthetics(home,project_name,run_name,GF_list,G,sol,ds,k,None)
-            write_model(home,project_name,run_name,source_name,model_name,sol,k,forceMT,mt)
+    G = getG(home,project_name,source_name,model_name,GF_list,G_from_file,G_name,forceMT)
+    source = loadtxt(home+project_name+'/data/model_info/'+source_name,ndmin=2)
+    if len(source) != nsources:
+        raise ValueError('nsources does not match source file')
+    d = inv.getdata(home,project_name,GF_list,decimate=None,bandpass=[None,None,None],quiet=True)
+    if d.shape != (G.shape[0],1) or not isfinite(d).all():
+        raise ValueError('Data and matrix rows differ or observations are nonfinite')
+    if weight:
+        w = inv.get_data_weights(home,project_name,GF_list,d,None)
+        if w.shape != (len(d),) or not isfinite(w).all() or (w <= 0).any():
+            raise ValueError('Observation standard deviations must be positive and finite')
+        WG,wd = G*w[:,None],d*w[:,None]
+    else:
+        WG,wd = G,d
+    for k, damping in enumerate(regularization):
+        A,b = WG,wd
+        if damping:
+            A = vstack((WG,damping*eye(G.shape[1])))
+            b = vstack((wd,zeros((G.shape[1],1))))
+        sol = (lstsq(A,b,rcond=None)[0] if solver == 'lstsq' else nnls(A,b[:,0])[0][:,None])
+        ds = G.dot(sol)
+        L2,Lmodel = norm(WG.dot(sol)-wd),norm(sol)
+        VR,_ = inv.get_VR(home,project_name,GF_list,sol,d,ds,None,WG,wd)
+        total,_,magnitude = get_moment(home,project_name,source_name,sol,forceMT,mt)
+        write_log(home,project_name,run_name,k,damping,L2,Lmodel,VR,total,magnitude,
+                  model_name,source_name,G_name,GF_list,provenance=provenance)
+        inv.write_synthetics(home,project_name,run_name,GF_list,G,sol,ds,k,None)
+        write_model(home,project_name,run_name,source_name,model_name,sol,k,forceMT,mt)
+
+
+def init_project(project_directory):
+    """Create a new standard MudPy project with tensor templates and TOML."""
+    from mudpy.mt3d_config import init_project as initialize
+    return initialize(project_directory)
+
+
+def run(config_file):
+    """Validate and execute a named tensor experiment from TOML."""
+    from mudpy.mt3d_config import run as execute
+    return execute(config_file)

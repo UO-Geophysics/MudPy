@@ -1,5 +1,126 @@
 # Tensor imagery CPU reference
 
+## Project initialization and named TOML runs
+
+Each earthquake, volcano, or groundwater site remains one MudPy project, with
+shared inputs and response libraries and multiple descriptive run names. Create
+a project once from a short Python script or interactive session:
+
+```python
+from mudpy import mt3d
+
+config = mt3d.init_project('/absolute/path/Norcia2016')
+print(config)  # /absolute/path/Norcia2016/configs/template.toml
+```
+
+The destination must not exist. Initialization creates the standard MudPy tree,
+including directories currently unused by static tomography, and adds `configs/`.
+The four-column source template goes in `data/model_info/`, the imagery list in
+`data/station_info/`, its example displacement/projection file in `data/statics/`,
+and the velocity model in `structure/`. All are explicitly illustrative inputs.
+The legacy `runslip.init(home, project_name)` retains its existing signature,
+directory/template contents, and confirmation behavior; the shared directory
+population helper avoids competing definitions of the tree.
+
+Edit/replace project inputs, copy the starter to a descriptive experiment TOML,
+and execute it from Python:
+
+```python
+from mudpy import mt3d
+
+record = mt3d.run('/absolute/path/Norcia2016/configs/layered_fulltensor.toml')
+print(record)  # .../output/inverse_models/models/<run_name>.resolved.json
+```
+
+Existing projects can use this entry point after adding a TOML; they do not need
+initialization. The runner validates all required folders and primary inputs.
+The launch interface is these two Python functions; there is no separate CLI.
+Python before 3.11 requires the `tomli` reader (already present in the audited
+Python 3.8 environment); Python 3.11+ uses `tomllib`. A missing reader raises an
+import error rather than installing dependencies or selecting another format.
+
+The commented [starter TOML](../../run/mt3d/template.toml) defines schema version
+1. Required sections are `project`, `run`, `inputs`, `forward`, and `inversion`.
+`forward.earth_flattening`, `inversion.source_model`, and `inversion.damping` are
+explicit. Optional values have recorded defaults: FK backend, `dk=0.05`,
+`pmin=0`, `pmax=1`, `kmax=25`, `lstsq`, diagonal weighting, matrix assembly, and
+one process. The default matrix basename follows `run.name`.
+
+The project path resolves relative to the TOML file. Input filenames are
+basenames in the fixed source/model/observation-list folders, respectively.
+Observation-list data paths may be absolute or relative to the project root,
+and must refer to `data/statics/<observation_id>.los`. The runner writes a
+selected, absolute-path list at `data/station_info/_mt3d_<run_name>.gflist`;
+the original observation list is not edited. Because that legacy format is
+whitespace-delimited, project paths containing whitespace are rejected.
+
+Configuration validation rejects unknown keys, unsafe names, incompatible
+settings, malformed input arrays, invalid geometry/uncertainties, and unsupported
+parallel or data modes. Source count is derived from the file. `full_tensor`
+and `fixed_tensor` are supported; fixed mode requires six explicit components
+in `xx,xy,xz,yy,yz,zz` order, with their supplied normalization preserved.
+Only identity damping is currently supported. Damping may be an explicit list
+or a logarithmic sweep:
+
+```toml
+[inversion]
+source_model = "full_tensor"
+solver = "lstsq"
+weighting = "diagonal"
+damping = { log10_min = -3.0, log10_max = -1.0, count = 15 }
+```
+
+`run.steps` is a nonempty, unique ordered subset of `greens`, `synthetics`, and
+`invert`. A preparation-only run can request `greens` and `synthetics`; subsequent
+named runs can request `invert`. Regenerating greens before inversion also
+requires regenerating synthetics. These are fixed stages, not a general workflow
+language.
+
+For each run, files beside the existing numbered models/logs include:
+
+| File | Contents |
+| --- | --- |
+| `<run>.config.toml` | Exact original bytes, including comments |
+| `<run>.resolved.json` | Effective settings/defaults, expanded damping values, absolute paths, input hashes, source ordering, code identity, dependency versions, and executable identities |
+| `<run>.0000.log`, etc. | The parameter combination and statistics for that solution, configuration-record paths/hashes, normalized observation-list path, and actual matrix hash |
+
+Records are created after validation and before numerical execution. Changing
+the editable TOML leaves archived records intact. A run name with existing
+records/results is rejected. Computation errors propagate and the configuration
+records remain available for the failed attempt; a normal return indicates that
+the requested stages finished. Preserve the project inputs identified by the
+hashes: configuration records do not duplicate large datasets. Primary inputs
+must stay unchanged during a run; changes detected after computation raise an
+error before stamping a cache as valid or returning success.
+
+The runner holds the project lock across validation, archival, and all stages.
+It also records cache identities alongside the existing GF tables and `.npy`
+matrix. Synthetic reuse checks source/Earth-model/receiver identities, numerical
+settings/code/executables, and projection/mechanism identity. Matrix reuse checks
+the same dependencies and the product hash. Observation values and uncertainty
+changes are recorded as run inputs but do not invalidate a geometry-only matrix.
+For an inversion using an existing verified matrix:
+
+```toml
+[run]
+name = "different_damping"
+steps = ["invert"]
+
+[matrix]
+name = "earlier_run"  # Existing GFs/matrices/earlier_run.npy
+mode = "reuse"
+```
+
+An assembly target that exists is rejected. Missing, stale, or modified cache
+records/products also raise errors; the runner never silently recomputes them.
+Legacy products without these records need an explicit rebuild through the
+runner. These JSON sidecars document existing formats; they do not introduce a
+new array storage backend. Stage products are shared project resources and may
+be regenerated by later named runs, while archived run configurations and
+numbered results remain protected.
+
+## Reproducing the reference
+
 This example exercises the existing MudPy project formats and actual FK/`syn`
 executables through a serial, imagery-first workflow. It creates 24 receiver
 locations with two representative LOS directions each and two fixed source
@@ -11,6 +132,15 @@ Run from the MudPy checkout using the environment that imports this checkout:
 ```sh
 python -B src/python/tests/test_mt3d.py
 python -B examples/mt3d/validate.py --project /absolute/existing-parent/new-project
+```
+
+Exercise the same case through initialization and TOML, including preparation,
+fixed/full-tensor runs, matrix reuse across different observation values, and
+the single-receiver case:
+
+```sh
+python -B -m unittest discover -s src/python/tests -p 'test_mt3d*.py'
+python -B examples/mt3d/validate.py --toml --project /absolute/existing-parent/new-project
 ```
 
 The project path must not exist. Previous experiment files are never deleted.
@@ -90,8 +220,9 @@ Direct helper calls require exclusive caller ownership of the project, including
 rank input files, response tables, and matrix caches. No process working-directory
 changes are made in the repaired tensor path.
 
-Legacy `.npy` caches still lack provenance checks: after a source, observation,
-geometry, mechanism, or Earth-model change, rebuild with `G_from_file=False`.
+Direct legacy `getG` calls still lack cache provenance checks: after a source,
+observation geometry, mechanism, or Earth-model change, rebuild with
+`G_from_file=False`. The TOML runner checks its cache sidecars before reuse.
 Old ten-column DC-only GF files are rejected; regenerate complete fourteen-column
 DC+EX responses. No storage backend or general observation schema has been adopted.
 

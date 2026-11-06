@@ -1,0 +1,40 @@
+# Example inputs only: replace them before interpreting a scientific result.
+schema_version = 1
+
+[project]
+# Relative to this file, not the process working directory.
+directory = ".."
+
+[run]
+name = "example"
+steps = ["greens", "synthetics", "invert"]
+
+[inputs]
+# Filenames in data/model_info, structure, and data/station_info respectively.
+sources = "template.sources"
+earth_model = "template.mod"
+observations = "template.gflist"
+
+[forward]
+backend = "fk"
+earth_flattening = false
+dk = 0.05
+pmin = 0.0
+pmax = 1.0
+kmax = 25.0
+
+[inversion]
+source_model = "full_tensor"
+solver = "lstsq"
+weighting = "diagonal"
+damping = [0.0]
+# Or: damping = { log10_min = -3.0, log10_max = -1.0, count = 15 }
+# For fixed_tensor mode also supply six components, without automatic rescaling:
+# fixed_tensor = [1.0, 0.0, 0.0, 1.0, 0.0, 1.0]
+
+[matrix]
+# name = "shared_matrix"  # Optional basename without .npy; defaults to run.name.
+mode = "assemble"  # reuse requires steps = ["invert"] and matching cache records.
+
+[execution]
+processes = 1
