@@ -102,6 +102,7 @@ damping = [0.0]
         config = RunConfig.load(self.config_file)
         self.assertEqual(config.project, self.project.resolve())
         self.assertEqual(config.steps, ('greens', 'synthetics', 'invert'))
+        self.assertEqual(config.processes, 1)
         self.assertEqual(_inputs(config)[0].shape, (1, 4))
         with self.assertRaises(FrozenInstanceError):
             config.name = 'different'
@@ -110,6 +111,13 @@ damping = [0.0]
             geotomo.init_project(self.project)
         self.assertEqual(self.config_file.read_text(), self.original)
         self.assertTrue((self.project/'GFs/dynamic').is_dir())
+
+    def test_worker_count_changes_provenance_without_invalidating_physical_caches(self):
+        serial = self.configure()
+        serial_signatures = self.products(serial)
+        parallel = self.configure(('processes = 1', 'processes = 8'))
+        self.assertEqual(parallel.settings()['execution']['processes'], 8)
+        self.assertEqual(self.products(parallel), serial_signatures)
         self.assertTrue((self.project/'analysis/frequency').is_dir())
 
     def test_strict_schema_values_and_cross_field_validation(self):
@@ -120,7 +128,9 @@ damping = [0.0]
             ('source_model = "full_tensor"', 'source_model = "fixed_tensor"'),
             ('source_model = "full_tensor"', 'source_model = "full_tensor"\nfixed_tensor = [1,0,0,1,0,1]'),
             ('processes = 1', 'processes = true'),
-            ('processes = 1', 'processes = 2'),
+            ('processes = 1', 'processes = 0'),
+            ('processes = 1', 'processes = -2'),
+            ('processes = 1', 'processes = 1.5'),
             ('earth_flattening = false', 'earth_flattening = "false"'),
             ('dk = 0.05', 'dk = -1'),
             ('pmax = 1.0', 'pmax = 0.0'),
@@ -198,7 +208,8 @@ damping = [0.0]
             _require_cache(self.project, matrix)
 
     def test_snapshot_normalization_and_exclusion_survive_working_file_edits(self):
-        config = self.configure(('steps = ["greens", "synthetics", "invert"]', 'steps = ["greens"]'))
+        config = self.configure(('steps = ["greens", "synthetics", "invert"]', 'steps = ["greens"]'),
+                                ('processes = 1', 'processes = 3'))
         exact = self.config_file.read_bytes()
 
         def worker(*args):
@@ -213,10 +224,11 @@ damping = [0.0]
         with patch.object(geotomo, '_inversion_gfs', side_effect=worker) as execute:
             resolved = geotomo.run(self.config_file)
             self.assertEqual(execute.call_count, 1)
+            self.assertEqual(execute.call_args[0][12], 3)
         record = json.loads(resolved.read_text())
         self.assertEqual(record['configuration_sha256'], hashlib.sha256(exact).hexdigest())
         self.assertEqual(record['source_count'], 1)
-        self.assertEqual(record['settings']['execution']['processes'], 1)
+        self.assertEqual(record['settings']['execution']['processes'], 3)
         self.assertEqual(len(record['input_sha256']), 4)
         normalized = Path(record['normalized_observations'])
         self.assertIn(str(self.project/'data/statics/template.los'), normalized.read_text())

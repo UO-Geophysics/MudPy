@@ -29,8 +29,13 @@ geotomo.run('/absolute/path/new_project/configs/experiment.toml')
 
 - Full six-component tensors or prescribed tensors with signed scalar amplitudes.
   Sources are integrated moments at specified points, not moment densities.
-- Serial FK static responses including both double-couple and explosion terms.
+- Source-parallel FK static responses including both double-couple and explosion terms.
   Tensor coordinates are NED; displacement/projection vectors are NEU.
+- Explicit TOML `execution.processes` caps concurrent FK/syn subprocesses
+  (default 1), with isolated source folders, bounded batches, and one response
+  writer preserving source order. Solver execution and BLAS threading are unchanged.
+  Serial/two-worker FK reference products agree exactly; all 46 regression
+  methods pass, including overlap, ordering, single-writer and failure checks.
 - Scalar imagery projections in metres, source-file ordering, and checked
   response completeness. Legacy slip-inversion interfaces retain their behavior.
 - Weighted data-space least squares and NNLS, with identity damping through

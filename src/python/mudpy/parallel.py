@@ -3,7 +3,28 @@ Module for routines that use paralell computing
 '''
 
 
-def run_parallel_green(home,project_name,station_file,model_name,dt,NFFT,static,dk,pmin,pmax,kmax,tsunami,insar,rank,size,full_mt=False,flat=True):
+def _geotomo_source_map(function, sources, processes):
+    """Bound external-process concurrency and buffered results; preserve order.
+
+    Threads only coordinate independent FK/syn subprocesses. Workers must never
+    change cwd or write shared files/HDF5; the caller consumes each batch before
+    scheduling the next. Failure waits for active workers before releasing inputs.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
+    if type(processes) is not int or processes < 1:
+        raise ValueError('processes must be a positive integer')
+    if processes == 1:
+        for source in sources:
+            yield function(source)
+        return
+    workers = min(processes, len(sources))
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        for start in range(0, len(sources), workers):
+            yield from executor.map(function, sources[start:start+workers])
+
+
+def run_parallel_green(home,project_name,station_file,model_name,dt,NFFT,static,dk,pmin,pmax,kmax,tsunami,insar,rank,size,full_mt=False,flat=True,*,processes=1):
     '''
     Compute GFs using Zhu & Rivera code for a given velocity model, source depth
     and station file. This function will make an external system call to fk.pl
@@ -38,7 +59,7 @@ def run_parallel_green(home,project_name,station_file,model_name,dt,NFFT,static,
             raise ValueError('Full tensor Green functions require static, non-tsunami mode')
         project = Path(home) / project_name
         sources = loadtxt(project / ('data/model_info/mpi_source.%d.fault' % rank),ndmin=2)
-        for source in sources:
+        def compute_source(source):
             depth = '%.4f' % source[3]
             subfault = str(int(source[0])).zfill(4)
             folder = project / 'GFs/static' / (model_name+'_'+depth+'.sub'+subfault)
@@ -68,6 +89,8 @@ def run_parallel_green(home,project_name,station_file,model_name,dt,NFFT,static,
                     header='DC: distance_km Z0 R0 T0 Z1 R1 T1 Z2 R2 T2; '+
                            'EX: distance_km Zex Rex Tex; source_id='+subfault+
                            '; earth_flattening='+str(flat))
+        for _ in _geotomo_source_map(compute_source, sources, processes):
+            pass
         return
 
     #What parameters are we using?
@@ -878,16 +901,17 @@ def run_parallel_teleseismics_green(home,project_name,time_epi,station_file,mode
                                             
                                                                   
 def run_parallel_synthetics_geotomo(home,project_name,station_file,model_name,forceMT,mt,insar,rank,size,
-                                   *, response_file=None, response_metadata=None):
+                                   *, response_file=None, response_metadata=None, processes=1):
     """Convert complete static DC+EX responses to tensor NEU/projection tables.
 
     Components use NED tensor coordinates; displacement/projection vectors use
     NEU. Rank-owned outputs are overwritten, and process cwd is never changed.
     Callers must own the project exclusively while generating/merging tables.
+    Source workers return NEU arrays; only this calling thread writes outputs.
     """
     from numpy import atleast_1d, atleast_2d
     from pathlib import Path
-    from contextlib import ExitStack
+    from contextlib import ExitStack, closing
     import subprocess
     from numpy import loadtxt, genfromtxt, eye, asarray, fromstring, isfinite, allclose, empty
     from mudpy.green import src2sta, rt2ne
@@ -912,45 +936,52 @@ def run_parallel_synthetics_geotomo(home,project_name,station_file,model_name,fo
         if not allclose((projections*projections).sum(axis=1),1,rtol=0,atol=1e-6):
             raise ValueError('Imagery measurement directions must be unit vectors in NEU')
     folder = project / 'GFs/static'
+
+    def compute_source(source):
+        block = empty((len(stations), 3, len(components)))
+        subfault = str(int(source[0])).zfill(4)
+        suffix = 'insar' if insar else 'gps'
+        gf_file = folder / (model_name+'.static.%.4f.sub%s.%s' % (source[3],subfault,suffix))
+        statics = loadtxt(gf_file,ndmin=2)
+        distances, azimuths = src2sta(station_file,source)
+        if (statics.shape != (len(stations),14) or not isfinite(statics).all()
+                or not allclose(statics[:,0],statics[:,10],rtol=0,atol=0)
+                or not allclose(statics[:,0],distances,rtol=0,atol=0.00051)):
+            raise ValueError('Expected matching complete DC+EX responses for every receiver in '+str(gf_file))
+        for k, station in enumerate(stations):
+            payload = ' '.join('%.10e' % value for value in statics[k])
+            for component_index, mechanism in enumerate(mechanisms):
+                command = ['syn','-M'+str(10**23.6)+'/'+ '/'.join(map(str,mechanism)),
+                           '-A'+str(azimuths[k]),'-P']
+                result = subprocess.run(command,input=payload,stdout=subprocess.PIPE,
+                                        stderr=subprocess.PIPE,text=True,check=True)
+                values = fromstring(result.stdout,sep=' ')
+                if values.shape != (5,) or not isfinite(values).all():
+                    raise ValueError('Invalid syn displacement: '+result.stdout+' '+result.stderr)
+                north,east = rt2ne(values[3]/100,values[4]/100,azimuths[k])
+                block[k, :, component_index] = [north,east,values[2]/100]
+        return block
+
+    coordinates = loadtxt(station_file, usecols=(1, 2), ndmin=2)
     with ExitStack() as stack:
         if response_file is None:
             outputs = [stack.enter_context((folder / ('tmp_%s_process%d' % (component,rank))).open('w'))
                        for component in components]
         else:
             from mudpy.geotomo_io import response_writer
-            coordinates = loadtxt(station_file, usecols=(1, 2), ndmin=2)
             library, completed = stack.enter_context(response_writer(
                 response_file, sources, stations, coordinates,
                 {} if response_metadata is None else response_metadata))
             outputs = [None]*6
-        for source_index, source in enumerate(sources):
-            block = empty((len(stations), 3, 6)) if response_file is not None else None
-            subfault = str(int(source[0])).zfill(4)
-            suffix = 'insar' if insar else 'gps'
-            gf_file = folder / (model_name+'.static.%.4f.sub%s.%s' % (source[3],subfault,suffix))
-            statics = loadtxt(gf_file,ndmin=2)
-            distances, azimuths, lon, lat = src2sta(station_file,source,output_coordinates=True)
-            if (statics.shape != (len(stations),14) or not isfinite(statics).all()
-                    or not allclose(statics[:,0],statics[:,10],rtol=0,atol=0)
-                    or not allclose(statics[:,0],distances,rtol=0,atol=0.00051)):
-                raise ValueError('Expected matching complete DC+EX responses for every receiver in '+str(gf_file))
-            for k, station in enumerate(stations):
-                payload = ' '.join('%.10e' % value for value in statics[k])
-                for component_index, (mechanism, output) in enumerate(zip(mechanisms,outputs)):
-                    command = ['syn','-M'+str(10**23.6)+'/'+ '/'.join(map(str,mechanism)),
-                               '-A'+str(azimuths[k]),'-P']
-                    result = subprocess.run(command,input=payload,stdout=subprocess.PIPE,
-                                            stderr=subprocess.PIPE,text=True,check=True)
-                    values = fromstring(result.stdout,sep=' ')
-                    if values.shape != (5,) or not isfinite(values).all():
-                        raise ValueError('Invalid syn displacement: '+result.stdout+' '+result.stderr)
-                    north,east = rt2ne(values[3]/100,values[4]/100,azimuths[k])
-                    neu = asarray([north,east,values[2]/100])
-                    if response_file is not None:
-                        block[k, :, component_index] = neu
-                    else:
+        blocks = stack.enter_context(closing(_geotomo_source_map(compute_source, sources, processes)))
+        for source_index, block in enumerate(blocks):
+            source = sources[source_index]
+            if response_file is None:
+                for k, (station, (lon, lat)) in enumerate(zip(stations, coordinates)):
+                    for component_index, output in enumerate(outputs):
+                        neu = block[k, :, component_index]
                         displacement = [projections[k].dot(neu)] if insar else neu
-                        row = [lon[k],lat[k],*source[1:4],*displacement]
+                        row = [lon,lat,*source[1:4],*displacement]
                         output.write(station+' '+str(int(source[0]))+' '+
                                      ' '.join('%.10e' % value for value in row)+'\n')
             if response_file is not None:

@@ -18,7 +18,7 @@ from mudpy import geotomo
 def run_with_toml(project, name, steps, mechanism=None, matrix_mode='assemble', matrix_name=None,
                   *, sources='cloud.sources', earth_model='halfspace.mod',
                   observations='imagery.gflist', damping=(0.,), dk=.05, kmax=25.,
-                  observation_format='gflist', response_name='elastic'):
+                  observation_format='gflist', response_name='elastic', processes=1):
     """Write an explicit experiment configuration for this reference case."""
     source_model = 'fixed_tensor' if mechanism is not None else 'full_tensor'
     text = '''schema_version = 1
@@ -50,20 +50,20 @@ damping = %s
 name = %s
 mode = %s
 [execution]
-processes = 1
+processes = %s
 ''' % (json.dumps(name), json.dumps(steps), json.dumps(sources), json.dumps(earth_model),
        json.dumps(observations), json.dumps(observation_format),
        '[responses]\nname = '+json.dumps(response_name) if observation_format == 'hdf5' else '',
        dk, kmax, json.dumps(source_model), json.dumps(list(damping)),
        'fixed_tensor = '+json.dumps(list(mechanism)) if mechanism is not None else '',
-       json.dumps(matrix_name or 'toml_'+name), json.dumps(matrix_mode))
+       json.dumps(matrix_name or 'toml_'+name), json.dumps(matrix_mode), processes)
     path = project/'configs'/(name+'.toml')
     with path.open('x') as stream:
         stream.write(text)
     return geotomo.run(path)
 
 
-def hdf5_study(project):
+def hdf5_study(project, processes=1):
     """Small FK reference, HDF5 round trip, fixed basis, and NumPy-only reuse."""
     import time
     from unittest.mock import patch
@@ -129,6 +129,33 @@ def hdf5_study(project):
               'source_sha256': _code_identity()['source_sha256'],
               'limitations': ['Tiny synthetic timing is not a large-library benchmark.',
                               'No real-data GF generation or inversion.']}
+    if processes > 1:
+        native = sorted((project/'GFs/static').glob('halfspace.mod.static.*.insar'))
+        native_hashes = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in native}
+        # Preserve the full-basis text outputs before regenerating in parallel.
+        run_with_toml(project, 'text_serial', ['synthetics'])
+        text_files = sorted((project/'GFs/static').glob('_M*.los'))
+        text_hashes = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in text_files}
+        run_with_toml(project, 'text_parallel', ['greens', 'synthetics'], processes=processes)
+        assert text_hashes == {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in text_files}
+        started = time.perf_counter()
+        run_with_toml(project, 'hdf5_parallel', ['greens', 'synthetics'],
+                      observations=observation_file.name, observation_format='hdf5',
+                      response_name='parallel_elastic', processes=processes)
+        parallel_time = time.perf_counter()-started
+        assert native_hashes == {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in native}
+        with h5py.File(str(project/'GFs/static/elastic.h5'), 'r') as serial, \
+                h5py.File(str(project/'GFs/static/parallel_elastic.h5'), 'r') as parallel:
+            assert serial.attrs['complete'] and parallel.attrs['complete']
+            for key in ('sources', 'receiver_ids', 'receiver_coordinates', 'displacement', 'completed_sources'):
+                np.testing.assert_array_equal(serial[key][()], parallel[key][()])
+        parallel_matrix = io.assemble_matrix(project/'GFs/static/parallel_elastic.h5',
+            io.read_observations(observation_file), np.loadtxt(project/'data/model_info/cloud.sources', ndmin=2))
+        np.testing.assert_array_equal(parallel_matrix, matrix)
+        report['parallel'] = {'requested_processes': processes, 'active_sources': 2,
+                              'forward_s': parallel_time, 'native_files_identical': True,
+                              'text_tables_identical': True,
+                              'neu_arrays_and_matrix_identical': True}
     (project/'hdf5_validation.json').write_text(json.dumps(report, indent=2)+'\n')
     print(json.dumps(report, indent=2))
 
@@ -732,9 +759,13 @@ if __name__ == '__main__':
     parser.add_argument('--toml', action='store_true', help='Exercise project initialization and the TOML runner')
     parser.add_argument('--layered', action='store_true', help='Run layered convergence and off-grid/noisy imagery recovery through TOML')
     parser.add_argument('--hdf5', action='store_true', help='Check HDF5 responses and direct NumPy reuse on the small synthetic reference')
+    parser.add_argument('--processes', type=int, default=1,
+                        help='With --hdf5, also compare serial and parallel forward calculations')
     args = parser.parse_args()
+    if args.processes < 1 or (args.processes != 1 and not args.hdf5):
+        parser.error('--processes must be positive and requires --hdf5 when not 1')
     if args.hdf5:
-        hdf5_study(args.project)
+        hdf5_study(args.project, args.processes)
     elif args.layered:
         layered_study(args.project)
     else:

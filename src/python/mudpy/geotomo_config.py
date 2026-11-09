@@ -84,6 +84,7 @@ class RunConfig:
     matrix_mode: str
     observation_format: str
     response_name: str
+    processes: int
 
     @property
     def observation_path(self):
@@ -171,8 +172,9 @@ class RunConfig:
         if matrix_name.endswith('.npy'):
             raise ValueError('matrix.name is a basename without the .npy extension')
         matrix_mode = _choice(matrix.get('mode', 'assemble'), ('assemble', 'reuse'), 'matrix.mode')
-        if type(execution.get('processes', 1)) is not int or execution.get('processes', 1) != 1:
-            raise ValueError('execution.processes must be 1; parallel tensor execution is not validated')
+        processes = execution.get('processes', 1)
+        if type(processes) is not int or processes < 1:
+            raise ValueError('execution.processes must be a positive integer')
         if 'greens' in steps and 'invert' in steps and 'synthetics' not in steps:
             raise ValueError('New greens must be followed by synthetics before inversion')
         if matrix_mode == 'reuse' and steps != ['invert']:
@@ -181,7 +183,7 @@ class RunConfig:
                    filenames['earth_model'], filenames['observations'], flattening,
                    dk, pmin, pmax, kmax, source_model, mechanism, solver, weighting,
                    _damping(inversion['damping']), matrix_name, matrix_mode,
-                   observation_format, response_name)
+                   observation_format, response_name, processes)
 
     def settings(self):
         settings = {
@@ -197,7 +199,7 @@ class RunConfig:
                           'solver': self.solver, 'weighting': self.weighting, 'damping': self.damping},
             'matrix': {'name': self.matrix_name, 'mode': self.matrix_mode,
                        'path': str(self.project/'GFs/matrices'/(self.matrix_name+'.npy'))},
-            'execution': {'processes': 1}}
+            'execution': {'processes': self.processes}}
         if self.observation_format == 'hdf5':
             settings['responses'] = {'name': self.response_name, 'path': str(self.response_path),
                                      'format': 'hdf5', 'basis': 'six reference moment tensors'}
@@ -487,7 +489,7 @@ def run(config_file):
             geotomo._inversion_gfs(home, name, config.observations if hdf5 else normalized.name,
                 config.sources, config.earth_model,
                 int('greens' in config.steps), int('synthetics' in config.steps), config.dk,
-                config.pmin, config.pmax, config.kmax, 0, 1, False if hdf5 else fixed,
+                config.pmin, config.pmax, config.kmax, 0, config.processes, False if hdf5 else fixed,
                 () if hdf5 else config.fixed_tensor, config.earth_flattening, **options)
             _verify_inputs(input_hashes)
             if 'greens' in config.steps:

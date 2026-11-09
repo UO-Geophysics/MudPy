@@ -102,6 +102,10 @@ Run the small HDF5 verification into a new destination:
 PYTHONPATH="$PWD/src/python" python -B examples/geotomo/validate.py --hdf5 --project /absolute/existing-parent/new-project
 ```
 
+Add `--processes 2` to also regenerate the small forward case in parallel and
+require identical native GF files, text tables, HDF5 arrays, and projected matrix.
+The validation directory must be new; this does not run a real-data inversion.
+
 It runs the independent homogeneous reference, compares text/HDF5 matrices,
 checks predictions and fixed mechanisms, and verifies NumPy-only reuse with
 generation/assembly deliberately forbidden. `hdf5_validation.json` records
@@ -157,6 +161,27 @@ explicit. Optional values have recorded defaults: FK backend, `dk=0.05`,
 `pmin=0`, `pmax=1`, `kmax=25`, `lstsq`, diagonal weighting, matrix assembly, and
 one process. The default matrix basename follows `run.name`.
 
+To parallelize forward calculations, set an explicit positive integer:
+
+```toml
+[execution]
+processes = 4
+```
+
+This caps concurrent external FK or `syn` calculations across source points;
+it never selects all available cores automatically. Fewer sources use fewer
+workers. Lightweight coordinator threads launch the independent executables,
+so no MPI installation or multiprocessing entry-point guard is required.
+Each FK source has a separate working folder. Batches contain at most this many
+source blocks, and one calling thread writes HDF5 or text responses in source
+order. Failed workers propagate their errors; active workers finish before the
+project lock and temporary station input are released. Failed HDF5 libraries
+remain marked incomplete and cannot be reused.
+
+The requested count is saved in run provenance, but does not change the physical
+response/matrix cache signatures. Solver damping sweeps remain sequential;
+NumPy/BLAS thread settings are independent of `execution.processes`.
+
 The project path resolves relative to the TOML file. Input filenames are
 basenames in the fixed source/model/observation-list folders, respectively.
 Observation-list data paths may be absolute or relative to the project root,
@@ -167,7 +192,7 @@ whitespace-delimited, project paths containing whitespace are rejected.
 
 Configuration validation rejects unknown keys, unsafe names, incompatible
 settings, malformed input arrays, invalid geometry/uncertainties, and unsupported
-parallel or data modes. Source count is derived from the file. `full_tensor`
+data modes. Source count is derived from the file. `full_tensor`
 and `fixed_tensor` are supported; fixed mode requires six explicit components
 in `xx,xy,xz,yy,yz,zz` order, with their supplied normalization preserved.
 Only identity damping is currently supported. Damping may be an explicit list
@@ -418,8 +443,9 @@ See the [NIED DC3D/DC3D0 manual](https://www.bosai.go.jp/information/pdf/DC3Dman
 
 ## Scope and ownership
 
-The first implementation requires `ncpus=1`. Unsupported GNSS/waveform requests
-and parallel tensor execution fail explicitly. The standard slip-GF path has
+Forward source calculations accept a positive `ncpus` count (or TOML
+`execution.processes`), with serial execution as the default. Unsupported
+GNSS/waveform requests fail explicitly. The standard slip-GF path has
 not been changed to use the new tensor branch. No FK source code was modified.
 
 `inversionGFs` and `run_inversion` acquire the exclusive `.geotomo.lock` project lock. A second

@@ -30,7 +30,7 @@ def inversionGFs(home,project_name,GF_list,source_name,model_name,
     """Generate tensor responses with exclusive project ownership.
 
     flat=True retains historical Earth flattening; use False for a homogeneous
-    flat half-space benchmark. The current tensor path requires ncpus=1.
+    flat half-space benchmark. ncpus caps concurrent FK/syn subprocesses.
     """
     with _project_lock(home,project_name):
         return _inversion_gfs(home,project_name,GF_list,source_name,model_name,
@@ -40,7 +40,7 @@ def inversionGFs(home,project_name,GF_list,source_name,model_name,
 def _inversion_gfs(home,project_name,GF_list,source_name,model_name,
         green_flag,synth_flag,dk,pmin,pmax,kmax,hot_start,ncpus,forceMT,mt,flat=True,
         *, observations=None, response_file=None, response_metadata=None):
-    """Compute tensor responses serially; one run owns the project at a time.
+    """Compute source responses concurrently; one run owns the project at a time.
 
     ``flat`` retains the historical FK Earth-flattening option. Set False for
     a flat homogeneous half-space benchmark. Static GNSS is not implemented.
@@ -49,8 +49,8 @@ def _inversion_gfs(home,project_name,GF_list,source_name,model_name,
     from pathlib import Path
     from numpy import genfromtxt, where, isfinite
 
-    if ncpus != 1:
-        raise NotImplementedError('geotomo currently requires ncpus=1; MPI execution is not validated')
+    if type(ncpus) is not int or ncpus < 1:
+        raise ValueError('ncpus must be a positive integer')
     project = Path(home) / project_name
     if observations is None:
         gf_file = project / 'data/station_info' / GF_list
@@ -90,7 +90,7 @@ def _inversion_gfs(home,project_name,GF_list,source_name,model_name,
 
 def make_parallel_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,
         hot_start,dk,pmin,pmax,kmax,ncpus,insar=False,flat=True):
-    """Generate complete DC+EX static GFs using the existing worker, serially.
+    """Generate complete DC+EX static GFs with independent source workers.
 
     Direct callers must own the project exclusively; inversionGFs enforces this.
     """
@@ -98,8 +98,8 @@ def make_parallel_green(home,project_name,station_file,fault_name,model_name,dt,
     from numpy import loadtxt, savetxt, isfinite, unique
     from mudpy.parallel import run_parallel_green
 
-    if ncpus != 1:
-        raise NotImplementedError('geotomo currently requires ncpus=1')
+    if type(ncpus) is not int or ncpus < 1:
+        raise ValueError('ncpus must be a positive integer')
     project = Path(home) / project_name
     source = loadtxt(project / 'data/model_info' / fault_name, ndmin=2)
     if source.shape[1] != 4 or not isfinite(source).all():
@@ -113,12 +113,12 @@ def make_parallel_green(home,project_name,station_file,fault_name,model_name,dt,
             fmt=['%d','%.17g','%.17g','%.17g'])
     run_parallel_green(home,project_name,str(project / 'data/station_info' / station_file),
         model_name,dt,NFFT,1,dk,pmin,pmax,kmax,False,insar,0,1,
-        full_mt=True,flat=flat)
+        full_mt=True,flat=flat,processes=ncpus)
 
 
 def make_parallel_synthetics(home,project_name,station_file,source_name,model_name,
         hot_start,ncpus,forceMT,mt,insar=False,*,response_file=None,response_metadata=None):
-    """Generate and assemble tensor responses serially, in existing text formats.
+    """Generate source responses concurrently and assemble with one writer.
 
     Direct callers must own the project exclusively; inversionGFs enforces this.
     """
@@ -126,8 +126,8 @@ def make_parallel_synthetics(home,project_name,station_file,source_name,model_na
     from numpy import loadtxt, savetxt
     from mudpy.parallel import run_parallel_synthetics_geotomo
 
-    if ncpus != 1:
-        raise NotImplementedError('geotomo currently requires ncpus=1')
+    if type(ncpus) is not int or ncpus < 1:
+        raise ValueError('ncpus must be a positive integer')
     project = Path(home) / project_name
     source = loadtxt(project / 'data/model_info' / source_name, ndmin=2)
     if not 0 <= hot_start < len(source):
@@ -136,7 +136,7 @@ def make_parallel_synthetics(home,project_name,station_file,source_name,model_na
             fmt=['%d','%.17g','%.17g','%.17g'])
     run_parallel_synthetics_geotomo(home,project_name,
         str(project / 'data/station_info' / station_file),model_name,forceMT,mt,insar,0,1,
-        response_file=response_file, response_metadata=response_metadata)
+        response_file=response_file, response_metadata=response_metadata,processes=ncpus)
     if response_file is not None:
         return
     suffix = 'los' if insar else 'neu'

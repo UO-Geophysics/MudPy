@@ -12,6 +12,99 @@ from mudpy import geotomo, geotomo_io as io, insartools
 from mudpy.geotomo_config import RunConfig, _inputs, _signatures, _code_identity
 
 
+class ParallelForwardTests(unittest.TestCase):
+    def test_source_workers_overlap_with_bounded_ordered_results(self):
+        from threading import Barrier, Lock
+        from mudpy.parallel import _geotomo_source_map
+        barrier, lock = Barrier(2, timeout=5), Lock()
+        active = 0
+        maximum = 0
+        def work(source):
+            nonlocal active, maximum
+            with lock:
+                active += 1
+                maximum = max(maximum, active)
+            if source < 2:
+                barrier.wait()
+            with lock:
+                active -= 1
+            return source
+        self.assertEqual(list(_geotomo_source_map(work, list(range(5)), 2)), list(range(5)))
+        self.assertEqual(maximum, 2)
+        # Requests larger than the source count and serial execution are valid.
+        self.assertEqual(list(_geotomo_source_map(lambda x: x, [7], 8)), [7])
+        self.assertEqual(list(_geotomo_source_map(lambda x: x, [7], 1)), [7])
+
+    def test_worker_failure_waits_for_active_sources_and_stops_next_batch(self):
+        from threading import Barrier, Event
+        from mudpy.parallel import _geotomo_source_map
+        barrier, finished = Barrier(2, timeout=5), Event()
+        def work(source):
+            if source == 0:
+                barrier.wait()
+                raise RuntimeError('failed source')
+            if source == 1:
+                barrier.wait()
+                finished.set()
+                return source
+            self.fail('Scheduled another batch after failure')
+        with self.assertRaisesRegex(RuntimeError, 'failed source'):
+            list(_geotomo_source_map(work, [0, 1, 2], 2))
+        self.assertTrue(finished.is_set())
+
+    def test_parallel_synthetics_have_one_writer_and_leave_failures_incomplete(self):
+        from threading import Barrier, get_ident
+        from subprocess import CompletedProcess, CalledProcessError
+        from mudpy.parallel import run_parallel_synthetics_geotomo
+        with tempfile.TemporaryDirectory() as temporary:
+            project = Path(temporary)/'site'
+            for name in ('data/model_info', 'data/station_info', 'GFs/static'):
+                (project/name).mkdir(parents=True)
+            # Repeated depths and unsorted IDs must retain source-file order.
+            sources = np.array([[19, 13, 43, 3], [3, 13.1, 43.1, 3], [8, 13.2, 43.2, 5]])
+            np.savetxt(project/'data/model_info/mpi_source.0.fault', sources)
+            stations = project/'data/station_info/one.sta'
+            stations.write_text('A 13 43\n')
+            for source in sources:
+                values = np.zeros((1, 14))
+                values[0, [0, 10]] = 1
+                values[0, 1] = source[0]
+                np.savetxt(project/('GFs/static/earth.mod.static.%.4f.sub%04d.insar' % (source[3], source[0])), values)
+            barrier = Barrier(2, timeout=5)
+            def syn(command, input, **kwargs):
+                marker = float(input.split()[1])
+                if marker in (19, 3):
+                    barrier.wait()
+                return CompletedProcess(command, 0, '0 0 %s 0 0' % marker, '')
+            owner, writers = get_ident(), []
+            original_setitem = h5py.Dataset.__setitem__
+            def write(dataset, key, value):
+                writers.append(get_ident())
+                original_setitem(dataset, key, value)
+            def run(name):
+                run_parallel_synthetics_geotomo(temporary+'/', 'site', str(stations),
+                    'earth.mod', False, (), True, 0, 1, response_file=project/name, processes=2)
+            with patch('mudpy.green.src2sta', return_value=(np.array([1.]), np.array([0.]))), \
+                    patch('subprocess.run', side_effect=syn), \
+                    patch.object(h5py.Dataset, '__setitem__', new=write):
+                run('ok.h5')
+            self.assertEqual(set(writers), {owner})
+            with h5py.File(str(project/'ok.h5'), 'r') as file:
+                self.assertTrue(file.attrs['complete'])
+                np.testing.assert_array_equal(file['sources'][()], sources)
+                np.testing.assert_allclose(file['displacement'][:, 0, 2, 0], sources[:, 0]/100)
+            with patch('mudpy.green.src2sta', return_value=(np.array([1.]), np.array([0.]))), \
+                    patch('subprocess.run', side_effect=CalledProcessError(1, ['syn'])):
+                with self.assertRaises(CalledProcessError):
+                    run('failed.h5')
+            with h5py.File(str(project/'failed.h5'), 'r') as file:
+                self.assertFalse(file.attrs['complete'])
+            observations = {'ids': np.array(['A']), 'coordinates': np.array([[13., 43.]]),
+                            'projection_neu': np.array([[0., 0., 1.]])}
+            with self.assertRaisesRegex(ValueError, 'Incomplete'):
+                io.assemble_matrix(project/'failed.h5', observations, sources)
+
+
 class StorageTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
