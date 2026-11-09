@@ -166,6 +166,9 @@ class QuadtreeTests(unittest.TestCase):
         self.assertEqual(sample['counts'].sum(), result['keep_mask'].sum())
         # The saved polygon is directly reusable, including hole semantics.
         record = json.loads(json.dumps(result['provenance']))
+        for polygon in record['include_polygons']['coordinates']:
+            for ring in polygon:
+                self.assertEqual(ring[0], ring[-1])
         replay = process(np.zeros((8, 8)), include_polygons=record['include_polygons'], min_size=2)
         np.testing.assert_array_equal(replay['keep_mask'], result['keep_mask'])
         np.testing.assert_array_equal(replay['sampling']['source_indices'], sample['source_indices'])

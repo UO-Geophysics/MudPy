@@ -484,7 +484,7 @@ def preprocess_insar(displacement, x, y, look_enu, *, units, los_positive,
                         min_pixels=min_pixels)
     def polygon_record(value):
         return None if value is None else {'type': 'MultiPolygon', 'coordinates': [
-            [ring.tolist() for ring in p] for p in _polygons(value)]}
+            [ring.tolist()+[ring[0].tolist()] for ring in p] for p in _polygons(value)]}
     provenance = {
         'coordinate_system': coordinate_system, 'input_units': units, 'output_units': 'm',
         'input_los_positive': los_positive,
@@ -550,10 +550,13 @@ def write_preprocessing(result, output_directory):
     directory.mkdir()  # Parents must already exist; existing runs are refused.
     (directory/'processing.json').write_text(text)
     np.savez_compressed(directory/'processed.npz', **arrays)
+    los_sign = result['provenance']['output_los_positive']
+    look_direction = result['provenance']['output_look_direction']
     header = ('x y LOS_m mean_E mean_N mean_U\n'
               'coordinate_system='+result['provenance']['coordinate_system']+'\n'
-              'LOS_positive='+result['provenance']['output_los_positive']+'; look_direction='
-              +result['provenance']['output_look_direction']+'\n'
+              'LOS_positive_convention='+('unverified; stored sign preserved' if los_sign == 'unknown' else los_sign)+'\n'
+              'look_vector_coefficients=provided; component_order=E,N,U; aggregation=arithmetic_mean\n'
+              'look_vector_direction_convention='+('unverified' if look_direction == 'unknown' else look_direction)+'\n'
               'Point representation approximates tile means; coefficients are not renormalized. '
               'Tile scatter is not sigma.')
     np.savetxt(directory/'samples.txt', np.column_stack([
