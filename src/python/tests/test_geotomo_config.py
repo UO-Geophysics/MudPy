@@ -10,8 +10,11 @@ from unittest.mock import patch
 
 import numpy as np
 
-from mudpy import mt3d, runslip
-from mudpy.mt3d_config import RunConfig, _inputs, _signatures, _record_cache, _require_cache
+from mudpy import geotomo, runslip
+from mudpy.geotomo_config import (
+    RunConfig, _inputs, _signatures, _record_cache, _require_cache,
+    _code_identity,
+)
 
 
 class ConfigTests(unittest.TestCase):
@@ -20,7 +23,7 @@ class ConfigTests(unittest.TestCase):
         self.addCleanup(self.temporary.cleanup)
         self.parent = Path(self.temporary.name).resolve()
         self.project = self.parent/'site'
-        self.config_file = mt3d.init_project(self.project)
+        self.config_file = geotomo.init_project(self.project)
         self.original = self.config_file.read_text()
 
     def configure(self, *changes):
@@ -33,8 +36,61 @@ class ConfigTests(unittest.TestCase):
 
     def products(self, config):
         source, _, geometry, _ = _inputs(config)
-        code = {'source_sha256': {name: 'code' for name in ('mt3d', 'parallel', 'green')}}
+        code = {'source_sha256': {name: 'code' for name in ('geotomo', 'parallel', 'green')}}
         return _signatures(config, source, geometry, code, {})
+
+    def test_project_lock_excludes_competing_runs_and_preserves_existing_owner(self):
+        lock = self.project/'.geotomo.lock'
+        with geotomo._project_lock(str(self.parent)+'/', self.project.name):
+            self.assertTrue(lock.exists())
+            with self.assertRaises(FileExistsError):
+                geotomo.run(self.config_file)
+            self.assertTrue(lock.exists())
+        self.assertFalse(lock.exists())
+        lock.write_text('existing owner')
+        with self.assertRaises(FileExistsError):
+            geotomo.run(self.config_file)
+        self.assertEqual(lock.read_text(), 'existing owner')
+
+    def test_minimal_version_one_toml_records_canonical_provenance(self):
+        # Independent minimal schema-1 configuration, with no workflow-name key.
+        original = b'''schema_version = 1
+[project]
+directory = ".."
+[run]
+name = "minimal_config"
+steps = ["greens"]
+[inputs]
+sources = "template.sources"
+earth_model = "template.mod"
+observations = "template.gflist"
+[forward]
+earth_flattening = false
+[inversion]
+source_model = "full_tensor"
+damping = [0.0]
+'''
+        self.config_file.write_bytes(original)
+        config = RunConfig.load(self.config_file)
+
+        def worker(*args):
+            for product in self.products(config)[0][2]:
+                product.write_text('verified-test-product\n')
+
+        with patch.object(geotomo, '_inversion_gfs', side_effect=worker):
+            resolved = geotomo.run(self.config_file)
+        self.assertEqual(resolved.with_name('minimal_config.config.toml').read_bytes(), original)
+        record = json.loads(resolved.read_text())
+        self.assertEqual(Path(record['normalized_observations']).name,
+                         '_geotomo_minimal_config.gflist')
+        self.assertIn('geotomo', record['code']['source_sha256'])
+        self.assertTrue((self.project/'GFs/static/_geotomo_greens.json').is_file())
+
+    def test_provenance_hashes_numerical_and_configuration_implementations(self):
+        from mudpy import geotomo_config
+        code = _code_identity()['source_sha256']
+        for name, module in (('geotomo', geotomo), ('geotomo_config', geotomo_config)):
+            self.assertEqual(code[name], hashlib.sha256(Path(module.__file__).read_bytes()).hexdigest())
 
     def test_initializer_refuses_existing_project_and_templates_are_valid(self):
         config = RunConfig.load(self.config_file)
@@ -45,7 +101,7 @@ class ConfigTests(unittest.TestCase):
             config.name = 'different'
         self.assertEqual(np.loadtxt(self.project/'data/model_info/template.sources').shape, (4,))
         with self.assertRaises(FileExistsError):
-            mt3d.init_project(self.project)
+            geotomo.init_project(self.project)
         self.assertEqual(self.config_file.read_text(), self.original)
         self.assertTrue((self.project/'GFs/dynamic').is_dir())
         self.assertTrue((self.project/'analysis/frequency').is_dir())
@@ -103,13 +159,13 @@ class ConfigTests(unittest.TestCase):
     def test_invalid_input_and_stale_cache_fail_before_run_artifacts(self):
         config = self.configure(('steps = ["greens", "synthetics", "invert"]', 'steps = ["invert"]'))
         with self.assertRaisesRegex(ValueError, 'Missing cache record'):
-            mt3d.run(self.config_file)
+            geotomo.run(self.config_file)
         self.assertEqual(list((self.project/'output/inverse_models/models').iterdir()), [])
-        self.assertFalse((self.project/'.mt3d.lock').exists())
+        self.assertFalse((self.project/'.geotomo.lock').exists())
         data = self.project/'data/statics/template.los'
         data.write_text('0\n0\n0\n0\n')
         with self.assertRaisesRegex(ValueError, 'unit NEU'):
-            mt3d.run(self.config_file)
+            geotomo.run(self.config_file)
         self.assertEqual(list((self.project/'output/inverse_models/models').iterdir()), [])
 
     def test_cache_signatures_separate_values_weights_geometry_and_mechanisms(self):
@@ -142,14 +198,14 @@ class ConfigTests(unittest.TestCase):
         def worker(*args):
             folder = self.project/'output/inverse_models/models'
             self.assertEqual((folder/'example.config.toml').read_bytes(), exact)
-            self.assertTrue((self.project/'.mt3d.lock').exists())
+            self.assertTrue((self.project/'.geotomo.lock').exists())
             with self.assertRaises(FileExistsError):
-                mt3d.run(self.config_file)
+                geotomo.run(self.config_file)
             for product in self.products(config)[0][2]:
                 product.write_text('verified-test-product\n')
 
-        with patch.object(mt3d, '_inversion_gfs', side_effect=worker) as execute:
-            resolved = mt3d.run(self.config_file)
+        with patch.object(geotomo, '_inversion_gfs', side_effect=worker) as execute:
+            resolved = geotomo.run(self.config_file)
             self.assertEqual(execute.call_count, 1)
         record = json.loads(resolved.read_text())
         self.assertEqual(record['configuration_sha256'], hashlib.sha256(exact).hexdigest())
@@ -162,16 +218,16 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(resolved.with_name('example.config.toml').read_bytes(), exact)
         self.assertEqual(json.loads(resolved.read_text()), record)
         with self.assertRaisesRegex(FileExistsError, 'already exists'):
-            mt3d.run(self.config_file)
-        self.assertFalse((self.project/'.mt3d.lock').exists())
+            geotomo.run(self.config_file)
+        self.assertFalse((self.project/'.geotomo.lock').exists())
 
     def test_computation_failure_retains_snapshot_and_propagates(self):
         self.configure(('steps = ["greens", "synthetics", "invert"]', 'steps = ["greens"]'))
-        with patch.object(mt3d, '_inversion_gfs', side_effect=RuntimeError('FK failed')):
+        with patch.object(geotomo, '_inversion_gfs', side_effect=RuntimeError('FK failed')):
             with self.assertRaisesRegex(RuntimeError, 'FK failed'):
-                mt3d.run(self.config_file)
+                geotomo.run(self.config_file)
         self.assertTrue((self.project/'output/inverse_models/models/example.config.toml').is_file())
-        self.assertFalse((self.project/'.mt3d.lock').exists())
+        self.assertFalse((self.project/'.geotomo.lock').exists())
 
     def test_input_changes_during_computation_do_not_get_a_cache_record(self):
         config = self.configure(('steps = ["greens", "synthetics", "invert"]', 'steps = ["greens"]'))
@@ -181,11 +237,11 @@ class ConfigTests(unittest.TestCase):
                 product.write_text('test product\n')
             (self.project/'data/statics/template.los').write_text('0.002\n0\n1\n0\n')
 
-        with patch.object(mt3d, '_inversion_gfs', side_effect=worker):
+        with patch.object(geotomo, '_inversion_gfs', side_effect=worker):
             with self.assertRaisesRegex(RuntimeError, 'Input changed'):
-                mt3d.run(self.config_file)
-        self.assertFalse((self.project/'GFs/static/_mt3d_greens.json').exists())
-        self.assertFalse((self.project/'.mt3d.lock').exists())
+                geotomo.run(self.config_file)
+        self.assertFalse((self.project/'GFs/static/_geotomo_greens.json').exists())
+        self.assertFalse((self.project/'.geotomo.lock').exists())
 
 
 class LegacyInitializationTests(unittest.TestCase):

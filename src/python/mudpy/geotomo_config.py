@@ -1,4 +1,4 @@
-"""Project setup and version-1 TOML runs for the existing mt3d workflow."""
+"""Project setup and version-1 TOML runs for Geodetic Source Tomography."""
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 import hashlib
@@ -183,7 +183,7 @@ def init_project(project_directory):
     project = Path(project_directory).expanduser().resolve()
     if any(char.isspace() for char in str(project)):
         raise ValueError('The legacy observation format requires a project path without whitespace')
-    templates = Path(__file__).resolve().parents[3]/'run/mt3d'
+    templates = Path(__file__).resolve().parents[3]/'run/geotomo'
     files = {
         'data/model_info/template.sources': templates/'template.sources',
         'data/station_info/template.gflist': templates/'template.gflist',
@@ -258,7 +258,7 @@ def _inputs(config):
                 not np.isin(numbers[2:], (0, 1)).all()):
             raise ValueError('Invalid observation coordinates or binary flags for '+station)
         if numbers[2:6].any():
-            raise ValueError('Only imagery scalar projections are supported by the current mt3d runner')
+            raise ValueError('Only imagery scalar projections are supported by the current geotomo runner')
         if numbers[6] != 1:
             continue
         observation = Path(row[12]).expanduser()
@@ -286,7 +286,7 @@ def _inputs(config):
 
 def _code_identity():
     folder = Path(__file__).resolve().parent
-    modules = ('mt3d', 'mt3d_config', 'parallel', 'green', 'inverse', 'analysis', 'runslip')
+    modules = ('geotomo', 'geotomo_config', 'parallel', 'green', 'inverse', 'analysis', 'runslip')
     identity = {'source_sha256': {name: _hash(folder/(name+'.py')) for name in modules},
                 'git_revision': None, 'git_status': None}
     repo = folder.parents[2]
@@ -304,18 +304,18 @@ def _signatures(config, sources, geometry, code, executables):
             'earth_model': _hash(project/'structure'/config.earth_model),
             'receivers': [{key: row[key] for key in ('id', 'lon', 'lat')} for row in geometry],
             'forward': config.settings()['forward'],
-            'code': {name: code['source_sha256'][name] for name in ('mt3d', 'parallel', 'green')},
+            'code': {name: code['source_sha256'][name] for name in ('geotomo', 'parallel', 'green')},
             'executables': {name: executables.get(name) for name in ('fk.pl', 'st_fk', 'trav')}}
     responses = {'greens': _digest(base), 'geometry': geometry,
                  'source_model': config.source_model, 'fixed_tensor': config.fixed_tensor,
                  'syn': executables.get('syn')}
-    matrix = {'responses': _digest(responses), 'assembly_code': code['source_sha256']['mt3d']}
+    matrix = {'responses': _digest(responses), 'assembly_code': code['source_sha256']['geotomo']}
     greens_files = [project/'GFs/static'/('%s.static.%.4f.sub%04d.insar' %
                     (config.earth_model, source[3], source[0])) for source in sources]
     components = ('Mxx',) if config.source_model == 'fixed_tensor' else ('Mxx', 'Mxy', 'Mxz', 'Myy', 'Myz', 'Mzz')
     response_files = [project/'GFs/static'/('_'+component+'.los') for component in components]
-    return ((project/'GFs/static/_mt3d_greens.json', base, greens_files),
-            (project/'GFs/static/_mt3d_responses.json', responses, response_files),
+    return ((project/'GFs/static/_geotomo_greens.json', base, greens_files),
+            (project/'GFs/static/_geotomo_responses.json', responses, response_files),
             (project/'GFs/matrices'/(config.matrix_name+'.npy.json'), matrix,
              [project/'GFs/matrices'/(config.matrix_name+'.npy')]))
 
@@ -358,7 +358,7 @@ def _collisions(config, normalized, matrix_specification):
 
 
 def run(config_file):
-    from mudpy import mt3d
+    from mudpy import geotomo
     import scipy
     import obspy
     import pyproj
@@ -372,7 +372,7 @@ def run(config_file):
             raise FileNotFoundError(project/directory)
     home, name = str(project.parent)+'/', project.name
     # One lock covers validation, snapshots, every compute stage, and logs.
-    with mt3d._project_lock(home, name):
+    with geotomo._project_lock(home, name):
         sources, rows, geometry, input_hashes = _inputs(config)
         code = _code_identity()
         executables = {}
@@ -384,7 +384,7 @@ def run(config_file):
                 raise FileNotFoundError('Required executable is not on PATH: '+executable)
             executables[executable] = {'path': path, 'sha256': _hash(path)} if path else None
         greens, responses, matrix = _signatures(config, sources, geometry, code, executables)
-        normalized = project/'data/station_info'/('_mt3d_'+config.name+'.gflist')
+        normalized = project/'data/station_info'/('_geotomo_'+config.name+'.gflist')
         _collisions(config, normalized, matrix)
         if 'synthetics' in config.steps and 'greens' not in config.steps:
             _require_cache(project, greens)
@@ -416,7 +416,7 @@ def run(config_file):
             stream.write(normalized_bytes)
         fixed = config.source_model == 'fixed_tensor'
         if 'greens' in config.steps or 'synthetics' in config.steps:
-            mt3d._inversion_gfs(home, name, normalized.name, config.sources, config.earth_model,
+            geotomo._inversion_gfs(home, name, normalized.name, config.sources, config.earth_model,
                 int('greens' in config.steps), int('synthetics' in config.steps), config.dk,
                 config.pmin, config.pmax, config.kmax, 0, 1, fixed, config.fixed_tensor,
                 config.earth_flattening)
@@ -427,14 +427,14 @@ def run(config_file):
                 _record_cache(project, responses)
         if 'invert' in config.steps:
             if config.matrix_mode == 'assemble':
-                mt3d.getG(home, name, config.sources, config.earth_model, normalized.name,
+                geotomo.getG(home, name, config.sources, config.earth_model, normalized.name,
                            False, config.matrix_name, fixed)
                 _record_cache(project, matrix)
             provenance = {'Configuration': original.name, 'Configuration SHA256': _hash(original),
                           'Resolved settings': resolved.name, 'Resolved settings SHA256': _hash(resolved),
                           'Normalized observations': str(normalized),
                           'Matrix SHA256': _hash(matrix[2][0])}
-            mt3d._run_inversion(home, name, config.name, config.sources, config.earth_model,
+            geotomo._run_inversion(home, name, config.name, config.sources, config.earth_model,
                 normalized.name, True, config.matrix_name, config.damping, len(sources),
                 config.solver, fixed, config.fixed_tensor, weight=config.weighting == 'diagonal',
                 provenance=provenance)

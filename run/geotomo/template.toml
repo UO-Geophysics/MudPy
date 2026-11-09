@@ -1,4 +1,6 @@
+# Geodetic Source Tomography (mudpy.geotomo).
 # Example inputs only: replace them before interpreting a scientific result.
+# Execute with geotomo.run("path/to/this.toml") after editing project inputs.
 schema_version = 1
 
 [project]

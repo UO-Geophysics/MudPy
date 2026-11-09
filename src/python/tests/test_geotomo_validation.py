@@ -6,8 +6,8 @@ import unittest
 import numpy as np
 
 
-path = Path(__file__).resolve().parents[3]/'examples/mt3d/validate.py'
-spec = importlib.util.spec_from_file_location('mt3d_validation_example', path)
+path = Path(__file__).resolve().parents[3]/'examples/geotomo/validate.py'
+spec = importlib.util.spec_from_file_location('geotomo_validation_example', path)
 example = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(example)
 

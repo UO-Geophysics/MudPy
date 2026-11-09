@@ -12,7 +12,7 @@ from pathlib import Path
 import numpy as np
 from pyproj import Geod
 
-from mudpy import mt3d
+from mudpy import geotomo
 
 
 def run_with_toml(project, name, steps, mechanism=None, matrix_mode='assemble', matrix_name=None,
@@ -55,14 +55,14 @@ processes = 1
     path = project/'configs'/(name+'.toml')
     with path.open('x') as stream:
         stream.write(text)
-    return mt3d.run(path)
+    return geotomo.run(path)
 
 
 def validate_single_receiver(project, use_toml=False):
     """Exercise real one-source/one-observation files and project exclusion."""
     single = project / 'single_receiver'
     if use_toml:
-        mt3d.init_project(single)
+        geotomo.init_project(single)
     else:
         single.mkdir()
         for directory in ('data/model_info', 'data/station_info', 'data/statics',
@@ -86,9 +86,9 @@ def validate_single_receiver(project, use_toml=False):
     if use_toml:
         run_with_toml(single, 'prepare', ['greens', 'synthetics'], mechanism)
     else:
-        mt3d.inversionGFs(home, name, 'imagery.gflist', 'cloud.sources', 'halfspace.mod',
+        geotomo.inversionGFs(home, name, 'imagery.gflist', 'cloud.sources', 'halfspace.mod',
                          1, 1, .05, 0, 1, 25, 0, 1, True, mechanism, flat=False)
-    G = mt3d.getG(home, name, 'cloud.sources', 'halfspace.mod', 'imagery.gflist', False, 'single', True)
+    G = geotomo.getG(home, name, 'cloud.sources', 'halfspace.mod', 'imagery.gflist', False, 'single', True)
     assert G.shape == (1, 1)
     np.savetxt(observation, np.r_[-.5*G[0, 0], look])
     arguments = (home, name, 'contraction', 'cloud.sources', 'halfspace.mod',
@@ -96,18 +96,18 @@ def validate_single_receiver(project, use_toml=False):
     if use_toml:
         run_with_toml(single, 'contraction', ['invert'], mechanism)
     else:
-        mt3d.run_inversion(*arguments, weight=True)
+        geotomo.run_inversion(*arguments, weight=True)
     result = np.loadtxt(single / 'output/inverse_models/models/contraction.0000.inv', ndmin=2)
     np.testing.assert_allclose(result[:, 4:10]/10**16.6, [-.5*np.array(mechanism)], atol=1e-10)
-    with mt3d._project_lock(home, name):
+    with geotomo._project_lock(home, name):
         try:
-            mt3d.run_inversion(*arguments)
+            geotomo.run_inversion(*arguments)
         except FileExistsError:
             pass  # Expected exclusion before matrix/output mutation.
         else:
             raise AssertionError('Concurrent project ownership was not rejected')
     assert Path.cwd() == cwd
-    assert not (single / '.mt3d.lock').exists()
+    assert not (single / '.geotomo.lock').exists()
     return float(abs(result[0, 4]/10**16.6+.5)/.5)
 
 
@@ -115,7 +115,7 @@ def main(project, use_toml=False):
     reference = json.loads(Path(__file__).with_name('okada_reference.json').read_text())
     project = project.resolve()
     if use_toml:
-        mt3d.init_project(project)
+        geotomo.init_project(project)
     else:
         project.mkdir()  # Refuse to overwrite a previous experiment.
         for directory in ('data/model_info', 'data/station_info', 'data/statics',
@@ -161,13 +161,13 @@ def main(project, use_toml=False):
     if use_toml:
         run_with_toml(project, 'prepare', ['greens', 'synthetics'])
     else:
-        mt3d.inversionGFs(home, name, gf_list.name, 'cloud.sources', 'halfspace.mod',
+        geotomo.inversionGFs(home, name, gf_list.name, 'cloud.sources', 'halfspace.mod',
                          1, 1, .05, 0, 1, 25, 0, 1, False, None, flat=False)
-    G = mt3d.getG(home, name, 'cloud.sources', 'halfspace.mod', gf_list.name,
+    G = geotomo.getG(home, name, 'cloud.sources', 'halfspace.mod', gf_list.name,
                  False, 'imagery', False)
     assert G.shape == (48, 12)
     assert np.linalg.matrix_rank(G) == 12
-    np.testing.assert_allclose(mt3d.getG(home, name, 'cloud.sources', 'halfspace.mod',
+    np.testing.assert_allclose(geotomo.getG(home, name, 'cloud.sources', 'halfspace.mod',
                                gf_list.name, True, 'imagery', False), G, rtol=0, atol=0)
 
     # Independent point-isotropic half-space reference. M = m I in N m:
@@ -197,9 +197,9 @@ def main(project, use_toml=False):
     # Direct prescribed mechanisms take a separate syn call from the six basis
     # calls, checking superposition and the complete producer/consumer handoff.
     mechanism = np.array([.6, .2, -.1, -.4, .3, .25])
-    mt3d.make_parallel_synthetics(home, name, station_file.name, 'cloud.sources',
+    geotomo.make_parallel_synthetics(home, name, station_file.name, 'cloud.sources',
                                 'halfspace.mod', 0, 1, True, mechanism, insar=True)
-    fixed = mt3d.getG(home, name, 'cloud.sources', 'halfspace.mod', gf_list.name,
+    fixed = geotomo.getG(home, name, 'cloud.sources', 'halfspace.mod', gf_list.name,
                      False, 'fixed', True)
     expected = G.dot(np.tile(mechanism, 2))
     # Sum the two independently prescribed source responses.
@@ -211,14 +211,14 @@ def main(project, use_toml=False):
     if use_toml:
         run_with_toml(project, 'fixed', ['synthetics', 'invert'], mechanism)
     else:
-        mt3d.run_inversion(home, name, 'fixed', 'cloud.sources', 'halfspace.mod',
+        geotomo.run_inversion(home, name, 'fixed', 'cloud.sources', 'halfspace.mod',
                           gf_list.name, False, 'fixed', [0], len(sources),
                           'lstsq', True, mechanism, weight=True)
     fixed_output = np.loadtxt(project / 'output/inverse_models/models/fixed.0000.inv', ndmin=2)
     np.testing.assert_allclose(fixed_output[:, 4:10]/10**16.6,
                                amplitudes[:, None]*mechanism, rtol=1e-7, atol=1e-10)
     # Restore six-component tables after the fixed-mechanism check.
-    mt3d.make_parallel_synthetics(home, name, station_file.name, 'cloud.sources',
+    geotomo.make_parallel_synthetics(home, name, station_file.name, 'cloud.sources',
                                 'halfspace.mod', 0, 1, False, None, insar=True)
 
     models = {
@@ -235,7 +235,7 @@ def main(project, use_toml=False):
                           matrix_mode='assemble' if run == 'mixed' else 'reuse',
                           matrix_name='toml_mixed')
         else:
-            mt3d.run_inversion(home, name, run, 'cloud.sources', 'halfspace.mod',
+            geotomo.run_inversion(home, name, run, 'cloud.sources', 'halfspace.mod',
                               gf_list.name, False, 'imagery', [0], len(sources),
                               'lstsq', False, None, weight=True)
         output = np.loadtxt(project / 'output/inverse_models/models' / (run+'.0000.inv'), ndmin=2)
@@ -247,7 +247,7 @@ def main(project, use_toml=False):
                                     (run+'.0000.'+station+'.los'))[0]
                           for station, _, _ in receivers])
         np.testing.assert_allclose(saved, G.dot(recovered.reshape(-1)), rtol=1e-7, atol=1e-10)
-        assert abs(mt3d.get_moment(home, name, 'cloud.sources', model, False)[0]-output[:, -1].sum()) < 1e7
+        assert abs(geotomo.get_moment(home, name, 'cloud.sources', model, False)[0]-output[:, -1].sum()) < 1e7
 
     # Offset components use their own measurement directions. These simple
     # horizontal projections check axis/sign conventions without claiming a
@@ -255,7 +255,7 @@ def main(project, use_toml=False):
     offset_directions = np.array([[1, 0, 0], [0, 1, 0]])
     np.testing.assert_allclose(isotropic_neu.dot(offset_directions.T), isotropic_neu[:, :2])
     # Fixed scalar contraction has positive scalar moment and signed tensors.
-    np.testing.assert_allclose(mt3d.get_moment(home, name, 'cloud.sources', [-1], True,
+    np.testing.assert_allclose(geotomo.get_moment(home, name, 'cloud.sources', [-1], True,
                                              [1, 0, 0, 1, 0, 1])[1],
                                [np.sqrt(1.5)*10**16.6])
     single_error = validate_single_receiver(project, use_toml)
@@ -267,8 +267,8 @@ def main(project, use_toml=False):
                'deviatoric_reference_relative_errors': deviatoric_errors,
                'superposition_relative_error': float(superposition_error),
                'python': sys.version, 'numpy': np.__version__,
-               'source_sha256': {module: hashlib.sha256(Path(mt3d.__file__).with_name(module+'.py').read_bytes()).hexdigest()
-                                 for module in ('mt3d', 'parallel', 'inverse', 'analysis')},
+               'source_sha256': {module: hashlib.sha256(Path(geotomo.__file__).with_name(module+'.py').read_bytes()).hexdigest()
+                                 for module in ('geotomo', 'parallel', 'inverse', 'analysis')},
                'recovery_relative_errors': errors,
                'single_receiver_recovery_relative_error': single_error,
                'toml_runner': use_toml,
@@ -439,7 +439,7 @@ def layered_study(project):
     import cProfile
     import time
     project = project.resolve()
-    mt3d.init_project(project)
+    geotomo.init_project(project)
     analysis = project/'analysis'
     driver_bytes = Path(__file__).read_bytes()
     (analysis/'validate.executed.py').write_bytes(driver_bytes)
@@ -511,8 +511,8 @@ def layered_study(project):
             profiler.dump_stats(str(analysis/(name+'.prof')))
         compute_time = time.perf_counter()-started
         started = time.perf_counter()
-        with mt3d._project_lock(str(project.parent)+'/', project.name):
-            G = mt3d.makeG(str(project.parent)+'/', project.name, source, model,
+        with geotomo._project_lock(str(project.parent)+'/', project.name):
+            G = geotomo.makeG(str(project.parent)+'/', project.name, source, model,
                           station_file.name, 'insar', mechanism is not None)
         timings[name] = {'generation_and_io_s': compute_time, 'assembly_s': time.perf_counter()-started}
         if source == 'truth.sources':

@@ -6,18 +6,18 @@ from unittest.mock import patch
 
 import numpy as np
 
-from mudpy import mt3d, inverse
+from mudpy import geotomo, inverse
 from mudpy.analysis import MT
 
 
 class TensorTests(unittest.TestCase):
     def test_moment_norm_and_signed_fixed_tensor(self):
         unit = 10**16.6
-        _, moment, _ = mt3d.get_moment('', '', '', [0, 1, 0, 0, 0, 0], False)
+        _, moment, _ = geotomo.get_moment('', '', '', [0, 1, 0, 0, 0, 0], False)
         np.testing.assert_allclose(moment, [unit])
-        _, moment, _ = mt3d.get_moment('', '', '', [-2], True, [1, 0, 0, 1, 0, 1])
+        _, moment, _ = geotomo.get_moment('', '', '', [-2], True, [1, 0, 0, 1, 0, 1])
         np.testing.assert_allclose(moment, [2*np.sqrt(1.5)*unit])
-        self.assertEqual(mt3d.get_moment('', '', '', np.zeros(6), False)[2], -np.inf)
+        self.assertEqual(geotomo.get_moment('', '', '', np.zeros(6), False)[2], -np.inf)
 
     def test_double_couple_and_undefined_isotropic_planes(self):
         def tensor_from_plane(plane):
@@ -62,34 +62,34 @@ class TensorTests(unittest.TestCase):
 
         with patch('numpy.loadtxt', side_effect=reader(real_load)), \
                 patch('numpy.genfromtxt', side_effect=reader(real_gen)):
-            matrix = mt3d.makeG('/audit/', 'project', 'cloud', '', 'one.sta', 'insar', False)
+            matrix = geotomo.makeG('/audit/', 'project', 'cloud', '', 'one.sta', 'insar', False)
             np.testing.assert_array_equal(matrix, [[200, 201, 202, 203, 204, 205,
                                                    100, 101, 102, 103, 104, 105]])
             np.testing.assert_array_equal(
-                mt3d.makeG('/audit/', 'project', 'cloud', '', 'one.sta', 'insar', True), [[200, 100]])
+                geotomo.makeG('/audit/', 'project', 'cloud', '', 'one.sta', 'insar', True), [[200, 100]])
             files[root+'GFs/static/_Mxx.los'] = 'A 1 15 45 14 44 5 100\n'
             with self.assertRaisesRegex(ValueError, 'Missing, duplicate'):
-                mt3d.makeG('/audit/', 'project', 'cloud', '', 'one.sta', 'insar', False)
+                geotomo.makeG('/audit/', 'project', 'cloud', '', 'one.sta', 'insar', False)
             files[root+'GFs/static/_Mxx.los'] *= 2
             with self.assertRaisesRegex(ValueError, 'Missing, duplicate'):
-                mt3d.makeG('/audit/', 'project', 'cloud', '', 'one.sta', 'insar', False)
+                geotomo.makeG('/audit/', 'project', 'cloud', '', 'one.sta', 'insar', False)
         with self.assertRaises(NotImplementedError):
-            mt3d.makeG('', '', '', '', '', 'static', False)
+            geotomo.makeG('', '', '', '', '', 'static', False)
 
     def test_nnls_uses_weighted_data_objective_and_augmented_damping(self):
         G = np.array([[1., 2.], [0., 1.]])
         d = np.array([[0.], [1.]])
         for weighted, damping, denominator in ((False, 0., 5.), (True, .5, 17.25)):
-            with patch.object(mt3d, '_project_lock', return_value=nullcontext()), \
-                    patch.object(mt3d, 'getG', return_value=G), \
+            with patch.object(geotomo, '_project_lock', return_value=nullcontext()), \
+                    patch.object(geotomo, 'getG', return_value=G), \
                     patch('numpy.loadtxt', return_value=np.zeros((2, 4))), \
                     patch.object(inverse, 'getdata', return_value=d), \
                     patch.object(inverse, 'get_data_weights', return_value=np.array([2., 1.])), \
                     patch.object(inverse, 'get_VR', return_value=(np.zeros(5), np.zeros(5))), \
                     patch.object(inverse, 'write_synthetics'), \
-                    patch.object(mt3d, 'write_log') as log, \
-                    patch.object(mt3d, 'write_model') as output:
-                mt3d.run_inversion('', '', '', '', '', '', False, '', [damping],
+                    patch.object(geotomo, 'write_log') as log, \
+                    patch.object(geotomo, 'write_model') as output:
+                geotomo.run_inversion('', '', '', '', '', '', False, '', [damping],
                                   2, 'nnls', True, [1, 0, 0, 1, 0, 1], weight=weighted)
                 solution = output.call_args.args[5]
                 np.testing.assert_allclose(solution[:, 0], [0, 1/denominator], atol=1e-14)

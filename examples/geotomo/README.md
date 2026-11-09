@@ -1,4 +1,8 @@
-# Tensor imagery CPU reference
+# Geodetic Source Tomography (`geotomo`)
+
+Geodetic imaging of distributed subsurface deformation sources. The current
+implementation uses moment tensors and static imagery projections; the examples
+below validate that source basis and its existing FK forward model.
 
 ## Project initialization and named TOML runs
 
@@ -7,9 +11,9 @@ shared inputs and response libraries and multiple descriptive run names. Create
 a project once from a short Python script or interactive session:
 
 ```python
-from mudpy import mt3d
+from mudpy import geotomo
 
-config = mt3d.init_project('/absolute/path/Norcia2016')
+config = geotomo.init_project('/absolute/path/Norcia2016')
 print(config)  # /absolute/path/Norcia2016/configs/template.toml
 ```
 
@@ -26,9 +30,9 @@ Edit/replace project inputs, copy the starter to a descriptive experiment TOML,
 and execute it from Python:
 
 ```python
-from mudpy import mt3d
+from mudpy import geotomo
 
-record = mt3d.run('/absolute/path/Norcia2016/configs/layered_fulltensor.toml')
+record = geotomo.run('/absolute/path/Norcia2016/configs/layered_fulltensor.toml')
 print(record)  # .../output/inverse_models/models/<run_name>.resolved.json
 ```
 
@@ -39,7 +43,7 @@ Python before 3.11 requires the `tomli` reader (already present in the audited
 Python 3.8 environment); Python 3.11+ uses `tomllib`. A missing reader raises an
 import error rather than installing dependencies or selecting another format.
 
-The commented [starter TOML](../../run/mt3d/template.toml) defines schema version
+The commented [starter TOML](../../run/geotomo/template.toml) defines schema version
 1. Required sections are `project`, `run`, `inputs`, `forward`, and `inversion`.
 `forward.earth_flattening`, `inversion.source_model`, and `inversion.damping` are
 explicit. Optional values have recorded defaults: FK backend, `dk=0.05`,
@@ -50,7 +54,7 @@ The project path resolves relative to the TOML file. Input filenames are
 basenames in the fixed source/model/observation-list folders, respectively.
 Observation-list data paths may be absolute or relative to the project root,
 and must refer to `data/statics/<observation_id>.los`. The runner writes a
-selected, absolute-path list at `data/station_info/_mt3d_<run_name>.gflist`;
+selected, absolute-path list at `data/station_info/_geotomo_<run_name>.gflist`;
 the original observation list is not edited. Because that legacy format is
 whitespace-delimited, project paths containing whitespace are rejected.
 
@@ -130,8 +134,8 @@ one artificial deformation interval; these are not real satellite products.
 Run from the MudPy checkout using the environment that imports this checkout:
 
 ```sh
-python -B src/python/tests/test_mt3d.py
-python -B examples/mt3d/validate.py --project /absolute/existing-parent/new-project
+python -B src/python/tests/test_geotomo.py
+python -B examples/geotomo/validate.py --project /absolute/existing-parent/new-project
 ```
 
 Exercise the same case through initialization and TOML, including preparation,
@@ -139,8 +143,8 @@ fixed/full-tensor runs, matrix reuse across different observation values, and
 the single-receiver case:
 
 ```sh
-python -B -m unittest discover -s src/python/tests -p 'test_mt3d*.py'
-python -B examples/mt3d/validate.py --toml --project /absolute/existing-parent/new-project
+python -B -m unittest discover -s src/python/tests -p 'test_geotomo*.py'
+python -B examples/geotomo/validate.py --toml --project /absolute/existing-parent/new-project
 ```
 
 The project path must not exist. Previous experiment files are never deleted.
@@ -154,14 +158,14 @@ reference solver during normal validation.
 Run the bounded layered/off-grid study in a new project:
 
 ```sh
-python -B examples/mt3d/validate.py --layered --project /absolute/existing-parent/new-project
+python -B examples/geotomo/validate.py --layered --project /absolute/existing-parent/new-project
 ```
 
 This mode always uses the TOML runner. Named experiments share one project,
 receiver geometry, and verified response matrices. Core scientific algorithms
 are the existing FK/full-tensor/identity-damped methods.
 Run the driver as the sole owner of its new project: it updates shared inputs
-between separately locked `mt3d.run` calls.
+between separately locked `geotomo.run` calls.
 
 The experiment has 49 receiver locations on a 7-by-7 grid spanning north/east
 coordinates from -6 to +6 km, with two representative LOS directions per point.
@@ -311,7 +315,7 @@ The first implementation requires `ncpus=1`. Unsupported GNSS/waveform requests
 and parallel tensor execution fail explicitly. The standard slip-GF path has
 not been changed to use the new tensor branch. No FK source code was modified.
 
-`inversionGFs` and `run_inversion` acquire an exclusive project lock. A second
+`inversionGFs` and `run_inversion` acquire the exclusive `.geotomo.lock` project lock. A second
 top-level run in that project fails before mutation. A killed process can leave
 the lock behind; inspect it and the failed run before manually removing it.
 Direct helper calls require exclusive caller ownership of the project, including

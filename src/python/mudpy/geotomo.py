@@ -1,5 +1,8 @@
 '''
-Routines for 3d or volumetric moment tensor inversion
+Geodetic Source Tomography: distributed deformation-source inversion.
+
+The current source basis uses full or prescribed moment tensors with static
+imagery observations.
 
 D. Melgar
 Apr 4th 2017
@@ -12,9 +15,9 @@ from contextlib import contextmanager
 
 @contextmanager
 def _project_lock(home, project_name):
-    """Fail before mutation if another top-level mt3d run owns the project."""
+    """Fail before mutation if another top-level geotomo run owns the project."""
     from pathlib import Path
-    lock = Path(home) / project_name / '.mt3d.lock'
+    lock = Path(home) / project_name / '.geotomo.lock'
     with lock.open('x'):
         try:
             yield
@@ -46,7 +49,7 @@ def _inversion_gfs(home,project_name,GF_list,source_name,model_name,
     from numpy import genfromtxt, where, isfinite
 
     if ncpus != 1:
-        raise NotImplementedError('mt3d currently requires ncpus=1; MPI execution is not validated')
+        raise NotImplementedError('geotomo currently requires ncpus=1; MPI execution is not validated')
     project = Path(home) / project_name
     gf_file = project / 'data/station_info' / GF_list
     stations = atleast_1d(genfromtxt(gf_file, usecols=0, dtype='U'))
@@ -54,7 +57,7 @@ def _inversion_gfs(home,project_name,GF_list,source_name,model_name,
     if not isfinite(flags).all() or not ((flags[:,2:] == 0) | (flags[:,2:] == 1)).all():
         raise ValueError('Observation flags must be finite and binary')
     if flags[:,2:6].any():
-        raise NotImplementedError('mt3d currently supports scalar imagery projections only, not GNSS or waveforms')
+        raise NotImplementedError('geotomo currently supports scalar imagery projections only, not GNSS or waveforms')
     selected = where(flags[:,6] == 1)[0]
     if not len(selected):
         raise ValueError('No imagery observations requested')
@@ -88,7 +91,7 @@ def make_parallel_green(home,project_name,station_file,fault_name,model_name,dt,
     from mudpy.parallel import run_parallel_green
 
     if ncpus != 1:
-        raise NotImplementedError('mt3d currently requires ncpus=1')
+        raise NotImplementedError('geotomo currently requires ncpus=1')
     project = Path(home) / project_name
     source = loadtxt(project / 'data/model_info' / fault_name, ndmin=2)
     if source.shape[1] != 4 or not isfinite(source).all():
@@ -113,17 +116,17 @@ def make_parallel_synthetics(home,project_name,station_file,source_name,model_na
     """
     from pathlib import Path
     from numpy import loadtxt, savetxt
-    from mudpy.parallel import run_parallel_synthetics_mt3d
+    from mudpy.parallel import run_parallel_synthetics_geotomo
 
     if ncpus != 1:
-        raise NotImplementedError('mt3d currently requires ncpus=1')
+        raise NotImplementedError('geotomo currently requires ncpus=1')
     project = Path(home) / project_name
     source = loadtxt(project / 'data/model_info' / source_name, ndmin=2)
     if not 0 <= hot_start < len(source):
         raise ValueError('hot_start must select a source')
     savetxt(project / 'data/model_info/mpi_source.0.fault', source[hot_start:],
             fmt=['%d','%.9f','%.9f','%.9f'])
-    run_parallel_synthetics_mt3d(home,project_name,
+    run_parallel_synthetics_geotomo(home,project_name,
         str(project / 'data/station_info' / station_file),model_name,forceMT,mt,insar,0,1)
     suffix = 'los' if insar else 'neu'
     components = ('Mxx',) if forceMT else ('Mxx','Mxy','Mxz','Myy','Myz','Mzz')
@@ -153,7 +156,7 @@ def getG(home,project_name,source_name,model_name,GF_list,G_from_file,G_name,for
     if not isfinite(flags).all() or not ((flags[:,2:] == 0) | (flags[:,2:] == 1)).all():
         raise ValueError('Observation flags must be finite and binary')
     if flags[:,2:6].any():
-        raise NotImplementedError('mt3d supports scalar imagery projections only')
+        raise NotImplementedError('geotomo supports scalar imagery projections only')
     selected = flags[:,6] == 1
     if not selected.any() or len(set(stations)) != len(stations):
         raise ValueError('Expected imagery observations with unique identifiers')
@@ -388,11 +391,11 @@ def _run_inversion(home,project_name,run_name,source_name,model_name,GF_list,G_f
 
 def init_project(project_directory):
     """Create a new standard MudPy project with tensor templates and TOML."""
-    from mudpy.mt3d_config import init_project as initialize
+    from mudpy.geotomo_config import init_project as initialize
     return initialize(project_directory)
 
 
 def run(config_file):
     """Validate and execute a named tensor experiment from TOML."""
-    from mudpy.mt3d_config import run as execute
+    from mudpy.geotomo_config import run as execute
     return execute(config_file)

@@ -29,7 +29,7 @@ def run_parallel_green(home,project_name,station_file,model_name,dt,NFFT,static,
     import os
 
     if full_mt:
-        # This branch belongs to mt3d. The existing slip-GF path below is unchanged.
+        # This branch belongs to geotomo. The existing slip-GF path below is unchanged.
         from pathlib import Path
         from io import StringIO
         from numpy import loadtxt, savetxt, hstack, isfinite, allclose
@@ -877,7 +877,7 @@ def run_parallel_teleseismics_green(home,project_name,time_epi,station_file,mode
 
                                             
                                                                   
-def run_parallel_synthetics_mt3d(home,project_name,station_file,model_name,forceMT,mt,insar,rank,size):
+def run_parallel_synthetics_geotomo(home,project_name,station_file,model_name,forceMT,mt,insar,rank,size):
     """Convert complete static DC+EX responses to tensor NEU/projection tables.
 
     Components use NED tensor coordinates; displacement/projection vectors use
@@ -1017,7 +1017,7 @@ if __name__ == '__main__':
     
         run_parallel_teleseismics_green(home,project_name,time_epi,station_file,model_name,teleseismic_vel_mod,endtime,rank,size)
     
-    elif sys.argv[1]=='run_parallel_synthetics_mt3d':
+    elif sys.argv[1]=='run_parallel_synthetics_geotomo':
         #Parse command line arguments
         home=sys.argv[2]
         project_name=sys.argv[3]
@@ -1041,7 +1041,6 @@ if __name__ == '__main__':
             insar=True
         elif insar=='False':
             insar=False
-        run_parallel_synthetics_mt3d(home,project_name,station_file,model_name,forceMT,mt,insar,rank,size)
+        run_parallel_synthetics_geotomo(home,project_name,station_file,model_name,forceMT,mt,insar,rank,size)
     else:
         print('ERROR: You''re not allowed to run '+sys.argv[1]+' from the shell or it does not exist')
-        
