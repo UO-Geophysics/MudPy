@@ -412,7 +412,7 @@ def _signatures(config, sources, geometry, code, executables):
             'executables': {name: executables.get(name) for name in ('fk.pl', 'st_fk', 'trav')}}
     responses = {'greens': _digest(base), 'geometry': geometry,
                  'source_model': config.source_model, 'fixed_tensor': config.fixed_tensor,
-                 'syn': executables.get('syn')}
+                 'synthesis': 'numpy_mt_radiat_float64'}
     matrix = {'responses': _digest(responses), 'assembly_code': code['source_sha256']['geotomo']}
     greens_files = [project/'GFs/static'/('%s.static.%.4f.sub%04d.insar' %
                     (config.earth_model, source[3], source[0])) for source in sources]
@@ -421,7 +421,7 @@ def _signatures(config, sources, geometry, code, executables):
     if config.observation_format == 'hdf5':
         # Physical NEU responses depend on positions, not look coefficients,
         # data, uncertainty, fixed mechanisms, or inversion choices.
-        responses = {'greens': _digest(base), 'syn': executables.get('syn'),
+        responses = {'greens': _digest(base), 'synthesis': 'numpy_mt_radiat_float64',
                      'io_code': code['source_sha256']['geotomo_io'],
                      'basis': 'xx,xy,xz,yy,yz,zz; NED; 10**16.6 Nm', 'displacement': 'NEU'}
         matrix = {'responses': _digest(responses), 'geometry': geometry,
@@ -505,8 +505,7 @@ def run(config_file):
         code = _code_identity()
         executables = {}
         needed = (('fk.pl', 'st_fk', 'trav') if 'greens' in config.steps else ())
-        needed += ('syn',) if 'synthetics' in config.steps else ()
-        for executable in ('fk.pl', 'st_fk', 'trav', 'syn'):
+        for executable in ('fk.pl', 'st_fk', 'trav'):
             path = shutil.which(executable)
             if path is None and executable in needed:
                 raise FileNotFoundError('Required executable is not on PATH: '+executable)
@@ -535,7 +534,9 @@ def run(config_file):
                   'code': code, 'executables': executables,
                   'versions': {'python': sys.version, 'numpy': np.__version__, 'scipy': scipy.__version__,
                                'obspy': obspy.__version__, 'pyproj': pyproj.__version__},
-                  'created_utc': datetime.now(timezone.utc).isoformat()}
+                  'created_utc': datetime.now(timezone.utc).isoformat(),
+                  'synthesis': {'method': 'numpy_mt_radiat', 'dtype': 'float64',
+                                'reference_moment_Nm': 10**16.6}}
         record['source_geometry'] = {
             'columns': ['id', 'longitude_deg', 'latitude_deg', 'depth_km'],
             'requested': requested_sources.tolist(), 'effective': sources.tolist(),

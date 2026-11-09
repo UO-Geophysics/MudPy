@@ -6,7 +6,7 @@ Module for routines that use paralell computing
 def _geotomo_source_map(function, sources, processes):
     """Bound external-process concurrency and buffered results; preserve order.
 
-    Threads only coordinate independent FK/syn subprocesses. Workers must never
+    Threads coordinate independent FK subprocesses or NumPy source blocks. They must never
     change cwd or write shared files/HDF5; the caller consumes each batch before
     scheduling the next. Failure waits for active workers before releasing inputs.
     """
@@ -913,9 +913,9 @@ def run_parallel_synthetics_geotomo(home,project_name,station_file,model_name,fo
     from numpy import atleast_1d, atleast_2d
     from pathlib import Path
     from contextlib import ExitStack, closing
-    import subprocess
-    from numpy import loadtxt, genfromtxt, eye, asarray, fromstring, isfinite, allclose, empty
-    from mudpy.green import src2sta, rt2ne
+    from numpy import loadtxt, genfromtxt, eye, asarray, isfinite, allclose
+    from mudpy.green import src2sta
+    from mudpy.geotomo import _tensor_static_neu
 
     project = Path(home) / project_name
     sources = loadtxt(project / ('data/model_info/mpi_source.%d.fault' % rank),ndmin=2)
@@ -939,7 +939,6 @@ def run_parallel_synthetics_geotomo(home,project_name,station_file,model_name,fo
     folder = project / 'GFs/static'
 
     def compute_source(source):
-        block = empty((len(stations), 3, len(components)))
         subfault = str(int(source[0])).zfill(4)
         suffix = 'insar' if insar else 'gps'
         gf_file = folder / (model_name+'.static.%.4f.sub%s.%s' % (source[3],subfault,suffix))
@@ -949,19 +948,7 @@ def run_parallel_synthetics_geotomo(home,project_name,station_file,model_name,fo
                 or not allclose(statics[:,0],statics[:,10],rtol=0,atol=0)
                 or not allclose(statics[:,0],distances,rtol=0,atol=0.00051)):
             raise ValueError('Expected matching complete DC+EX responses for every receiver in '+str(gf_file))
-        for k, station in enumerate(stations):
-            payload = ' '.join('%.10e' % value for value in statics[k])
-            for component_index, mechanism in enumerate(mechanisms):
-                command = ['syn','-M'+str(10**23.6)+'/'+ '/'.join(map(str,mechanism)),
-                           '-A'+str(azimuths[k]),'-P']
-                result = subprocess.run(command,input=payload,stdout=subprocess.PIPE,
-                                        stderr=subprocess.PIPE,text=True,check=True)
-                values = fromstring(result.stdout,sep=' ')
-                if values.shape != (5,) or not isfinite(values).all():
-                    raise ValueError('Invalid syn displacement: '+result.stdout+' '+result.stderr)
-                north,east = rt2ne(values[3]/100,values[4]/100,azimuths[k])
-                block[k, :, component_index] = [north,east,values[2]/100]
-        return block
+        return _tensor_static_neu(statics, azimuths, mechanisms)
 
     coordinates = loadtxt(station_file, usecols=(1, 2), ndmin=2)
     with ExitStack() as stack:

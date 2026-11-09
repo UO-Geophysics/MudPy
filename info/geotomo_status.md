@@ -31,17 +31,20 @@ geotomo.run('/absolute/path/new_project/configs/experiment.toml')
   Sources are integrated moments at specified points, not moment densities.
 - Source-parallel FK static responses including both double-couple and explosion terms.
   Tensor coordinates are NED; displacement/projection vectors are NEU.
-- Explicit TOML `execution.processes` caps concurrent FK/syn subprocesses
+- Vectorized float64 moment-tensor synthesis evaluates all receivers and basis
+  components per source using the `radiats.c` formulas, including explosion terms.
+  Production runs require no `syn` executable. The slip path and C code are unchanged.
+- Explicit TOML `execution.processes` caps concurrent source workers
   (default 1), with isolated source folders, bounded batches, and one response
   writer preserving source order. Solver execution and BLAS threading are unchanged.
-  Serial/two-worker FK reference products agree exactly; all 46 regression
+  Serial/parallel response arrays and matrices agree exactly; all 52 regression
   methods pass, including overlap, ordering, single-writer and failure checks.
 - TOML preflight rejects FK interface sources by default. Explicit
   `forward.interface_policy = "above"` or `"below"` and
   `interface_offset_km` (default 0.01 km) resolve them once, with adjacent-layer
   and FK precision checks. Requested geometry is preserved; effective geometry
   is archived, hashed, and used by forward calculations, caches and saved models.
-  All 50 regression methods and a small actual layered FK interface reference pass.
+  The small actual layered FK interface reference also passed at that milestone.
 - Scalar imagery projections in metres, source-file ordering, and checked
   response completeness. Legacy slip-inversion interfaces retain their behavior.
 - Weighted data-space least squares and NNLS, with identity damping through
@@ -55,6 +58,13 @@ geotomo.run('/absolute/path/new_project/configs/experiment.toml')
   never initialized again, and existing named results are protected.
 
 ## Validation and limits
+
+The synthetic forward profiling mode (`validate.py --profile-forward`) separates
+FK, vectorized make-synthetics and HDF5 costs for three sources/1,507 receivers.
+Make-synthetics took 0.64 s with either one or three workers, replacing the
+229.24/123.49 s per-receiver executable path. Sampled C reference comparisons
+pass a 6e-4 relative-L2 bound for legacy single precision/printed rounding;
+independent homogeneous references and the 40-solution layered/off-grid study pass.
 
 Independent homogeneous isotropic and Okada shear checks pass. Layered checks
 cover the homogeneous limit, numerical convergence, superposition, and source

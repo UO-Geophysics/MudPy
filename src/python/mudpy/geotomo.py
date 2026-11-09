@@ -30,7 +30,7 @@ def inversionGFs(home,project_name,GF_list,source_name,model_name,
     """Generate tensor responses with exclusive project ownership.
 
     flat=True retains historical Earth flattening; use False for a homogeneous
-    flat half-space benchmark. ncpus caps concurrent FK/syn subprocesses.
+    flat half-space benchmark. ncpus caps concurrent source workers.
     """
     with _project_lock(home,project_name):
         return _inversion_gfs(home,project_name,GF_list,source_name,model_name,
@@ -147,6 +147,46 @@ def make_parallel_synthetics(home,project_name,station_file,source_name,model_na
             output.write('# station source_id lon_sta lat_sta lon_src lat_src depth_km '+
                          ('projection_m' if insar else 'north_m east_m up_m')+'\n')
             output.write((folder / ('tmp_'+component+'_process0')).read_text())
+
+
+def _tensor_static_neu(statics, azimuths, mechanisms):
+    """Vectorize radiats.c mt_radiat and syn.c static sums in float64.
+
+    Native columns are DC distance/Z0/R0/T0/Z1/R1/T1/Z2/R2/T2 followed by
+    EX distance/Zex/Rex/Tex. Mechanisms are xx,xy,xz,yy,yz,zz in NED;
+    off-diagonal coefficients are symmetric tensor entries, without a factor 2.
+    Return (receiver, NEU, mechanism), metres per 10**16.6 Nm coefficient.
+    """
+    import numpy as np
+    from mudpy.green import rt2ne
+
+    statics = np.asarray(statics, dtype=float)
+    azimuths = np.asarray(azimuths, dtype=float)
+    mechanisms = np.asarray(mechanisms, dtype=float)
+    if (statics.ndim != 2 or statics.shape[1] != 14 or not len(statics) or
+            azimuths.shape != (len(statics),) or mechanisms.ndim != 2 or
+            mechanisms.shape[1] != 6 or not len(mechanisms) or
+            not all(np.isfinite(a).all() for a in (statics, azimuths, mechanisms)) or
+            not np.array_equal(statics[:, 0], statics[:, 10])):
+        raise ValueError('Expected finite matching DC+EX rows, receiver azimuths, and six-component mechanisms')
+    xx, xy, xz, yy, yz, zz = mechanisms.T
+    angle = np.deg2rad(azimuths)[:, None]
+    s, c = np.sin(angle), np.cos(angle)
+    s2, c2 = 2*s*c, c*c-s*s
+    with np.errstate(over='raise', invalid='raise'):
+        dd = (2*zz-xx-yy)/6
+        ds = -xz*c-yz*s
+        ss = -.5*(xx-yy)*c2-xy*s2
+        explosion = (xx+yy+zz)/3
+        up = (statics[:, 1, None]*dd + statics[:, 4, None]*ds +
+              statics[:, 7, None]*ss + statics[:, 11, None]*explosion)
+        radial = (statics[:, 2, None]*dd + statics[:, 5, None]*ds +
+                  statics[:, 8, None]*ss + statics[:, 12, None]*explosion)
+        transverse = (statics[:, 6, None]*(-xz*s+yz*c) +
+                      statics[:, 9, None]*(-.5*(xx-yy)*s2+xy*c2))
+        north, east = rt2ne(radial, transverse, azimuths[:, None])
+        # syn: Nm -> dyne cm (1e7), native normalization (1e-20), cm -> m (1e-2).
+        return np.stack((north, east, up), axis=1) * (10**16.6 * 1e-15)
 
 
 def getG(home,project_name,source_name,model_name,GF_list,G_from_file,G_name,forceMT):

@@ -49,6 +49,6 @@ damping = [0.0]
 mode = "assemble"  # reuse requires steps = ["invert"] and matching cache records.
 
 [execution]
-# Maximum concurrent FK/syn subprocesses, across sources; never auto-selects cores.
+# Maximum source workers for FK/NumPy synthesis; never auto-selects cores.
 # One writer assembles responses. Solver/BLAS threading is independent.
 processes = 1

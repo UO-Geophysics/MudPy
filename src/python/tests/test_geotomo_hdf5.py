@@ -54,7 +54,6 @@ class ParallelForwardTests(unittest.TestCase):
 
     def test_parallel_synthetics_have_one_writer_and_leave_failures_incomplete(self):
         from threading import Barrier, get_ident
-        from subprocess import CompletedProcess, CalledProcessError
         from mudpy.parallel import run_parallel_synthetics_geotomo
         with tempfile.TemporaryDirectory() as temporary:
             project = Path(temporary)/'site'
@@ -71,11 +70,12 @@ class ParallelForwardTests(unittest.TestCase):
                 values[0, 1] = source[0]
                 np.savetxt(project/('GFs/static/earth.mod.static.%.4f.sub%04d.insar' % (source[3], source[0])), values)
             barrier = Barrier(2, timeout=5)
-            def syn(command, input, **kwargs):
-                marker = float(input.split()[1])
+            original_tensor = geotomo._tensor_static_neu
+            def tensor(statics, azimuths, mechanisms):
+                marker = statics[0, 1]
                 if marker in (19, 3):
                     barrier.wait()
-                return CompletedProcess(command, 0, '0 0 %s 0 0' % marker, '')
+                return original_tensor(statics, azimuths, mechanisms)
             owner, writers = get_ident(), []
             original_setitem = h5py.Dataset.__setitem__
             def write(dataset, key, value):
@@ -85,17 +85,18 @@ class ParallelForwardTests(unittest.TestCase):
                 run_parallel_synthetics_geotomo(temporary+'/', 'site', str(stations),
                     'earth.mod', False, (), True, 0, 1, response_file=project/name, processes=2)
             with patch('mudpy.green.src2sta', return_value=(np.array([1.]), np.array([0.]))), \
-                    patch('subprocess.run', side_effect=syn), \
+                    patch.object(geotomo, '_tensor_static_neu', side_effect=tensor), \
+                    patch('subprocess.run', side_effect=AssertionError('Unexpected syn process')), \
                     patch.object(h5py.Dataset, '__setitem__', new=write):
                 run('ok.h5')
             self.assertEqual(set(writers), {owner})
             with h5py.File(str(project/'ok.h5'), 'r') as file:
                 self.assertTrue(file.attrs['complete'])
                 np.testing.assert_array_equal(file['sources'][()], sources)
-                np.testing.assert_allclose(file['displacement'][:, 0, 2, 0], sources[:, 0]/100)
+                np.testing.assert_allclose(file['displacement'][:, 0, 2, 0], -sources[:, 0]/6*(10**16.6*1e-15))
             with patch('mudpy.green.src2sta', return_value=(np.array([1.]), np.array([0.]))), \
-                    patch('subprocess.run', side_effect=CalledProcessError(1, ['syn'])):
-                with self.assertRaises(CalledProcessError):
+                    patch.object(geotomo, '_tensor_static_neu', side_effect=ValueError('failed tensor calculation')):
+                with self.assertRaisesRegex(ValueError, 'failed tensor calculation'):
                     run('failed.h5')
             with h5py.File(str(project/'failed.h5'), 'r') as file:
                 self.assertFalse(file.attrs['complete'])
@@ -239,6 +240,8 @@ class HDF5RunTests(unittest.TestCase):
         self.assertEqual(np.loadtxt(effective_file)[3], 1.01)
         record = json.loads(resolved.read_text())
         self.assertEqual(record['source_geometry']['requested'][0][3], 1)
+        self.assertNotIn('syn', record['executables'])
+        self.assertEqual(record['synthesis']['method'], 'numpy_mt_radiat')
         self.assertEqual(record['source_geometry']['effective'][0][3], 1.01)
         self.assertIn(str(effective_file.resolve()), record['input_sha256'])
         with h5py.File(str(self.project/'GFs/static/elastic.h5'), 'r') as file:

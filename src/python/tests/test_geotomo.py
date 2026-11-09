@@ -11,6 +11,48 @@ from mudpy.analysis import MT
 
 
 class TensorTests(unittest.TestCase):
+    def test_vectorized_tensor_isotropic_shear_signs_units_and_linearity(self):
+        azimuths = np.array([0., 90., 180., 270.])
+        statics = np.arange(56., dtype=float).reshape(4, 14)/10
+        statics[:, 10] = statics[:, 0]
+        scale = 10**16.6*1e-15
+        isotropic = geotomo._tensor_static_neu(statics, azimuths, [[1, 0, 0, 1, 0, 1]])[:, :, 0]
+        np.testing.assert_allclose(isotropic[:, 2], statics[:, 11]*scale, rtol=1e-15)
+        angles = np.deg2rad(azimuths)
+        np.testing.assert_allclose(isotropic[:, 0], statics[:, 12]*np.cos(angles)*scale)
+        np.testing.assert_allclose(isotropic[:, 1], statics[:, 12]*np.sin(angles)*scale)
+        np.testing.assert_array_equal(geotomo._tensor_static_neu(statics, azimuths, [[0]*6]), np.zeros((4, 3, 1)))
+
+        # Independent cardinal-direction checks for the off-diagonal entries.
+        terms = np.zeros((2, 14))
+        terms[:, [4, 5, 6, 9]] = [2, 3, 5, 7]
+        basis = geotomo._tensor_static_neu(terms, [0, 90], np.eye(6))/scale
+        np.testing.assert_allclose(basis[0, :, 1], [0, 7, 0], atol=1e-14)  # Mxy
+        np.testing.assert_allclose(basis[1, :, 1], [7, 0, 0], atol=1e-14)
+        np.testing.assert_allclose(basis[0, :, 2], [-3, 0, -2], atol=1e-14)  # Mxz
+        np.testing.assert_allclose(basis[1, :, 2], [5, 0, 0], atol=1e-14)
+        np.testing.assert_allclose(basis[0, :, 4], [0, 5, 0], atol=1e-14)  # Myz
+        np.testing.assert_allclose(basis[1, :, 4], [0, -3, -2], atol=1e-14)
+
+        rng = np.random.default_rng(571)
+        mechanisms = rng.normal(size=(8, 6))
+        all_basis = geotomo._tensor_static_neu(statics, azimuths, np.eye(6))
+        combined = geotomo._tensor_static_neu(statics, azimuths, mechanisms)
+        np.testing.assert_allclose(combined, np.einsum('nck,pk->ncp', all_basis, mechanisms), atol=2e-13, rtol=1e-14)
+        self.assertEqual(combined.dtype, np.dtype('float64'))
+
+    def test_vectorized_tensor_rejects_invalid_native_rows_and_shapes(self):
+        statics = np.zeros((1, 14))
+        for table, azimuth, mechanism in (
+                (statics[:, :10], [0], np.eye(6)), (statics, [np.nan], np.eye(6)),
+                (statics, [0, 1], np.eye(6)), (statics, [0], [[1]*5]),
+                (np.full((1, 14), np.nan), [0], np.eye(6))):
+            with self.assertRaises(ValueError):
+                geotomo._tensor_static_neu(table, azimuth, mechanism)
+        statics[0, 10] = 1
+        with self.assertRaises(ValueError):
+            geotomo._tensor_static_neu(statics, [0], np.eye(6))
+
     def test_moment_norm_and_signed_fixed_tensor(self):
         unit = 10**16.6
         _, moment, _ = geotomo.get_moment('', '', '', [0, 1, 0, 0, 0, 0], False)

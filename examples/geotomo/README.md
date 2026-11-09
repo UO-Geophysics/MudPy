@@ -61,14 +61,22 @@ point; retained membership is provenance, not an instruction to compute kernels
 at all native pixels. Background correction remains the supplied preprocessing
 choice, not an automatically fitted inversion nuisance model.
 
-FK's complete native DC+EX files remain backend products. `syn` responses are
-rotated to NEU, converted to metres, and written directly into a float64 HDF5
+FK's complete native DC+EX files remain backend products. Make-synthetics
+evaluates the `mt_radiat` formulas from `radiats.c` with NumPy across all receivers
+and tensor components. Responses are rotated to NEU, converted to metres, and written directly into a float64 HDF5
 array with axes `(source, receiver, NEU, tensor)`. Tensor components are
 `xx,xy,xz,yy,yz,zz` in NED coordinates, with one coefficient scaling a component
 by `10**16.6 N m`. Source IDs, coordinates, receiver IDs, conventions, and run
 provenance accompany the array. Chunking uses one source, up to 1,024 receivers,
 three displacement components, and all six tensor components; no compression
 or reduced precision is introduced.
+
+Production synthesis launches no `syn` processes. The C executable is retained
+as a validation reference; it uses single precision and four-significant-digit
+output, so float64 responses agree within its rounding tolerance rather than
+bit-for-bit. Cache records identify the vectorized method and its numerical code;
+old response/matrix caches must be regenerated. The slip path and C programs
+retain their existing behavior.
 
 One writer fills each complete source block and records completion. Failed
 files stay marked incomplete and are rejected by matrix assembly. Named
@@ -110,6 +118,24 @@ It runs the independent homogeneous reference, compares text/HDF5 matrices,
 checks predictions and fixed mechanisms, and verifies NumPy-only reuse with
 generation/assembly deliberately forbidden. `hdf5_validation.json` records
 errors, code hashes, and small-case timings; those timings are not scaling claims.
+
+## Forward profiling
+
+For a forward-only performance check on synthetic data, use a new destination:
+
+```sh
+PYTHONPATH="$PWD/src/python" python -u -B examples/geotomo/validate.py --profile-forward --project /absolute/existing-parent/new-profile
+```
+
+This compares one and three workers for three sources and 1,507 synthetic
+receivers. It times native FK generation and tensor conversion separately and
+records parent/child CPU time, external call counts, and peak overlapping calls.
+Production synthesis is required to launch zero `syn` processes. A separate
+full-library write measures HDF5 cost. Serial/parallel response arrays and matrices
+must agree exactly; sampled unit, isotropic, signed and mixed mechanisms are
+checked against the original C `syn` at its output precision. `forward_profile.json`
+records measurements and limitations; each run retains its TOML/provenance.
+No inversion or Norcia data is used.
 
 ## Project initialization and named TOML runs
 
@@ -198,9 +224,9 @@ To parallelize forward calculations, set an explicit positive integer:
 processes = 4
 ```
 
-This caps concurrent external FK or `syn` calculations across source points;
+This caps concurrent source workers for FK and vectorized make-synthetics;
 it never selects all available cores automatically. Fewer sources use fewer
-workers. Lightweight coordinator threads launch the independent executables,
+workers. Threads launch independent FK executables or evaluate NumPy source blocks,
 so no MPI installation or multiprocessing entry-point guard is required.
 Each FK source has a separate working folder. Batches contain at most this many
 source blocks, and one calling thread writes HDF5 or text responses in source
@@ -287,8 +313,8 @@ numbered results remain protected.
 
 ## Reproducing the reference
 
-This example exercises the existing MudPy project formats and actual FK/`syn`
-executables through a serial, imagery-first workflow. It creates 24 receiver
+This example exercises the existing MudPy project formats, actual FK executables
+and vectorized synthesis through an imagery-first workflow. It creates 24 receiver
 locations with two representative LOS directions each and two fixed source
 locations with intentionally reversed numeric IDs. All observations represent
 one artificial deformation interval; these are not real satellite products.
@@ -310,7 +336,9 @@ python -B examples/geotomo/validate.py --toml --project /absolute/existing-paren
 ```
 
 The project path must not exist. Previous experiment files are never deleted.
-FK's `fk.pl`, `st_fk`, `trav`, and `syn` must be on PATH. The Python dependencies
+FK's `fk.pl`, `st_fk`, and `trav` must be on PATH. `syn` is additionally required
+for the C reference comparisons in `--hdf5` and `--profile-forward`, not for
+production runs. The Python dependencies
 are the existing NumPy/SciPy, ObsPy, and pyproj stack. No MPI or new package is
 required. The committed Okada fixture removes the need to load an optional
 reference solver during normal validation.
@@ -429,7 +457,8 @@ the plotting driver's hash separately as `plot_driver_sha256` in the summary.
 
 Forward comparisons allow a relative L2 error of `1e-3` over the observation
 vector. This is an explicit initial acceptance bound, allowing for FK integration
-and the existing `syn` four-significant-digit text output. Same-matrix noiseless
+error. Separate C `syn` comparisons allow `6e-4` relative L2 for its single
+precision and four-significant-digit output. Same-matrix noiseless
 recovery uses `1e-7`; that tight algebraic check does not measure real source
 resolution. Agree and revisit scientific tolerances as models/data broaden.
 
@@ -446,8 +475,8 @@ Scalar observations are in meters, positive along the supplied unit vector.
 The synthetic vectors are representative geometries rather than actual orbit
 metadata. Legacy `.los` files store `[displacement, north, east, up]`.
 
-Each coefficient scales a tensor component by `10**16.6 N m`, passed to `syn`
-as `10**23.6 dyne cm`. This component scale is not a common scalar moment for
+Each coefficient scales a tensor component by `10**16.6 N m`, equivalent to
+`10**23.6 dyne cm` in the C reference. This component scale is not a common scalar moment for
 every unit basis tensor. For an isotropic moment `M=m I`, the independent surface
 reference used here is
 

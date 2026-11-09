@@ -73,6 +73,9 @@ def hdf5_study(project, processes=1):
 
     main(project, use_toml=True)
     project = project.resolve()
+    syn_reference = check_syn_reference(project,
+        np.loadtxt(project/'data/model_info/cloud.sources', ndmin=2),
+        project/'data/station_info/receivers.sta', 'halfspace.mod')
     rows = [line.split() for line in (project/'data/station_info/imagery.gflist').read_text().splitlines()
             if line.strip() and not line.startswith('#')]
     values = np.array([np.loadtxt(row[12]) for row in rows])
@@ -125,7 +128,7 @@ def hdf5_study(project, processes=1):
               'full_pipeline_s': full_time, 'matrix_load_s': load_time,
               'cached_two_damping_run_s': reuse_time,
               'reuse_bypasses_generation_and_assembly': True,
-              'fixed_tensor_uses_existing_library': True,
+              'fixed_tensor_uses_existing_library': True, 'syn_reference': syn_reference,
               'source_sha256': _code_identity()['source_sha256'],
               'limitations': ['Tiny synthetic timing is not a large-library benchmark.',
                               'No real-data GF generation or inversion.']}
@@ -158,6 +161,163 @@ def hdf5_study(project, processes=1):
                               'neu_arrays_and_matrix_identical': True}
     (project/'hdf5_validation.json').write_text(json.dumps(report, indent=2)+'\n')
     print(json.dumps(report, indent=2))
+
+
+def check_syn_reference(project, sources, station_file, model_name):
+    """Compare float64 tensor conversion with rounded C syn on sampled receivers."""
+    import subprocess
+    from mudpy.green import src2sta, rt2ne
+
+    mechanisms = np.vstack((np.eye(6), [1, 0, 0, 1, 0, 1], [-1, 0, 0, -1, 0, -1],
+                            [1, .2, 0, -1, 0, 0], [-.3, .4, -.5, .8, -.9, .2], np.zeros(6)))
+    errors, calls = [], 0
+    for source in sources:
+        _, azimuths = src2sta(str(station_file), source)
+        native = project/('GFs/static/%s.static.%.4f.sub%04d.insar' % (model_name, source[3], source[0]))
+        statics = np.loadtxt(native, ndmin=2)
+        selected = np.linspace(0, len(statics)-1, min(12, len(statics)), dtype=int)
+        vector = geotomo._tensor_static_neu(statics[selected], azimuths[selected], mechanisms)
+        reference = np.empty_like(vector)
+        for index, receiver in enumerate(selected):
+            payload = ' '.join('%.10e' % value for value in statics[receiver])
+            for component, mechanism in enumerate(mechanisms):
+                command = ['syn', '-M'+str(10**23.6)+'/'+'/'.join(map(str, mechanism)),
+                           '-A'+str(azimuths[receiver]), '-P']
+                result = subprocess.run(command, input=payload, text=True,
+                                        stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+                values = np.fromstring(result.stdout, sep=' ')
+                if values.shape != (5,) or not np.isfinite(values).all():
+                    raise ValueError('Invalid syn reference output: '+result.stdout+' '+result.stderr)
+                north, east = rt2ne(values[3]/100, values[4]/100, azimuths[receiver])
+                reference[index, :, component] = [north, east, values[2]/100]
+                calls += 1
+        for component in range(len(mechanisms)):
+            scale = np.linalg.norm(reference[:, :, component])
+            difference = np.linalg.norm(vector[:, :, component]-reference[:, :, component])
+            if not scale:
+                assert difference == 0
+            else:
+                errors.append(float(difference/scale))
+    maximum = max(errors)
+    assert maximum < 6e-4, maximum
+    return {'calls': calls, 'max_mechanism_relative_l2': maximum, 'tolerance': 6e-4,
+            'mechanisms': mechanisms.tolist(),
+            'precision': 'C syn uses float32 and four-significant-digit output; NumPy retains float64'}
+
+
+def profile_forward(project):
+    """Time source-parallel FK and vectorized synthesis on a fixed synthetic case."""
+    from collections import defaultdict
+    from threading import Lock
+    import resource
+    import subprocess
+    import time
+    from unittest.mock import patch
+    import h5py
+    from mudpy import geotomo_io as io
+    from mudpy.geotomo_config import _code_identity
+
+    geotomo.init_project(project)
+    project = project.resolve()
+    sources = np.array([[9, 0, 0, 1.01], [2, .02, -.01, 7.], [5, -.01, .02, 13.]])
+    np.savetxt(project/'data/model_info/profile.sources', sources,
+               fmt=['%d', '%.17g', '%.17g', '%.4f'])
+    (project/'structure/profile.mod').write_text(
+        '2 2.6 4.5 2.4 300 600\n6 3.3 5.8 2.7 300 600\n0 3.6 6.3 2.8 300 600\n')
+    count = 1507
+    angles = np.arange(count)*np.pi*(3-np.sqrt(5))
+    radii = .01+.3*np.sqrt((np.arange(count)+.5)/count)
+    xy = np.column_stack((radii*np.cos(angles), radii*np.sin(angles)))
+    ids = ['P%04d' % k for k in range(count)]
+    io.write_observations(project/'data/statics/profile.h5', ids, xy,
+        np.zeros(count), np.tile([.1, -.4, .8], (count, 1)), sigma_m=np.full(count, .001),
+        metadata={'coordinate_system': 'Synthetic WGS84 longitude/latitude degrees',
+                  'interval': 'synthetic profiling only'})
+    station_file = project/'data/station_info/profile.sta'
+    with station_file.open('x') as stream:
+        for identifier, coordinate in zip(ids, xy):
+            stream.write('%s %.17g %.17g\n' % (identifier, *coordinate))
+    real_run, timings, lock = subprocess.run, {}, Lock()
+
+    def measure(label, operation):
+        calls, active, maximum = (defaultdict(int) for _ in range(3))
+        def observed_run(command, *args, **kwargs):
+            kind = Path(command[0]).name
+            if kind not in ('syn', 'fk.pl'):
+                return real_run(command, *args, **kwargs)
+            if kind == 'syn':
+                raise AssertionError('Production synthesis unexpectedly launched syn')
+            with lock:
+                calls[kind] += 1
+                active[kind] += 1
+                maximum[kind] = max(maximum[kind], active[kind])
+            try:
+                return real_run(command, *args, **kwargs)
+            finally:
+                with lock:
+                    active[kind] -= 1
+        def usage():
+            own = resource.getrusage(resource.RUSAGE_SELF)
+            child = resource.getrusage(resource.RUSAGE_CHILDREN)
+            return np.array([own.ru_utime, own.ru_stime, child.ru_utime, child.ru_stime])
+        print('Profiling '+label+' ...', flush=True)
+        before, started = usage(), time.perf_counter()
+        with patch('subprocess.run', new=observed_run):
+            operation()
+        elapsed, cpu = time.perf_counter()-started, usage()-before
+        timings[label] = {'wall_s': elapsed, 'parent_user_s': cpu[0], 'parent_system_s': cpu[1],
+                         'children_user_s': cpu[2], 'children_system_s': cpu[3],
+                         'average_cpu_cores': float(cpu.sum()/elapsed), 'calls': dict(calls),
+                         'maximum_concurrent_calls': dict(maximum)}
+        print(json.dumps({label: timings[label]}, indent=2), flush=True)
+
+    native_hashes = None
+    for workers in (1, 3):
+        def run_stage(stage):
+            label = '%s_p%d' % (stage, workers)
+            return run_with_toml(project, label, [stage], sources='profile.sources',
+                earth_model='profile.mod', observations='profile.h5', observation_format='hdf5',
+                response_name='responses_p%d' % workers, processes=workers)
+        measure('fk_p%d' % workers, lambda: run_stage('greens'))
+        current = {p.name: hashlib.sha256(p.read_bytes()).hexdigest()
+                   for p in (project/'GFs/static').glob('profile.mod.static.*.insar')}
+        assert len(current) == 3
+        if native_hashes is not None:
+            assert native_hashes == current
+        native_hashes = current
+        measure('synthetics_p%d' % workers, lambda: run_stage('synthetics'))
+
+    with h5py.File(str(project/'GFs/static/responses_p1.h5'), 'r') as serial, \
+            h5py.File(str(project/'GFs/static/responses_p3.h5'), 'r') as parallel:
+        assert serial.attrs['complete'] and parallel.attrs['complete']
+        expected = serial['displacement'][()]
+        assert np.isfinite(expected).all()
+        np.testing.assert_array_equal(expected, parallel['displacement'][()])
+        np.testing.assert_array_equal(parallel['sources'][()], sources)
+        metadata = json.loads(serial.attrs['metadata_json'])
+    observations = io.read_observations(project/'data/statics/profile.h5')
+    serial_matrix = io.assemble_matrix(project/'GFs/static/responses_p1.h5', observations, sources)
+    np.testing.assert_array_equal(serial_matrix,
+        io.assemble_matrix(project/'GFs/static/responses_p3.h5', observations, sources))
+    def write_library():
+        with io.response_writer(project/'GFs/static/write_timing.h5', sources, ids, xy,
+                                dict(metadata, profiling_only=True)) as (data, completed):
+            for index in range(len(sources)):
+                data[index] = expected[index]
+                completed[index] = True
+    measure('hdf5_write', write_library)
+    reference = check_syn_reference(project, sources, station_file, 'profile.mod')
+    report = {'sources': len(sources), 'receivers': count, 'syn_calls_per_conversion': 0,
+              'synthesis': 'numpy_mt_radiat_float64', 'native_files_identical': True,
+              'response_arrays_and_matrices_identical': True, 'syn_reference': reference,
+              'timings': timings, 'source_sha256': _code_identity()['source_sha256'],
+              'validation_driver_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+              'limitations': ['Single measurement per configuration; not a scaling law.',
+                              'System load is uncontrolled.',
+                              'Synthetic observations only; no Norcia changes or inversion.']}
+    with (project/'forward_profile.json').open('x') as stream:
+        stream.write(json.dumps(report, indent=2)+'\n')
+    print('Profiling complete: '+str(project/'forward_profile.json'), flush=True)
 
 
 def validate_single_receiver(project, use_toml=False):
@@ -296,7 +456,7 @@ def main(project, use_toml=False):
         assert error < 1e-3, (case['name'], error)
         deviatoric_errors[case['name']] = float(error)
 
-    # Direct prescribed mechanisms take a separate syn call from the six basis
+    # Direct prescribed mechanisms are evaluated separately from the six basis
     # calls, checking superposition and the complete producer/consumer handoff.
     mechanism = np.array([.6, .2, -.1, -.4, .3, .25])
     geotomo.make_parallel_synthetics(home, name, station_file.name, 'cloud.sources',
@@ -456,7 +616,7 @@ def plot_layered_study(project, summary, matrices, receiver_xy, grid_xyz, truth_
                     ax.minorticks_off()
                 ax.grid(alpha=.2)
             axes[0].legend(fontsize=8)
-            fig.suptitle('Two-layer response convergence (printed synthetic precision retained)')
+            fig.suptitle('Two-layer response convergence (float64 synthesis)')
             save(fig, 'layered_convergence')
 
             iso = np.array([1, 0, 0, 1, 0, 1])*np.sqrt(2/3)
@@ -759,12 +919,16 @@ if __name__ == '__main__':
     parser.add_argument('--toml', action='store_true', help='Exercise project initialization and the TOML runner')
     parser.add_argument('--layered', action='store_true', help='Run layered convergence and off-grid/noisy imagery recovery through TOML')
     parser.add_argument('--hdf5', action='store_true', help='Check HDF5 responses and direct NumPy reuse on the small synthetic reference')
+    parser.add_argument('--profile-forward', action='store_true',
+                        help='Profile three synthetic sources and 1507 receivers with one/three workers')
     parser.add_argument('--processes', type=int, default=1,
                         help='With --hdf5, also compare serial and parallel forward calculations')
     args = parser.parse_args()
     if args.processes < 1 or (args.processes != 1 and not args.hdf5):
         parser.error('--processes must be positive and requires --hdf5 when not 1')
-    if args.hdf5:
+    if args.profile_forward:
+        profile_forward(args.project)
+    elif args.hdf5:
         hdf5_study(args.project, args.processes)
     elif args.layered:
         layered_study(args.project)
