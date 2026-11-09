@@ -203,10 +203,11 @@ class HDF5RunTests(unittest.TestCase):
         self.which.start()
         self.addCleanup(self.which.stop)
 
-    def config(self, name, steps, mode='assemble', mechanism=None):
+    def config(self, name, steps, mode='assemble', mechanism=None, keep_fk=True):
         text = self.text.replace('name = "example"', 'name = '+json.dumps(name))
         text = text.replace('steps = ["greens", "synthetics", "invert"]', 'steps = '+json.dumps(steps))
         text = text.replace('mode = "assemble"', 'name = "shared"\nmode = '+json.dumps(mode))
+        text = text.replace('keep_fk_intermediates = true', 'keep_fk_intermediates = '+str(keep_fk).lower())
         if mechanism is not None:
             text = text.replace('source_model = "full_tensor"',
                                 'source_model = "fixed_tensor"\nfixed_tensor = '+json.dumps(mechanism))
@@ -217,13 +218,179 @@ class HDF5RunTests(unittest.TestCase):
     def worker(self, *args, **kwargs):
         sources = np.loadtxt(self.project/'data/model_info'/args[3], ndmin=2)
         obs = kwargs['observations']
-        for source in sources:
-            (self.project/'GFs/static'/('template.mod.static.%.4f.sub%04d.insar' %
-                                      (source[3], source[0]))).write_text('native fixture')
+        if args[5]:
+            for source in sources:
+                (self.project/'GFs/static'/('template.mod.static.%.4f.sub%04d.insar' %
+                                          (source[3], source[0]))).write_text('native fixture')
+                folder = self.project/('GFs/static/template.mod_%.4f.sub%04d' % (source[3], source[0]))
+                folder.mkdir(exist_ok=True)
+                (folder/'template.mod').write_bytes((self.project/'structure/template.mod').read_bytes())
+                (folder/'junk.p').write_text('P travel-time fixture')
+                (folder/'junk.s').write_text('S travel-time fixture')
+        if not args[6]:
+            return
         with io.response_writer(kwargs['response_file'], sources, obs['ids'], obs['coordinates'],
                                 kwargs['response_metadata']) as (data, complete):
             data[:] = np.arange(1., 19.).reshape(1, 1, 3, 6)*.001
             complete[:] = True
+
+    def test_native_retention_default_and_policy_independent_cache_signatures(self):
+        path = self.config('retain', ['greens', 'synthetics'])
+        kept = RunConfig.load(path)
+        pruned_path = self.config('policy_only', ['greens', 'synthetics'], keep_fk=False)
+        pruned = RunConfig.load(pruned_path)
+        sources, _, geometry, _ = _inputs(kept)
+        code = _code_identity()
+        self.assertEqual(_signatures(kept, sources, geometry, code, {})[1][1],
+                         _signatures(pruned, sources, geometry, code, {})[1][1])
+        with patch.object(geotomo, '_inversion_gfs', side_effect=self.worker):
+            geotomo.run(path)
+        self.assertTrue((self.project/'GFs/static/template.mod.static.3.0000.sub0001.insar').exists())
+        self.assertTrue((self.project/'GFs/static/template.mod_3.0000.sub0001/junk.p').exists())
+        record = json.loads((self.project/'GFs/static/_geotomo_greens.json').read_text())
+        self.assertNotIn('native_cleanup', record)
+
+    def test_pruning_preserves_library_assembly_fixed_projection_and_numpy_reuse(self):
+        path = self.config('pruned', ['greens', 'synthetics'], keep_fk=False)
+        unrelated = self.project/'GFs/static/user_notes.insar'
+        unrelated.write_text('keep me')
+        other_folder = self.project/'GFs/static/other_model_3.0000.sub0001'
+        other_folder.mkdir()
+        (other_folder/'notes.txt').write_text('also keep me')
+        # Cleanup validates blocks without assembling a matrix.
+        with patch.object(geotomo, '_inversion_gfs', side_effect=self.worker), \
+                patch.object(io, 'assemble_matrix', side_effect=AssertionError('Unexpected matrix assembly')):
+            resolved = geotomo.run(path)
+        self.assertFalse((self.project/'GFs/static/template.mod.static.3.0000.sub0001.insar').exists())
+        self.assertFalse((self.project/'GFs/static/template.mod_3.0000.sub0001').exists())
+        self.assertEqual(unrelated.read_text(), 'keep me')
+        self.assertEqual((other_folder/'notes.txt').read_text(), 'also keep me')
+        native = json.loads((self.project/'GFs/static/_geotomo_greens.json').read_text())
+        response = json.loads((self.project/'GFs/static/elastic.h5.json').read_text())
+        self.assertEqual(native['availability'], 'pruned')
+        self.assertEqual(response['native_cleanup']['state'], 'pruned')
+        self.assertEqual(len(response['native_cleanup']['files']), 4)
+        self.assertEqual(response['native_cleanup']['run'], 'pruned')
+        self.assertFalse(json.loads(resolved.read_text())['settings']['execution']['keep_fk_intermediates'])
+        assemble = self.config('assemble_pruned', ['invert'])
+        reuse = self.config('reuse_pruned', ['invert'], 'reuse', keep_fk=False)
+        with patch.object(geotomo, '_inversion_gfs', side_effect=AssertionError('Unexpected GF generation')):
+            geotomo.run(assemble)
+            with patch.object(io, 'assemble_matrix', side_effect=AssertionError('Unexpected assembly')):
+                geotomo.run(reuse)
+        models = self.project/'output/inverse_models/models'
+        np.testing.assert_array_equal(np.loadtxt(models/'assemble_pruned.0000.inv'),
+                                      np.loadtxt(models/'reuse_pruned.0000.inv'))
+        obs = io.read_observations(self.project/'data/statics/template.h5')
+        sources = np.loadtxt(self.project/'data/model_info/template.sources', ndmin=2)
+        obs['projection_neu'][:] = [.2, -.3, .8]
+        self.assertEqual(io.assemble_matrix(self.project/'GFs/static/elastic.h5', obs, sources,
+                                            [1, 0, 0, 1, 0, 1]).shape, (1, 1))
+        rebuild = self.config('needs_native', ['synthetics'])
+        rebuild.write_text(rebuild.read_text().replace('name = "elastic"', 'name = "rebuilt_library"'))
+        with self.assertRaisesRegex(ValueError, 'intentionally removed.*greens'):
+            geotomo.run(rebuild)
+        self.assertFalse((models/'needs_native.config.toml').exists())
+
+    def test_greens_only_defers_cleanup_until_successful_hdf5_synthesis(self):
+        greens = self.config('greens_only', ['greens'], keep_fk=False)
+        synthesis = self.config('finish_synthesis', ['synthetics'], keep_fk=False)
+        native = self.project/'GFs/static/template.mod.static.3.0000.sub0001.insar'
+        with patch.object(geotomo, '_inversion_gfs', side_effect=self.worker):
+            geotomo.run(greens)
+            self.assertTrue(native.exists())
+            self.assertFalse((self.project/'GFs/static/elastic.h5').exists())
+            geotomo.run(synthesis)
+        self.assertFalse(native.exists())
+        self.assertTrue((self.project/'GFs/static/elastic.h5').exists())
+
+    def test_forward_and_solver_failures_retain_native_intermediates(self):
+        for stage in ('forward', 'solver'):
+            with self.subTest(stage=stage):
+                path = self.config(stage+'_failure', ['greens', 'synthetics'] if stage == 'forward'
+                                   else ['greens', 'synthetics', 'invert'], keep_fk=False)
+                path.write_text(path.read_text().replace('name = "elastic"', 'name = "'+stage+'_library"'))
+                def forward(*args, **kwargs):
+                    self.worker(*args, **kwargs)
+                    if stage == 'forward':
+                        raise RuntimeError('forward failed')
+                with patch.object(geotomo, '_inversion_gfs', side_effect=forward), \
+                        patch.object(geotomo, '_run_inversion', side_effect=RuntimeError('solver failed')):
+                    with self.assertRaisesRegex(RuntimeError, stage+' failed'):
+                        geotomo.run(path)
+                self.assertTrue((self.project/'GFs/static/template.mod.static.3.0000.sub0001.insar').exists())
+                self.assertTrue((self.project/'GFs/static/template.mod_3.0000.sub0001/junk.p').exists())
+                self.assertFalse((self.project/'.geotomo.lock').exists())
+
+    def test_invalid_library_prevents_cleanup_before_any_deletion(self):
+        for corruption in ('incomplete', 'nan', 'geometry'):
+            with self.subTest(corruption=corruption):
+                path = self.config(corruption, ['greens', 'synthetics'], keep_fk=False)
+                path.write_text(path.read_text().replace('name = "elastic"', 'name = "'+corruption+'_library"'))
+                def invalid(*args, **kwargs):
+                    self.worker(*args, **kwargs)
+                    with h5py.File(str(kwargs['response_file']), 'r+') as file:
+                        if corruption == 'incomplete':
+                            file.attrs['complete'] = False
+                        elif corruption == 'nan':
+                            file['displacement'][0, 0, 0, 0] = np.nan
+                        else:
+                            file['sources'][0, 3] = 9
+                with patch.object(geotomo, '_inversion_gfs', side_effect=invalid):
+                    with self.assertRaises(ValueError):
+                        geotomo.run(path)
+                self.assertTrue((self.project/'GFs/static/template.mod.static.3.0000.sub0001.insar').exists())
+                self.assertTrue((self.project/'GFs/static/template.mod_3.0000.sub0001/junk.p').exists())
+
+    def test_unknown_files_and_symlinks_prevent_cleanup(self):
+        outside = self.project/'personal.txt'
+        outside.write_text('preserve this')
+        folder = self.project/'GFs/static/template.mod_3.0000.sub0001'
+        for kind in ('unknown', 'symlink'):
+            path = self.config(kind, ['greens', 'synthetics'], keep_fk=False)
+            path.write_text(path.read_text().replace('name = "elastic"', 'name = "'+kind+'_library"'))
+            def modified(*args, **kwargs):
+                self.worker(*args, **kwargs)
+                if kind == 'unknown':
+                    (folder/'personal.txt').write_text('keep this too')
+                else:
+                    (folder/'junk.s').unlink()
+                    (folder/'junk.s').symlink_to(outside)
+            with patch.object(geotomo, '_inversion_gfs', side_effect=modified):
+                with self.assertRaisesRegex(ValueError, 'Unexpected FK working file'):
+                    geotomo.run(path)
+            self.assertTrue((self.project/'GFs/static/template.mod.static.3.0000.sub0001.insar').exists())
+            self.assertTrue((folder/'template.mod').exists())
+            self.assertEqual(outside.read_text(), 'preserve this')
+            if kind == 'unknown':
+                self.assertEqual((folder/'personal.txt').read_text(), 'keep this too')
+                (folder/'personal.txt').unlink()  # Fixture only; permit the symlink case.
+
+    def test_interrupted_cleanup_rejects_native_reuse_and_preserves_response_cache(self):
+        path = self.config('interrupted', ['greens', 'synthetics'], keep_fk=False)
+        model = (self.project/'GFs/static/template.mod_3.0000.sub0001/template.mod').resolve()
+        original_unlink = Path.unlink
+        def interrupted(target, *args, **kwargs):
+            if target.resolve() == model:
+                raise PermissionError('cleanup interrupted')
+            return original_unlink(target, *args, **kwargs)
+        with patch.object(geotomo, '_inversion_gfs', side_effect=self.worker), \
+                patch.object(Path, 'unlink', new=interrupted):
+            with self.assertRaisesRegex(PermissionError, 'cleanup interrupted'):
+                geotomo.run(path)
+        native_path = self.project/'GFs/static/_geotomo_greens.json'
+        native = json.loads(native_path.read_text())
+        response_path = self.project/'GFs/static/elastic.h5.json'
+        response = json.loads(response_path.read_text())
+        self.assertEqual(native['availability'], 'cleanup_pending')
+        self.assertEqual(response['native_cleanup']['state'], 'cleanup_pending')
+        with self.assertRaisesRegex(ValueError, 'cleanup was interrupted'):
+            from mudpy.geotomo_config import _require_cache
+            _require_cache(self.project, (native_path, native['inputs'],
+                [self.project/name for name in native['files']]))
+        _require_cache(self.project, (response_path, response['inputs'],
+            [self.project/name for name in response['files']]))
+        self.assertFalse((self.project/'.geotomo.lock').exists())
 
     def test_shifted_sources_follow_library_matrix_models_and_cached_reuse(self):
         self.text = self.text.replace('interface_policy = "error"', 'interface_policy = "below"')

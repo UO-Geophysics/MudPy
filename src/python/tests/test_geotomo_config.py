@@ -103,6 +103,7 @@ damping = [0.0]
         self.assertEqual(config.project, self.project.resolve())
         self.assertEqual(config.steps, ('greens', 'synthetics', 'invert'))
         self.assertEqual(config.processes, 1)
+        self.assertTrue(config.keep_fk_intermediates)
         self.assertEqual(_inputs(config)[0].shape, (1, 4))
         with self.assertRaises(FrozenInstanceError):
             config.name = 'different'
@@ -131,6 +132,9 @@ damping = [0.0]
             ('processes = 1', 'processes = 0'),
             ('processes = 1', 'processes = -2'),
             ('processes = 1', 'processes = 1.5'),
+            ('keep_fk_intermediates = true', 'keep_fk_intermediates = "false"'),
+            ('keep_fk_intermediates = true', 'keep_fk_intermediates = 0'),
+            ('keep_fk_intermediates = true', 'keep_fk_intermediates = false'),
             ('earth_flattening = false', 'earth_flattening = "false"'),
             ('interface_policy = "error"', 'interface_policy = "guess"'),
             ('interface_offset_km = 0.01', 'interface_offset_km = 0.0'),

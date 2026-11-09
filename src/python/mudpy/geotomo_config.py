@@ -87,6 +87,7 @@ class RunConfig:
     processes: int
     interface_policy: str
     interface_offset_km: float
+    keep_fk_intermediates: bool
 
     @property
     def observation_path(self):
@@ -130,7 +131,7 @@ class RunConfig:
         _keys(inversion, ('source_model', 'fixed_tensor', 'solver', 'weighting', 'damping'),
               ('source_model', 'damping'), 'inversion')
         _keys(matrix, ('name', 'mode'), (), 'matrix')
-        _keys(execution, ('processes',), (), 'execution')
+        _keys(execution, ('processes', 'keep_fk_intermediates'), (), 'execution')
         _keys(responses, ('name',), (), 'responses')
         directory = project['directory']
         if not isinstance(directory, str) or not directory.strip():
@@ -187,6 +188,11 @@ class RunConfig:
         processes = execution.get('processes', 1)
         if type(processes) is not int or processes < 1:
             raise ValueError('execution.processes must be a positive integer')
+        keep_fk = execution.get('keep_fk_intermediates', True)
+        if type(keep_fk) is not bool:
+            raise ValueError('execution.keep_fk_intermediates must be a boolean')
+        if not keep_fk and observation_format != 'hdf5':
+            raise ValueError('FK intermediate cleanup requires HDF5 responses')
         if 'greens' in steps and 'invert' in steps and 'synthetics' not in steps:
             raise ValueError('New greens must be followed by synthetics before inversion')
         if matrix_mode == 'reuse' and steps != ['invert']:
@@ -195,7 +201,7 @@ class RunConfig:
                    filenames['earth_model'], filenames['observations'], flattening,
                    dk, pmin, pmax, kmax, source_model, mechanism, solver, weighting,
                    _damping(inversion['damping']), matrix_name, matrix_mode,
-                   observation_format, response_name, processes, interface_policy, interface_offset)
+                   observation_format, response_name, processes, interface_policy, interface_offset, keep_fk)
 
     def settings(self):
         settings = {
@@ -213,7 +219,7 @@ class RunConfig:
                           'solver': self.solver, 'weighting': self.weighting, 'damping': self.damping},
             'matrix': {'name': self.matrix_name, 'mode': self.matrix_mode,
                        'path': str(self.project/'GFs/matrices'/(self.matrix_name+'.npy'))},
-            'execution': {'processes': self.processes}}
+            'execution': {'processes': self.processes, 'keep_fk_intermediates': self.keep_fk_intermediates}}
         if self.observation_format == 'hdf5':
             settings['responses'] = {'name': self.response_name, 'path': str(self.response_path),
                                      'format': 'hdf5', 'basis': 'six reference moment tensors'}
@@ -452,6 +458,12 @@ def _require_cache(project, specification):
     record = json.loads(path.read_text())
     if not isinstance(record, dict) or record.get('signature') != _digest(inputs):
         raise ValueError('Cached inputs/settings do not match '+str(path)+'; explicitly recompute this stage')
+    availability = record.get('availability', 'available')
+    if availability in ('cleanup_pending', 'pruned'):
+        raise ValueError('Native FK intermediates were intentionally removed or cleanup was interrupted; '+
+                         'explicitly rerun the greens stage to rebuild them: '+str(path))
+    if availability != 'available':
+        raise ValueError('Invalid cache availability: '+str(path))
     expected = {str(product.relative_to(project)) for product in products}
     if not isinstance(record.get('files'), dict) or set(record['files']) != expected:
         raise ValueError('Incomplete cache product record: '+str(path))
@@ -459,6 +471,68 @@ def _require_cache(project, specification):
         if not product.is_file() or _hash(product) != record['files'][str(product.relative_to(project))]:
             raise ValueError('Missing or changed cached product: '+str(product))
     return record
+
+
+def _cleanup_fk_intermediates(config, sources, observations, greens, responses):
+    """Verify the closed library and all deletion targets before pruning anything.
+
+    The caller holds the project lock. No recursive/glob deletion is used. Cache
+    state is marked pending before deletion so interruption cannot certify native
+    reuse; the response library itself remains independently reusable.
+    """
+    from mudpy.geotomo_io import validate_responses
+    project = config.project
+    static = project/'GFs/static'
+    static.resolve().relative_to(project)
+    if static.is_symlink():
+        raise ValueError('Refusing FK cleanup through a symlink: '+str(static))
+    native_record = _require_cache(project, greens)
+    response_record = _require_cache(project, responses)
+    validate_responses(config.response_path, observations, sources)
+    files = []
+    for path in greens[2]:
+        if path.is_symlink() or not path.is_file():
+            raise ValueError('Unsafe native FK cleanup target: '+str(path))
+        files.append({'path': str(path.relative_to(project)), 'size_bytes': path.stat().st_size,
+                      'sha256': native_record['files'][str(path.relative_to(project))]})
+    directories = []
+    model_hash = _hash(project/'structure'/config.earth_model)
+    for source in sources:
+        folder = static/('%s_%.4f.sub%04d' % (config.earth_model, source[3], source[0]))
+        if folder.is_symlink():
+            raise ValueError('Unsafe FK working-directory symlink: '+str(folder))
+        if not folder.exists():
+            continue
+        if not folder.is_dir():
+            raise ValueError('Invalid FK working directory: '+str(folder))
+        for path in sorted(folder.iterdir()):
+            if path.name not in (config.earth_model, 'junk.p', 'junk.s') or path.is_symlink() or not path.is_file():
+                raise ValueError('Unexpected FK working file; cleanup stopped before deletion: '+str(path))
+            digest = _hash(path)
+            if path.name == config.earth_model and digest != model_hash:
+                raise ValueError('FK working model differs from project model: '+str(path))
+            files.append({'path': str(path.relative_to(project)), 'size_bytes': path.stat().st_size,
+                          'sha256': digest})
+        directories.append(str(folder.relative_to(project)))
+    receipt = {'state': 'cleanup_pending', 'run': config.name,
+               'verified_response': str(config.response_path.relative_to(project)),
+               'files': files, 'directories': directories,
+               'size_bytes': sum(item['size_bytes'] for item in files)}
+    native_record.update(availability='cleanup_pending', native_cleanup=receipt)
+    response_record['native_cleanup'] = receipt
+    # Both receipts exist before the first unlink; partial cleanup stays explicit.
+    greens[0].write_bytes(_json_bytes(native_record))
+    responses[0].write_bytes(_json_bytes(response_record))
+    for item in files:
+        (project/item['path']).unlink()
+    for directory in directories:
+        (project/directory).rmdir()
+    receipt.update(state='pruned', completed_utc=datetime.now(timezone.utc).isoformat())
+    native_record['availability'] = 'pruned'
+    greens[0].write_bytes(_json_bytes(native_record))
+    responses[0].write_bytes(_json_bytes(response_record))
+    print('Removed %d native FK files and %d working folders (%d bytes); verified library: %s' %
+          (len(files), len(directories), receipt['size_bytes'], config.response_path.name), flush=True)
 
 
 def _collisions(config, normalized, matrix_specification):
@@ -607,4 +681,6 @@ def run(config_file):
                 config.solver, fixed, config.fixed_tensor, weight=config.weighting == 'diagonal',
                 provenance=provenance, **options)
         _verify_inputs(input_hashes)
+        if hdf5 and 'synthetics' in config.steps and not config.keep_fk_intermediates:
+            _cleanup_fk_intermediates(config, sources, rows, greens, responses)
         return resolved

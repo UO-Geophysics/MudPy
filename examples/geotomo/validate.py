@@ -18,7 +18,7 @@ from mudpy import geotomo
 def run_with_toml(project, name, steps, mechanism=None, matrix_mode='assemble', matrix_name=None,
                   *, sources='cloud.sources', earth_model='halfspace.mod',
                   observations='imagery.gflist', damping=(0.,), dk=.05, kmax=25.,
-                  observation_format='gflist', response_name='elastic', processes=1):
+                  observation_format='gflist', response_name='elastic', processes=1, keep_fk=True):
     """Write an explicit experiment configuration for this reference case."""
     source_model = 'fixed_tensor' if mechanism is not None else 'full_tensor'
     text = '''schema_version = 1
@@ -51,12 +51,13 @@ name = %s
 mode = %s
 [execution]
 processes = %s
+keep_fk_intermediates = %s
 ''' % (json.dumps(name), json.dumps(steps), json.dumps(sources), json.dumps(earth_model),
        json.dumps(observations), json.dumps(observation_format),
        '[responses]\nname = '+json.dumps(response_name) if observation_format == 'hdf5' else '',
        dk, kmax, json.dumps(source_model), json.dumps(list(damping)),
        'fixed_tensor = '+json.dumps(list(mechanism)) if mechanism is not None else '',
-       json.dumps(matrix_name or 'toml_'+name), json.dumps(matrix_mode), processes)
+       json.dumps(matrix_name or 'toml_'+name), json.dumps(matrix_mode), processes, str(keep_fk).lower())
     path = project/'configs'/(name+'.toml')
     with path.open('x') as stream:
         stream.write(text)
@@ -159,6 +160,31 @@ def hdf5_study(project, processes=1):
                               'forward_s': parallel_time, 'native_files_identical': True,
                               'text_tables_identical': True,
                               'neu_arrays_and_matrix_identical': True}
+    # Remove only this synthetic calculation's native products, then prove that
+    # library assembly and direct matrix reuse remain independent of them.
+    run_with_toml(project, 'hdf5_cleanup', ['greens', 'synthetics'],
+                  observations=observation_file.name, observation_format='hdf5',
+                  response_name='cleanup_elastic', processes=processes, keep_fk=False)
+    sources = np.loadtxt(project/'data/model_info/cloud.sources', ndmin=2)
+    for source in sources:
+        assert not (project/('GFs/static/halfspace.mod.static.%.4f.sub%04d.insar' % (source[3], source[0]))).exists()
+        assert not (project/('GFs/static/halfspace.mod_%.4f.sub%04d' % (source[3], source[0]))).exists()
+    with patch('mudpy.geotomo._inversion_gfs', side_effect=AssertionError('Unexpected GF generation')):
+        run_with_toml(project, 'cleanup_assemble', ['invert'],
+                      observations=observation_file.name, observation_format='hdf5', response_name='cleanup_elastic')
+        with patch('mudpy.geotomo_io.assemble_matrix', side_effect=AssertionError('Unexpected matrix assembly')):
+            run_with_toml(project, 'cleanup_reuse', ['invert'], matrix_mode='reuse',
+                          matrix_name='toml_cleanup_assemble', observations=observation_file.name,
+                          observation_format='hdf5', response_name='cleanup_elastic')
+    np.testing.assert_array_equal(matrix, np.load(project/'GFs/matrices/toml_cleanup_assemble.npy'))
+    np.testing.assert_array_equal(np.loadtxt(models/'hdf5_full.0000.inv'),
+                                  np.loadtxt(models/'cleanup_reuse.0000.inv'))
+    native_record = json.loads((project/'GFs/static/_geotomo_greens.json').read_text())
+    cleanup_record = json.loads((project/'GFs/static/cleanup_elastic.h5.json').read_text())
+    assert native_record['availability'] == 'pruned'
+    report['cleanup'] = {'receipt': cleanup_record['native_cleanup'],
+                         'assembly_and_cached_reuse_verified': True,
+                         'matrix_and_model_identical': True}
     (project/'hdf5_validation.json').write_text(json.dumps(report, indent=2)+'\n')
     print(json.dumps(report, indent=2))
 

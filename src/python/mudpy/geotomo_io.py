@@ -1,5 +1,5 @@
 """HDF5 observations/responses for geotomo; NumPy matrices remain separate."""
-from contextlib import contextmanager
+from contextlib import contextmanager, closing
 import hashlib
 import json
 from pathlib import Path
@@ -184,21 +184,17 @@ def response_writer(filename, sources, ids, coordinates, metadata):
         file.attrs['complete'] = True
 
 
-def assemble_matrix(filename, observations, sources, mechanism=None):
-    """Read one source block at a time and project into an unweighted matrix."""
+def _response_blocks(filename, observations, sources):
+    """Read finite blocks with common schema/geometry/completeness checks."""
     sources = np.asarray(sources)
-    fixed = None if mechanism is None else np.asarray(mechanism, dtype=float)
-    if fixed is not None and (fixed.shape != (6,) or not np.isfinite(fixed).all() or not fixed.any()):
-        raise ValueError('Expected six finite nonzero-in-norm tensor components')
-    count = 6 if fixed is None else 1
-    matrix = np.empty((len(observations['ids']), len(sources)*count))
     with h5py.File(str(filename), 'r') as file:
         _header(file, 'responses')
         expected = {'axes': 'source,receiver,NEU,tensor', 'tensor_coordinates': 'NED',
                     'tensor_components': ','.join(TENSOR_COMPONENTS),
                     'reference_moment_Nm': REFERENCE_MOMENT_NM,
                     'displacement_units': 'm per reference tensor coefficient', 'source_depth_units': 'km'}
-        if (not file.attrs.get('complete') or not file['completed_sources'][()].all() or
+        if (not file.attrs.get('complete') or file['completed_sources'].shape != (len(sources),) or
+                not file['completed_sources'][()].all() or
                 any(file.attrs.get(key) != value for key, value in expected.items())):
             raise ValueError('Incomplete response library or incompatible conventions')
         if (not np.array_equal(file['receiver_ids'][()].astype(str), observations['ids']) or
@@ -207,12 +203,31 @@ def assemble_matrix(filename, observations, sources, mechanism=None):
                 not np.allclose(file['receiver_coordinates'][()], observations['coordinates'], rtol=0, atol=1e-9)):
             raise ValueError('Response source/receiver IDs, ordering, or coordinates do not match')
         data = file['displacement']
-        if data.shape != (len(sources), len(observations['ids']), 3, 6):
+        if data.shape != (len(sources), len(observations['ids']), 3, 6) or data.dtype != np.dtype('float64'):
             raise ValueError('Invalid response-library shape')
         for k in range(len(sources)):
             block = data[k]
             if not np.isfinite(block).all():
                 raise ValueError('Nonfinite elastic response block')
+            yield block
+
+
+def validate_responses(filename, observations, sources):
+    """Verify a closed library without assembling an inversion matrix."""
+    with closing(_response_blocks(filename, observations, sources)) as blocks:
+        for _ in blocks:
+            pass
+
+
+def assemble_matrix(filename, observations, sources, mechanism=None):
+    """Read one source block at a time and project into an unweighted matrix."""
+    fixed = None if mechanism is None else np.asarray(mechanism, dtype=float)
+    if fixed is not None and (fixed.shape != (6,) or not np.isfinite(fixed).all() or not fixed.any()):
+        raise ValueError('Expected six finite nonzero-in-norm tensor components')
+    count = 6 if fixed is None else 1
+    matrix = np.empty((len(observations['ids']), len(sources)*count))
+    with closing(_response_blocks(filename, observations, sources)) as blocks:
+        for k, block in enumerate(blocks):
             projected = np.einsum('rc,rct->rt', observations['projection_neu'], block)
             matrix[:, k*count:(k+1)*count] = projected if fixed is None else projected.dot(fixed)[:, None]
     return matrix

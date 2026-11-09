@@ -84,6 +84,34 @@ libraries cannot be overwritten: choose a new `responses.name` to regenerate.
 The library always stores all six basis responses, independent of look
 coefficients, weighting, and full/fixed-tensor inversion choices.
 
+Native FK intermediates are retained by default. For HDF5 runs, opt in to
+cleanup after successful synthesis with:
+
+```toml
+[execution]
+processes = 4
+keep_fk_intermediates = false
+```
+
+Cleanup runs at the end of a successful run while holding the project lock.
+It verifies the closed HDF5 library's schema, completion flags, source/receiver
+geometry, float64 shape and finite source blocks, plus product/cache hashes.
+It then removes only the listed native `.insar` files and matching source
+folders' copied model and `junk.p`/`junk.s` files. No recursive/glob deletion is
+used. Unexpected files, symlinks or changed working models stop cleanup before
+any deletion. Calculation/solver failures retain the intermediates, and a
+greens-only run keeps them until a later successful HDF5 synthesis.
+
+The response-library `.h5.json` sidecar records a cleanup receipt with file
+hashes, paths, bytes, run name and completion time. `_geotomo_greens.json` marks
+native availability as `pruned`. HDF5 libraries, NumPy matrices, project inputs
+and run records are preserved; new matrix assembly and cached inversion need
+no native files. Rebuilding the response library requires explicitly rerunning
+`greens` after pruning. An interrupted filesystem cleanup remains marked
+`cleanup_pending`, preventing native-cache reuse; its verified HDF5 library
+remains available. Retention policy does not change physical cache signatures.
+Text-list and legacy slip runs retain their intermediates.
+
 Assembly reads source blocks, applies the supplied NEU coefficients, combines
 components for fixed mechanisms if requested, and saves an **unweighted**
 `GFs/matrices/<matrix.name>.npy`. Cached inversion loads that NumPy matrix once
@@ -118,6 +146,8 @@ It runs the independent homogeneous reference, compares text/HDF5 matrices,
 checks predictions and fixed mechanisms, and verifies NumPy-only reuse with
 generation/assembly deliberately forbidden. `hdf5_validation.json` records
 errors, code hashes, and small-case timings; those timings are not scaling claims.
+It also exercises actual native-file cleanup, then checks fresh matrix assembly
+and cached inversion against the saved reference after those files are gone.
 
 ## Forward profiling
 

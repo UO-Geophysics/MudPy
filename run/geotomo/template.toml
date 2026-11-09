@@ -52,3 +52,6 @@ mode = "assemble"  # reuse requires steps = ["invert"] and matching cache record
 # Maximum source workers for FK/NumPy synthesis; never auto-selects cores.
 # One writer assembles responses. Solver/BLAS threading is independent.
 processes = 1
+# HDF5 runs only: false removes native FK files after verified successful synthesis.
+# Failed calculations keep their intermediates. Existing TOMLs default to true.
+keep_fk_intermediates = true

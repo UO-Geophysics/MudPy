@@ -37,7 +37,7 @@ geotomo.run('/absolute/path/new_project/configs/experiment.toml')
 - Explicit TOML `execution.processes` caps concurrent source workers
   (default 1), with isolated source folders, bounded batches, and one response
   writer preserving source order. Solver execution and BLAS threading are unchanged.
-  Serial/parallel response arrays and matrices agree exactly; all 52 regression
+  Serial/parallel response arrays and matrices agree exactly; all 59 regression
   methods pass, including overlap, ordering, single-writer and failure checks.
 - TOML preflight rejects FK interface sources by default. Explicit
   `forward.interface_policy = "above"` or `"below"` and
@@ -54,6 +54,10 @@ geotomo.run('/absolute/path/new_project/configs/experiment.toml')
 - HDF5 input from preprocessing packages, preserving mean look coefficients and
   pixel membership while modeling one representative location per sample.
   Source-block NEU response storage and direct unweighted NumPy matrix reuse.
+- Optional HDF5 `execution.keep_fk_intermediates = false` removes known native
+  files and source working folders only after whole-run success and closed-library
+  validation. Default retention preserves existing behavior. Cleanup receipts and
+  pruned/pending cache state preserve traceability; HDF5/matrix reuse remains valid.
 - Exclusive `.geotomo.lock` ownership for top-level runs. Existing projects are
   never initialized again, and existing named results are protected.
 
