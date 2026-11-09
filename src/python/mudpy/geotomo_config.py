@@ -85,6 +85,8 @@ class RunConfig:
     observation_format: str
     response_name: str
     processes: int
+    interface_policy: str
+    interface_offset_km: float
 
     @property
     def observation_path(self):
@@ -94,6 +96,10 @@ class RunConfig:
     @property
     def response_path(self):
         return self.project/'GFs/static'/(self.response_name+'.h5')
+
+    @property
+    def effective_source_path(self):
+        return self.project/'data/model_info'/('_geotomo_'+self.name+'.sources')
 
     @classmethod
     def load(cls, filename):
@@ -118,7 +124,8 @@ class RunConfig:
         _keys(run, ('name', 'steps'), ('name', 'steps'), 'run')
         _keys(inputs, ('sources', 'earth_model', 'observations', 'observation_format'),
               ('sources', 'earth_model', 'observations'), 'inputs')
-        _keys(forward, ('backend', 'earth_flattening', 'dk', 'pmin', 'pmax', 'kmax'),
+        _keys(forward, ('backend', 'earth_flattening', 'dk', 'pmin', 'pmax', 'kmax',
+                        'interface_policy', 'interface_offset_km'),
               ('earth_flattening',), 'forward')
         _keys(inversion, ('source_model', 'fixed_tensor', 'solver', 'weighting', 'damping'),
               ('source_model', 'damping'), 'inversion')
@@ -151,6 +158,11 @@ class RunConfig:
         flattening = forward['earth_flattening']
         if type(flattening) is not bool:
             raise ValueError('forward.earth_flattening must be a boolean')
+        interface_policy = _choice(forward.get('interface_policy', 'error'),
+                                   ('error', 'above', 'below'), 'forward.interface_policy')
+        interface_offset = _real(forward.get('interface_offset_km', .01), 'forward.interface_offset_km')
+        if interface_offset < .0001:
+            raise ValueError('forward.interface_offset_km must be at least 0.0001 km (FK depth precision)')
         dk = _real(forward.get('dk', .05), 'forward.dk')
         pmin = _real(forward.get('pmin', 0.), 'forward.pmin')
         pmax = _real(forward.get('pmax', 1.), 'forward.pmax')
@@ -183,7 +195,7 @@ class RunConfig:
                    filenames['earth_model'], filenames['observations'], flattening,
                    dk, pmin, pmax, kmax, source_model, mechanism, solver, weighting,
                    _damping(inversion['damping']), matrix_name, matrix_mode,
-                   observation_format, response_name, processes)
+                   observation_format, response_name, processes, interface_policy, interface_offset)
 
     def settings(self):
         settings = {
@@ -194,7 +206,9 @@ class RunConfig:
                        'observations': str(self.observation_path),
                        'observation_format': self.observation_format},
             'forward': {'backend': 'fk', 'earth_flattening': self.earth_flattening,
-                        'dk': self.dk, 'pmin': self.pmin, 'pmax': self.pmax, 'kmax': self.kmax},
+                        'dk': self.dk, 'pmin': self.pmin, 'pmax': self.pmax, 'kmax': self.kmax,
+                        'interface_policy': self.interface_policy,
+                        'interface_offset_km': self.interface_offset_km},
             'inversion': {'source_model': self.source_model, 'fixed_tensor': self.fixed_tensor,
                           'solver': self.solver, 'weighting': self.weighting, 'damping': self.damping},
             'matrix': {'name': self.matrix_name, 'mode': self.matrix_mode,
@@ -254,6 +268,50 @@ def _digest(value):
     return hashlib.sha256(_json_bytes(value)).hexdigest()
 
 
+def _effective_sources(config, sources, model):
+    """Resolve FK interface hits once, in physical depth coordinates.
+
+    Match fk.pl's Vp boundary test and midpoint Earth flattening. Depths are
+    quantized to the four decimals actually passed to FK. Half a depth increment
+    is the interface tolerance; the chosen offset must stay in the adjacent layer.
+    """
+    effective = sources.copy()
+    effective[:, 3] = [float('%.4f' % depth) for depth in sources[:, 3]]
+    thickness, vp = model[:, 0].copy(), model[:, 2].copy()
+    if config.earth_flattening:
+        if thickness.sum() >= 6371 or (sources[:, 3] >= 6371).any():
+            raise ValueError('FK Earth-flattening depths must be less than 6371 km')
+        scale = 6371 / (6371 - np.cumsum(thickness) + .5*thickness)
+        thickness *= scale
+        vp *= scale
+    boundaries = np.cumsum(thickness)[:-1]
+    if config.earth_flattening:
+        boundaries = -6371*np.expm1(-boundaries/6371)
+    real = vp[:-1] != vp[1:]
+    tolerance = .00005 + 1e-12
+    for source in effective:
+        depth = source[3]
+        if depth <= 0:
+            raise ValueError('Source %d rounds to a nonpositive FK depth' % source[0])
+        hits = np.flatnonzero(real & (abs(boundaries-depth) <= tolerance))
+        if not len(hits):
+            continue
+        if len(hits) != 1:
+            raise ValueError('Source %d is too close to multiple FK interfaces' % source[0])
+        index = hits[0]
+        boundary = boundaries[index]
+        label = 'Source %d at %.4f km meets FK interface %.10g km' % (source[0], depth, boundary)
+        if config.interface_policy == 'error':
+            raise ValueError(label+'; choose forward.interface_policy = above or below explicitly')
+        above = config.interface_policy == 'above'
+        source[3] = float('%.4f' % (boundary + (-1 if above else 1)*config.interface_offset_km))
+        lower = (boundaries[index-1] if index else 0) if above else boundary
+        upper = boundary if above else (boundaries[index+1] if index+1 < len(boundaries) else np.inf)
+        if not lower+tolerance < source[3] < upper-tolerance:
+            raise ValueError(label+'; interface offset must remain strictly inside the adjacent layer')
+    return effective
+
+
 def _inputs(config):
     """Validate all primary inputs and normalize only selected imagery rows."""
     project = config.project
@@ -274,6 +332,7 @@ def _inputs(config):
             (model[:, 0] < 0).any() or model[-1, 0] != 0 or
             (model[:, 1] <= 0).any() or (model[:, 2] <= model[:, 1]).any()):
         raise ValueError('Invalid FK model: require thickness/Vs/Vp [rho/Qs/Qp], positive speeds, Vp > Vs and a final zero-thickness half-space')
+    sources = _effective_sources(config, sources, model)
     if config.observation_format == 'hdf5':
         from mudpy.geotomo_io import read_observations
         observations = read_observations(paths[2])
@@ -342,10 +401,13 @@ def _code_identity():
 
 def _signatures(config, sources, geometry, code, executables):
     project = config.project
+    forward = config.settings()['forward'].copy()
+    del forward['interface_policy'], forward['interface_offset_km']
     base = {'sources': _hash(project/'data/model_info'/config.sources),
+            'effective_sources': sources.tolist(),
             'earth_model': _hash(project/'structure'/config.earth_model),
             'receivers': [{key: row[key] for key in ('id', 'lon', 'lat')} for row in geometry],
-            'forward': config.settings()['forward'],
+            'forward': forward,
             'code': {name: code['source_sha256'][name] for name in ('geotomo', 'parallel', 'green')},
             'executables': {name: executables.get(name) for name in ('fk.pl', 'st_fk', 'trav')}}
     responses = {'greens': _digest(base), 'geometry': geometry,
@@ -401,7 +463,8 @@ def _require_cache(project, specification):
 
 def _collisions(config, normalized, matrix_specification):
     folder = config.project/'output/inverse_models/models'
-    artifacts = [folder/(config.name+'.config.toml'), folder/(config.name+'.resolved.json')]
+    artifacts = [folder/(config.name+'.config.toml'), folder/(config.name+'.resolved.json'),
+                 config.effective_source_path]
     if normalized is not None:
         artifacts.append(normalized)
     if config.observation_format == 'hdf5' and 'synthetics' in config.steps:
@@ -436,6 +499,9 @@ def run(config_file):
     # One lock covers validation, snapshots, every compute stage, and logs.
     with geotomo._project_lock(home, name):
         sources, rows, geometry, input_hashes = _inputs(config)
+        requested_sources = np.loadtxt(project/'data/model_info'/config.sources, ndmin=2)
+        changed = np.flatnonzero(np.any(requested_sources != sources, axis=1))
+        source_name = config.effective_source_path.name if len(changed) else config.sources
         code = _code_identity()
         executables = {}
         needed = (('fk.pl', 'st_fk', 'trav') if 'greens' in config.steps else ())
@@ -470,6 +536,22 @@ def run(config_file):
                   'versions': {'python': sys.version, 'numpy': np.__version__, 'scipy': scipy.__version__,
                                'obspy': obspy.__version__, 'pyproj': pyproj.__version__},
                   'created_utc': datetime.now(timezone.utc).isoformat()}
+        record['source_geometry'] = {
+            'columns': ['id', 'longitude_deg', 'latitude_deg', 'depth_km'],
+            'requested': requested_sources.tolist(), 'effective': sources.tolist(),
+            'effective_file': str(project/'data/model_info'/source_name),
+            'adjustments': [{'source_id': int(sources[k, 0]),
+                             'requested_depth_km': float(requested_sources[k, 3]),
+                             'effective_depth_km': float(sources[k, 3])} for k in changed]}
+        if len(changed):
+            with config.effective_source_path.open('x') as stream:
+                np.savetxt(stream, sources, fmt=['%d', '%.17g', '%.17g', '%.4f'],
+                           header='Effective FK geometry: ID longitude_deg latitude_deg depth_km')
+            input_hashes[str(config.effective_source_path)] = _hash(config.effective_source_path)
+            for adjustment in record['source_geometry']['adjustments']:
+                print('Source %d: requested depth %.10g km -> effective FK depth %.4f km (interface policy: %s)' %
+                      (adjustment['source_id'], adjustment['requested_depth_km'],
+                       adjustment['effective_depth_km'], config.interface_policy), flush=True)
         if hdf5:
             import h5py
             record['versions'].update(h5py=h5py.__version__, hdf5=h5py.version.hdf5_version)
@@ -487,7 +569,7 @@ def run(config_file):
             options = ({'observations': rows, 'response_file': config.response_path,
                         'response_metadata': record} if hdf5 else {})
             geotomo._inversion_gfs(home, name, config.observations if hdf5 else normalized.name,
-                config.sources, config.earth_model,
+                source_name, config.earth_model,
                 int('greens' in config.steps), int('synthetics' in config.steps), config.dk,
                 config.pmin, config.pmax, config.kmax, 0, config.processes, False if hdf5 else fixed,
                 () if hdf5 else config.fixed_tensor, config.earth_flattening, **options)
@@ -506,7 +588,7 @@ def run(config_file):
                     with matrix[2][0].open('xb') as stream:
                         np.save(stream, G, allow_pickle=False)
                 else:
-                    geotomo.getG(home, name, config.sources, config.earth_model, normalized.name,
+                    geotomo.getG(home, name, source_name, config.earth_model, normalized.name,
                                False, config.matrix_name, fixed)
                 _verify_inputs(input_hashes)
                 matrix_record = _record_cache(project, matrix)
@@ -518,7 +600,7 @@ def run(config_file):
                           'Observations': str(config.observation_path) if hdf5 else str(normalized),
                           'Matrix SHA256': matrix_record['files'][str(matrix[2][0].relative_to(project))]}
             options = {'observations': rows, 'matrix': G} if hdf5 else {}
-            geotomo._run_inversion(home, name, config.name, config.sources, config.earth_model,
+            geotomo._run_inversion(home, name, config.name, source_name, config.earth_model,
                 config.observations if hdf5 else normalized.name,
                 True, config.matrix_name, config.damping, len(sources),
                 config.solver, fixed, config.fixed_tensor, weight=config.weighting == 'diagonal',

@@ -75,7 +75,8 @@ def run_parallel_green(home,project_name,station_file,model_name,dt,NFFT,static,
                     cwd=folder,stdout=subprocess.PIPE,stderr=subprocess.PIPE,
                     text=True,check=True)
                 if not result.stdout.strip():
-                    raise RuntimeError('FK produced no static response: '+result.stderr)
+                    raise RuntimeError('FK source %d at %s km produced no static response: %s' %
+                                       (source[0], depth, result.stderr))
                 response = loadtxt(StringIO(result.stdout),ndmin=2)
                 if (response.shape != (len(distances),columns) or not isfinite(response).all()
                         or not allclose(response[:,0],distances,rtol=0,atol=0.00051)):

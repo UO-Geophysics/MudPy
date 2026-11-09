@@ -214,7 +214,7 @@ class HDF5RunTests(unittest.TestCase):
         return path
 
     def worker(self, *args, **kwargs):
-        sources = np.loadtxt(self.project/'data/model_info/template.sources', ndmin=2)
+        sources = np.loadtxt(self.project/'data/model_info'/args[3], ndmin=2)
         obs = kwargs['observations']
         for source in sources:
             (self.project/'GFs/static'/('template.mod.static.%.4f.sub%04d.insar' %
@@ -223,6 +223,44 @@ class HDF5RunTests(unittest.TestCase):
                                 kwargs['response_metadata']) as (data, complete):
             data[:] = np.arange(1., 19.).reshape(1, 1, 3, 6)*.001
             complete[:] = True
+
+    def test_shifted_sources_follow_library_matrix_models_and_cached_reuse(self):
+        self.text = self.text.replace('interface_policy = "error"', 'interface_policy = "below"')
+        source_path = self.project/'data/model_info/template.sources'
+        source_path.write_text('9 13 43 1\n')
+        original_sources = source_path.read_bytes()
+        (self.project/'structure/template.mod').write_text('1 3 5 2.5\n0 3.5 6 2.7\n')
+        first = self.config('shifted', ['greens', 'synthetics', 'invert'])
+        with patch.object(geotomo, '_inversion_gfs', side_effect=self.worker) as worker:
+            resolved = geotomo.run(first)
+        effective_file = self.project/'data/model_info/_geotomo_shifted.sources'
+        self.assertEqual(worker.call_args[0][3], effective_file.name)
+        self.assertEqual(source_path.read_bytes(), original_sources)
+        self.assertEqual(np.loadtxt(effective_file)[3], 1.01)
+        record = json.loads(resolved.read_text())
+        self.assertEqual(record['source_geometry']['requested'][0][3], 1)
+        self.assertEqual(record['source_geometry']['effective'][0][3], 1.01)
+        self.assertIn(str(effective_file.resolve()), record['input_sha256'])
+        with h5py.File(str(self.project/'GFs/static/elastic.h5'), 'r') as file:
+            self.assertEqual(file['sources'][0, 3], 1.01)
+            self.assertEqual(json.loads(file.attrs['metadata_json'])['source_geometry']['effective'][0][3], 1.01)
+        model = self.project/'output/inverse_models/models/shifted.0000.inv'
+        self.assertEqual(np.loadtxt(model)[3], 1.01)
+        reuse = self.config('shifted_reuse', ['invert'], 'reuse')
+        with patch.object(geotomo, '_inversion_gfs', side_effect=AssertionError('Unexpected GF generation')), \
+                patch('mudpy.geotomo_io.assemble_matrix', side_effect=AssertionError('Unexpected assembly')):
+            geotomo.run(reuse)
+        reused = self.project/'output/inverse_models/models/shifted_reuse.0000.inv'
+        np.testing.assert_array_equal(np.loadtxt(model), np.loadtxt(reused))
+        # A different effective side cannot reuse the same matrix.
+        wrong_side = self.config('wrong_side', ['invert'], 'reuse')
+        wrong_side.write_text(wrong_side.read_text().replace('interface_policy = "below"',
+                                                          'interface_policy = "above"'))
+        with self.assertRaisesRegex(ValueError, 'do not match'):
+            geotomo.run(wrong_side)
+        self.assertFalse((self.project/'data/model_info/_geotomo_wrong_side.sources').exists())
+        with self.assertRaisesRegex(FileExistsError, 'already exists'):
+            geotomo.run(first)
 
     def test_complete_run_and_numpy_only_reuse_after_values_weights_solver_change(self):
         first = self.config('first', ['greens', 'synthetics', 'invert'])

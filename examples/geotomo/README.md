@@ -161,6 +161,36 @@ explicit. Optional values have recorded defaults: FK backend, `dk=0.05`,
 `pmin=0`, `pmax=1`, `kmax=25`, `lstsq`, diagonal weighting, matrix assembly, and
 one process. The default matrix basename follows `run.name`.
 
+The TOML runner checks source depths against FK-disallowed layer interfaces
+before launching workers or saving run products. The default
+`forward.interface_policy = "error"` reports the source ID and interface depth.
+To explicitly place interface sources on one side, use:
+
+```toml
+[forward]
+earth_flattening = false
+interface_policy = "below"  # "above" is also supported
+interface_offset_km = 0.01  # 10 m from the interface, in physical depth
+```
+
+Sources away from interfaces are not shifted. FK depths are represented to
+four decimal places (0.0001 km); half that increment is the interface tolerance.
+Preflight uses FK's Vp-contrast test and accounts for its Earth-flattening
+transformation when enabled. The rounded shifted point must lie strictly inside
+the adjacent layer. Offsets below FK depth precision, shifts across another
+boundary, and ambiguous hits on multiple interfaces fail explicitly. Above and
+below select different material layers; this is a modeling choice, not a retry
+strategy or an automatic choice of side.
+
+The requested source file is preserved. When depths shift or require FK depth
+rounding, the runner saves `data/model_info/_geotomo_<run>.sources`, reports each
+change in the terminal, and records requested/effective coordinates and file
+hashes in the resolved JSON and response-library provenance. Every calculation,
+matrix check, cached solve, and saved model uses the effective geometry.
+Physical caches include that geometry; changing sides/depths invalidates them.
+Changing policy without changing effective geometry does not. Direct numerical
+helpers do not apply this TOML preparation policy; the slip workflow is unchanged.
+
 To parallelize forward calculations, set an explicit positive integer:
 
 ```toml

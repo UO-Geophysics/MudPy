@@ -36,6 +36,12 @@ geotomo.run('/absolute/path/new_project/configs/experiment.toml')
   writer preserving source order. Solver execution and BLAS threading are unchanged.
   Serial/two-worker FK reference products agree exactly; all 46 regression
   methods pass, including overlap, ordering, single-writer and failure checks.
+- TOML preflight rejects FK interface sources by default. Explicit
+  `forward.interface_policy = "above"` or `"below"` and
+  `interface_offset_km` (default 0.01 km) resolve them once, with adjacent-layer
+  and FK precision checks. Requested geometry is preserved; effective geometry
+  is archived, hashed, and used by forward calculations, caches and saved models.
+  All 50 regression methods and a small actual layered FK interface reference pass.
 - Scalar imagery projections in metres, source-file ordering, and checked
   response completeness. Legacy slip-inversion interfaces retain their behavior.
 - Weighted data-space least squares and NNLS, with identity damping through

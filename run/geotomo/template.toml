@@ -25,6 +25,10 @@ name = "elastic"
 [forward]
 backend = "fk"
 earth_flattening = false
+# Reject sources on FK interfaces before computation by default.
+# Opt in to "above" or "below"; offset is km (0.01 km = 10 m).
+interface_policy = "error"
+interface_offset_km = 0.01
 dk = 0.05
 pmin = 0.0
 pmax = 1.0
