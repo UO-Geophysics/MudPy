@@ -690,6 +690,7 @@ def getdata(home,project_name,GF_list,decimate,bandpass,quiet=False):
     OUT:
         d: The data vector
     '''
+    from numpy import atleast_1d, atleast_2d
     from numpy import genfromtxt,where,array,append,r_,concatenate,zeros
     from obspy import read
     from mudpy.forward import round_time
@@ -699,9 +700,9 @@ def getdata(home,project_name,GF_list,decimate,bandpass,quiet=False):
 
     #Read gf file and decide what needs to get loaded
     gf_file=home+project_name+'/data/station_info/'+GF_list
-    GF=genfromtxt(gf_file,usecols=[3,4,5,6,7],skip_header=1,dtype='f8')
-    GFfiles=genfromtxt(gf_file,usecols=[8,9,10,11,12],dtype='U')  
-    stations=genfromtxt(gf_file,usecols=0,dtype='U')  
+    GF=atleast_2d(genfromtxt(gf_file,usecols=[3,4,5,6,7],skip_header=1,dtype='f8'))
+    GFfiles=atleast_2d(genfromtxt(gf_file,usecols=[8,9,10,11,12],dtype='U'))
+    stations=atleast_1d(genfromtxt(gf_file,usecols=0,dtype='U'))
     
     #Parse out filtering pass bands
     displacement_bandpass=bandpass[0]
@@ -922,6 +923,7 @@ def get_data_weights(home,project_name,GF_list,d,decimate):
     '''
     Assemble matrix of data weights from sigmas of observations
     '''    
+    from numpy import atleast_1d, atleast_2d
     from numpy import genfromtxt,where,zeros,ones
     from obspy import read
     from mudpy.green import stdecimate
@@ -929,9 +931,9 @@ def get_data_weights(home,project_name,GF_list,d,decimate):
     print('Computing data weights...')
     #Read gf file and decide what needs tog et loaded
     gf_file=home+project_name+'/data/station_info/'+GF_list
-    GF=genfromtxt(gf_file,usecols=[3,4,5,6,7],dtype='f8')
-    GFfiles=genfromtxt(gf_file,usecols=[8,9,10,11,12],dtype='U')
-    weights=genfromtxt(gf_file,usecols=range(13,28),dtype='f')
+    GF=atleast_2d(genfromtxt(gf_file,usecols=[3,4,5,6,7],dtype='f8'))
+    GFfiles=atleast_2d(genfromtxt(gf_file,usecols=[8,9,10,11,12],dtype='U'))
+    weights=atleast_2d(genfromtxt(gf_file,usecols=range(13,28),dtype='f'))
     #Initalize
     w=zeros(len(d))
     kinsert=0
@@ -1183,6 +1185,7 @@ def write_synthetics(home,project_name,run_name,GF_list,G,sol,ds,num,decimate):
         Nothing
     '''
     
+    from numpy import atleast_1d, atleast_2d
     from obspy import read
     from numpy import array,savetxt,where,genfromtxt,squeeze,r_
     from mudpy.green import stdecimate
@@ -1191,9 +1194,9 @@ def write_synthetics(home,project_name,run_name,GF_list,G,sol,ds,num,decimate):
     num=str(num).rjust(4,'0')
     #Read gf file and decide what needs to get loaded
     gf_file=home+project_name+'/data/station_info/'+GF_list
-    stations=genfromtxt(gf_file,usecols=[0],skip_header=1,dtype='U')
-    GF=genfromtxt(gf_file,usecols=[3,4,5,6,7],skip_header=1,dtype='f8')
-    GFfiles=genfromtxt(gf_file,usecols=[8,9,10,11,12],skip_header=1,dtype='U')
+    stations=atleast_1d(genfromtxt(gf_file,usecols=[0],skip_header=1,dtype='U'))
+    GF=atleast_2d(genfromtxt(gf_file,usecols=[3,4,5,6,7],skip_header=1,dtype='f8'))
+    GFfiles=atleast_2d(genfromtxt(gf_file,usecols=[8,9,10,11,12],skip_header=1,dtype='U'))
     #Separate into its constituent parts (statics,displacaments, velocities, etc...)
     kinsert=0
     #Statics
@@ -1635,6 +1638,7 @@ def get_VR(home,project_name,GF_list,sol,d,ds,decimate,WG,wd):
         VR: Variance reduction (%)
     '''
     
+    from numpy import atleast_1d, atleast_2d
     from numpy import genfromtxt,where,r_,nan
     from obspy import read
     from mudpy.green import stdecimate
@@ -1644,9 +1648,9 @@ def get_VR(home,project_name,GF_list,sol,d,ds,decimate,WG,wd):
     
     #Read gf file and decide what needs to get loaded
     gf_file=home+project_name+'/data/station_info/'+GF_list
-    stations=genfromtxt(gf_file,usecols=[0],skip_header=1,dtype='U')
-    GF=genfromtxt(gf_file,usecols=[3,4,5,6,7],skip_header=1,dtype='f8')
-    GFfiles=genfromtxt(gf_file,usecols=[8,9,10,11,12],skip_header=1,dtype='U')
+    stations=atleast_1d(genfromtxt(gf_file,usecols=[0],skip_header=1,dtype='U'))
+    GF=atleast_2d(genfromtxt(gf_file,usecols=[3,4,5,6,7],skip_header=1,dtype='f8'))
+    GFfiles=atleast_2d(genfromtxt(gf_file,usecols=[8,9,10,11,12],skip_header=1,dtype='U'))
     #Separate into its constituent parts (statics,displacaments, velocities, etc...)
     kstart=0
     kend=0

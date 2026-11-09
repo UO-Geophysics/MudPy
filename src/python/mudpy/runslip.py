@@ -4,6 +4,43 @@ Runtime file for forward modeling and inverse kinematic slip inversions
 '''
 
 
+# Shared layout; callers create the root and choose workflow-specific templates.
+_PROJECT_DIRECTORIES = (
+    'GFs',
+    'GFs/static',
+    'GFs/dynamic',
+    'GFs/matrices',
+    'GFs/tsunami',
+    'GFs/STFs',
+    'data/waveforms',
+    'data/statics',
+    'data/station_info',
+    'data/model_info',
+    'structure',
+    'plots',
+    'scripts',
+    'forward_models',
+    'output/inverse_models',
+    'output/inverse_models/statics',
+    'output/inverse_models/waveforms',
+    'output/inverse_models/models',
+    'output/forward_models',
+    'logs',
+    'analysis',
+    'analysis/frequency',
+)
+
+
+def _populate_project(project_directory, templates):
+    from pathlib import Path
+    from shutil import copy
+    project = Path(project_directory)
+    for directory in _PROJECT_DIRECTORIES:
+        (project / directory).mkdir(parents=True, exist_ok=True)
+    for destination, source in templates.items():
+        copy(source, project / destination)
+
+
 #Initalize project folders
 def init(home,project_name):
     '''
@@ -16,7 +53,7 @@ def init(home,project_name):
     OUT:
         Nothing
     '''
-    from shutil import rmtree,copy
+    from shutil import rmtree
     from os import path,makedirs,environ
     clob='y'
     proj_dir=home+project_name+'/'
@@ -32,35 +69,13 @@ def init(home,project_name):
             print('Phew, almost shot yourself in the foot there didn\'t you?')
     if clob == 'y' or clob == 'Y':
         makedirs(proj_dir)
-        #And make the subdirectories
-        makedirs(proj_dir+'GFs')
-        makedirs(proj_dir+'GFs/static')
-        makedirs(proj_dir+'GFs/dynamic')
-        makedirs(proj_dir+'GFs/matrices')
-        makedirs(proj_dir+'GFs/tsunami')
-        makedirs(proj_dir+'GFs/STFs')
-        makedirs(proj_dir+'data/waveforms')
-        makedirs(proj_dir+'data/statics')
-        makedirs(proj_dir+'data/station_info')
-        makedirs(proj_dir+'data/model_info')
-        makedirs(proj_dir+'structure')
-        makedirs(proj_dir+'plots')
-        makedirs(proj_dir+'scripts')
-        makedirs(proj_dir+'forward_models')
-        makedirs(proj_dir+'output/inverse_models')
-        makedirs(proj_dir+'output/inverse_models/statics')
-        makedirs(proj_dir+'output/inverse_models/waveforms')
-        makedirs(proj_dir+'output/inverse_models/models')
-        makedirs(proj_dir+'output/forward_models')
-        makedirs(proj_dir+'logs')
-        makedirs(proj_dir+'analysis')
-        makedirs(proj_dir+'analysis/frequency')
-        #Copy templates into appropriate files
         mudpy=environ['MUD']+'/run/'
-        copy(mudpy+'template.fault',proj_dir+'data/model_info/')
-        copy(mudpy+'template.gflist',proj_dir+'data/station_info/')
-        copy(mudpy+'template.sta',proj_dir+'data/station_info/')
-        copy(mudpy+'template.mod',proj_dir+'structure/')
+        _populate_project(proj_dir, {
+            'data/model_info/template.fault': mudpy+'template.fault',
+            'data/station_info/template.gflist': mudpy+'template.gflist',
+            'data/station_info/template.sta': mudpy+'template.sta',
+            'structure/template.mod': mudpy+'template.mod',
+        })
 
 
 #Extract fault geometry from rupture file

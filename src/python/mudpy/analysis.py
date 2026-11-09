@@ -352,38 +352,27 @@ class MT:
         from numpy.linalg import eig
         self.eig_val,self.eig_vec=eig(self.tensor)
     def compute_DC(self):
-        #Bst fitting double couple
-        from numpy import zeros,diag
-        #if self.mt_style is 'rtp':
-        #    self.flip()
-        self.eigen()
-        eig1=self.eig_val[0]
-        eig3=self.eig_val[2]
-        self.tensor_DC=zeros((3,3))
-        self.tensor_DC[0,0]=0.5*(eig1-eig3)
-        self.tensor_DC[2,2]=-0.5*(eig1-eig3)
-        #Rotate back to original coordinates
-        #Mdct=V*Mdct*V';
-        #Mdc(:,:,k)=Mdct;
-        self.tensor_DC=self.eig_vec.dot(self.tensor_DC).dot(self.eig_vec.transpose())
-        d=self.eig_val
-        E=sum(self.eig_val)/3
-        d=d-E
-        self.epsilon=min(abs(d))/max(abs(d))
+        # Symmetric eigenvectors are ordered from pressure to tension.
+        from numpy import diag
+        from numpy.linalg import eigh
+        self.eig_val,self.eig_vec=eigh(self.tensor)
+        amplitude=0.5*(self.eig_val[-1]-self.eig_val[0])
+        self.tensor_DC=self.eig_vec.dot(diag([-amplitude,0.,amplitude])).dot(self.eig_vec.T)
+        deviatoric=self.eig_val-self.eig_val.mean()
+        scale=max(abs(deviatoric))
+        self.epsilon=min(abs(deviatoric))/scale if scale else 0.
     def get_nodal_planes(self):
-        from numpy import array,arccos,arctan2,cos,sin,pi,rad2deg,real
-        from numpy.linalg import norm,eig
+        from numpy import array,arccos,arctan2,cos,sin,pi,rad2deg,real,full,finfo,clip
+        from numpy.linalg import norm,eigh
         self.compute_DC()
         M=self.tensor_DC
-        #Get eigen vectors and values
-        eig_val,eig_vec=eig(M)
-        #Define new basis: tension, pressure and null axes
-        if eig_val[0]>0:
-            t=eig_vec[:,0]
-            p=eig_vec[:,2]
-        else:
-            t=eig_vec[:,2]
-            p=eig_vec[:,0]
+        if norm(M) <= 10*finfo(float).eps*norm(self.tensor):
+            self.nodal_plane1=full(3,float('nan'))
+            self.nodal_plane2=full(3,float('nan'))
+            return
+        eig_val,eig_vec=eigh(M)
+        t=eig_vec[:,-1]
+        p=eig_vec[:,0]
         #Make sure rake of T and P axes is positive (stereonet representation)
         if t[2]<0:
             t=-t
@@ -412,14 +401,14 @@ class MT:
             n2=d
             d2=n
         #Compute angles
-        di1=arccos(n1[2])
+        di1=arccos(clip(n1[2],-1,1))
         st1=arctan2(n1[0],-n1[1])
         phi1=array([cos(st1),sin(st1),0])
-        ra1=arccos(phi1.dot(d1))
-        di2=arccos(n2[2])
+        ra1=arccos(clip(phi1.dot(d1),-1,1))
+        di2=arccos(clip(n2[2],-1,1))
         st2=arctan2(n2[0],-n2[1])
         phi2=array([cos(st2),sin(st2),0])
-        ra2=arccos(phi2.dot(d2))
+        ra2=arccos(clip(phi2.dot(d2),-1,1))
         #Format according to right-pinule strike and dip convention
         if st1 < 0 and st1 >= -pi:
             st1=2*pi+st1
