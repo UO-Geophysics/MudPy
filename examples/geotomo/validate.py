@@ -17,7 +17,8 @@ from mudpy import geotomo
 
 def run_with_toml(project, name, steps, mechanism=None, matrix_mode='assemble', matrix_name=None,
                   *, sources='cloud.sources', earth_model='halfspace.mod',
-                  observations='imagery.gflist', damping=(0.,), dk=.05, kmax=25.):
+                  observations='imagery.gflist', damping=(0.,), dk=.05, kmax=25.,
+                  observation_format='gflist', response_name='elastic'):
     """Write an explicit experiment configuration for this reference case."""
     source_model = 'fixed_tensor' if mechanism is not None else 'full_tensor'
     text = '''schema_version = 1
@@ -30,6 +31,8 @@ steps = %s
 sources = %s
 earth_model = %s
 observations = %s
+observation_format = %s
+%s
 [forward]
 backend = "fk"
 earth_flattening = false
@@ -49,13 +52,85 @@ mode = %s
 [execution]
 processes = 1
 ''' % (json.dumps(name), json.dumps(steps), json.dumps(sources), json.dumps(earth_model),
-       json.dumps(observations), dk, kmax, json.dumps(source_model), json.dumps(list(damping)),
+       json.dumps(observations), json.dumps(observation_format),
+       '[responses]\nname = '+json.dumps(response_name) if observation_format == 'hdf5' else '',
+       dk, kmax, json.dumps(source_model), json.dumps(list(damping)),
        'fixed_tensor = '+json.dumps(list(mechanism)) if mechanism is not None else '',
        json.dumps(matrix_name or 'toml_'+name), json.dumps(matrix_mode))
     path = project/'configs'/(name+'.toml')
     with path.open('x') as stream:
         stream.write(text)
     return geotomo.run(path)
+
+
+def hdf5_study(project):
+    """Small FK reference, HDF5 round trip, fixed basis, and NumPy-only reuse."""
+    import time
+    from unittest.mock import patch
+    import h5py
+    from mudpy import geotomo_io as io
+    from mudpy.geotomo_config import _code_identity
+
+    main(project, use_toml=True)
+    project = project.resolve()
+    rows = [line.split() for line in (project/'data/station_info/imagery.gflist').read_text().splitlines()
+            if line.strip() and not line.startswith('#')]
+    values = np.array([np.loadtxt(row[12]) for row in rows])
+    observation_file = project/'data/statics/imagery.h5'
+    io.write_observations(observation_file, [r[0] for r in rows],
+                          np.array([[float(r[1]), float(r[2])] for r in rows]),
+                          values[:, 0], values[:, 1:], sigma_m=np.full(len(rows), .001),
+                          metadata={'coordinate_system': 'WGS84 longitude/latitude degrees',
+                                    'interval': 'synthetic', 'observation_kind': 'point LOS'})
+    started = time.perf_counter()
+    run_with_toml(project, 'hdf5_full', ['greens', 'synthetics', 'invert'],
+                  observations=observation_file.name, observation_format='hdf5')
+    full_time = time.perf_counter()-started
+    reference = np.load(project/'GFs/matrices/imagery.npy')
+    matrix_file = project/'GFs/matrices/toml_hdf5_full.npy'
+    started = time.perf_counter()
+    matrix = np.load(matrix_file, allow_pickle=False)
+    load_time = time.perf_counter()-started
+    relative = np.linalg.norm(matrix-reference)/np.linalg.norm(reference)
+    assert relative < 1e-9, relative
+    models = project/'output/inverse_models/models'
+    truth = np.loadtxt(models/'deflation.0000.inv', ndmin=2)[:, 4:10]
+    actual = np.loadtxt(models/'hdf5_full.0000.inv', ndmin=2)[:, 4:10]
+    np.testing.assert_allclose(actual, truth, rtol=0, atol=1e-7*10**16.6)
+    with h5py.File(str(project/'output/inverse_models/statics/hdf5_full.0000.predictions.h5'), 'r') as file:
+        np.testing.assert_allclose(file['prediction_m'][()], matrix.dot((actual/10**16.6).reshape(-1)), atol=1e-11)
+        np.testing.assert_allclose(file['residual_m'][()], file['los_m'][()]-file['prediction_m'][()], atol=0)
+
+    with patch('mudpy.geotomo_io.assemble_matrix', side_effect=AssertionError('Unexpected matrix assembly')), \
+            patch('mudpy.geotomo._inversion_gfs', side_effect=AssertionError('Unexpected GF generation')):
+        started = time.perf_counter()
+        run_with_toml(project, 'hdf5_reuse', ['invert'], matrix_mode='reuse',
+                      matrix_name='toml_hdf5_full', observations=observation_file.name,
+                      observation_format='hdf5', damping=(0., .01))
+        reuse_time = time.perf_counter()-started
+    np.testing.assert_array_equal(np.loadtxt(models/'hdf5_full.0000.inv'),
+                                  np.loadtxt(models/'hdf5_reuse.0000.inv'))
+    # The complete physical basis also supports prescribed mechanisms without syn.
+    with patch('mudpy.geotomo._inversion_gfs', side_effect=AssertionError('Unexpected GF generation')):
+        run_with_toml(project, 'hdf5_fixed', ['invert'], mechanism=[1, 0, 0, 1, 0, 1],
+                      observations=observation_file.name, observation_format='hdf5')
+    fixed = np.load(project/'GFs/matrices/toml_hdf5_fixed.npy')
+    np.testing.assert_allclose(fixed, np.column_stack([matrix[:, 6*k:6*k+6][:, [0, 3, 5]].sum(axis=1)
+                                                     for k in range(2)]), atol=1e-15)
+    np.testing.assert_allclose(np.loadtxt(models/'hdf5_fixed.0000.inv', ndmin=2)[:, 4:10], truth,
+                               rtol=0, atol=1e-7*10**16.6)
+    assert not (project/'.geotomo.lock').exists()
+    report = {'matrix_shape': list(matrix.shape), 'representative_points': len(rows),
+              'source_count': 2, 'relative_matrix_difference_from_text': float(relative),
+              'full_pipeline_s': full_time, 'matrix_load_s': load_time,
+              'cached_two_damping_run_s': reuse_time,
+              'reuse_bypasses_generation_and_assembly': True,
+              'fixed_tensor_uses_existing_library': True,
+              'source_sha256': _code_identity()['source_sha256'],
+              'limitations': ['Tiny synthetic timing is not a large-library benchmark.',
+                              'No real-data GF generation or inversion.']}
+    (project/'hdf5_validation.json').write_text(json.dumps(report, indent=2)+'\n')
+    print(json.dumps(report, indent=2))
 
 
 def validate_single_receiver(project, use_toml=False):
@@ -656,8 +731,11 @@ if __name__ == '__main__':
     parser.add_argument('--project', type=Path, required=True)
     parser.add_argument('--toml', action='store_true', help='Exercise project initialization and the TOML runner')
     parser.add_argument('--layered', action='store_true', help='Run layered convergence and off-grid/noisy imagery recovery through TOML')
+    parser.add_argument('--hdf5', action='store_true', help='Check HDF5 responses and direct NumPy reuse on the small synthetic reference')
     args = parser.parse_args()
-    if args.layered:
+    if args.hdf5:
+        hdf5_study(args.project)
+    elif args.layered:
         layered_study(args.project)
     else:
         main(args.project, args.toml)

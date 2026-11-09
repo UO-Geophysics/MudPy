@@ -877,7 +877,8 @@ def run_parallel_teleseismics_green(home,project_name,time_epi,station_file,mode
 
                                             
                                                                   
-def run_parallel_synthetics_geotomo(home,project_name,station_file,model_name,forceMT,mt,insar,rank,size):
+def run_parallel_synthetics_geotomo(home,project_name,station_file,model_name,forceMT,mt,insar,rank,size,
+                                   *, response_file=None, response_metadata=None):
     """Convert complete static DC+EX responses to tensor NEU/projection tables.
 
     Components use NED tensor coordinates; displacement/projection vectors use
@@ -888,7 +889,7 @@ def run_parallel_synthetics_geotomo(home,project_name,station_file,model_name,fo
     from pathlib import Path
     from contextlib import ExitStack
     import subprocess
-    from numpy import loadtxt, genfromtxt, eye, asarray, fromstring, isfinite, allclose
+    from numpy import loadtxt, genfromtxt, eye, asarray, fromstring, isfinite, allclose, empty
     from mudpy.green import src2sta, rt2ne
 
     project = Path(home) / project_name
@@ -896,12 +897,14 @@ def run_parallel_synthetics_geotomo(home,project_name,station_file,model_name,fo
     stations = atleast_1d(genfromtxt(station_file,usecols=0,dtype='U'))
     if len(set(stations)) != len(stations):
         raise ValueError('Observation identifiers must be unique')
+    if response_file is not None and (rank != 0 or size != 1 or forceMT):
+        raise ValueError('HDF5 responses require one writer and the complete six-component basis')
     components = ('Mxx',) if forceMT else ('Mxx','Mxy','Mxz','Myy','Myz','Mzz')
     mechanisms = asarray(mt,dtype=float).reshape(1,-1) if forceMT else eye(6)
     if mechanisms.shape != (len(components),6) or not isfinite(mechanisms).all():
         raise ValueError('Expected six finite tensor components')
     projections = None
-    if insar:
+    if insar and response_file is None:
         observations = [loadtxt(project / 'data/statics' / (sta+'.los')) for sta in stations]
         if any(value.shape != (4,) or not isfinite(value).all() for value in observations):
             raise ValueError('Each imagery file must contain displacement_m, north, east, up')
@@ -910,9 +913,18 @@ def run_parallel_synthetics_geotomo(home,project_name,station_file,model_name,fo
             raise ValueError('Imagery measurement directions must be unit vectors in NEU')
     folder = project / 'GFs/static'
     with ExitStack() as stack:
-        outputs = [stack.enter_context((folder / ('tmp_%s_process%d' % (component,rank))).open('w'))
-                   for component in components]
-        for source in sources:
+        if response_file is None:
+            outputs = [stack.enter_context((folder / ('tmp_%s_process%d' % (component,rank))).open('w'))
+                       for component in components]
+        else:
+            from mudpy.geotomo_io import response_writer
+            coordinates = loadtxt(station_file, usecols=(1, 2), ndmin=2)
+            library, completed = stack.enter_context(response_writer(
+                response_file, sources, stations, coordinates,
+                {} if response_metadata is None else response_metadata))
+            outputs = [None]*6
+        for source_index, source in enumerate(sources):
+            block = empty((len(stations), 3, 6)) if response_file is not None else None
             subfault = str(int(source[0])).zfill(4)
             suffix = 'insar' if insar else 'gps'
             gf_file = folder / (model_name+'.static.%.4f.sub%s.%s' % (source[3],subfault,suffix))
@@ -924,7 +936,7 @@ def run_parallel_synthetics_geotomo(home,project_name,station_file,model_name,fo
                 raise ValueError('Expected matching complete DC+EX responses for every receiver in '+str(gf_file))
             for k, station in enumerate(stations):
                 payload = ' '.join('%.10e' % value for value in statics[k])
-                for mechanism, output in zip(mechanisms,outputs):
+                for component_index, (mechanism, output) in enumerate(zip(mechanisms,outputs)):
                     command = ['syn','-M'+str(10**23.6)+'/'+ '/'.join(map(str,mechanism)),
                                '-A'+str(azimuths[k]),'-P']
                     result = subprocess.run(command,input=payload,stdout=subprocess.PIPE,
@@ -934,10 +946,16 @@ def run_parallel_synthetics_geotomo(home,project_name,station_file,model_name,fo
                         raise ValueError('Invalid syn displacement: '+result.stdout+' '+result.stderr)
                     north,east = rt2ne(values[3]/100,values[4]/100,azimuths[k])
                     neu = asarray([north,east,values[2]/100])
-                    displacement = [projections[k].dot(neu)] if insar else neu
-                    row = [lon[k],lat[k],*source[1:4],*displacement]
-                    output.write(station+' '+str(int(source[0]))+' '+
-                                 ' '.join('%.10e' % value for value in row)+'\n')
+                    if response_file is not None:
+                        block[k, :, component_index] = neu
+                    else:
+                        displacement = [projections[k].dot(neu)] if insar else neu
+                        row = [lon[k],lat[k],*source[1:4],*displacement]
+                        output.write(station+' '+str(int(source[0]))+' '+
+                                     ' '.join('%.10e' % value for value in row)+'\n')
+            if response_file is not None:
+                library[source_index] = block
+                completed[source_index] = True
 
 
 #If main entry point

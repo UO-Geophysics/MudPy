@@ -19,6 +19,7 @@ geotomo.run('/absolute/path/new_project/configs/experiment.toml')
 | --- | --- |
 | `src/python/mudpy/geotomo.py` | GF/synthetic orchestration, matrix assembly, inversion, and model/log output |
 | `src/python/mudpy/geotomo_config.py` | Schema-1 TOML, project initialization, input validation, provenance, and cache verification |
+| `src/python/mudpy/geotomo_io.py` | HDF5 observations, full NEU response libraries, block projection, and predictions |
 | `src/python/mudpy/parallel.py` | `run_parallel_green` and `run_parallel_synthetics_geotomo` workers |
 | [Starter TOML](../run/geotomo/template.toml) | Project-relative inputs, forward settings, source model, damping, and run stages |
 | [Example README](../examples/geotomo/README.md) | Usage, conventions, validation, limitations, and ownership |
@@ -36,6 +37,9 @@ geotomo.run('/absolute/path/new_project/configs/experiment.toml')
   augmented rows. Spatial smoothing and other source penalties remain future work.
 - One project per site/event, descriptive run names, exact configuration
   snapshots, resolved input/code/executable identities, and verified cache reuse.
+- HDF5 input from preprocessing packages, preserving mean look coefficients and
+  pixel membership while modeling one representative location per sample.
+  Source-block NEU response storage and direct unweighted NumPy matrix reuse.
 - Exclusive `.geotomo.lock` ownership for top-level runs. Existing projects are
   never initialized again, and existing named results are protected.
 

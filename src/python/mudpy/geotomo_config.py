@@ -82,6 +82,17 @@ class RunConfig:
     damping: tuple
     matrix_name: str
     matrix_mode: str
+    observation_format: str
+    response_name: str
+
+    @property
+    def observation_path(self):
+        folder = 'data/statics' if self.observation_format == 'hdf5' else 'data/station_info'
+        return self.project/folder/self.observations
+
+    @property
+    def response_path(self):
+        return self.project/'GFs/static'/(self.response_name+'.h5')
 
     @classmethod
     def load(cls, filename):
@@ -94,16 +105,17 @@ class RunConfig:
         original = path.read_bytes()
         data = toml.loads(original.decode('utf-8'))
         _keys(data, ('schema_version', 'project', 'run', 'inputs', 'forward',
-                     'inversion', 'matrix', 'execution'),
+                     'inversion', 'matrix', 'execution', 'responses'),
               ('schema_version', 'project', 'run', 'inputs', 'forward', 'inversion'), 'root')
         if type(data['schema_version']) is not int or data['schema_version'] != 1:
             raise ValueError('Only schema_version = 1 is supported')
         project, run, inputs = data['project'], data['run'], data['inputs']
         forward, inversion = data['forward'], data['inversion']
         matrix, execution = data.get('matrix', {}), data.get('execution', {})
+        responses = data.get('responses', {})
         _keys(project, ('directory',), ('directory',), 'project')
         _keys(run, ('name', 'steps'), ('name', 'steps'), 'run')
-        _keys(inputs, ('sources', 'earth_model', 'observations'),
+        _keys(inputs, ('sources', 'earth_model', 'observations', 'observation_format'),
               ('sources', 'earth_model', 'observations'), 'inputs')
         _keys(forward, ('backend', 'earth_flattening', 'dk', 'pmin', 'pmax', 'kmax'),
               ('earth_flattening',), 'forward')
@@ -111,6 +123,7 @@ class RunConfig:
               ('source_model', 'damping'), 'inversion')
         _keys(matrix, ('name', 'mode'), (), 'matrix')
         _keys(execution, ('processes',), (), 'execution')
+        _keys(responses, ('name',), (), 'responses')
         directory = project['directory']
         if not isinstance(directory, str) or not directory.strip():
             raise ValueError('project.directory must be a nonempty path')
@@ -125,7 +138,14 @@ class RunConfig:
                 any(not isinstance(step, str) or step not in stages for step in steps) or
                 steps != [step for step in stages if step in steps]):
             raise ValueError('run.steps must be a nonempty, unique ordered subset of greens, synthetics, invert')
-        filenames = {key: _name(inputs[key], 'inputs.'+key) for key in inputs}
+        filenames = {key: _name(inputs[key], 'inputs.'+key) for key in ('sources', 'earth_model', 'observations')}
+        observation_format = _choice(inputs.get('observation_format', 'gflist'),
+                                     ('gflist', 'hdf5'), 'inputs.observation_format')
+        response_name = _name(responses.get('name', 'elastic'), 'responses.name')
+        if response_name.endswith('.h5'):
+            raise ValueError('responses.name is a basename without the .h5 extension')
+        if responses and observation_format != 'hdf5':
+            raise ValueError('responses settings require inputs.observation_format = "hdf5"')
         _choice(forward.get('backend', 'fk'), ('fk',), 'forward.backend')
         flattening = forward['earth_flattening']
         if type(flattening) is not bool:
@@ -160,15 +180,17 @@ class RunConfig:
         return cls(path, original, directory, name, tuple(steps), filenames['sources'],
                    filenames['earth_model'], filenames['observations'], flattening,
                    dk, pmin, pmax, kmax, source_model, mechanism, solver, weighting,
-                   _damping(inversion['damping']), matrix_name, matrix_mode)
+                   _damping(inversion['damping']), matrix_name, matrix_mode,
+                   observation_format, response_name)
 
     def settings(self):
-        return {
+        settings = {
             'schema_version': 1, 'project': {'directory': str(self.project)},
             'run': {'name': self.name, 'steps': self.steps},
             'inputs': {'sources': str(self.project/'data/model_info'/self.sources),
                        'earth_model': str(self.project/'structure'/self.earth_model),
-                       'observations': str(self.project/'data/station_info'/self.observations)},
+                       'observations': str(self.observation_path),
+                       'observation_format': self.observation_format},
             'forward': {'backend': 'fk', 'earth_flattening': self.earth_flattening,
                         'dk': self.dk, 'pmin': self.pmin, 'pmax': self.pmax, 'kmax': self.kmax},
             'inversion': {'source_model': self.source_model, 'fixed_tensor': self.fixed_tensor,
@@ -176,6 +198,10 @@ class RunConfig:
             'matrix': {'name': self.matrix_name, 'mode': self.matrix_mode,
                        'path': str(self.project/'GFs/matrices'/(self.matrix_name+'.npy'))},
             'execution': {'processes': 1}}
+        if self.observation_format == 'hdf5':
+            settings['responses'] = {'name': self.response_name, 'path': str(self.response_path),
+                                     'format': 'hdf5', 'basis': 'six reference moment tensors'}
+        return settings
 
 
 def init_project(project_directory):
@@ -196,6 +222,11 @@ def init_project(project_directory):
     project.mkdir(parents=True)  # Existing projects are never initialized again.
     (project/'configs').mkdir()
     _populate_project(project, files)
+    from mudpy.geotomo_io import write_observations
+    write_observations(project/'data/statics/template.h5', ['template'], [[13., 43.]],
+                       [.001], [[0., 0., 1.]], sigma_m=[.001],
+                       metadata={'coordinate_system': 'Geographic longitude/latitude degrees; illustrative only',
+                                 'interval': 'replace with acquisition dates', 'example_only': True})
     return project/'configs/template.toml'
 
 
@@ -225,7 +256,7 @@ def _inputs(config):
     """Validate all primary inputs and normalize only selected imagery rows."""
     project = config.project
     paths = [project/'data/model_info'/config.sources, project/'structure'/config.earth_model,
-             project/'data/station_info'/config.observations]
+             config.observation_path]
     sources = np.loadtxt(paths[0], ndmin=2)
     if (sources.shape[1] != 4 or not np.isfinite(sources).all() or
             (sources[:, 0] <= 0).any() or (sources[:, 0] != sources[:, 0].astype(int)).any() or
@@ -241,6 +272,15 @@ def _inputs(config):
             (model[:, 0] < 0).any() or model[-1, 0] != 0 or
             (model[:, 1] <= 0).any() or (model[:, 2] <= model[:, 1]).any()):
         raise ValueError('Invalid FK model: require thickness/Vs/Vp [rho/Qs/Qp], positive speeds, Vp > Vs and a final zero-thickness half-space')
+    if config.observation_format == 'hdf5':
+        from mudpy.geotomo_io import read_observations
+        observations = read_observations(paths[2])
+        if config.weighting == 'diagonal' and observations['sigma_m'] is None:
+            raise ValueError('Diagonal weighting requires sigma_m; use weighting = "none" for uncalibrated data')
+        geometry = [{'id': name, 'lon': xy[0], 'lat': xy[1], 'direction_neu': direction.tolist()}
+                    for name, xy, direction in zip(observations['ids'], observations['coordinates'],
+                                                   observations['projection_neu'])]
+        return sources, observations, geometry, {str(path.resolve()): _hash(path) for path in paths}
     rows, geometry, seen = [], [], set()
     for line in paths[2].read_text().splitlines():
         line = line.split('#', 1)[0].strip()
@@ -286,7 +326,7 @@ def _inputs(config):
 
 def _code_identity():
     folder = Path(__file__).resolve().parent
-    modules = ('geotomo', 'geotomo_config', 'parallel', 'green', 'inverse', 'analysis', 'runslip')
+    modules = ('geotomo', 'geotomo_config', 'geotomo_io', 'parallel', 'green', 'inverse', 'analysis', 'runslip')
     identity = {'source_sha256': {name: _hash(folder/(name+'.py')) for name in modules},
                 'git_revision': None, 'git_status': None}
     repo = folder.parents[2]
@@ -314,6 +354,19 @@ def _signatures(config, sources, geometry, code, executables):
                     (config.earth_model, source[3], source[0])) for source in sources]
     components = ('Mxx',) if config.source_model == 'fixed_tensor' else ('Mxx', 'Mxy', 'Mxz', 'Myy', 'Myz', 'Mzz')
     response_files = [project/'GFs/static'/('_'+component+'.los') for component in components]
+    if config.observation_format == 'hdf5':
+        # Physical NEU responses depend on positions, not look coefficients,
+        # data, uncertainty, fixed mechanisms, or inversion choices.
+        responses = {'greens': _digest(base), 'syn': executables.get('syn'),
+                     'io_code': code['source_sha256']['geotomo_io'],
+                     'basis': 'xx,xy,xz,yy,yz,zz; NED; 10**16.6 Nm', 'displacement': 'NEU'}
+        matrix = {'responses': _digest(responses), 'geometry': geometry,
+                  'source_model': config.source_model, 'fixed_tensor': config.fixed_tensor,
+                  'assembly_code': code['source_sha256']['geotomo_io']}
+        return ((project/'GFs/static/_geotomo_greens.json', base, greens_files),
+                (config.response_path.with_suffix('.h5.json'), responses, [config.response_path]),
+                (project/'GFs/matrices'/(config.matrix_name+'.npy.json'), matrix,
+                 [project/'GFs/matrices'/(config.matrix_name+'.npy')]))
     return ((project/'GFs/static/_geotomo_greens.json', base, greens_files),
             (project/'GFs/static/_geotomo_responses.json', responses, response_files),
             (project/'GFs/matrices'/(config.matrix_name+'.npy.json'), matrix,
@@ -325,6 +378,7 @@ def _record_cache(project, specification):
     record = {'signature': _digest(inputs), 'inputs': inputs,
               'files': {str(product.relative_to(project)): _hash(product) for product in products}}
     path.write_bytes(_json_bytes(record))
+    return record
 
 
 def _require_cache(project, specification):
@@ -340,11 +394,16 @@ def _require_cache(project, specification):
     for product in products:
         if not product.is_file() or _hash(product) != record['files'][str(product.relative_to(project))]:
             raise ValueError('Missing or changed cached product: '+str(product))
+    return record
 
 
 def _collisions(config, normalized, matrix_specification):
     folder = config.project/'output/inverse_models/models'
-    artifacts = [folder/(config.name+'.config.toml'), folder/(config.name+'.resolved.json'), normalized]
+    artifacts = [folder/(config.name+'.config.toml'), folder/(config.name+'.resolved.json')]
+    if normalized is not None:
+        artifacts.append(normalized)
+    if config.observation_format == 'hdf5' and 'synthetics' in config.steps:
+        artifacts += [config.response_path, config.response_path.with_suffix('.h5.json')]
     numbered = re.compile(re.escape(config.name)+r'\.\d{4,}\.')
     for directory in ('models', 'statics', 'waveforms'):
         path = config.project/'output/inverse_models'/directory
@@ -363,6 +422,7 @@ def run(config_file):
     import obspy
     import pyproj
     config = RunConfig.load(config_file)
+    hdf5 = config.observation_format == 'hdf5'
     project = config.project
     required = ('data/model_info', 'data/station_info', 'data/statics', 'structure',
                 'GFs/static', 'GFs/matrices', 'output/inverse_models/models',
@@ -384,59 +444,82 @@ def run(config_file):
                 raise FileNotFoundError('Required executable is not on PATH: '+executable)
             executables[executable] = {'path': path, 'sha256': _hash(path)} if path else None
         greens, responses, matrix = _signatures(config, sources, geometry, code, executables)
-        normalized = project/'data/station_info'/('_geotomo_'+config.name+'.gflist')
+        normalized = None if hdf5 else project/'data/station_info'/('_geotomo_'+config.name+'.gflist')
         _collisions(config, normalized, matrix)
         if 'synthetics' in config.steps and 'greens' not in config.steps:
             _require_cache(project, greens)
         if 'invert' in config.steps:
             if config.matrix_mode == 'reuse':
-                _require_cache(project, matrix)
+                matrix_record = _require_cache(project, matrix)
             elif 'synthetics' not in config.steps:
                 _require_cache(project, responses)
         original = project/'output/inverse_models/models'/(config.name+'.config.toml')
         resolved = original.with_name(config.name+'.resolved.json')
-        normalized_bytes = ('# Normalized selected imagery observations; paths are absolute.\n'+
-                            ''.join(' '.join(row)+'\n' for row in rows)).encode('utf-8')
+        normalized_bytes = None if hdf5 else (
+            '# Normalized selected imagery observations; paths are absolute.\n'+
+            ''.join(' '.join(row)+'\n' for row in rows)).encode('utf-8')
         record = {'settings': config.settings(), 'configuration_source': str(config.config_path),
                   'configuration_sha256': hashlib.sha256(config.original).hexdigest(),
-                  'normalized_observations': str(normalized),
-                  'normalized_observations_sha256': hashlib.sha256(normalized_bytes).hexdigest(),
-                  'source_count': len(sources), 'observation_count': len(rows),
+                  'normalized_observations': None if hdf5 else str(normalized),
+                  'normalized_observations_sha256': None if hdf5 else hashlib.sha256(normalized_bytes).hexdigest(),
+                  'source_count': len(sources), 'observation_count': len(rows['ids']) if hdf5 else len(rows),
                   'source_ids': sources[:, 0].astype(int).tolist(), 'input_sha256': input_hashes,
                   'code': code, 'executables': executables,
                   'versions': {'python': sys.version, 'numpy': np.__version__, 'scipy': scipy.__version__,
                                'obspy': obspy.__version__, 'pyproj': pyproj.__version__},
                   'created_utc': datetime.now(timezone.utc).isoformat()}
+        if hdf5:
+            import h5py
+            record['versions'].update(h5py=h5py.__version__, hdf5=h5py.version.hdf5_version)
+            record['observation_metadata'] = rows['metadata']
         # Immutable records are installed before the first numerical operation.
         with original.open('xb') as stream:
             stream.write(config.original)
         with resolved.open('xb') as stream:
             stream.write(_json_bytes(record))
-        with normalized.open('xb') as stream:
-            stream.write(normalized_bytes)
+        if normalized is not None:
+            with normalized.open('xb') as stream:
+                stream.write(normalized_bytes)
         fixed = config.source_model == 'fixed_tensor'
         if 'greens' in config.steps or 'synthetics' in config.steps:
-            geotomo._inversion_gfs(home, name, normalized.name, config.sources, config.earth_model,
+            options = ({'observations': rows, 'response_file': config.response_path,
+                        'response_metadata': record} if hdf5 else {})
+            geotomo._inversion_gfs(home, name, config.observations if hdf5 else normalized.name,
+                config.sources, config.earth_model,
                 int('greens' in config.steps), int('synthetics' in config.steps), config.dk,
-                config.pmin, config.pmax, config.kmax, 0, 1, fixed, config.fixed_tensor,
-                config.earth_flattening)
+                config.pmin, config.pmax, config.kmax, 0, 1, False if hdf5 else fixed,
+                () if hdf5 else config.fixed_tensor, config.earth_flattening, **options)
             _verify_inputs(input_hashes)
             if 'greens' in config.steps:
                 _record_cache(project, greens)
             if 'synthetics' in config.steps:
                 _record_cache(project, responses)
         if 'invert' in config.steps:
+            G = None
             if config.matrix_mode == 'assemble':
-                geotomo.getG(home, name, config.sources, config.earth_model, normalized.name,
-                           False, config.matrix_name, fixed)
-                _record_cache(project, matrix)
+                if hdf5:
+                    from mudpy.geotomo_io import assemble_matrix
+                    G = assemble_matrix(config.response_path, rows, sources,
+                                        config.fixed_tensor if fixed else None)
+                    with matrix[2][0].open('xb') as stream:
+                        np.save(stream, G, allow_pickle=False)
+                else:
+                    geotomo.getG(home, name, config.sources, config.earth_model, normalized.name,
+                               False, config.matrix_name, fixed)
+                _verify_inputs(input_hashes)
+                matrix_record = _record_cache(project, matrix)
+            elif hdf5:
+                # Only the .npy matrix is loaded: no response-library read or assembly.
+                G = np.load(matrix[2][0], allow_pickle=False)
             provenance = {'Configuration': original.name, 'Configuration SHA256': _hash(original),
                           'Resolved settings': resolved.name, 'Resolved settings SHA256': _hash(resolved),
-                          'Normalized observations': str(normalized),
-                          'Matrix SHA256': _hash(matrix[2][0])}
+                          'Observations': str(config.observation_path) if hdf5 else str(normalized),
+                          'Matrix SHA256': matrix_record['files'][str(matrix[2][0].relative_to(project))]}
+            options = {'observations': rows, 'matrix': G} if hdf5 else {}
             geotomo._run_inversion(home, name, config.name, config.sources, config.earth_model,
-                normalized.name, True, config.matrix_name, config.damping, len(sources),
+                config.observations if hdf5 else normalized.name,
+                True, config.matrix_name, config.damping, len(sources),
                 config.solver, fixed, config.fixed_tensor, weight=config.weighting == 'diagonal',
-                provenance=provenance)
+                provenance=provenance, **options)
         _verify_inputs(input_hashes)
         return resolved

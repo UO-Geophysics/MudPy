@@ -12,10 +12,15 @@ name = "example"
 steps = ["greens", "synthetics", "invert"]
 
 [inputs]
-# Filenames in data/model_info, structure, and data/station_info respectively.
+# Filenames in data/model_info, structure, and data/statics respectively.
 sources = "template.sources"
 earth_model = "template.mod"
-observations = "template.gflist"
+observations = "template.h5"
+observation_format = "hdf5"
+
+[responses]
+# Basename without .h5, in GFs/static. A new library requires a new name.
+name = "elastic"
 
 [forward]
 backend = "fk"
@@ -29,6 +34,7 @@ kmax = 25.0
 source_model = "full_tensor"
 solver = "lstsq"
 weighting = "diagonal"
+# Use weighting = "none" when calibrated sigma_m is unavailable.
 damping = [0.0]
 # Or: damping = { log10_min = -3.0, log10_max = -1.0, count = 15 }
 # For fixed_tensor mode also supply six components, without automatic rescaling:

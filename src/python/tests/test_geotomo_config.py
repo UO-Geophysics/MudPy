@@ -24,7 +24,13 @@ class ConfigTests(unittest.TestCase):
         self.parent = Path(self.temporary.name).resolve()
         self.project = self.parent/'site'
         self.config_file = geotomo.init_project(self.project)
-        self.original = self.config_file.read_text()
+        # Continue exercising the supported text-list interface independently
+        # of the canonical HDF5 starter, which has its own integration tests.
+        self.original = self.config_file.read_text().replace('observations = "template.h5"',
+            'observations = "template.gflist"').replace('observation_format = "hdf5"',
+            'observation_format = "gflist"')
+        self.original = self.original.replace('[responses]\n# Basename without .h5, in GFs/static. A new library requires a new name.\nname = "elastic"\n', '')
+        self.config_file.write_text(self.original)
 
     def configure(self, *changes):
         text = self.original

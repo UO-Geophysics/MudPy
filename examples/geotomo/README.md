@@ -4,6 +4,109 @@ Geodetic imaging of distributed subsurface deformation sources. The current
 implementation uses moment tensors and static imagery projections; the examples
 below validate that source basis and its existing FK forward model.
 
+## HDF5 observations and elastic responses
+
+The starter TOML now selects HDF5 observations. `h5py` is required; the tested
+environment has Python 3.8, NumPy 1.21.5, h5py 2.10.0, and HDF5 1.10.6. No new
+dependency installation is performed by the workflow.
+
+Import an existing geographic preprocessing package into the project:
+
+```python
+from mudpy import geotomo
+
+geotomo.import_observations(
+    '/absolute/path/preprocessing_run',
+    '/absolute/path/Norcia2016/data/statics/T44.h5',
+    id_prefix='T44_')
+```
+
+This reads `samples.txt`, `processed.npz`, and `processing.json`, verifies their
+agreement, and preserves input hashes, processing metadata, and native-pixel
+membership. Coordinates are the stored representative pixels, not recomputed
+centroids. LOS remains in metres, positive toward the satellite. Mean ENU
+coefficients are reordered to NEU without normalization. The importer requires
+documented signs/units and geographic coordinates; it does not reproject or
+invent an uncertainty estimate. Native rasters are not duplicated in this file.
+
+The observation file stores `ids`, `coordinates` (longitude/latitude degrees),
+`los_m`, `projection_neu`, optional calibrated `sigma_m`, and a `sampling` group.
+Metadata explicitly retains unresolved source datum/reference information.
+Imported tile scatter remains a diagnostic, separate from `sigma_m`.
+
+Select the file and a descriptive response-library basename in TOML:
+
+```toml
+[inputs]
+sources = "cloud.sources"
+earth_model = "layered.mod"
+observations = "T44.h5"          # In data/statics/
+observation_format = "hdf5"
+
+[responses]
+name = "t44_layered_v1"         # GFs/static/t44_layered_v1.h5
+
+[inversion]
+source_model = "full_tensor"
+solver = "lstsq"
+weighting = "none"              # Until calibrated sigma_m is supplied
+damping = [0.0, 0.1, 1.0]
+```
+
+HDF5 observation and response schemas are version 1, independent of TOML schema
+version 1. The runner writes no per-observation `.los` files for HDF5 inputs.
+It evaluates the elastic response once at each representative observation
+location. A cell-mean observation is approximated by the prediction at that
+point; retained membership is provenance, not an instruction to compute kernels
+at all native pixels. Background correction remains the supplied preprocessing
+choice, not an automatically fitted inversion nuisance model.
+
+FK's complete native DC+EX files remain backend products. `syn` responses are
+rotated to NEU, converted to metres, and written directly into a float64 HDF5
+array with axes `(source, receiver, NEU, tensor)`. Tensor components are
+`xx,xy,xz,yy,yz,zz` in NED coordinates, with one coefficient scaling a component
+by `10**16.6 N m`. Source IDs, coordinates, receiver IDs, conventions, and run
+provenance accompany the array. Chunking uses one source, up to 1,024 receivers,
+three displacement components, and all six tensor components; no compression
+or reduced precision is introduced.
+
+One writer fills each complete source block and records completion. Failed
+files stay marked incomplete and are rejected by matrix assembly. Named
+libraries cannot be overwritten: choose a new `responses.name` to regenerate.
+The library always stores all six basis responses, independent of look
+coefficients, weighting, and full/fixed-tensor inversion choices.
+
+Assembly reads source blocks, applies the supplied NEU coefficients, combines
+components for fixed mechanisms if requested, and saves an **unweighted**
+`GFs/matrices/<matrix.name>.npy`. Cached inversion loads that NumPy matrix once
+for the whole damping sweep, bypassing response reads and assembly. Cache
+dependency and product-hash validation still run. Changed LOS values, sigma,
+solver, or damping reuse the same matrix. Changed projection coefficients or
+mechanism require a new matrix but can reuse the physical library. Changed
+receiver/source positions or Earth model require new physical responses.
+
+Predictions are saved per damping value as
+`output/inverse_models/statics/<run>.<number>.predictions.h5`, including IDs,
+observations, coefficients, predictions, residuals, and run provenance. Tensor
+models and logs retain their established outputs. The imagery variance-reduction
+statistic retains MudPy's fractional reduction in the L1 residual norm.
+
+The existing text-list path remains explicit with
+`inputs.observation_format = "gflist"` (also the default for older TOMLs), with
+the list in `data/station_info/`. It continues to support the existing numerical
+reference examples. The slip-inversion workflow is unchanged.
+
+Run the small HDF5 verification into a new destination:
+
+```sh
+PYTHONPATH="$PWD/src/python" python -B examples/geotomo/validate.py --hdf5 --project /absolute/existing-parent/new-project
+```
+
+It runs the independent homogeneous reference, compares text/HDF5 matrices,
+checks predictions and fixed mechanisms, and verifies NumPy-only reuse with
+generation/assembly deliberately forbidden. `hdf5_validation.json` records
+errors, code hashes, and small-case timings; those timings are not scaling claims.
+
 ## Project initialization and named TOML runs
 
 Each earthquake, volcano, or groundwater site remains one MudPy project, with
@@ -19,9 +122,10 @@ print(config)  # /absolute/path/Norcia2016/configs/template.toml
 
 The destination must not exist. Initialization creates the standard MudPy tree,
 including directories currently unused by static tomography, and adds `configs/`.
-The four-column source template goes in `data/model_info/`, the imagery list in
-`data/station_info/`, its example displacement/projection file in `data/statics/`,
-and the velocity model in `structure/`. All are explicitly illustrative inputs.
+The four-column source template goes in `data/model_info/`, the HDF5 observation
+example in `data/statics/`, and the velocity model in `structure/`. Text-list
+examples are also retained for the supported text interface. All are explicitly
+illustrative inputs.
 The legacy `runslip.init(home, project_name)` retains its existing signature,
 directory/template contents, and confirmation behavior; the shared directory
 population helper avoids competing definitions of the tree.
@@ -45,6 +149,9 @@ import error rather than installing dependencies or selecting another format.
 
 The commented [starter TOML](../../run/geotomo/template.toml) defines schema version
 1. Required sections are `project`, `run`, `inputs`, `forward`, and `inversion`.
+HDF5 inputs use `data/statics/`; optional `responses.name` identifies their
+elastic library. Omitting `inputs.observation_format` selects `gflist` explicitly
+as the established schema-1 default, rather than guessing from an extension.
 `forward.earth_flattening`, `inversion.source_model`, and `inversion.damping` are
 explicit. Optional values have recorded defaults: FK backend, `dk=0.05`,
 `pmin=0`, `pmax=1`, `kmax=25`, `lstsq`, diagonal weighting, matrix assembly, and
@@ -53,7 +160,7 @@ one process. The default matrix basename follows `run.name`.
 The project path resolves relative to the TOML file. Input filenames are
 basenames in the fixed source/model/observation-list folders, respectively.
 Observation-list data paths may be absolute or relative to the project root,
-and must refer to `data/statics/<observation_id>.los`. The runner writes a
+and, for text lists, must refer to `data/statics/<observation_id>.los`. The runner writes a
 selected, absolute-path list at `data/station_info/_geotomo_<run_name>.gflist`;
 the original observation list is not edited. Because that legacy format is
 whitespace-delimited, project paths containing whitespace are rejected.
@@ -100,7 +207,8 @@ error before stamping a cache as valid or returning success.
 The runner holds the project lock across validation, archival, and all stages.
 It also records cache identities alongside the existing GF tables and `.npy`
 matrix. Synthetic reuse checks source/Earth-model/receiver identities, numerical
-settings/code/executables, and projection/mechanism identity. Matrix reuse checks
+settings/code/executables. Text responses additionally depend on their baked-in
+projection/mechanism; HDF5 physical responses do not. Matrix reuse checks
 the same dependencies and the product hash. Observation values and uncertainty
 changes are recorded as run inputs but do not invalidate a geometry-only matrix.
 For an inversion using an existing verified matrix:
@@ -117,9 +225,8 @@ mode = "reuse"
 
 An assembly target that exists is rejected. Missing, stale, or modified cache
 records/products also raise errors; the runner never silently recomputes them.
-Legacy products without these records need an explicit rebuild through the
-runner. These JSON sidecars document existing formats; they do not introduce a
-new array storage backend. Stage products are shared project resources and may
+Products without these records need an explicit rebuild through the runner.
+Stage products are shared project resources and may
 be regenerated by later named runs, while archived run configurations and
 numbered results remain protected.
 
