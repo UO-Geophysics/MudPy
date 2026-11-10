@@ -292,6 +292,95 @@ has an inconsistent full/deviatoric eigensort for some mixed ISO tensors; regres
 comparisons therefore use its trace-free DC/CLVD decomposition. Production
 decomposition uses NumPy eigenanalysis; Pyrocko is not a runtime requirement.
 
+## Pure double-couple inversion
+
+The canonical HDF5 runner supports a pure-DC nonlinear least-squares mode:
+
+```toml
+[inversion]
+source_model = "double_couple"
+solver = "least_squares"
+weighting = "none"
+damping = [0.001]  # Illustrative; choose a fresh sweep for this penalty.
+
+[inversion.double_couple]
+initial_catalog = "event.ndk"
+starts = 3
+seed = 0
+perturbation_deg = 30.0
+max_nfev = 500
+ftol = 1e-9
+xtol = 1e-9
+gtol = 1e-9
+```
+
+Place a **single-event GCMT NDK** file in `data/model_info`. The reader rejects
+multiple events/mechanisms and partial parses. ObsPy converts NDK dyne-cm to Nm;
+the runner explicitly converts USE coordinates into NED. The original catalog
+tensor, event identity, normalized DC initialization and file hash are archived.
+Alternatively supply `initial_tensor = [xx,xy,xz,yy,yz,zz]` in this table, using
+six NED components with any common scale. Exactly one initialization is required.
+Its standard DC component must be defined. Only its orientation initializes the
+sources; the catalog event's moment is not assigned to every source or imposed
+as a total-moment constraint.
+
+Each source has a nonnegative amplitude `a = M0 / 10**16.6 Nm` and three rotation
+coordinates. Rotating a normalized DC tensor preserves eigenvalues `[-a,0,a]`,
+so ISO and CLVD remain zero throughout optimization. Orientations are free:
+this mode does not enforce normal faulting, a fault surface, spatial smoothness,
+or proximity to the starting mechanism. The first start uses the catalog DC;
+additional starts independently perturb each source by seeded rotations whose
+angles are uniform between zero and `perturbation_deg`.
+
+The objective is `||W(Gm(a,r)-d)||² + lambda² ||a||²`. This is nonlinear least
+squares with **rotation-invariant scalar-moment damping**, unlike the existing
+raw-component penalty. Retune damping rather than transferring a member's old
+lambda. For each start, bounded linear least squares initializes amplitudes;
+a numerical floor of 1% of the initial amplitude scale frees rotations at zero
+nodes. Final amplitudes have lower bound zero, without that initialization floor.
+An exactly zero dataset has the explicit zero-moment global minimum.
+
+SciPy TRF/LSMR uses analytic rotation derivatives and a matrix-free Jacobian.
+The residual and penalty are both divided by the data L2 norm for convergence
+scaling; this leaves the objective minimizer unchanged. Saved residuals, costs
+and moment norms use the original units. `scaled_optimality` refers to the scaled
+objective. `max_nfev` applies to each start at each damping value. Starts execute
+sequentially with local state; ordinary BLAS threading remains independent.
+
+Only converged starts can be selected. Every member gets a `.solver.json` with
+status, message, evaluations, cost, scaled optimality and moment/residual norms
+for all starts, plus relative tensor/prediction differences between converged
+starts and the selected model. These describe local-solution sensitivity, not a
+global-optimality guarantee. If no start converges, failure diagnostics are saved,
+the run raises, and that member receives no normal model/prediction output.
+The lock is released and any requested FK cleanup does not run after failure.
+
+The existing 17-column model, log and prediction formats are retained. Result
+readers verify the diagnostic checksum, selected-start norms and pure-DC tensor
+eigenvalues. The tradeoff viewer labels the new moment-amplitude norm explicitly.
+Full-tensor/fixed-tensor and legacy slip inversion paths retain their behavior.
+
+The solver lives in `geotomo_dc.py`, separately fingerprinted in run provenance.
+The forward/linear implementation is unchanged. Full-tensor and pure-DC modes
+use the **same six-component matrix basis**, with identical physical cache
+signatures; changing initialization or solver controls does not invalidate GFs
+or that matrix. A fixed-tensor amplitude matrix remains a different basis.
+Existing cache records are neither migrated nor rewritten on reuse.
+
+Controlled validation (no real-data inversion):
+
+```sh
+PYTHONPATH="$PWD/src/python" python -B examples/geotomo/validate_dc.py --output /absolute/new-validation-directory
+# Optionally pass --matrix /absolute/synthetic-six-component-matrix.npy.
+```
+
+The driver tests noiseless/noisy changing-dip sources and damping, records code/
+input identities, and refuses an existing output directory. Numerical and TOML
+integration tests cover derivative/adjoint checks, catalog conventions, weighted
+sweeps, full-matrix reuse, diagnostics, failed convergence and read-only viewing.
+Small known-location recovery does not establish resolution or performance for a
+large source volume. Norcia pure-DC testing is a separate, deferred step.
+
 ## Forward profiling
 
 For a forward-only performance check on synthetic data, use a new destination:

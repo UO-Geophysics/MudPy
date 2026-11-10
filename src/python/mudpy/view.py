@@ -3020,6 +3020,8 @@ def geotomo_tradeoff(project, run_name, *, reference_mw=None, highlight=None, ax
     import matplotlib.pyplot as plt
     from mudpy.geotomo_io import read_run
     run = read_run(project, run_name)
+    model_label = ('L2 norm of M0 / Mref' if run['settings']['inversion'].get('penalty') == 'scalar_moment_l2'
+                   else 'Coefficient L2 norm')
     rows = run['solutions']
     order = np.argsort([row['damping'] for row in rows])
     members = np.array([row['member'] for row in rows])[order]
@@ -3040,14 +3042,14 @@ def geotomo_tradeoff(project, run_name, *, reference_mw=None, highlight=None, ax
         for name, data in (('x', values['model_l2']), ('y', values['residual_l2'])):
             if (data > 0).all():
                 getattr(axes[0], 'set_'+name+'scale')('log')
-        axes[0].set(xlabel='Coefficient L2 norm', ylabel='Data residual L2 norm'+(' (m)' if run['weighting'] == 'none' else ' (weighted)'),
+        axes[0].set(xlabel=model_label, ylabel='Data residual L2 norm'+(' (m)' if run['weighting'] == 'none' else ' (weighted)'),
                     title='L-curve; labels are member numbers')
         axes[1].plot(damping, values['residual_rms_mm'], 'o-', ms=4)
         axes[1].set(ylabel='Unweighted residual RMS (mm)', title='Data fit')
         axes[2].plot(damping, values['model_l2'], 'o-', ms=4)
         if (values['model_l2'] > 0).all():
             axes[2].set_yscale('log')
-        axes[2].set(ylabel='Coefficient L2 norm', title='Penalty used by the inversion')
+        axes[2].set(ylabel=model_label, title='Penalty used by the inversion')
         for key, label, marker in (
                 ('sum_scalar_moment_nm', r'$\sum_i M_0(M_i)$', 'o'),
                 ('net_scalar_moment_nm', r'$M_0(\sum_i M_i)$', 's')):

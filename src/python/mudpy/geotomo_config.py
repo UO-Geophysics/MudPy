@@ -60,6 +60,36 @@ def _damping(value):
     return values
 
 
+def _double_couple(table):
+    allowed = ('initial_tensor', 'initial_catalog', 'starts', 'seed', 'perturbation_deg',
+               'max_nfev', 'ftol', 'xtol', 'gtol')
+    _keys(table, allowed, (), 'inversion.double_couple')
+    if ('initial_tensor' in table) == ('initial_catalog' in table):
+        raise ValueError('DC requires exactly one initial_tensor or initial_catalog')
+    result = {'starts': 3, 'seed': 0, 'perturbation_deg': 30., 'max_nfev': 500,
+              'ftol': 1e-9, 'xtol': 1e-9, 'gtol': 1e-9}
+    result.update(table)
+    for key, minimum in (('starts', 1), ('seed', 0), ('max_nfev', 1)):
+        if type(result[key]) is not int or result[key] < minimum:
+            raise ValueError('DC '+key+' must be an integer >= '+str(minimum))
+    for key in ('perturbation_deg', 'ftol', 'xtol', 'gtol'):
+        result[key] = _real(result[key], 'DC '+key)
+    if not 0 <= result['perturbation_deg'] <= 180 or (result['starts'] > 1 and result['perturbation_deg'] == 0):
+        raise ValueError('DC multistart requires positive perturbation_deg, at most 180')
+    if any(result[key] <= np.finfo(float).eps for key in ('ftol', 'xtol', 'gtol')):
+        raise ValueError('DC tolerances must exceed machine epsilon')
+    if 'initial_tensor' in result:
+        values = result['initial_tensor']
+        if not isinstance(values, list) or len(values) != 6:
+            raise ValueError('DC initial_tensor must have six NED components')
+        result['initial_tensor'] = [_real(v, 'DC initial_tensor') for v in values]
+        from mudpy.geotomo_dc import dc_reference
+        dc_reference(result['initial_tensor'])
+    else:
+        result['initial_catalog'] = _name(result['initial_catalog'], 'DC initial_catalog')
+    return result
+
+
 @dataclass(frozen=True)
 class RunConfig:
     config_path: Path
@@ -88,6 +118,7 @@ class RunConfig:
     interface_policy: str
     interface_offset_km: float
     keep_fk_intermediates: bool
+    double_couple: dict = field(default_factory=dict)
 
     @property
     def observation_path(self):
@@ -128,7 +159,7 @@ class RunConfig:
         _keys(forward, ('backend', 'earth_flattening', 'dk', 'pmin', 'pmax', 'kmax',
                         'interface_policy', 'interface_offset_km'),
               ('earth_flattening',), 'forward')
-        _keys(inversion, ('source_model', 'fixed_tensor', 'solver', 'weighting', 'damping'),
+        _keys(inversion, ('source_model', 'fixed_tensor', 'solver', 'weighting', 'damping', 'double_couple'),
               ('source_model', 'damping'), 'inversion')
         _keys(matrix, ('name', 'mode'), (), 'matrix')
         _keys(execution, ('processes', 'keep_fk_intermediates'), (), 'execution')
@@ -170,16 +201,22 @@ class RunConfig:
         kmax = _real(forward.get('kmax', 25.), 'forward.kmax')
         if dk <= 0 or kmax <= 0 or not 0 <= pmin < pmax:
             raise ValueError('Require dk > 0, kmax > 0, and 0 <= pmin < pmax')
-        source_model = _choice(inversion['source_model'], ('full_tensor', 'fixed_tensor'), 'inversion.source_model')
+        source_model = _choice(inversion['source_model'], ('full_tensor', 'fixed_tensor', 'double_couple'), 'inversion.source_model')
         mechanism = inversion.get('fixed_tensor', [])
         if not isinstance(mechanism, list):
             raise ValueError('inversion.fixed_tensor must be an array')
         mechanism = tuple(_real(item, 'inversion.fixed_tensor') for item in mechanism)
         if source_model == 'fixed_tensor' and (len(mechanism) != 6 or not any(mechanism)):
             raise ValueError('Fixed-tensor mode requires six finite, nonzero-in-norm components in xx,xy,xz,yy,yz,zz order')
-        if source_model == 'full_tensor' and 'fixed_tensor' in inversion:
+        if source_model != 'fixed_tensor' and 'fixed_tensor' in inversion:
             raise ValueError('inversion.fixed_tensor is only valid in fixed_tensor mode')
-        solver = _choice(inversion.get('solver', 'lstsq'), ('lstsq', 'nnls'), 'inversion.solver')
+        dc = _double_couple(inversion.get('double_couple', {})) if source_model == 'double_couple' else {}
+        if source_model != 'double_couple' and 'double_couple' in inversion:
+            raise ValueError('inversion.double_couple requires source_model = double_couple')
+        if source_model == 'double_couple' and observation_format != 'hdf5':
+            raise ValueError('Pure-DC project runs require canonical HDF5 observations')
+        solver = _choice(inversion.get('solver', 'least_squares' if dc else 'lstsq'),
+                         ('least_squares',) if dc else ('lstsq', 'nnls'), 'inversion.solver')
         weighting = _choice(inversion.get('weighting', 'diagonal'), ('diagonal', 'none'), 'inversion.weighting')
         matrix_name = _name(matrix.get('name', name), 'matrix.name')
         if matrix_name.endswith('.npy'):
@@ -201,7 +238,7 @@ class RunConfig:
                    filenames['earth_model'], filenames['observations'], flattening,
                    dk, pmin, pmax, kmax, source_model, mechanism, solver, weighting,
                    _damping(inversion['damping']), matrix_name, matrix_mode,
-                   observation_format, response_name, processes, interface_policy, interface_offset, keep_fk)
+                   observation_format, response_name, processes, interface_policy, interface_offset, keep_fk, dc)
 
     def settings(self):
         settings = {
@@ -223,6 +260,9 @@ class RunConfig:
         if self.observation_format == 'hdf5':
             settings['responses'] = {'name': self.response_name, 'path': str(self.response_path),
                                      'format': 'hdf5', 'basis': 'six reference moment tensors'}
+        if self.double_couple:
+            settings['inversion']['double_couple'] = self.double_couple.copy()
+            settings['inversion']['penalty'] = 'scalar_moment_l2'
         return settings
 
 
@@ -323,6 +363,8 @@ def _inputs(config):
     project = config.project
     paths = [project/'data/model_info'/config.sources, project/'structure'/config.earth_model,
              config.observation_path]
+    if 'initial_catalog' in config.double_couple:
+        paths.append(project/'data/model_info'/config.double_couple['initial_catalog'])
     sources = np.loadtxt(paths[0], ndmin=2)
     if (sources.shape[1] != 4 or not np.isfinite(sources).all() or
             (sources[:, 0] <= 0).any() or (sources[:, 0] != sources[:, 0].astype(int)).any() or
@@ -393,7 +435,7 @@ def _inputs(config):
 
 def _code_identity():
     folder = Path(__file__).resolve().parent
-    modules = ('geotomo', 'geotomo_config', 'geotomo_io', 'parallel', 'green', 'inverse', 'analysis', 'runslip')
+    modules = ('geotomo', 'geotomo_config', 'geotomo_io', 'geotomo_dc', 'parallel', 'green', 'inverse', 'analysis', 'runslip')
     identity = {'source_sha256': {name: _hash(folder/(name+'.py')) for name in modules},
                 'git_revision': None, 'git_status': None}
     # Preserve numerical cache identity when only read-only result viewers change.
@@ -423,8 +465,9 @@ def _signatures(config, sources, geometry, code, executables):
             'forward': forward,
             'code': {name: code['source_sha256'][name] for name in ('geotomo', 'parallel', 'green')},
             'executables': {name: executables.get(name) for name in ('fk.pl', 'st_fk', 'trav')}}
+    basis = 'fixed_tensor' if config.source_model == 'fixed_tensor' else 'full_tensor'
     responses = {'greens': _digest(base), 'geometry': geometry,
-                 'source_model': config.source_model, 'fixed_tensor': config.fixed_tensor,
+                 'source_model': basis, 'fixed_tensor': config.fixed_tensor,
                  'synthesis': 'numpy_mt_radiat_float64'}
     matrix = {'responses': _digest(responses), 'assembly_code': code['source_sha256']['geotomo']}
     greens_files = [project/'GFs/static'/('%s.static.%.4f.sub%04d.insar' %
@@ -438,7 +481,7 @@ def _signatures(config, sources, geometry, code, executables):
                      'io_code': code['io_cache_sha256'],
                      'basis': 'xx,xy,xz,yy,yz,zz; NED; 10**16.6 Nm', 'displacement': 'NEU'}
         matrix = {'responses': _digest(responses), 'geometry': geometry,
-                  'source_model': config.source_model, 'fixed_tensor': config.fixed_tensor,
+                  'source_model': basis, 'fixed_tensor': config.fixed_tensor,
                   'assembly_code': code['io_cache_sha256']}
         return ((project/'GFs/static/_geotomo_greens.json', base, greens_files),
                 (config.response_path.with_suffix('.h5.json'), responses, [config.response_path]),
@@ -580,6 +623,16 @@ def run(config_file):
     # One lock covers validation, snapshots, every compute stage, and logs.
     with geotomo._project_lock(home, name):
         sources, rows, geometry, input_hashes = _inputs(config)
+        initial = None
+        if config.double_couple:
+            from mudpy.geotomo_dc import dc_reference
+            if 'initial_catalog' in config.double_couple:
+                from mudpy.geotomo_io import read_initial_tensor
+                initial = read_initial_tensor(project/'data/model_info'/config.double_couple['initial_catalog'])
+            else:
+                initial = {'tensor_nm': config.double_couple['initial_tensor'], 'format': 'explicit NED components'}
+            initial['dc_unit_ned'] = dc_reference(initial['tensor_nm']).tolist()
+            _verify_inputs(input_hashes)
         requested_sources = np.loadtxt(project/'data/model_info'/config.sources, ndmin=2)
         changed = np.flatnonzero(np.any(requested_sources != sources, axis=1))
         source_name = config.effective_source_path.name if len(changed) else config.sources
@@ -625,6 +678,8 @@ def run(config_file):
             'adjustments': [{'source_id': int(sources[k, 0]),
                              'requested_depth_km': float(requested_sources[k, 3]),
                              'effective_depth_km': float(sources[k, 3])} for k in changed]}
+        if initial is not None:
+            record['double_couple_initialization'] = initial
         if len(changed):
             with config.effective_source_path.open('x') as stream:
                 np.savetxt(stream, sources, fmt=['%d', '%.17g', '%.17g', '%.4f'],
@@ -682,11 +737,15 @@ def run(config_file):
                           'Observations': str(config.observation_path) if hdf5 else str(normalized),
                           'Matrix SHA256': matrix_record['files'][str(matrix[2][0].relative_to(project))]}
             options = {'observations': rows, 'matrix': G} if hdf5 else {}
-            geotomo._run_inversion(home, name, config.name, source_name, config.earth_model,
-                config.observations if hdf5 else normalized.name,
-                True, config.matrix_name, config.damping, len(sources),
-                config.solver, fixed, config.fixed_tensor, weight=config.weighting == 'diagonal',
-                provenance=provenance, **options)
+            if config.double_couple:
+                from mudpy.geotomo_dc import _run_inversion
+                _run_inversion(config, sources, rows, G, initial['tensor_nm'], provenance, source_name)
+            else:
+                geotomo._run_inversion(home, name, config.name, source_name, config.earth_model,
+                    config.observations if hdf5 else normalized.name,
+                    True, config.matrix_name, config.damping, len(sources),
+                    config.solver, fixed, config.fixed_tensor, weight=config.weighting == 'diagonal',
+                    provenance=provenance, **options)
         _verify_inputs(input_hashes)
         if hdf5 and 'synthetics' in config.steps and not config.keep_fk_intermediates:
             _cleanup_fk_intermediates(config, sources, rows, greens, responses)

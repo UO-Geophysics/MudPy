@@ -19,6 +19,7 @@ geotomo.run('/absolute/path/new_project/configs/experiment.toml')
 | --- | --- |
 | `src/python/mudpy/geotomo.py` | GF/synthetic orchestration, matrix assembly, inversion, and model/log output |
 | `src/python/mudpy/geotomo_config.py` | Schema-1 TOML, project initialization, input validation, provenance, and cache verification |
+| `src/python/mudpy/geotomo_dc.py` | Pure-DC nonlinear least squares, analytic matrix-free Jacobian, multistart diagnostics and TOML adapter |
 | `src/python/mudpy/geotomo_io.py` | HDF5 observations/responses, block projection, predictions, and checked result readers |
 | `src/python/mudpy/view.py` | Reusable geotomo tradeoff, imagery fit and point-source viewers alongside existing slip viewers |
 | `src/python/mudpy/analysis.py` | Checked ISO/DEV/DC/CLVD decomposition of saved geotomo tensors; existing analysis interfaces retained |
@@ -39,7 +40,7 @@ geotomo.run('/absolute/path/new_project/configs/experiment.toml')
 - Explicit TOML `execution.processes` caps concurrent source workers
   (default 1), with isolated source folders, bounded batches, and one response
   writer preserving source order. Solver execution and BLAS threading are unchanged.
-  Serial/parallel response arrays and matrices agree exactly; all 70 regression
+  Serial/parallel response arrays and matrices agree exactly; all 78 regression
   methods pass, including overlap, ordering, single-writer and failure checks.
 - TOML preflight rejects FK interface sources by default. Explicit
   `forward.interface_policy = "above"` or `"below"` and
@@ -51,6 +52,13 @@ geotomo.run('/absolute/path/new_project/configs/experiment.toml')
   response completeness. Legacy slip-inversion interfaces retain their behavior.
 - Weighted data-space least squares and NNLS, with identity damping through
   augmented rows. Spatial smoothing and other source penalties remain future work.
+- Pure-DC nonlinear least squares for canonical HDF5 projects, initialized from
+  one GCMT NDK event or explicit NED tensor. Positive moments/free rotations,
+  scalar-moment L2 damping, deterministic sequential multistart and analytic
+  TRF/LSMR Jacobian operators reuse the existing six-component matrix. The
+  forward module and its cache hashes are unchanged; no cache migration occurs.
+  Checked per-member solver diagnostics expose local convergence/failure and
+  between-start tensor/prediction differences. No Norcia DC run has been launched.
 - One project per site/event, descriptive run names, exact configuration
   snapshots, resolved input/code/executable identities, and verified cache reuse.
 - HDF5 input from preprocessing packages, preserving mean look coefficients and

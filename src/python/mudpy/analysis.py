@@ -301,6 +301,48 @@ def make_planar_geometry(strike,dip,nstrike,dx_dip,dx_strike,epicenter,num_updip
     fault=c_[fault_num,loout,laout,zout,strike,dip,tw,rise,L,W]
     return fault
     
+def double_couple_tensors(parameters, reference):
+    """Return DC coefficients and analytic derivatives in xx,xy,xz,yy,yz,zz.
+
+    parameters is (source,4): nonnegative scalar moment in caller units and a
+    rotation vector in radians. reference is a unit-moment symmetric DC matrix,
+    either (3,3) or (source,3,3). Coefficients retain caller moment units;
+    derivatives have shape (source,6,4). Rotations act in NED coordinates.
+    """
+    import numpy as np
+    from scipy.spatial.transform import Rotation
+    p = np.asarray(parameters, dtype=float)
+    base = np.asarray(reference, dtype=float)
+    if (p.ndim != 2 or p.shape[1] != 4 or not len(p) or not np.isfinite(p).all() or
+            (p[:, 0] < 0).any() or base.shape not in ((3, 3), (len(p), 3, 3)) or
+            not np.isfinite(base).all() or not np.allclose(base, np.swapaxes(base, -1, -2), atol=1e-12) or
+            not np.allclose(np.linalg.eigvalsh(base), [-1, 0, 1], rtol=0, atol=1e-10)):
+        raise ValueError('Expected finite (N,4) moment/rotation parameters and unit-moment DC reference tensors')
+    def skew(v):
+        result = np.zeros((len(v), 3, 3))
+        result[:, 0, 1], result[:, 0, 2], result[:, 1, 2] = -v[:, 2], v[:, 1], -v[:, 0]
+        return result-np.swapaxes(result, 1, 2)
+    rotation = Rotation.from_rotvec(p[:, 1:]).as_matrix()
+    transpose = np.swapaxes(rotation, 1, 2)
+    unit = rotation @ base @ transpose
+    theta = np.linalg.norm(p[:, 1:], axis=1)
+    a = .5*np.sinc(theta/(2*np.pi))**2
+    b = 1/6-theta**2/120+theta**4/5040
+    large = theta > 1e-4
+    b[large] = (theta[large]-np.sin(theta[large]))/theta[large]**3
+    cross = skew(p[:, 1:])
+    right = np.eye(3)-a[:, None, None]*cross+b[:, None, None]*(cross @ cross)
+    upper = np.triu_indices(3)
+    coefficients = unit[:, upper[0], upper[1]]*p[:, :1]
+    derivative = np.empty((len(p), 6, 4))
+    derivative[:, :, 0] = unit[:, upper[0], upper[1]]
+    for k in range(3):
+        generator = skew(right[:, :, k])
+        change = rotation @ (generator @ base-base @ generator) @ transpose
+        derivative[:, :, k+1] = change[:, upper[0], upper[1]]*p[:, :1]
+    return coefficients, derivative
+
+
 def decompose_geotomo_tensors(tensors_nm):
     """Decompose NED tensors (xx,xy,xz,yy,yz,zz) without changing inputs.
 

@@ -44,6 +44,20 @@ damping = [0.0]
 # For fixed_tensor mode also supply six components, without automatic rescaling:
 # fixed_tensor = [1.0, 0.0, 0.0, 1.0, 0.0, 1.0]
 
+# Pure DC (canonical HDF5 only): set source_model = "double_couple" and
+# solver = "least_squares" above, then uncomment this table. Retune damping:
+# DC penalizes L2 of scalar moments / 10**16.6 Nm, not raw tensor components.
+# [inversion.double_couple]
+# initial_catalog = "event.ndk"  # Exactly one GCMT event in data/model_info.
+# Or initial_tensor = [...]  # Six NED components, xx,xy,xz,yy,yz,zz; orientation only.
+# starts = 3
+# seed = 0
+# perturbation_deg = 30.0  # Maximum per-source initial rotation for extra starts.
+# max_nfev = 500           # Budget per start, per damping member.
+# ftol = 1e-9
+# xtol = 1e-9
+# gtol = 1e-9
+
 [matrix]
 # name = "shared_matrix"  # Optional basename without .npy; defaults to run.name.
 mode = "assemble"  # reuse requires steps = ["invert"] and matching cache records.

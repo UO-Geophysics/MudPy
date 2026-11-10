@@ -248,6 +248,33 @@ def write_predictions(filename, observations, prediction, provenance):
 # Read-only result readers (excluded from response/matrix cache identity).
 
 
+def read_initial_tensor(filename):
+    """Read exactly one GCMT NDK event; ObsPy converts dyne-cm to Nm.
+
+    Reject warnings/partial parses and multiple events or focal mechanisms.
+    Return the original tensor in saved geotomo NED order, plus catalog identity.
+    No event selection, coordinate guess, network access or silent fallback.
+    """
+    import warnings
+    from obspy import read_events
+    with warnings.catch_warnings():
+        warnings.simplefilter('error')
+        catalog = read_events(str(filename), format='NDK')
+    if len(catalog) != 1 or len(catalog[0].focal_mechanisms) != 1:
+        raise ValueError('Initial catalog must contain exactly one event and focal mechanism')
+    event = catalog[0]
+    moment = event.focal_mechanisms[0].moment_tensor
+    if moment is None or moment.tensor is None:
+        raise ValueError('Initial catalog event has no moment tensor')
+    t = moment.tensor
+    values = np.array([t.m_tt, -t.m_tp, t.m_rt, t.m_pp, -t.m_rp, t.m_rr], dtype=float)
+    if not np.isfinite(values).all():
+        raise ValueError('Catalog initial tensor contains nonfinite components')
+    return {'tensor_nm': values.tolist(), 'event_id': str(event.resource_id),
+            'format': 'GCMT NDK', 'input_coordinates': 'USE', 'output_coordinates': 'NED',
+            'units': 'Nm; NDK dyne-cm conversion performed by ObsPy'}
+
+
 def read_model(filename):
     """Read a geotomo .inv model; tensors/moments are in Nm and depths in km.
 
@@ -334,9 +361,30 @@ def read_solution(project, run_name, member):
         raise ValueError('Unsupported archived data weighting')
     if not np.isclose(np.linalg.norm(residual), fields['L2'], rtol=1e-8, atol=1e-12):
         raise ValueError('Prediction residual norm disagrees with the log')
+    solver = None
+    if settings['inversion'].get('source_model') == 'double_couple':
+        path = Path(str(model_path)+'.solver.json')
+        if metadata['solver_sha256'] != _hash(path):
+            raise ValueError('DC solver diagnostics changed after writing predictions')
+        solver = json.loads(path.read_text())
+        if (not solver['success'] or solver['run_name'] != run_name or solver['member'] != member or
+                solver['damping'] != fields['lambda_spatial'] or solver['penalty'] != 'scalar_moment_l2' or
+                solver['moment_reference_nm'] != REFERENCE_MOMENT_NM):
+            raise ValueError('Invalid DC solver identity, convergence or moment normalization')
+        selected = solver['starts'][solver['selected_start']]
+        if (not selected['success'] or not np.isclose(selected['residual_l2'], fields['L2'], rtol=1e-8, atol=1e-12) or
+                not np.isclose(selected['moment_l2'], fields['Lm'], rtol=1e-8, atol=1e-12) or
+                not np.isclose(np.linalg.norm(model['scalar_moment_nm']/REFERENCE_MOMENT_NM), fields['Lm'], rtol=1e-8, atol=1e-12)):
+            raise ValueError('DC selected solution disagrees with logged/model norms')
+        tensor = model['tensors_nm'][:, [[0, 1, 2], [1, 3, 4], [2, 4, 5]]]
+        eigenvalues = np.linalg.eigvalsh(tensor)
+        expected = model['scalar_moment_nm'][:, None]*np.array([-1., 0, 1])
+        if not np.all(abs(eigenvalues-expected) <= 1e-8*model['scalar_moment_nm'][:, None]):
+            raise ValueError('Saved DC solution contains ISO or CLVD')
     return {'member': member, 'run_name': run_name, 'model': model, 'predictions': prediction,
             'damping': fields['lambda_spatial'], 'residual_l2': fields['L2'], 'model_l2': fields['Lm'],
-            'weighting': weighting, 'residual_rms_mm': float(np.sqrt(np.mean(prediction['residual_m']**2))*1000)}
+            'weighting': weighting, 'solver_diagnostics': solver,
+            'residual_rms_mm': float(np.sqrt(np.mean(prediction['residual_m']**2))*1000)}
 
 
 def read_run(project, run_name):
