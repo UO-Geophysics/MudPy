@@ -8,7 +8,7 @@ from unittest.mock import patch
 import numpy as np
 
 from mudpy.analysis import double_couple_tensors, decompose_geotomo_tensors
-from mudpy.geotomo_dc import solve, dc_reference, _jacobian_operator
+from mudpy.geotomo_dc import solve, dc_reference, _jacobian_operator, _initial_amplitudes
 from mudpy import geotomo, geotomo_io as io, geotomo_config as config
 
 
@@ -21,6 +21,18 @@ V10   4.975 73 100   0.120  8 216  -5.095 15 308   5.035  49 30  106 211 61   81
 
 
 class DoubleCoupleTests(unittest.TestCase):
+    def test_correlated_volume_amplitude_initialization_satisfies_kkt(self):
+        rng = np.random.default_rng(261110)
+        matrix = rng.normal(size=(100, 8)) @ rng.normal(size=(8, 120))
+        matrix += rng.normal(size=matrix.shape)*1e-5
+        data = matrix[:, :3] @ np.array([2., 1., .5])
+        damping = .003
+        amplitude = _initial_amplitudes(matrix, data, damping)
+        gradient = matrix.T @ (matrix @ amplitude-data)+damping**2*amplitude
+        self.assertTrue((amplitude >= 0).all())
+        self.assertGreater(gradient.min(), -1e-8)
+        self.assertLess(abs(amplitude*gradient).max(), 1e-8)
+
     def test_geometry_derivatives_and_adjoint(self):
         base = np.diag([-1., 0, 1])
         p = np.array([[2., .3, -.5, .1], [.7, 0, 0, 0], [1, np.pi, -.2, .4]])
@@ -124,6 +136,20 @@ class DCProjectTests(unittest.TestCase):
         self.assertEqual(self.cache_file.read_bytes(), self.cache_before)
         np.testing.assert_array_equal(np.load(self.matrix_file), self.matrix)
         self.assertFalse((self.project/'.geotomo.lock').exists())
+        model_path = self.project/'output/inverse_models/models/dc_synthetic.0000.inv'
+        model = np.loadtxt(model_path, ndmin=2)
+        tiny_source = model[0].copy()
+        tiny_source[0] = 90
+        quantum = np.nextafter(0., 1.)*io.REFERENCE_MOMENT_NM
+        tiny_source[4:10] = quantum*np.array([-20, 0, 0, 1, 0, 20])
+        tiny_source[16] = 0
+        np.savetxt(model_path, np.vstack((model, tiny_source)))
+        self.assertEqual(io.read_solution(self.project, 'dc_synthetic', 0)['model']['ids'][-1], 90)
+        tiny_source[4:10] = [1e-305, 0, 0, 1e-305, 0, 1e-305]
+        np.savetxt(model_path, np.vstack((model, tiny_source)))
+        with self.assertRaisesRegex(ValueError, 'contains ISO or CLVD'):
+            io.read_solution(self.project, 'dc_synthetic', 0)
+        np.savetxt(model_path, model)
         path = self.project/'output/inverse_models/models/dc_synthetic.0000.solver.json'
         path.write_text(path.read_text()+' ')
         with self.assertRaisesRegex(ValueError, 'diagnostics changed'):

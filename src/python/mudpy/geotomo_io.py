@@ -377,9 +377,19 @@ def read_solution(project, run_name, member):
                 not np.isclose(np.linalg.norm(model['scalar_moment_nm']/REFERENCE_MOMENT_NM), fields['Lm'], rtol=1e-8, atol=1e-12)):
             raise ValueError('DC selected solution disagrees with logged/model norms')
         tensor = model['tensors_nm'][:, [[0, 1, 2], [1, 3, 4], [2, 4, 5]]]
-        eigenvalues = np.linalg.eigvalsh(tensor)
-        expected = model['scalar_moment_nm'][:, None]*np.array([-1., 0, 1])
-        if not np.all(abs(eigenvalues-expected) <= 1e-8*model['scalar_moment_nm'][:, None]):
+        # Check tensor shape at unit scale. The stored moment can underflow
+        # to zero for a nonzero tensor when its components are squared.
+        scale = np.abs(tensor).max(axis=(1, 2), keepdims=True)
+        normalized = np.divide(tensor, scale, out=np.zeros_like(tensor), where=scale > 0)
+        eigenvalues = np.linalg.eigvalsh(normalized)
+        moment = np.linalg.norm(normalized, axis=(1, 2)) / np.sqrt(2)
+        expected = moment[:, None]*np.array([-1., 0, 1])
+        # Coefficients are formed in reference-moment units before conversion
+        # to Nm. Subnormal coefficients can lose precision at that step.
+        quantum = np.nextafter(0., 1.)*REFERENCE_MOMENT_NM
+        rounding = np.divide(8*quantum, scale.ravel(), out=np.zeros_like(moment),
+                             where=scale.ravel() > 0)
+        if not np.all(abs(eigenvalues-expected) <= (1e-8*moment+rounding)[:, None]):
             raise ValueError('Saved DC solution contains ISO or CLVD')
     return {'member': member, 'run_name': run_name, 'model': model, 'predictions': prediction,
             'damping': fields['lambda_spatial'], 'residual_l2': fields['L2'], 'model_l2': fields['Lm'],

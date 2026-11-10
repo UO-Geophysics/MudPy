@@ -335,7 +335,7 @@ angles are uniform between zero and `perturbation_deg`.
 The objective is `||W(Gm(a,r)-d)||² + lambda² ||a||²`. This is nonlinear least
 squares with **rotation-invariant scalar-moment damping**, unlike the existing
 raw-component penalty. Retune damping rather than transferring a member's old
-lambda. For each start, bounded linear least squares initializes amplitudes;
+lambda. For each start, direct NNLS on the damped system initializes amplitudes;
 a numerical floor of 1% of the initial amplitude scale frees rotations at zero
 nodes. Final amplitudes have lower bound zero, without that initialization floor.
 An exactly zero dataset has the explicit zero-moment global minimum.
@@ -354,6 +354,13 @@ starts and the selected model. These describe local-solution sensitivity, not a
 global-optimality guarantee. If no start converges, failure diagnostics are saved,
 the run raises, and that member receives no normal model/prediction output.
 The lock is released and any requested FK cleanup does not run after failure.
+
+Diagnostics also record wall/CPU time for each start, initialization and nonlinear
+optimization wall time, and total solver wall/CPU time per damping value. CPU time
+includes all BLAS threads. A full-volume Norcia attempt exposed the former bounded
+TRF amplitude initializer's iteration limit; direct NNLS solves that same convex
+subproblem and is checked for nonnegativity and KKT optimality on correlated
+source responses. Nonlinear stopping criteria remain explicit TOML choices.
 
 The existing 17-column model, log and prediction formats are retained. Result
 readers verify the diagnostic checksum, selected-start norms and pure-DC tensor

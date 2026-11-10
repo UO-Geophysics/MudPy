@@ -38,6 +38,15 @@ def _jacobian_operator(matrix, derivative, damping):
     return LinearOperator((ndata+nsource, 4*nsource), matvec=matvec, rmatvec=rmatvec, dtype=float)
 
 
+def _initial_amplitudes(matrix, data, damping):
+    """Solve the convex damped nonnegative amplitude subproblem directly."""
+    from scipy.optimize import nnls
+    count = matrix.shape[1]
+    augmented = np.vstack((matrix, damping*np.eye(count)))
+    target = np.r_[data, np.zeros(count)]
+    return nnls(augmented, target, maxiter=10*count)[0]
+
+
 def solve(matrix, data, damping, initial_tensor, *, starts=3, seed=0, perturbation_deg=30.,
           max_nfev=500, ftol=1e-9, xtol=1e-9, gtol=1e-9):
     """Minimize ||G*m(a,r)-d||² + damping² ||a||², with a >= 0.
@@ -50,8 +59,10 @@ def solve(matrix, data, damping, initial_tensor, *, starts=3, seed=0, perturbati
     An unconverged start is recorded but cannot be selected. If all fail, return
     no model: RuntimeError carries the per-start diagnostics for archival.
     """
-    from scipy.optimize import least_squares, lsq_linear
+    from scipy.optimize import least_squares
     from scipy.spatial.transform import Rotation
+    from time import perf_counter, process_time
+    solve_wall, solve_cpu = perf_counter(), process_time()
     G, d = np.asarray(matrix, dtype=float), np.asarray(data, dtype=float).reshape(-1)
     if (G.ndim != 2 or not G.shape[0] or not G.shape[1] or G.shape[1] % 6 or
             len(d) != len(G) or not np.isfinite(G).all() or not np.isfinite(d).all() or
@@ -74,6 +85,7 @@ def solve(matrix, data, damping, initial_tensor, *, starts=3, seed=0, perturbati
     rng = np.random.default_rng(seed)
     diagnostics, candidates = [], []
     for start in range(starts):
+        start_wall, start_cpu = perf_counter(), process_time()
         bases = np.broadcast_to(base, (nsource, 3, 3)).copy()
         if start:
             axes = rng.normal(size=(nsource, 3))
@@ -85,11 +97,9 @@ def solve(matrix, data, damping, initial_tensor, *, starts=3, seed=0, perturbati
         p[:, 0] = 1
         unit, _ = double_couple_tensors(p, bases)
         projected = np.einsum('rnc,nc->rn', scaled_G.reshape(len(G), nsource, 6), unit)
-        augmented = np.vstack((projected, scaled_damping*np.eye(nsource)))
-        target = np.r_[scaled_d, np.zeros(nsource)]
-        amplitude = lsq_linear(augmented, target, bounds=(0, np.inf), tol=1e-12)
-        if not amplitude.success:
-            raise RuntimeError('DC amplitude initialization did not converge: '+amplitude.message)
+        amplitude = _initial_amplitudes(projected, scaled_d, scaled_damping)
+        initialization_wall = perf_counter()-start_wall
+        optimization_wall = perf_counter()
         if not d.any():
             # Known global minimum, including damping=0: no orientation is defined.
             p[:, 0] = 0
@@ -99,9 +109,9 @@ def solve(matrix, data, damping, initial_tensor, *, starts=3, seed=0, perturbati
         else:
             # A positive initialization floor frees rotations at zero NNLS nodes.
             # This is not a final lower bound or a prior on recovered moments.
-            scale = max(np.linalg.norm(amplitude.x)/np.sqrt(nsource),
+            scale = max(np.linalg.norm(amplitude)/np.sqrt(nsource),
                         np.linalg.norm(scaled_d)/max(np.linalg.norm(projected), np.finfo(float).tiny))
-            p[:, 0] = np.maximum(amplitude.x, .01*scale)
+            p[:, 0] = np.maximum(amplitude, .01*scale)
             def residual(x):
                 coefficients, _ = double_couple_tensors(x.reshape(nsource, 4), bases)
                 return np.r_[scaled_G @ coefficients.ravel()-scaled_d, scaled_damping*x.reshape(nsource, 4)[:, 0]]
@@ -113,6 +123,7 @@ def solve(matrix, data, damping, initial_tensor, *, starts=3, seed=0, perturbati
                 method='trf', tr_solver='lsmr', tr_options={'atol': 1e-12, 'btol': 1e-12},
                 x_scale=np.tile([max(scale, 1e-12), 1, 1, 1], nsource), loss='linear',
                 max_nfev=max_nfev, ftol=ftol, xtol=xtol, gtol=gtol)
+            optimization_wall = perf_counter()-optimization_wall
             p = result.x.reshape(nsource, 4)
             coefficients, _ = double_couple_tensors(p, bases)
             item = dict(start=start, success=bool(result.success), status=int(result.status),
@@ -120,6 +131,9 @@ def solve(matrix, data, damping, initial_tensor, *, starts=3, seed=0, perturbati
                         cost=float(result.cost*residual_scale**2), scaled_optimality=float(result.optimality),
                         residual_l2=float(np.linalg.norm(G @ coefficients.ravel()-d)),
                         moment_l2=float(np.linalg.norm(p[:, 0])))
+        item.update(wall_seconds=perf_counter()-start_wall, cpu_seconds=process_time()-start_cpu,
+                    initialization_wall_seconds=initialization_wall,
+                    optimization_wall_seconds=0. if not d.any() else optimization_wall)
         diagnostics.append(item)
         if item['success']:
             candidates.append((item['cost'], start, coefficients.copy()))
@@ -137,6 +151,8 @@ def solve(matrix, data, damping, initial_tensor, *, starts=3, seed=0, perturbati
     return coefficients.ravel()[:, None], {'selected_start': selected, 'starts': diagnostics,
         'penalty': 'scalar_moment_l2', 'moment_reference_nm': REFERENCE_MOMENT_NM,
         'initial_dc_ned': base.tolist(), 'seed': seed, 'residual_scale': float(residual_scale),
+        'initialization_method': 'damped_nnls',
+        'wall_seconds': perf_counter()-solve_wall, 'cpu_seconds': process_time()-solve_cpu,
         'global_optimum_established': not d.any()}
 
 

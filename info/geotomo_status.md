@@ -40,7 +40,7 @@ geotomo.run('/absolute/path/new_project/configs/experiment.toml')
 - Explicit TOML `execution.processes` caps concurrent source workers
   (default 1), with isolated source folders, bounded batches, and one response
   writer preserving source order. Solver execution and BLAS threading are unchanged.
-  Serial/parallel response arrays and matrices agree exactly; all 78 regression
+  Serial/parallel response arrays and matrices agree exactly; all 79 regression
   methods pass, including overlap, ordering, single-writer and failure checks.
 - TOML preflight rejects FK interface sources by default. Explicit
   `forward.interface_policy = "above"` or `"below"` and
@@ -58,7 +58,11 @@ geotomo.run('/absolute/path/new_project/configs/experiment.toml')
   TRF/LSMR Jacobian operators reuse the existing six-component matrix. The
   forward module and its cache hashes are unchanged; no cache migration occurs.
   Checked per-member solver diagnostics expose local convergence/failure and
-  between-start tensor/prediction differences. No Norcia DC run has been launched.
+  between-start tensor/prediction differences, plus per-start/member wall and CPU
+  timings. Direct damped NNLS initializes amplitudes robustly for correlated
+  volume responses. The Norcia DC sweep and comparison figures are complete.
+  Five damping values and 15 starts took 6,205 s wall with four BLAS threads.
+  The saved-model reader handles subnormal rounding on zero-moment sources.
 - One project per site/event, descriptive run names, exact configuration
   snapshots, resolved input/code/executable identities, and verified cache reuse.
 - HDF5 input from preprocessing packages, preserving mean look coefficients and
