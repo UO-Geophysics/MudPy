@@ -140,6 +140,68 @@ class ResultViewTests(unittest.TestCase):
         self.assertTrue(np.all(axes[0].collections[0].get_array() == 0))
         with self.assertRaises(ValueError):
             io.read_solution(self.project, self.run, True)
+        figure, axes = view.geotomo_sources(self.project, self.run, 0, quantity='iso_balance')
+        self.assertEqual(axes[0].collections[0].get_clim(), (0, 1))
+        self.assertTrue(np.ma.getmaskarray(axes[0].collections[0].get_array()).all())
+        figure, axes = view.geotomo_mechanisms(self.project, self.run, 0, component='dc')
+        self.assertEqual(len(axes[0].artists), 0)
+
+    def test_component_maps_balance_and_depth_selection(self):
+        from mudpy.analysis import decompose_geotomo_tensors
+        model = io.read_solution(self.project, self.run, 0)['model']
+        d = decompose_geotomo_tensors(model['tensors_nm'])
+        for quantity in ('iso', 'dev', 'dc', 'clvd', 'iso_balance'):
+            figure, axes = view.geotomo_sources(self.project, self.run, 0, quantity=quantity, depths=[3])
+            self.assertEqual(len(axes), 1)
+            expected = (d[quantity+'_signed_moment_nm'] if quantity in ('iso', 'clvd') else
+                        d['iso_balance'] if quantity == 'iso_balance' else d['moment_nm'][quantity])
+            np.testing.assert_allclose(axes[0].collections[0].get_array(), expected)
+            if quantity in ('iso', 'clvd'):
+                limits = axes[0].collections[0].get_clim()
+                self.assertEqual(limits[0], -limits[1])
+            elif quantity == 'iso_balance':
+                self.assertEqual(axes[0].collections[0].get_clim(), (0, 1))
+        with self.assertRaisesRegex(ValueError, 'absent'):
+            view.geotomo_sources(self.project, self.run, 0, depths=[4])
+        with self.assertRaises(ValueError):
+            view.geotomo_sources(self.project, self.run, 0, kind='sections', quantity='iso_balance')
+
+    def test_mechanism_area_axes_colours_planes_and_section_ownership(self):
+        from matplotlib.offsetbox import AnnotationBbox
+        filename = self.models/'example.0000.inv'
+        table = np.loadtxt(filename)
+        table[:, 4:10] = 0
+        table[:, 5] = [1e19, -1e19]
+        table[:, 16] = 1e19
+        np.savetxt(filename, table)
+        before = sorted(str(p) for p in self.project.rglob('*'))
+        with patch.object(plt, 'show', side_effect=AssertionError('Unexpected show')):
+            figure, axes = view.geotomo_mechanisms(self.project, self.run, 0, component='dc', style='circles')
+            sizes = axes[0].collections[0].get_sizes()
+            np.testing.assert_allclose(sizes, [22**2, 22**2])
+            figure, axes = view.geotomo_mechanisms(self.project, self.run, 0, component='full')
+            self.assertEqual(sum(isinstance(a, AnnotationBbox) for a in axes[0].artists), 2)
+            figure.canvas.draw()
+            figure, axes = view.geotomo_mechanisms(self.project, self.run, 0, component='dc',
+                style='circles', color_by='rake', plane=1)
+            self.assertEqual(axes[0].collections[0].get_clim(), (-180, 180))
+            figure, axes = view.geotomo_orientation(self.project, self.run, 0, center=(0, 0), strike=0)
+            self.assertEqual(len(axes), 4)
+            self.assertEqual(len(axes[1].collections[0].get_offsets()), 2)
+            self.assertEqual(len(axes[1].collections[1].get_offsets()), 2)
+            self.assertTrue(axes[1].yaxis_inverted())
+        with self.assertRaisesRegex(ValueError, 'explicit plane'):
+            view.geotomo_mechanisms(self.project, self.run, 0, component='dc', style='circles', color_by='rake')
+        with self.assertRaisesRegex(ValueError, 'overlap'):
+            view.geotomo_mechanisms(self.project, self.run, 0, kind='section', center=(0, 0),
+                                   strike=90, section_width_km=5)
+        figure, axes = view.geotomo_mechanisms(self.project, self.run, 0, kind='section', center=(0, 0),
+                                             strike=90, section_width_km=.2)
+        self.assertIn('1 individual', axes[0].get_title())
+        figure, axes = view.geotomo_orientation(self.project, self.run, 0, center=(0, 0), strike=90,
+                                               section_offset_km=0, section_width_km=.2)
+        self.assertEqual(len(axes[1].collections[0].get_offsets()), 1)
+        self.assertEqual(before, sorted(str(p) for p in self.project.rglob('*')))
 
 
 if __name__ == '__main__':

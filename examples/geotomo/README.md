@@ -187,7 +187,7 @@ at coincident projected nodes (1 mm numerical grouping) across the other horizon
 coordinate. They accept irregular source clouds and do not assume a fault mesh.
 Pass a Matplotlib `norm` to compare solutions on a common linear/log scale.
 
-All three functions accept `axes` for caller-owned layouts and preserve an
+All viewers accept `axes` for caller-owned layouts and preserve an
 existing figure title. Standalone figures use local styling. Existing slip viewers
 retain their interfaces and behavior. Project analysis scripts choose members,
 reference values, map extents, shared colour scales, composites and export paths;
@@ -210,6 +210,87 @@ the numerical portion of `geotomo_io.py`, ending at its explicit result-reader
 boundary. Reader-only changes preserve numerical caches; production storage/
 assembly code belongs above the boundary. No cache records are migrated or
 rewritten by plotting.
+
+### Source components and mechanisms
+
+```python
+from mudpy.analysis import decompose_geotomo_tensors
+from mudpy.geotomo_io import read_solution
+
+solution = read_solution(project, run_name, 9)
+parts = decompose_geotomo_tensors(solution['model']['tensors_nm'])
+
+# Each quantity shares a colour normalization across its depth panels.
+fig, axes = view.geotomo_sources(project, run_name, 9, quantity='iso')
+fig, axes = view.geotomo_sources(project, run_name, 9, quantity='iso_balance')
+fig, axes = view.geotomo_mechanisms(project, run_name, 9, depths=[4])
+fig, axes = view.geotomo_mechanisms(project, run_name, 9,
+                                  component='dc', style='circles')
+fig, axes = view.geotomo_mechanisms(project, run_name, 9, component='dc',
+                                  style='circles', color_by='rake', plane=1)
+fig, axes = view.geotomo_mechanisms(project, run_name, 9, component='dc',
+                                  kind='section', center=(13.10, 42.83), strike=155,
+                                  section_offset_km=8, section_width_km=3)
+fig, axes = view.geotomo_orientation(project, run_name, 9,
+                                   center=(13.10, 42.83), strike=155,
+                                   section_offset_km=8, section_width_km=3)
+```
+
+The decomposition accepts batches of six NED components in the saved model order:
+`xx,xy,xz,yy,yz,zz`. It returns full, ISO, DEV, DC and CLVD tensors, their scalar
+moments, signed ISO/CLVD strengths, ISO balance, DC planes/axes and mechanism
+colours. ISO is `trace(M)/3 I`; DEV = DC + CLVD uses the conventional
+[Jost–Herrmann decomposition](https://www.seismosoc.org/Publications/srl/SRL_83/srl_83-3_es_I/).
+The existing `MT.compute_DC` is a best-fitting DC representation and retains its
+behavior; saved best-fitting planes do not measure the standard decomposition's
+DC amount. Pure CLVD has no DC mechanism under this decomposition.
+
+Every component strength uses `sqrt(M:M/2)` in Nm, consistent with existing
+geotomo moments. Component scalar norms are **not additive percentages**. ISO
+sign follows trace (positive expansion, negative contraction); CLVD sign follows
+its unique principal axis, positive for eigenvalues proportional to `[-1,-1,2]`.
+CLVD is trace-free, so its sign does not mean inflation/deflation. Pure shear on
+a curved fault remains locally DC; mixed ISO/DEV sources are also physically
+possible, including opening/closing cracks.
+
+Depth-map `quantity` accepts `moment` (default), `iso`, `dev`, `dc`, `clvd` or
+`iso_balance`; `depths=[...]` selects existing model levels. ISO/CLVD defaults
+are symmetric diverging scales. Balance is `M0(ISO)/(M0(ISO)+M0(DEV))`, fixed to
+0–1, with symbol area proportional to full moment. A zero tensor has undefined
+balance and is marked neutrally. Balance is a defined index, not a fraction of
+the original norm or an admissibility test for physical sources.
+
+Mechanism beachballs show the full tensor by default, or the decomposed DC.
+They are lower-hemisphere, north-up focal-sphere symbols (black positive, white
+negative radiation), drawn with ObsPy/MoPaD; they are not observed seismic data.
+Symbol area scales with the selected component moment. `moment_reference_nm`
+sets the moment represented by `diameter` in points; the default reference is
+the maximum over the whole model, keeping sizes comparable across depths.
+Zero/undefined mechanisms are neutral crosses. DC orientations below 64 machine
+epsilons of full moment are numerical undefined values.
+
+DC circles blend RGB = `(T_down**2, B_down**2, P_down**2)`: reverse red,
+strike-slip green, normal blue, with intermediate colours representing oblique
+axis orientations. They summarize principal-axis character, not a chosen fault
+plane. Rake colouring uses a cyclic -180–180 degree scale and requires an explicit
+`plane=1` or `2`; neither algebraic alternative identifies the physical fault.
+
+Mechanism `kind='section'` selects an explicit along-strike strip and projects
+its individual source positions across strike; it never sums tensors. Exact
+projected overlaps (1 mm grouping) fail and require a narrower strip. Section
+beachballs retain their **north-up plan-view orientation**, rather than rotating
+the focal sphere into the section. `geotomo_orientation` shows both plane
+alternatives' strike/dip/rake versus depth, alongside source position, with
+moment-scaled symbols and an optional matching strip. No plane selection, depth
+jitter or fitted flattening trend is imposed.
+
+Tests cover pure ISO/DC/CLVD, signs, reconstruction, rotations, extreme scales,
+zero/undefined sources, plane reconstruction, symbol sizing and section selection.
+Independent comparison of all 315 Norcia member-9 tensors with Pyrocko's standard
+decomposition agrees within 2e-15 relative tensor norm. The installed legacy MoPaD
+has an inconsistent full/deviatoric eigensort for some mixed ISO tensors; regression
+comparisons therefore use its trace-free DC/CLVD decomposition. Production
+decomposition uses NumPy eigenanalysis; Pyrocko is not a runtime requirement.
 
 ## Forward profiling
 

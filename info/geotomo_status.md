@@ -21,6 +21,7 @@ geotomo.run('/absolute/path/new_project/configs/experiment.toml')
 | `src/python/mudpy/geotomo_config.py` | Schema-1 TOML, project initialization, input validation, provenance, and cache verification |
 | `src/python/mudpy/geotomo_io.py` | HDF5 observations/responses, block projection, predictions, and checked result readers |
 | `src/python/mudpy/view.py` | Reusable geotomo tradeoff, imagery fit and point-source viewers alongside existing slip viewers |
+| `src/python/mudpy/analysis.py` | Checked ISO/DEV/DC/CLVD decomposition of saved geotomo tensors; existing analysis interfaces retained |
 | `src/python/mudpy/parallel.py` | `run_parallel_green` and `run_parallel_synthetics_geotomo` workers |
 | [Starter TOML](../run/geotomo/template.toml) | Project-relative inputs, forward settings, source model, damping, and run stages |
 | [Example README](../examples/geotomo/README.md) | Usage, conventions, validation, limitations, and ownership |
@@ -38,7 +39,7 @@ geotomo.run('/absolute/path/new_project/configs/experiment.toml')
 - Explicit TOML `execution.processes` caps concurrent source workers
   (default 1), with isolated source folders, bounded batches, and one response
   writer preserving source order. Solver execution and BLAS threading are unchanged.
-  Serial/parallel response arrays and matrices agree exactly; all 65 regression
+  Serial/parallel response arrays and matrices agree exactly; all 70 regression
   methods pass, including overlap, ordering, single-writer and failure checks.
 - TOML preflight rejects FK interface sources by default. Explicit
   `forward.interface_policy = "above"` or `"below"` and
@@ -69,6 +70,12 @@ geotomo.run('/absolute/path/new_project/configs/experiment.toml')
   axes, colour scales and normalization support project-specific figure layouts.
   Reader-only edits preserve numerical cache identity; complete module hashes
   remain in provenance. Existing Norcia response/matrix caches still validate.
+- Source-component depth maps, full/DC beachballs, DC character or explicit-plane
+  rake circles, individual-source mechanism sections and both DC planes versus
+  depth. ISO/CLVD strengths use signed tensor norms; ISO balance is a defined
+  0–1 index, not an admissibility criterion. Decomposition reconstructs each
+  tensor and agrees with an independent Pyrocko reference for all 315 member-9
+  tensors. No new inversion or legacy mechanism-interface changes were needed.
 
 ## Validation and limits
 

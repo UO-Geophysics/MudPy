@@ -301,6 +301,63 @@ def make_planar_geometry(strike,dip,nstrike,dx_dip,dx_strike,epicenter,num_updip
     fault=c_[fault_num,loout,laout,zout,strike,dip,tw,rise,L,W]
     return fault
     
+def decompose_geotomo_tensors(tensors_nm):
+    """Decompose NED tensors (xx,xy,xz,yy,yz,zz) without changing inputs.
+
+    Returns batches, including for one six-vector. ISO is trace(M)/3 I;
+    DEV = DC + CLVD uses the Jost--Herrmann eigenvalue decomposition.
+    Component strengths use sqrt(M:M/2), as in geotomo.get_moment, not the
+    spectral normalization used for conventional decomposition percentages.
+    Component scalar moments are not additive. ISO sign is trace sign; CLVD
+    sign is that of its unique principal axis (positive for [-1,-1,2]).
+    iso_balance is |ISO|/(|ISO|+|DEV|), undefined for zero tensors.
+    DC planes/axes are undefined below 64*machine-epsilon of full moment.
+    Plane A/B are algebraic alternatives, not selected geological fault planes.
+    """
+    import numpy as np
+    values = np.asarray(tensors_nm, dtype=float)
+    if values.ndim == 1:
+        values = values[None, :]
+    if values.ndim != 2 or values.shape[1] != 6 or not len(values) or not np.isfinite(values).all():
+        raise ValueError('Expected a nonempty finite array of six NED tensor components')
+    scale = np.abs(values).max(axis=1)
+    normalized = np.divide(values, scale[:, None], out=np.zeros_like(values), where=scale[:, None] > 0)
+    full = normalized[:, [[0, 1, 2], [1, 3, 4], [2, 4, 5]]]
+    amplitude = np.trace(full, axis1=1, axis2=2)/3
+    iso = amplitude[:, None, None]*np.eye(3)
+    dev = full-iso
+    eigenvalues, eigenvectors = np.linalg.eigh(dev)
+    middle = eigenvalues[:, 1]
+    clvd_eigenvalues = middle[:, None]*np.where((middle >= 0)[:, None], [-2, 1, 1], [1, 1, -2])
+    clvd = np.einsum('nik,nk,njk->nij', eigenvectors, clvd_eigenvalues, eigenvectors)
+    dc = dev-clvd
+    components = {'full': full, 'iso': iso, 'dev': dev, 'dc': dc, 'clvd': clvd}
+    moment = {name: np.linalg.norm(tensor, axis=(1, 2))/np.sqrt(2)*scale
+              for name, tensor in components.items()}
+    tolerance = 64*np.finfo(float).eps*moment['full']
+    # Degenerate orientations are numerical undefined values, not inferred mechanisms.
+    planes = np.full((len(values), 2, 3), np.nan)
+    axes = np.full((len(values), 3, 3), np.nan)
+    for k in np.flatnonzero(moment['dc'] > tolerance):
+        tensor = dc[k]
+        mechanism = MT(tensor[0, 0], tensor[0, 1], tensor[0, 2], tensor[1, 1],
+                       tensor[1, 2], tensor[2, 2], 0, 0, 0, mt_style='xyz')
+        mechanism.get_nodal_planes()
+        planes[k] = [mechanism.nodal_plane1, mechanism.nodal_plane2]
+        axes[k] = eigenvectors[k]
+    rakes = planes[:, :, 2]
+    defined = np.isfinite(rakes)
+    rakes[defined] = (rakes[defined]+180) % 360-180
+    balance = np.divide(moment['iso'], moment['iso']+moment['dev'],
+                        out=np.full(len(values), np.nan), where=moment['full'] > 0)
+    # Axis columns are P, B, T; RGB blends reverse, strike-slip, normal character.
+    style_rgb = np.clip(axes[:, 2, [2, 1, 0]]**2, 0, 1)
+    return {'tensors_nm': {name: tensor*scale[:, None, None] for name, tensor in components.items()},
+            'moment_nm': moment, 'iso_signed_moment_nm': np.sign(amplitude)*moment['iso'],
+            'clvd_signed_moment_nm': -np.sign(middle)*moment['clvd'], 'iso_balance': balance,
+            'dc_nodal_planes_deg': planes, 'dc_axes_ned': axes, 'dc_style_rgb': style_rgb}
+
+
 class MT:
     """
     A moment tensor class

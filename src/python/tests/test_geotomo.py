@@ -7,7 +7,68 @@ from unittest.mock import patch
 import numpy as np
 
 from mudpy import geotomo, inverse
-from mudpy.analysis import MT
+from mudpy.analysis import MT, decompose_geotomo_tensors
+
+
+class DecompositionTests(unittest.TestCase):
+    def test_pure_sources_signs_balance_and_undefined_planes(self):
+        values = np.array([[1, 0, 0, 1, 0, 1], [-1, 0, 0, -1, 0, -1],
+                           [-1, 0, 0, -1, 0, 2], [1, 0, 0, 1, 0, -2],
+                           [0, 1, 0, 0, 0, 0], [0]*6], dtype=float)
+        before = values.copy()
+        d = decompose_geotomo_tensors(values)
+        np.testing.assert_array_equal(values, before)
+        np.testing.assert_allclose(d['iso_signed_moment_nm'][:2], [np.sqrt(1.5), -np.sqrt(1.5)])
+        np.testing.assert_allclose(d['clvd_signed_moment_nm'][2:4], [np.sqrt(3), -np.sqrt(3)])
+        np.testing.assert_array_equal(d['moment_nm']['dc'][:4], 0)
+        np.testing.assert_allclose(d['iso_balance'][:5], [1, 1, 0, 0, 0])
+        self.assertTrue(np.isnan(d['iso_balance'][5]))
+        self.assertTrue(np.isnan(d['dc_nodal_planes_deg'][:4]).all())
+        np.testing.assert_allclose(d['dc_style_rgb'][4], [0, 1, 0])
+        for scale in (1e-200, 1e200):
+            scaled = decompose_geotomo_tensors(values[4]*scale)
+            self.assertAlmostEqual(scaled['moment_nm']['dc'][0]/scale, 1)
+        for bad in ([], [[1]*5], [[np.nan]*6], np.ones((2, 3, 3))):
+            with self.assertRaises(ValueError):
+                decompose_geotomo_tensors(bad)
+
+    def test_rotated_mixtures_reconstruction_and_independent_mopad_reference(self):
+        from obspy.imaging.scripts.mopad import MomentTensor
+        rng = np.random.default_rng(261110)
+        for _ in range(20):
+            rotation, _ = np.linalg.qr(rng.normal(size=(3, 3)))
+            matrix = rotation @ np.diag(rng.normal(size=3)) @ rotation.T
+            d = decompose_geotomo_tensors(matrix[np.triu_indices(3)])
+            parts, moments = d['tensors_nm'], d['moment_nm']
+            np.testing.assert_allclose(parts['iso']+parts['dc']+parts['clvd'], matrix[None], atol=1e-14)
+            self.assertAlmostEqual(moments['full'][0]**2, moments['iso'][0]**2+moments['dev'][0]**2)
+            dc_eigenvalues = np.linalg.eigvalsh(parts['dc'][0])
+            np.testing.assert_allclose(dc_eigenvalues, [-moments['dc'][0], 0, moments['dc'][0]], atol=2e-14)
+            ned = matrix[[0, 1, 2, 0, 0, 1], [0, 1, 2, 1, 2, 2]]
+            reference = MomentTensor(ned, system='NED')
+            for name, reader in [('iso', reference.get_iso), ('dev', reference.get_devi)]:
+                np.testing.assert_allclose(parts[name][0], reader(system='NED'), atol=2e-13)
+            # The installed legacy MoPaD sorts full and deviatoric eigenvalues
+            # inconsistently for some mixed ISO tensors. Compare its DC/CLVD
+            # decomposition on the trace-free tensor, where that bug is absent.
+            dev = parts['dev'][0]
+            reference = MomentTensor(dev[[0, 1, 2, 0, 0, 1], [0, 1, 2, 1, 2, 2]], system='NED')
+            np.testing.assert_allclose(parts['dc'][0], reference.get_DC(system='NED'), atol=2e-13)
+            np.testing.assert_allclose(parts['clvd'][0], reference.get_CLVD(system='NED'), atol=2e-13)
+            for plane in d['dc_nodal_planes_deg'][0]:
+                reconstructed = MomentTensor(plane).get_M(system='NED')
+                np.testing.assert_allclose(reconstructed, parts['dc'][0]/moments['dc'][0], atol=1e-7)
+
+    def test_normal_reverse_axes_and_constant_strike_listric_sum(self):
+        from obspy.imaging.scripts.mopad import MomentTensor
+        normal = np.diag([0., 1., -1.])
+        reverse = -normal
+        d = decompose_geotomo_tensors(np.array([normal[np.triu_indices(3)], reverse[np.triu_indices(3)]]))
+        np.testing.assert_allclose(d['dc_style_rgb'], [[0, 0, 1], [1, 0, 0]])
+        summed = sum(MomentTensor([155, dip, -90]).get_M(system='NED') for dip in (25, 45, 65))
+        d = decompose_geotomo_tensors(summed[np.triu_indices(3)])
+        self.assertLess(d['moment_nm']['iso'][0], 1e-14)
+        self.assertLess(d['moment_nm']['clvd'][0], 1e-14)
 
 
 class TensorTests(unittest.TestCase):
