@@ -1,6 +1,6 @@
 # Geodetic Source Tomography (`geotomo`)
 
-Current implementation status, November 9, 2026.
+Current implementation status, November 10, 2026.
 
 Geodetic imaging of distributed subsurface deformation sources, implemented
 within MudPy. Imagery-derived displacement is primary; GNSS is complementary
@@ -19,7 +19,8 @@ geotomo.run('/absolute/path/new_project/configs/experiment.toml')
 | --- | --- |
 | `src/python/mudpy/geotomo.py` | GF/synthetic orchestration, matrix assembly, inversion, and model/log output |
 | `src/python/mudpy/geotomo_config.py` | Schema-1 TOML, project initialization, input validation, provenance, and cache verification |
-| `src/python/mudpy/geotomo_io.py` | HDF5 observations, full NEU response libraries, block projection, and predictions |
+| `src/python/mudpy/geotomo_io.py` | HDF5 observations/responses, block projection, predictions, and checked result readers |
+| `src/python/mudpy/view.py` | Reusable geotomo tradeoff, imagery fit and point-source viewers alongside existing slip viewers |
 | `src/python/mudpy/parallel.py` | `run_parallel_green` and `run_parallel_synthetics_geotomo` workers |
 | [Starter TOML](../run/geotomo/template.toml) | Project-relative inputs, forward settings, source model, damping, and run stages |
 | [Example README](../examples/geotomo/README.md) | Usage, conventions, validation, limitations, and ownership |
@@ -37,7 +38,7 @@ geotomo.run('/absolute/path/new_project/configs/experiment.toml')
 - Explicit TOML `execution.processes` caps concurrent source workers
   (default 1), with isolated source folders, bounded batches, and one response
   writer preserving source order. Solver execution and BLAS threading are unchanged.
-  Serial/parallel response arrays and matrices agree exactly; all 59 regression
+  Serial/parallel response arrays and matrices agree exactly; all 65 regression
   methods pass, including overlap, ordering, single-writer and failure checks.
 - TOML preflight rejects FK interface sources by default. Explicit
   `forward.interface_policy = "above"` or `"below"` and
@@ -60,6 +61,14 @@ geotomo.run('/absolute/path/new_project/configs/experiment.toml')
   pruned/pending cache state preserve traceability; HDF5/matrix reuse remains valid.
 - Exclusive `.geotomo.lock` ownership for top-level runs. Existing projects are
   never initialized again, and existing named results are protected.
+- Read-only canonical model/log/prediction readers and quick Matplotlib viewers:
+  `view.geotomo_tradeoff`, `view.geotomo_fit`, `view.geotomo_sources`. Figures/axes
+  are returned without automatic saving/showing. Depth slices and summed horizontal
+  projections distinguish point-source moments from summed-tensor moment; an
+  optional external Mw reference does not select a preferred damping. Caller-owned
+  axes, colour scales and normalization support project-specific figure layouts.
+  Reader-only edits preserve numerical cache identity; complete module hashes
+  remain in provenance. Existing Norcia response/matrix caches still validate.
 
 ## Validation and limits
 

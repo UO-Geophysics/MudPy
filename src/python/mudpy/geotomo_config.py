@@ -396,6 +396,13 @@ def _code_identity():
     modules = ('geotomo', 'geotomo_config', 'geotomo_io', 'parallel', 'green', 'inverse', 'analysis', 'runslip')
     identity = {'source_sha256': {name: _hash(folder/(name+'.py')) for name in modules},
                 'git_revision': None, 'git_status': None}
+    # Preserve numerical cache identity when only read-only result viewers change.
+    # Response generation/storage/assembly code must remain above this boundary.
+    core, boundary, _ = (folder/'geotomo_io.py').read_bytes().partition(
+        b'\n\n# Read-only result readers (excluded from response/matrix cache identity).')
+    if not boundary:
+        raise ValueError('Missing geotomo_io numerical cache boundary')
+    identity['io_cache_sha256'] = hashlib.sha256(core).hexdigest()
     repo = folder.parents[2]
     if (repo/'.git').exists():
         identity['git_revision'] = subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=repo,
@@ -428,11 +435,11 @@ def _signatures(config, sources, geometry, code, executables):
         # Physical NEU responses depend on positions, not look coefficients,
         # data, uncertainty, fixed mechanisms, or inversion choices.
         responses = {'greens': _digest(base), 'synthesis': 'numpy_mt_radiat_float64',
-                     'io_code': code['source_sha256']['geotomo_io'],
+                     'io_code': code['io_cache_sha256'],
                      'basis': 'xx,xy,xz,yy,yz,zz; NED; 10**16.6 Nm', 'displacement': 'NEU'}
         matrix = {'responses': _digest(responses), 'geometry': geometry,
                   'source_model': config.source_model, 'fixed_tensor': config.fixed_tensor,
-                  'assembly_code': code['source_sha256']['geotomo_io']}
+                  'assembly_code': code['io_cache_sha256']}
         return ((project/'GFs/static/_geotomo_greens.json', base, greens_files),
                 (config.response_path.with_suffix('.h5.json'), responses, [config.response_path]),
                 (project/'GFs/matrices'/(config.matrix_name+'.npy.json'), matrix,

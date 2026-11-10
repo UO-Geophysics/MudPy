@@ -2991,3 +2991,208 @@ def slip2geo(ss,ds,strike):
     x=xss+xds
     y=yss+yds
     return x,y
+
+
+def _geotomo_axes(axes, count, columns, figsize):
+    import numpy as np
+    import matplotlib.pyplot as plt
+    if axes is None:
+        figure, grid = plt.subplots(int(np.ceil(count/columns)), columns, squeeze=False,
+                                   figsize=figsize, constrained_layout=True)
+        flat = grid.ravel()
+        for axis in flat[count:]:
+            axis.set_visible(False)
+        return figure, flat[:count]
+    flat = np.atleast_1d(axes).ravel()
+    if len(flat) != count or any(axis.figure is not flat[0].figure for axis in flat):
+        raise ValueError('Supply the requested number of axes from one figure')
+    return flat[0].figure, flat
+
+
+def geotomo_tradeoff(project, run_name, *, reference_mw=None, highlight=None, axes=None):
+    """Quick sweep overview; return (figure, flat axes), without saving/showing.
+
+    Plot coefficient/data L2 tradeoff, unweighted RMS, coefficient norm and two
+    distinct moment budgets. reference_mw is an optional external reference,
+    not a fitted event magnitude or an automatic damping-selection criterion.
+    """
+    import numpy as np
+    import matplotlib.pyplot as plt
+    from mudpy.geotomo_io import read_run
+    run = read_run(project, run_name)
+    rows = run['solutions']
+    order = np.argsort([row['damping'] for row in rows])
+    members = np.array([row['member'] for row in rows])[order]
+    values = {key: np.array([row[key] for row in rows])[order] for key in
+              ('damping', 'residual_l2', 'residual_rms_mm', 'model_l2',
+               'sum_scalar_moment_nm', 'net_scalar_moment_nm')}
+    labels = members[np.linspace(0, len(rows)-1, min(6, len(rows)), dtype=int)] if highlight is None else highlight
+    if any(member not in members for member in labels):
+        raise ValueError('Highlighted member is not in this run')
+    if reference_mw is not None and not np.isfinite(reference_mw):
+        raise ValueError('Reference Mw must be finite')
+    own_figure = axes is None
+    with plt.rc_context({'font.family': 'DejaVu Sans', 'font.size': 10}):
+        figure, axes = _geotomo_axes(axes, 4, 2, (11, 8))
+        damping = values['damping']
+        axes[0].plot(values['model_l2'], values['residual_l2'], color='.5', lw=1)
+        axes[0].scatter(values['model_l2'], values['residual_l2'], c=members, cmap='viridis', s=30)
+        for name, data in (('x', values['model_l2']), ('y', values['residual_l2'])):
+            if (data > 0).all():
+                getattr(axes[0], 'set_'+name+'scale')('log')
+        axes[0].set(xlabel='Coefficient L2 norm', ylabel='Data residual L2 norm'+(' (m)' if run['weighting'] == 'none' else ' (weighted)'),
+                    title='L-curve; labels are member numbers')
+        axes[1].plot(damping, values['residual_rms_mm'], 'o-', ms=4)
+        axes[1].set(ylabel='Unweighted residual RMS (mm)', title='Data fit')
+        axes[2].plot(damping, values['model_l2'], 'o-', ms=4)
+        if (values['model_l2'] > 0).all():
+            axes[2].set_yscale('log')
+        axes[2].set(ylabel='Coefficient L2 norm', title='Penalty used by the inversion')
+        for key, label, marker in (
+                ('sum_scalar_moment_nm', r'$\sum_i M_0(M_i)$', 'o'),
+                ('net_scalar_moment_nm', r'$M_0(\sum_i M_i)$', 's')):
+            moment = values[key]
+            axes[3].plot(damping, np.ma.masked_less_equal(moment, 0), marker+'-', ms=4, label=label)
+            zero = moment == 0
+            if zero.any():
+                axes[3].plot(damping[zero], np.full(zero.sum(), .02), marker='v', ls='none',
+                             transform=axes[3].get_xaxis_transform(), label=label+' = 0 (axis floor)')
+        if (values['sum_scalar_moment_nm'] > 0).any() or (values['net_scalar_moment_nm'] > 0).any() or reference_mw is not None:
+            axes[3].set_yscale('log')
+        else:
+            axes[3].set_ylim(0, 1)
+        if reference_mw is not None:
+            axes[3].axhline(10**(1.5*reference_mw+9.1), color='black', ls='--',
+                            label='External Mw %.2f reference' % reference_mw)
+        axes[3].set(ylabel='Scalar moment (N m)', title='Source sum and summed-tensor moment')
+        axes[3].legend(fontsize=9)
+        for axis in axes[1:]:
+            if (damping > 0).all():
+                axis.set_xscale('log')
+            elif (damping > 0).any():
+                axis.set_xscale('symlog', linthresh=damping[damping > 0].min()/10)
+            axis.set_xlabel(r'Damping $\lambda$')
+        for member in labels:
+            i = np.flatnonzero(members == member)[0]
+            axes[0].annotate(str(member), (values['model_l2'][i], values['residual_l2'][i]),
+                             xytext=(4, 4), textcoords='offset points', fontsize=8)
+            axes[1].annotate(str(member), (damping[i], values['residual_rms_mm'][i]),
+                             xytext=(4, 4), textcoords='offset points', fontsize=8)
+        for axis in axes:
+            axis.grid(alpha=.25, which='both')
+        if own_figure:
+            figure.suptitle(run_name+' — damping sweep (no preferred member selected)')
+        return figure, axes
+
+
+def geotomo_fit(project, run_name, member, *, units='mm', limits=None, residual_limits=None,
+                cmap='RdBu_r', label='LOS', axes=None):
+    """Observed/predicted/residual samples without interpolation or file writes.
+
+    limits and residual_limits are (min,max) in displayed units. Defaults use
+    the full observed/predicted range and the same range for residuals. Colourbar
+    extensions indicate clipping when explicit limits exclude data.
+    """
+    import numpy as np
+    import matplotlib.pyplot as plt
+    from mudpy.geotomo_io import read_solution
+    if units not in ('m', 'mm'):
+        raise ValueError('Units must be m or mm')
+    solution = read_solution(project, run_name, member)
+    data = solution['predictions']
+    scale = 1000 if units == 'mm' else 1
+    observed, predicted, residual = (data[key]*scale for key in ('los_m', 'prediction_m', 'residual_m'))
+    if limits is None:
+        bound = max(abs(observed).max(), abs(predicted).max())
+        limits = (-bound, bound) if bound > 0 else (-1, 1)
+    residual_limits = limits if residual_limits is None else residual_limits
+    for bounds in (limits, residual_limits):
+        if len(bounds) != 2 or not np.isfinite(bounds).all() or bounds[0] >= bounds[1]:
+            raise ValueError('Colour limits must be finite increasing pairs in displayed units')
+    own_figure = axes is None
+    with plt.rc_context({'font.family': 'DejaVu Sans', 'font.size': 10}):
+        figure, axes = _geotomo_axes(axes, 3, 3, (13, 4.6))
+        lon, lat = data['coordinates'].T
+        for axis, values, bounds, title in zip(axes, (observed, predicted, residual),
+                (limits, limits, residual_limits), ('Observed '+label, 'Predicted '+label, 'Observed − predicted')):
+            image = axis.scatter(lon, lat, c=values, s=16, cmap=cmap, vmin=bounds[0], vmax=bounds[1], rasterized=True)
+            below, above = (values < bounds[0]).any(), (values > bounds[1]).any()
+            extend = 'both' if below and above else 'min' if below else 'max' if above else 'neither'
+            figure.colorbar(image, ax=axis, shrink=.8, label=units, extend=extend)
+            axis.set(xlabel='Longitude (degrees)', ylabel='Latitude (degrees)', title=title)
+            axis.set_aspect(1/np.cos(np.deg2rad(lat.mean())))
+            axis.grid(alpha=.2)
+        if own_figure:
+            figure.suptitle('%s.%04d — λ = %.3g; RMS %.2f mm (all %d samples)' %
+                           (run_name, solution['member'], solution['damping'], solution['residual_rms_mm'], len(lon)))
+        return figure, axes
+
+
+def geotomo_sources(project, run_name, member, *, kind='depth', center=None, strike=None,
+                    norm=None, cmap='magma', axes=None):
+    """Point-source scalar moments as depth slices or horizontal projections.
+
+    kind='sections' requires center=(lon,lat) and strike in clockwise degrees.
+    Projection sums scalar moments at coincident nodes (1 mm numerical grouping),
+    rather than overplotting hidden sources. No interpolation/grid shape assumed.
+    Pass a Matplotlib normalization to compare multiple members on one scale.
+    Return (figure, flat axes); no saving/showing or model mutation.
+    """
+    import numpy as np
+    import matplotlib.pyplot as plt
+    from matplotlib.colors import Normalize
+    from mudpy.geotomo_io import read_solution
+    solution = read_solution(project, run_name, member)
+    model = solution['model']
+    coordinates, depth, moment = model['coordinates'], model['depth_km'], model['scalar_moment_nm']
+    if kind == 'depth':
+        panels = [(coordinates[depth == z, 0], coordinates[depth == z, 1], moment[depth == z],
+                   'Depth %.3g km' % z) for z in np.unique(depth)]
+        xlabel, ylabel, colour_label = 'Longitude (degrees)', 'Latitude (degrees)', 'Source scalar moment (N m)'
+    elif kind == 'sections':
+        from pyproj import Geod
+        if (center is None or len(center) != 2 or not np.isfinite(center).all() or
+                abs(center[0]) > 180 or abs(center[1]) >= 90 or strike is None or not np.isfinite(strike)):
+            raise ValueError('Sections require a geographic center and finite strike')
+        azimuth, _, distance = Geod(ellps='WGS84').inv(np.full(len(depth), center[0]),
+            np.full(len(depth), center[1]), coordinates[:, 0], coordinates[:, 1])
+        bearing = np.deg2rad(azimuth-strike)
+        panels = []
+        for offset, title in ((distance*np.cos(bearing)/1000, 'Along-strike projection'),
+                              (distance*np.sin(bearing)/1000, 'Across-strike projection')):
+            nodes, inverse = np.unique(np.round(np.column_stack((offset, depth)), 6), axis=0, return_inverse=True)
+            panels.append((nodes[:, 0], nodes[:, 1], np.bincount(inverse, weights=moment), title))
+        xlabel, ylabel = 'Distance from center (km)', 'Depth below model top (km)'
+        colour_label = 'Projected sum of source scalar moments (N m)'
+    else:
+        raise ValueError('Source view kind must be depth or sections')
+    if norm is None:
+        maximum = max(values.max() for _, _, values, _ in panels)
+        norm = Normalize(0, maximum if maximum > 0 else 1)
+    norm.autoscale_None(np.concatenate([values for _, _, values, _ in panels]))
+    own_figure = axes is None
+    with plt.rc_context({'font.family': 'DejaVu Sans', 'font.size': 10}):
+        figure, axes = _geotomo_axes(axes, len(panels), min(len(panels), 3),
+                                    (12, 3.8*int(np.ceil(len(panels)/3))))
+        for axis, (x, y, values, title) in zip(axes, panels):
+            image = axis.scatter(x, y, c=values, s=45, norm=norm, cmap=cmap, edgecolors='.4', linewidths=.3)
+            zero = values == 0
+            if zero.any():
+                axis.scatter(x[zero], y[zero], s=45, facecolors='none', edgecolors='.5', label='Zero moment')
+                axis.legend(fontsize=8)
+            axis.set(xlabel=xlabel, ylabel=ylabel, title=title)
+            if kind == 'depth':
+                axis.set_aspect(1/np.cos(np.deg2rad(coordinates[:, 1].mean())))
+                axis.set_xlim(coordinates[:, 0].min()-.01, coordinates[:, 0].max()+.01)
+                axis.set_ylim(coordinates[:, 1].min()-.01, coordinates[:, 1].max()+.01)
+            else:
+                axis.set_ylim(depth.max()+.5, 0)
+            axis.grid(alpha=.2)
+        values = np.concatenate([values for _, _, values, _ in panels])
+        below, above = (values < norm.vmin).any(), (values > norm.vmax).any()
+        extend = 'both' if below and above else 'min' if below else 'max' if above else 'neither'
+        figure.colorbar(image, ax=list(axes), shrink=.8, label=colour_label, extend=extend)
+        if own_figure:
+            figure.suptitle('%s.%04d — λ = %.3g; %s' %
+                           (run_name, solution['member'], solution['damping'], 'depth slices' if kind == 'depth' else 'summed projections'))
+        return figure, axes

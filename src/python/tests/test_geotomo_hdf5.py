@@ -250,6 +250,28 @@ class HDF5RunTests(unittest.TestCase):
         record = json.loads((self.project/'GFs/static/_geotomo_greens.json').read_text())
         self.assertNotIn('native_cleanup', record)
 
+    def test_result_reader_changes_do_not_invalidate_numerical_caches(self):
+        import hashlib
+        from mudpy import geotomo_config
+        config = RunConfig.load(self.template)
+        sources, _, geometry, _ = _inputs(config)
+        baseline = _code_identity()
+        original_read = Path.read_bytes
+        original_hash = geotomo_config._hash
+        io_path = Path(io.__file__).resolve()
+        def changed_reader(path):
+            content = original_read(path)
+            return content+b'\n# Reader-only change\n' if path.resolve() == io_path else content
+        def changed_hash(path):
+            return hashlib.sha256(changed_reader(Path(path))).hexdigest() if Path(path).resolve() == io_path else original_hash(path)
+        with patch.object(Path, 'read_bytes', new=changed_reader), \
+                patch.object(geotomo_config, '_hash', side_effect=changed_hash):
+            changed = _code_identity()
+        self.assertNotEqual(baseline['source_sha256']['geotomo_io'], changed['source_sha256']['geotomo_io'])
+        self.assertEqual(baseline['io_cache_sha256'], changed['io_cache_sha256'])
+        self.assertEqual(_signatures(config, sources, geometry, baseline, {})[1:],
+                         _signatures(config, sources, geometry, changed, {})[1:])
+
     def test_pruning_preserves_library_assembly_fixed_projection_and_numpy_reuse(self):
         path = self.config('pruned', ['greens', 'synthetics'], keep_fk=False)
         unrelated = self.project/'GFs/static/user_notes.insar'

@@ -243,3 +243,123 @@ def write_predictions(filename, observations, prediction, provenance):
     with h5py.File(str(filename), 'r+') as file:
         file.create_dataset('prediction_m', data=prediction)
         file.create_dataset('residual_m', data=observations['los_m']-prediction)
+
+
+# Read-only result readers (excluded from response/matrix cache identity).
+
+
+def read_model(filename):
+    """Read a geotomo .inv model; tensors/moments are in Nm and depths in km.
+
+    Undefined nodal-plane angles may be NaN. Scalar moment of the summed tensor
+    and sum of point-source scalar moments are distinct, explicitly named values.
+    """
+    from mudpy.geotomo import get_moment
+    table = np.loadtxt(filename, ndmin=2)
+    if (table.shape[1] != 17 or not len(table) or
+            not np.isfinite(table[:, :10]).all() or not np.isfinite(table[:, 16]).all() or
+            np.isinf(table[:, 10:16]).any() or (table[:, 0] <= 0).any() or
+            (table[:, 0] != table[:, 0].astype(int)).any() or
+            len(np.unique(table[:, 0])) != len(table) or (table[:, 3] <= 0).any()):
+        raise ValueError('Expected finite geotomo model rows with 17 columns and unique positive source IDs')
+    _coordinates(table[:, 1:3], len(table))
+    tensors = table[:, 4:10]
+    total, moments, _ = get_moment('', '', '', tensors/REFERENCE_MOMENT_NM, False)
+    if not np.allclose(table[:, 16], moments, rtol=1e-8, atol=0):
+        raise ValueError('Stored scalar moments disagree with the model tensors')
+    summed_tensor = tensors.sum(axis=0)
+    net, _, _ = get_moment('', '', '', summed_tensor/REFERENCE_MOMENT_NM, False)
+    return {'ids': table[:, 0].astype(int), 'coordinates': table[:, 1:3],
+            'depth_km': table[:, 3], 'tensors_nm': tensors, 'nodal_planes_deg': table[:, 10:16],
+            'scalar_moment_nm': moments, 'sum_scalar_moment_nm': float(total),
+            'summed_tensor_nm': summed_tensor, 'net_scalar_moment_nm': float(net)}
+
+
+def read_predictions(filename):
+    """Read/validate observed, predicted and observed-minus-predicted samples."""
+    result = read_observations(filename)
+    with h5py.File(str(filename), 'r') as file:
+        prediction, residual = file['prediction_m'][()], file['residual_m'][()]
+    if (prediction.shape != result['los_m'].shape or residual.shape != prediction.shape or
+            not np.isfinite(prediction).all() or not np.isfinite(residual).all() or
+            not np.allclose(residual, result['los_m']-prediction, rtol=1e-12, atol=1e-14)):
+        raise ValueError('Invalid predictions or observed-minus-predicted residuals')
+    return dict(result, prediction_m=prediction, residual_m=residual)
+
+
+def _result_paths(project, run_name, member):
+    _ids([run_name])
+    if isinstance(member, str) and member.isdecimal():
+        member = int(member)
+    if isinstance(member, (bool, np.bool_)) or not isinstance(member, (int, np.integer)) or member < 0:
+        raise ValueError('Member must be a nonnegative integer or digit string')
+    member = int(member)
+    project = Path(project).expanduser().resolve()
+    stem = '%s.%04d' % (run_name, member)
+    return project, member, project/'output/inverse_models/models'/stem, project/'output/inverse_models/statics'/stem
+
+
+def read_solution(project, run_name, member):
+    """Read one canonical model/log/prediction set without modifying results."""
+    project, member, model_path, prediction_path = _result_paths(project, run_name, member)
+    model = read_model(str(model_path)+'.inv')
+    prediction = read_predictions(str(prediction_path)+'.predictions.h5')
+    fields = {}
+    for line in Path(str(model_path)+'.log').read_text().splitlines():
+        if ' = ' in line:
+            key, value = line.split(' = ', 1)
+            if key in ('lambda_spatial', 'L2', 'Lm'):
+                if key in fields:
+                    raise ValueError('Duplicate inversion metric: '+key)
+                fields[key] = float(value)
+    if (set(fields) != {'lambda_spatial', 'L2', 'Lm'} or
+            any(not np.isfinite(v) or v < 0 for v in fields.values())):
+        raise ValueError('Missing or invalid damping, residual norm or coefficient norm in log')
+    archived = json.loads((project/'output/inverse_models/models'/(run_name+'.resolved.json')).read_text())
+    settings = archived['settings']
+    damping = settings['inversion']['damping']
+    if settings['run']['name'] != run_name or member >= len(damping) or fields['lambda_spatial'] != damping[member]:
+        raise ValueError('Log member/damping disagrees with archived run settings')
+    metadata = prediction['metadata']['run']
+    if metadata['run_name'] != run_name or metadata['damping'] != fields['lambda_spatial']:
+        raise ValueError('Prediction identity/damping disagrees with the log')
+    weighting = settings['inversion']['weighting']
+    if weighting == 'diagonal':
+        if prediction['sigma_m'] is None:
+            raise ValueError('Weighted run predictions lack sigma_m')
+        residual = prediction['residual_m']/prediction['sigma_m']
+    elif weighting == 'none':
+        residual = prediction['residual_m']
+    else:
+        raise ValueError('Unsupported archived data weighting')
+    if not np.isclose(np.linalg.norm(residual), fields['L2'], rtol=1e-8, atol=1e-12):
+        raise ValueError('Prediction residual norm disagrees with the log')
+    return {'member': member, 'run_name': run_name, 'model': model, 'predictions': prediction,
+            'damping': fields['lambda_spatial'], 'residual_l2': fields['L2'], 'model_l2': fields['Lm'],
+            'weighting': weighting, 'residual_rms_mm': float(np.sqrt(np.mean(prediction['residual_m']**2))*1000)}
+
+
+def read_run(project, run_name):
+    """Tabulate every archived sweep member; missing/inconsistent results fail."""
+    project, _, _, _ = _result_paths(project, run_name, 0)
+    archived = json.loads((project/'output/inverse_models/models'/(run_name+'.resolved.json')).read_text())
+    count = len(archived['settings']['inversion']['damping'])
+    if not count:
+        raise ValueError('Archived run has no inversion members')
+    rows, first_model, first_observations = [], None, None
+    for member in range(count):
+        solution = read_solution(project, run_name, member)
+        model, observations = solution['model'], solution['predictions']
+        if first_model is None:
+            first_model, first_observations = model, observations
+        elif (not np.array_equal(model['ids'], first_model['ids']) or
+              not np.array_equal(model['coordinates'], first_model['coordinates']) or
+              not np.array_equal(model['depth_km'], first_model['depth_km']) or
+              any(not np.array_equal(observations[key], first_observations[key])
+                  for key in ('ids', 'coordinates', 'los_m', 'projection_neu', 'sigma_m'))):
+            raise ValueError('Sweep member source or observation geometry/data changed')
+        rows.append({key: solution[key] for key in ('member', 'damping', 'residual_l2', 'model_l2', 'residual_rms_mm')})
+        rows[-1].update(sum_scalar_moment_nm=model['sum_scalar_moment_nm'],
+                        net_scalar_moment_nm=model['net_scalar_moment_nm'])
+    return {'project': project, 'run_name': run_name, 'weighting': solution['weighting'],
+            'solutions': rows, 'settings': archived['settings']}

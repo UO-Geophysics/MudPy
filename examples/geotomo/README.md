@@ -149,6 +149,68 @@ errors, code hashes, and small-case timings; those timings are not scaling claim
 It also exercises actual native-file cleanup, then checks fresh matrix assembly
 and cached inversion against the saved reference after those files are gone.
 
+## Quick result viewing
+
+Reusable geotomo viewers live in `mudpy.view`. They read the canonical archived
+models/logs/prediction HDF5 files, return `(figure, axes)` with a flat axes array,
+and do not show, save or modify inversion results automatically:
+
+```python
+from mudpy import view
+
+project = '/absolute/path/Norcia2016'
+run_name = 't44_aci_volume_l2_v1'
+
+fig, axes = view.geotomo_tradeoff(project, run_name, reference_mw=6.6)
+fig.savefig('tradeoff.png', dpi=180)
+
+fig, axes = view.geotomo_fit(project, run_name, 9, units='mm',
+                             limits=(-250, 250), residual_limits=(-30, 30))
+
+fig, axes = view.geotomo_sources(project, run_name, 9)
+fig, axes = view.geotomo_sources(project, run_name, 9, kind='sections',
+                                 center=(13.10, 42.83), strike=155)
+```
+
+These example reference values and member numbers are caller choices, not viewer
+defaults or preferred solutions. The sweep viewer plots the coefficient/data L2
+tradeoff, unweighted residual RMS, coefficient norm and moment diagnostics.
+`highlight=[...]` labels particular members. RMS is computed directly from saved
+residuals; the logged legacy "VR" statistic is not labelled as variance reduction.
+
+The imagery viewer plots actual samples without interpolation. Observed and
+predicted panels share limits; separate residual limits are explicit and colourbar
+extensions indicate clipping. `units` is `m` or `mm`; `label` can describe another
+scalar projection/offset. Source plots use point-source scalar moments in Nm.
+Depth views share a normalization across depth levels. Sections sum scalar moments
+at coincident projected nodes (1 mm numerical grouping) across the other horizontal
+coordinate. They accept irregular source clouds and do not assume a fault mesh.
+Pass a Matplotlib `norm` to compare solutions on a common linear/log scale.
+
+All three functions accept `axes` for caller-owned layouts and preserve an
+existing figure title. Standalone figures use local styling. Existing slip viewers
+retain their interfaces and behavior. Project analysis scripts choose members,
+reference values, map extents, shared colour scales, composites and export paths;
+they can save PNG/PDF or call `plt.show()` as appropriate.
+
+`geotomo_io.read_model(path)`, `read_predictions(path)`,
+`read_solution(project, run_name, member)` and `read_run(project, run_name)` expose
+arrays/dictionaries for custom analysis. Readers validate geometry, finite tensors,
+scalar moments, observed-minus-predicted residuals, archived damping and log norms;
+missing/inconsistent members fail. Undefined nodal planes may be NaN. Moments are
+explicitly named `sum_scalar_moment_nm` and `net_scalar_moment_nm`: the first sums
+point-source tensor norms, while the second is the scalar norm of their summed
+tensor. These are different diagnostics; neither automatically selects a catalog-
+consistent solution. `reference_mw` is optional and converted with MudPy's Mw
+convention. The inversion's raw-coefficient L2 penalty is distinct from these
+rotation-invariant scalar-moment norms.
+
+Full source hashes remain in run provenance. Response/matrix cache identity uses
+the numerical portion of `geotomo_io.py`, ending at its explicit result-reader
+boundary. Reader-only changes preserve numerical caches; production storage/
+assembly code belongs above the boundary. No cache records are migrated or
+rewritten by plotting.
+
 ## Forward profiling
 
 For a forward-only performance check on synthetic data, use a new destination:
