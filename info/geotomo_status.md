@@ -51,7 +51,7 @@ geotomo.run('/absolute/path/new_project/configs/experiment.toml')
 - Scalar imagery projections in metres, source-file ordering, and checked
   response completeness. Legacy slip-inversion interfaces retain their behavior.
 - Weighted data-space least squares and NNLS, with identity damping through
-  augmented rows. Spatial smoothing and other source penalties remain future work.
+  augmented rows for the linear full/fixed-tensor inversions.
 - Pure-DC nonlinear least squares for canonical HDF5 projects, initialized from
   one GCMT NDK event or explicit NED tensor. Positive moments/free rotations,
   scalar-moment L2 damping, deterministic sequential multistart and analytic
@@ -63,6 +63,24 @@ geotomo.run('/absolute/path/new_project/configs/experiment.toml')
   volume responses. The Norcia DC sweep and comparison figures are complete.
   Five damping values and 15 starts took 6,205 s wall with four BLAS threads.
   The saved-model reader handles subnormal rounding on zero-moment sources.
+- Optional horizontal mechanism smoothing for pure-DC runs uses same-depth
+  neighbors within an explicit WGS84 distance cutoff. One smoothing weight
+  penalizes harmonic-moment weighted unit-tensor differences with analytic
+  derivatives. Resolved records preserve neighbor IDs and per-start diagnostics
+  record the smoothing norm. The 83 regression tests pass. Three Norcia weights
+  at moment damping 0.01 completed in 104, 59 and 52 minutes with four BLAS
+  threads, using the verified existing matrix and 550 horizontal pairs.
+- L1 scalar-moment penalty in the numerical DC API and canonical TOML runs uses
+  bounded L-BFGS-B and analytic gradients. The 87 regression tests pass. Eight synthetic
+  cases use the complete Norcia matrix with three planted normal sources and
+  two starts per case. A fixed-mechanism control agrees with Lasso. Weak L1
+  recovers over 99.9% of moment on the planted nodes at the 2 mm noise level.
+  Arrays, diagnostics, timing and four PNG figures are saved for review.
+  Five real Norcia L1 weights and one matched smoothing run completed twelve
+  starts in 57.5 s of solver wall time. The pure-L1 comparison case gives
+  10.71 mm RMS with 75 nonzero nodes and 39 carrying 95% of moment. Adding
+  smoothing gives 10.88 mm with 74/38 nodes. Result readers validate L1 norms
+  and the full objective, and sweep plots use the recorded penalty norm.
 - One project per site/event, descriptive run names, exact configuration
   snapshots, resolved input/code/executable identities, and verified cache reuse.
 - HDF5 input from preprocessing packages, preserving mean look coefficients and

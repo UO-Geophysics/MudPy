@@ -3012,7 +3012,7 @@ def _geotomo_axes(axes, count, columns, figsize):
 def geotomo_tradeoff(project, run_name, *, reference_mw=None, highlight=None, axes=None):
     """Quick sweep overview; return (figure, flat axes), without saving/showing.
 
-    Plot coefficient/data L2 tradeoff, unweighted RMS, coefficient norm and two
+    Plot recorded penalty/data tradeoff, unweighted RMS, model norm and two
     distinct moment budgets. reference_mw is an optional external reference,
     not a fitted event magnitude or an automatic damping-selection criterion.
     """
@@ -3020,13 +3020,15 @@ def geotomo_tradeoff(project, run_name, *, reference_mw=None, highlight=None, ax
     import matplotlib.pyplot as plt
     from mudpy.geotomo_io import read_run
     run = read_run(project, run_name)
-    model_label = ('L2 norm of M0 / Mref' if run['settings']['inversion'].get('penalty') == 'scalar_moment_l2'
-                   else 'Coefficient L2 norm')
+    penalty = run['settings']['inversion'].get('penalty')
+    norm_key = 'model_l1' if penalty == 'scalar_moment_l1' else 'model_l2'
+    model_label = {'scalar_moment_l1': 'L1 norm of M0 / Mref',
+                   'scalar_moment_l2': 'L2 norm of M0 / Mref'}.get(penalty, 'Coefficient L2 norm')
     rows = run['solutions']
     order = np.argsort([row['damping'] for row in rows])
     members = np.array([row['member'] for row in rows])[order]
     values = {key: np.array([row[key] for row in rows])[order] for key in
-              ('damping', 'residual_l2', 'residual_rms_mm', 'model_l2',
+              ('damping', 'residual_l2', 'residual_rms_mm', norm_key,
                'sum_scalar_moment_nm', 'net_scalar_moment_nm')}
     labels = members[np.linspace(0, len(rows)-1, min(6, len(rows)), dtype=int)] if highlight is None else highlight
     if any(member not in members for member in labels):
@@ -3037,17 +3039,17 @@ def geotomo_tradeoff(project, run_name, *, reference_mw=None, highlight=None, ax
     with plt.rc_context({'font.family': 'DejaVu Sans', 'font.size': 10}):
         figure, axes = _geotomo_axes(axes, 4, 2, (11, 8))
         damping = values['damping']
-        axes[0].plot(values['model_l2'], values['residual_l2'], color='.5', lw=1)
-        axes[0].scatter(values['model_l2'], values['residual_l2'], c=members, cmap='viridis', s=30)
-        for name, data in (('x', values['model_l2']), ('y', values['residual_l2'])):
+        axes[0].plot(values[norm_key], values['residual_l2'], color='.5', lw=1)
+        axes[0].scatter(values[norm_key], values['residual_l2'], c=members, cmap='viridis', s=30)
+        for name, data in (('x', values[norm_key]), ('y', values['residual_l2'])):
             if (data > 0).all():
                 getattr(axes[0], 'set_'+name+'scale')('log')
         axes[0].set(xlabel=model_label, ylabel='Data residual L2 norm'+(' (m)' if run['weighting'] == 'none' else ' (weighted)'),
                     title='L-curve; labels are member numbers')
         axes[1].plot(damping, values['residual_rms_mm'], 'o-', ms=4)
         axes[1].set(ylabel='Unweighted residual RMS (mm)', title='Data fit')
-        axes[2].plot(damping, values['model_l2'], 'o-', ms=4)
-        if (values['model_l2'] > 0).all():
+        axes[2].plot(damping, values[norm_key], 'o-', ms=4)
+        if (values[norm_key] > 0).all():
             axes[2].set_yscale('log')
         axes[2].set(ylabel=model_label, title='Penalty used by the inversion')
         for key, label, marker in (
@@ -3076,7 +3078,7 @@ def geotomo_tradeoff(project, run_name, *, reference_mw=None, highlight=None, ax
             axis.set_xlabel(r'Damping $\lambda$')
         for member in labels:
             i = np.flatnonzero(members == member)[0]
-            axes[0].annotate(str(member), (values['model_l2'][i], values['residual_l2'][i]),
+            axes[0].annotate(str(member), (values[norm_key][i], values['residual_l2'][i]),
                              xytext=(4, 4), textcoords='offset points', fontsize=8)
             axes[1].annotate(str(member), (damping[i], values['residual_rms_mm'][i]),
                              xytext=(4, 4), textcoords='offset points', fontsize=8)

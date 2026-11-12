@@ -62,22 +62,34 @@ def _damping(value):
 
 def _double_couple(table):
     allowed = ('initial_tensor', 'initial_catalog', 'starts', 'seed', 'perturbation_deg',
-               'max_nfev', 'ftol', 'xtol', 'gtol')
+               'max_nfev', 'ftol', 'xtol', 'gtol', 'horizontal_smoothing',
+               'horizontal_neighbor_radius_km', 'moment_penalty')
     _keys(table, allowed, (), 'inversion.double_couple')
     if ('initial_tensor' in table) == ('initial_catalog' in table):
         raise ValueError('DC requires exactly one initial_tensor or initial_catalog')
     result = {'starts': 3, 'seed': 0, 'perturbation_deg': 30., 'max_nfev': 500,
-              'ftol': 1e-9, 'xtol': 1e-9, 'gtol': 1e-9}
+              'ftol': 1e-9, 'xtol': 1e-9, 'gtol': 1e-9, 'horizontal_smoothing': 0.,
+              'moment_penalty': 'l2'}
     result.update(table)
+    result['moment_penalty'] = _choice(result['moment_penalty'], ('l1', 'l2'), 'DC moment_penalty')
     for key, minimum in (('starts', 1), ('seed', 0), ('max_nfev', 1)):
         if type(result[key]) is not int or result[key] < minimum:
             raise ValueError('DC '+key+' must be an integer >= '+str(minimum))
-    for key in ('perturbation_deg', 'ftol', 'xtol', 'gtol'):
+    for key in ('perturbation_deg', 'ftol', 'xtol', 'gtol', 'horizontal_smoothing'):
         result[key] = _real(result[key], 'DC '+key)
     if not 0 <= result['perturbation_deg'] <= 180 or (result['starts'] > 1 and result['perturbation_deg'] == 0):
         raise ValueError('DC multistart requires positive perturbation_deg, at most 180')
     if any(result[key] <= np.finfo(float).eps for key in ('ftol', 'xtol', 'gtol')):
         raise ValueError('DC tolerances must exceed machine epsilon')
+    if result['horizontal_smoothing'] < 0:
+        raise ValueError('DC horizontal_smoothing must be nonnegative')
+    radius_key = 'horizontal_neighbor_radius_km'
+    if radius_key in result:
+        result[radius_key] = _real(result[radius_key], 'DC '+radius_key)
+        if result[radius_key] <= 0:
+            raise ValueError('DC '+radius_key+' must be positive')
+    elif result['horizontal_smoothing']:
+        raise ValueError('DC horizontal_smoothing requires '+radius_key)
     if 'initial_tensor' in result:
         values = result['initial_tensor']
         if not isinstance(values, list) or len(values) != 6:
@@ -215,8 +227,9 @@ class RunConfig:
             raise ValueError('inversion.double_couple requires source_model = double_couple')
         if source_model == 'double_couple' and observation_format != 'hdf5':
             raise ValueError('Pure-DC project runs require canonical HDF5 observations')
-        solver = _choice(inversion.get('solver', 'least_squares' if dc else 'lstsq'),
-                         ('least_squares',) if dc else ('lstsq', 'nnls'), 'inversion.solver')
+        dc_solver = 'lbfgsb' if dc.get('moment_penalty') == 'l1' else 'least_squares'
+        solver = _choice(inversion.get('solver', dc_solver if dc else 'lstsq'),
+                         (dc_solver,) if dc else ('lstsq', 'nnls'), 'inversion.solver')
         weighting = _choice(inversion.get('weighting', 'diagonal'), ('diagonal', 'none'), 'inversion.weighting')
         matrix_name = _name(matrix.get('name', name), 'matrix.name')
         if matrix_name.endswith('.npy'):
@@ -262,7 +275,7 @@ class RunConfig:
                                      'format': 'hdf5', 'basis': 'six reference moment tensors'}
         if self.double_couple:
             settings['inversion']['double_couple'] = self.double_couple.copy()
-            settings['inversion']['penalty'] = 'scalar_moment_l2'
+            settings['inversion']['penalty'] = 'scalar_moment_'+self.double_couple['moment_penalty']
         return settings
 
 
@@ -634,6 +647,11 @@ def run(config_file):
             initial['dc_unit_ned'] = dc_reference(initial['tensor_nm']).tolist()
             _verify_inputs(input_hashes)
         requested_sources = np.loadtxt(project/'data/model_info'/config.sources, ndmin=2)
+        horizontal_pairs = None
+        if 'invert' in config.steps and config.double_couple.get('horizontal_smoothing'):
+            from mudpy.geotomo_dc import _horizontal_neighbors
+            horizontal_pairs = _horizontal_neighbors(
+                requested_sources, config.double_couple['horizontal_neighbor_radius_km'])
         changed = np.flatnonzero(np.any(requested_sources != sources, axis=1))
         source_name = config.effective_source_path.name if len(changed) else config.sources
         code = _code_identity()
@@ -680,6 +698,8 @@ def run(config_file):
                              'effective_depth_km': float(sources[k, 3])} for k in changed]}
         if initial is not None:
             record['double_couple_initialization'] = initial
+        if horizontal_pairs is not None:
+            record['horizontal_neighbor_source_ids'] = sources[horizontal_pairs, 0].astype(int).tolist()
         if len(changed):
             with config.effective_source_path.open('x') as stream:
                 np.savetxt(stream, sources, fmt=['%d', '%.17g', '%.17g', '%.4f'],
@@ -739,7 +759,8 @@ def run(config_file):
             options = {'observations': rows, 'matrix': G} if hdf5 else {}
             if config.double_couple:
                 from mudpy.geotomo_dc import _run_inversion
-                _run_inversion(config, sources, rows, G, initial['tensor_nm'], provenance, source_name)
+                _run_inversion(config, sources, rows, G, initial['tensor_nm'], provenance,
+                               source_name, horizontal_pairs)
             else:
                 geotomo._run_inversion(home, name, config.name, source_name, config.earth_model,
                     config.observations if hdf5 else normalized.name,

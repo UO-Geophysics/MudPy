@@ -326,13 +326,12 @@ as a total-moment constraint.
 
 Each source has a nonnegative amplitude `a = M0 / 10**16.6 Nm` and three rotation
 coordinates. Rotating a normalized DC tensor preserves eigenvalues `[-a,0,a]`,
-so ISO and CLVD remain zero throughout optimization. Orientations are free:
-this mode does not enforce normal faulting, a fault surface, spatial smoothness,
-or proximity to the starting mechanism. The first start uses the catalog DC;
+so ISO and CLVD remain zero throughout optimization. By default, the solver
+fits each source mechanism independently. The first start uses the catalog DC;
 additional starts independently perturb each source by seeded rotations whose
 angles are uniform between zero and `perturbation_deg`.
 
-The objective is `||W(Gm(a,r)-d)||² + lambda² ||a||²`. This is nonlinear least
+The default objective is `||W(Gm(a,r)-d)||² + lambda² ||a||²`. This is nonlinear least
 squares with **rotation-invariant scalar-moment damping**, unlike the existing
 raw-component penalty. Retune damping rather than transferring a member's old
 lambda. For each start, direct NNLS on the damped system initializes amplitudes;
@@ -340,9 +339,27 @@ a numerical floor of 1% of the initial amplitude scale frees rotations at zero
 nodes. Final amplitudes have lower bound zero, without that initialization floor.
 An exactly zero dataset has the explicit zero-moment global minimum.
 
+Optional horizontal mechanism smoothing adds one weight, `horizontal_smoothing`,
+under `[inversion.double_couple]`. It defaults to zero. When positive, set
+`horizontal_neighbor_radius_km` to define the graph from source geometry. For
+example, 4.5 km includes the side neighbors of a 4 km square grid and excludes the
+diagonals. Pairs must share the same requested depth, before any FK adjustment,
+and be within the WGS84 surface distance cutoff. The resolved record lists
+the paired source IDs. A positive weight with no eligible pairs raises an error.
+
+For each pair, the added residual is the smoothing weight times the difference
+of the two unit-moment DC tensors, weighted by the harmonic mean
+`2*a_i*a_j/(a_i+a_j)` of the normalized moments. The squared tensor norm is
+`D:D/2`. Equal mechanisms incur zero penalty at any amplitudes, and a zero
+moment disables that pair's penalty. Scalar-moment damping retains its own
+weight. The initial NNLS solve still uses data and scalar-moment damping, and
+the nonlinear solver then includes all three terms. Diagnostics record the
+neighbor count, cutoff, weight, and each start's `horizontal_mechanism_l2` before
+multiplication by the smoothing weight.
+
 SciPy TRF/LSMR uses analytic rotation derivatives and a matrix-free Jacobian.
-The residual and penalty are both divided by the data L2 norm for convergence
-scaling; this leaves the objective minimizer unchanged. Saved residuals, costs
+The data residual and regularization terms are divided by the data L2 norm for
+convergence scaling, which preserves the objective minimizer. Saved residuals, costs
 and moment norms use the original units. `scaled_optimality` refers to the scaled
 objective. `max_nfev` applies to each start at each damping value. Starts execute
 sequentially with local state; ordinary BLAS threading remains independent.
@@ -380,6 +397,37 @@ Controlled validation (no real-data inversion):
 PYTHONPATH="$PWD/src/python" python -B examples/geotomo/validate_dc.py --output /absolute/new-validation-directory
 # Optionally pass --matrix /absolute/synthetic-six-component-matrix.npy.
 ```
+
+The numerical `geotomo_dc.solve` API also accepts `moment_penalty="l1"`.
+It minimizes `||Gm-d||² + damping*sum(a) + horizontal_smoothing²*S`
+with nonnegative moments and analytic L-BFGS-B gradients. L1 uses the damping
+weight directly. L2 uses its square. The amplitude coordinates are scaled
+before optimization. Diagnostics identify the optimizer, moment L1 norm,
+iterations, evaluations, exact active count and stopping condition.
+
+Full-volume sparse synthetic validation uses an existing Norcia six-component
+matrix and its checked project configuration. This experiment plants three
+normal sources among all 315 candidates, adds 2 mm LOS noise, tests horizontal
+smoothing, and repeats with an oblique starting mechanism. Fixed-mechanism
+L-BFGS-B is checked against scikit-learn Lasso's objective and dual gap.
+The numerical experiment uses two starts per case.
+
+```sh
+PATH="$PWD/src/fk:$PATH" PYTHONPATH="$PWD/src/python" MPLBACKEND=Agg \
+python -u -B examples/geotomo/validate_dc.py \
+  --sparse-config /absolute/Norcia2016/configs/t44_aci_volume_dc_gcmt_v4.toml \
+  --output /absolute/existing-parent/new-sparse-validation
+```
+
+This command requires scikit-learn for the independent convex reference. It
+preserves arrays, metrics, input/code fingerprints and PNG plots. Source counts
+include both exact nonzero moments and the number carrying 95% of total moment.
+Canonical TOML runs also accept `moment_penalty = "l1"` in
+`[inversion.double_couple]` with `solver = "lbfgsb"` in `[inversion]`.
+Existing DC TOMLs default to the L2/TRF solver. L1 settings, solver diagnostics,
+model/prediction checksums and per-start timings are archived with each run.
+The tradeoff viewer uses the recorded L1 moment norm for these runs. The log's
+legacy `Lm` field retains its L2 meaning for existing readers.
 
 The driver tests noiseless/noisy changing-dip sources and damping, records code/
 input identities, and refuses an existing output directory. Numerical and TOML

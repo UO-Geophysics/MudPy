@@ -48,6 +48,8 @@ damping = [0.0]
 # solver = "least_squares" above, then uncomment this table. Retune damping:
 # DC penalizes L2 of scalar moments / 10**16.6 Nm, not raw tensor components.
 # [inversion.double_couple]
+# moment_penalty = "l2"  # "l1" uses solver = "lbfgsb" in [inversion].
+# L1 adds damping*sum(M0/Mref); L2 adds damping**2*sum((M0/Mref)**2).
 # initial_catalog = "event.ndk"  # Exactly one GCMT event in data/model_info.
 # Or initial_tensor = [...]  # Six NED components, xx,xy,xz,yy,yz,zz; orientation only.
 # starts = 3
@@ -57,6 +59,8 @@ damping = [0.0]
 # ftol = 1e-9
 # xtol = 1e-9
 # gtol = 1e-9
+# horizontal_smoothing = 0.0  # Optional mechanism smoothing weight.
+# horizontal_neighbor_radius_km = 4.5  # Required if weight > 0; example for a 4 km grid.
 
 [matrix]
 # name = "shared_matrix"  # Optional basename without .npy; defaults to run.name.

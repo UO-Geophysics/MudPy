@@ -8,7 +8,10 @@ from unittest.mock import patch
 import numpy as np
 
 from mudpy.analysis import double_couple_tensors, decompose_geotomo_tensors
-from mudpy.geotomo_dc import solve, dc_reference, _jacobian_operator, _initial_amplitudes
+from mudpy.geotomo_dc import (
+    solve, dc_reference, _jacobian_operator, _initial_amplitudes,
+    _horizontal_neighbors, _horizontal_terms, _l1_objective,
+)
 from mudpy import geotomo, geotomo_io as io, geotomo_config as config
 
 
@@ -21,6 +24,45 @@ V10   4.975 73 100   0.120  8 216  -5.095 15 308   5.035  49 30  106 211 61   81
 
 
 class DoubleCoupleTests(unittest.TestCase):
+    def test_l1_objective_gradient_with_smoothing_and_zero_amplitudes(self):
+        rng = np.random.default_rng(23)
+        matrix, data = rng.normal(size=(25, 18)), rng.normal(size=25)
+        parameters = np.array([[2., .2, .1, -.3], [.7, -.1, .3, .1], [0., .1, -.2, 0]])
+        base, pairs = np.diag([-1., 0, 1]), np.array([[0, 1], [1, 2]])
+        def objective(p):
+            return _l1_objective(p, matrix, data, base, .4, .3, pairs)
+        value, gradient = objective(parameters)
+        for k, direction in enumerate(np.eye(parameters.size)):
+            direction = direction.reshape(parameters.shape)
+            if k == 8:
+                numeric = (objective(parameters+1e-7*direction)[0]-value)/1e-7
+            else:
+                numeric = (objective(parameters+1e-6*direction)[0]-
+                           objective(parameters-1e-6*direction)[0])/2e-6
+            self.assertAlmostEqual(gradient[k], numeric, delta=2e-5)
+
+    def test_l1_recovery_matches_analytic_soft_threshold_and_units(self):
+        matrix = np.diag(np.tile(np.sqrt([.5, 1, 1, .5, 1, .5]), 3))
+        reference = [-1, 0, 0, 0, 0, 1]
+        p = np.array([[2., 0, 0, 0], [.7, 0, 0, 0], [0., 0, 0, 0]])
+        truth, _ = double_couple_tensors(p, dc_reference(reference))
+        data = matrix @ truth.ravel()
+        result, report = solve(matrix, data, .4, reference, starts=1, moment_penalty='l1')
+        expected = truth.copy()
+        expected[0] *= 1.8/2
+        expected[1] *= .5/.7
+        np.testing.assert_allclose(result.ravel(), expected.ravel(), atol=1e-7)
+        selected = report['starts'][0]
+        self.assertEqual(selected['active_source_count'], 2)
+        self.assertEqual(report['optimizer'], 'L-BFGS-B')
+        self.assertAlmostEqual(2*selected['cost'], selected['residual_l2']**2+.4*selected['moment_l1'])
+        scaled, _ = solve(matrix*.01, data*.01, .4*.01**2, reference,
+                          starts=1, moment_penalty='l1')
+        np.testing.assert_allclose(scaled, result, atol=1e-7)
+        zero, info = solve(matrix, data*0, .4, reference, starts=1, moment_penalty='l1')
+        np.testing.assert_array_equal(zero, 0)
+        self.assertTrue(info['global_optimum_established'])
+
     def test_correlated_volume_amplitude_initialization_satisfies_kkt(self):
         rng = np.random.default_rng(261110)
         matrix = rng.normal(size=(100, 8)) @ rng.normal(size=(8, 120))
@@ -71,6 +113,72 @@ class DoubleCoupleTests(unittest.TestCase):
         selected = info['starts'][info['selected_start']]
         self.assertAlmostEqual(2*selected['cost'], selected['residual_l2']**2+4*selected['moment_l2']**2)
 
+    def test_horizontal_neighbors_respect_requested_depth_and_exclude_diagonals(self):
+        # Four corners, shuffled IDs, plus a source above the first corner.
+        sources = np.array([[19, 0, 0, 4], [4, .036, 0, 4], [8, .036, .036, 4],
+                            [2, 0, 0, 1], [13, 0, .036, 4]])
+        np.testing.assert_array_equal(_horizontal_neighbors(sources, 4.5),
+                                      [[0, 1], [0, 4], [1, 2], [2, 4]])
+        with self.assertRaisesRegex(ValueError, 'no same-depth neighbors'):
+            _horizontal_neighbors(sources, 3.)
+
+    def test_horizontal_residual_jacobian_and_zero_moment_pairs(self):
+        base = np.diag([-1., 0, 1])
+        p = np.array([[2., .3, -.5, .1], [.7, 0, 0, 0], [1., -.2, .4, 0]])
+        pairs = np.array([[0, 1], [0, 2], [1, 2]])
+        rng = np.random.default_rng(42)
+        G = rng.normal(size=(20, 18))
+        damping, smoothing = .2, .7
+
+        def residual(parameters):
+            coefficients, derivative = double_couple_tensors(parameters, base)
+            edge = _horizontal_terms(parameters[:, 0], derivative, pairs)
+            return np.r_[G @ coefficients.ravel(), damping*parameters[:, 0], smoothing*edge.ravel()]
+
+        _, derivative = double_couple_tensors(p, base)
+        blocks = tuple(smoothing*block for block in _horizontal_terms(p[:, 0], derivative, pairs, jacobian=True))
+        J = _jacobian_operator(G, derivative, damping, pairs, blocks)
+        numeric = np.column_stack([(residual(p+1e-6*h.reshape(p.shape)) -
+                                    residual(p-1e-6*h.reshape(p.shape)))/2e-6 for h in np.eye(p.size)])
+        np.testing.assert_allclose(J @ np.eye(p.size), numeric, atol=5e-9)
+        v = rng.normal(size=J.shape[0])
+        np.testing.assert_allclose(J.rmatvec(v), numeric.T @ v, atol=1e-8)
+
+        p[1, 1:] = p[0, 1:]  # Same mechanism, unequal moments.
+        p[2, 0] = 0.
+        _, derivative = double_couple_tensors(p, base)
+        np.testing.assert_array_equal(_horizontal_terms(p[:, 0], derivative, pairs), 0)
+        p[1, 0] = 0.
+        _, derivative = double_couple_tensors(p, base)
+        np.testing.assert_array_equal(_horizontal_terms(p[:, 0], derivative, pairs, jacobian=True)[0][-1], 0)
+
+    def test_horizontal_smoothing_reduces_orientation_difference_and_keeps_dc(self):
+        reference = [-1, 0, 0, 0, 0, 1]
+        p = np.array([[2., .4, 0, 0], [1.5, -.4, 0, 0], [1., 0, .5, 0]])
+        truth, _ = double_couple_tensors(p, dc_reference(reference))
+        matrix = np.eye(truth.size)
+        pairs = [[0, 1]]
+        baseline, _ = solve(matrix, truth.ravel(), 0., reference, starts=1)
+        disabled, _ = solve(matrix, truth.ravel(), 0., reference, starts=1, horizontal_pairs=pairs)
+        np.testing.assert_array_equal(disabled, baseline)
+        smooth, report = solve(matrix, truth.ravel(), 0., reference, starts=1,
+                               horizontal_smoothing=1., horizontal_pairs=pairs)
+        baseline = baseline.reshape(-1, 6)
+        tensors = smooth.reshape(-1, 6)
+        parts = decompose_geotomo_tensors(tensors)
+        np.testing.assert_allclose(parts['moment_nm']['iso'], 0, atol=1e-14)
+        np.testing.assert_allclose(parts['moment_nm']['clvd'], 0, atol=1e-14)
+        np.testing.assert_allclose(tensors[2], baseline[2], atol=1e-7)
+        unit = tensors/parts['moment_nm']['full'][:, None]
+        np.testing.assert_array_less(np.linalg.norm(unit[0]-unit[1]),
+                                     np.linalg.norm(baseline[0]/p[0, 0]-baseline[1]/p[1, 0]))
+        selected = report['starts'][report['selected_start']]
+        self.assertAlmostEqual(2*selected['cost'], selected['residual_l2']**2+
+                               selected['horizontal_mechanism_l2']**2)
+        with self.assertRaisesRegex(ValueError, 'pairs must be unique'):
+            solve(matrix, truth.ravel(), 0., reference, starts=1, horizontal_smoothing=1.,
+                  horizontal_pairs=[[0, 1], [1, 0]])
+
     def test_failed_convergence_is_loud_and_zero_data_are_exact(self):
         G = np.random.default_rng(12).normal(size=(30, 6))
         p = np.array([[2., .7, .3, -.1]])
@@ -99,7 +207,7 @@ class DCProjectTests(unittest.TestCase):
         text = text.replace('weighting = "diagonal"', 'weighting = "none"')
         self.full = self.project/'configs/full.toml'
         self.full.write_text(text)
-        np.savetxt(self.project/'data/model_info/template.sources', [[19, 13, 43, 3], [4, 13.01, 43, 5]])
+        np.savetxt(self.project/'data/model_info/template.sources', [[19, 13, 43, 3], [4, 13.01, 43, 3]])
         self.matrix = np.random.default_rng(93).normal(size=(30, 12))*.01
         truth, _ = double_couple_tensors(np.array([[2, .2, -.1, 0], [1, -.2, 0, .1]]), np.diag([-1., 0, 1]))
         io.write_observations(self.project/'data/statics/synthetic.h5', ['R%d' % k for k in range(30)],
@@ -166,6 +274,27 @@ class DCProjectTests(unittest.TestCase):
         self.assertFalse((folder/'dc_synthetic.0000.inv').exists())
         self.assertFalse((self.project/'.geotomo.lock').exists())
 
+    def test_toml_horizontal_smoothing_reuses_matrix_and_archives_graph(self):
+        with patch.object(config.shutil, 'which', return_value=None):
+            self.dc.write_text(self.dc_text+'horizontal_smoothing = 0.03\n')
+            with self.assertRaisesRegex(ValueError, 'requires horizontal_neighbor_radius_km'):
+                geotomo.run(self.dc)
+            self.dc.write_text(self.dc_text+'horizontal_smoothing = 0.03\nhorizontal_neighbor_radius_km = 0.5\n')
+            with self.assertRaisesRegex(ValueError, 'no same-depth neighbors'):
+                geotomo.run(self.dc)
+            self.assertFalse((self.project/'output/inverse_models/models/dc_synthetic.resolved.json').exists())
+            self.dc.write_text(self.dc_text+'horizontal_smoothing = 0.03\nhorizontal_neighbor_radius_km = 1.0\n')
+            record = json.loads(geotomo.run(self.dc).read_text())
+        self.assertEqual(record['horizontal_neighbor_source_ids'], [[19, 4]])
+        self.assertEqual(record['settings']['inversion']['double_couple']['horizontal_smoothing'], .03)
+        result = io.read_solution(self.project, 'dc_synthetic', 0)
+        diagnostic = result['solver_diagnostics']
+        self.assertEqual(diagnostic['horizontal_pair_count'], 1)
+        self.assertEqual(diagnostic['horizontal_neighbor_radius_km'], 1.)
+        self.assertEqual(diagnostic['horizontal_smoothing'], .03)
+        self.assertEqual(self.cache_file.read_bytes(), self.cache_before)
+        np.testing.assert_array_equal(np.load(self.matrix_file), self.matrix)
+
     def test_weighted_sweep_readers_and_penalty_label(self):
         self.dc.write_text(self.dc_text.replace('weighting = "none"', 'weighting = "diagonal"')
                            .replace('damping = [0.0]', 'damping = [0.0, 10.0]'))
@@ -182,6 +311,55 @@ class DCProjectTests(unittest.TestCase):
         figure, axes = view.geotomo_tradeoff(self.project, 'dc_synthetic')
         self.assertEqual(axes[0].get_xlabel(), 'L2 norm of M0 / Mref')
         plt.close(figure)
+
+    def test_l1_toml_sweep_smoothing_reader_and_viewer(self):
+        text = self.dc_text.replace('solver = "least_squares"', 'solver = "lbfgsb"')
+        text = text.replace('damping = [0.0]', 'damping = [0.00001, 0.001]')
+        self.dc.write_text(text+'moment_penalty = "l1"\nmax_nfev = 3000\ngtol = 1e-7\n'
+                           'horizontal_smoothing = 0.001\nhorizontal_neighbor_radius_km = 1.0\n')
+        with patch.object(config.shutil, 'which', return_value=None):
+            record = json.loads(geotomo.run(self.dc).read_text())
+        self.assertEqual(record['settings']['inversion']['penalty'], 'scalar_moment_l1')
+        self.assertEqual(record['settings']['inversion']['solver'], 'lbfgsb')
+        run = io.read_run(self.project, 'dc_synthetic')
+        self.assertLess(run['solutions'][1]['model_l1'], run['solutions'][0]['model_l1'])
+        for member in (0, 1):
+            result = io.read_solution(self.project, 'dc_synthetic', member)
+            self.assertEqual(result['solver_diagnostics']['optimizer'], 'L-BFGS-B')
+            self.assertAlmostEqual(result['model_l1'],
+                                   result['model']['sum_scalar_moment_nm']/io.REFERENCE_MOMENT_NM)
+        self.assertEqual(self.cache_file.read_bytes(), self.cache_before)
+        np.testing.assert_array_equal(np.load(self.matrix_file), self.matrix)
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+        with matplotlib.rc_context():
+            from mudpy import view
+        figure, axes = view.geotomo_tradeoff(self.project, 'dc_synthetic')
+        self.assertEqual(axes[0].get_xlabel(), 'L1 norm of M0 / Mref')
+        self.assertEqual(axes[2].get_ylabel(), 'L1 norm of M0 / Mref')
+        plt.close(figure)
+        self.dc.write_text(text+'moment_penalty = "l1"\n')
+        with self.assertRaisesRegex(FileExistsError, 'already exists'):
+            geotomo.run(self.dc)
+
+    def test_l1_config_requires_matching_optimizer_and_archives_failure(self):
+        self.dc.write_text(self.dc_text+'moment_penalty = "l1"\n')
+        with self.assertRaisesRegex(ValueError, 'inversion.solver'):
+            config.RunConfig.load(self.dc)
+        self.dc.write_text(self.dc_text+'moment_penalty = "l0"\n')
+        with self.assertRaisesRegex(ValueError, 'moment_penalty'):
+            config.RunConfig.load(self.dc)
+        text = self.dc_text.replace('solver = "least_squares"', 'solver = "lbfgsb"')
+        self.dc.write_text(text+'moment_penalty = "l1"\nmax_nfev = 1\n')
+        with patch.object(config.shutil, 'which', return_value=None):
+            with self.assertRaisesRegex(RuntimeError, 'No DC solver start'):
+                geotomo.run(self.dc)
+        models = self.project/'output/inverse_models/models'
+        failure = json.loads((models/'dc_synthetic.0000.solver.json').read_text())
+        self.assertFalse(failure['success'])
+        self.assertFalse((models/'dc_synthetic.0000.inv').exists())
+        self.assertFalse((self.project/'.geotomo.lock').exists())
 
     def test_catalog_units_coordinates_preflight_and_hashes(self):
         path = self.project/'data/model_info/event.ndk'

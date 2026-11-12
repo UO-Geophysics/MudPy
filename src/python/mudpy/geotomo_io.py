@@ -367,8 +367,12 @@ def read_solution(project, run_name, member):
         if metadata['solver_sha256'] != _hash(path):
             raise ValueError('DC solver diagnostics changed after writing predictions')
         solver = json.loads(path.read_text())
+        dc_settings = settings['inversion'].get('double_couple', {})
+        penalty = dc_settings.get('moment_penalty', 'l2')
+        if penalty not in ('l1', 'l2'):
+            raise ValueError('Unsupported archived DC moment penalty')
         if (not solver['success'] or solver['run_name'] != run_name or solver['member'] != member or
-                solver['damping'] != fields['lambda_spatial'] or solver['penalty'] != 'scalar_moment_l2' or
+                solver['damping'] != fields['lambda_spatial'] or solver['penalty'] != 'scalar_moment_'+penalty or
                 solver['moment_reference_nm'] != REFERENCE_MOMENT_NM):
             raise ValueError('Invalid DC solver identity, convergence or moment normalization')
         selected = solver['starts'][solver['selected_start']]
@@ -376,6 +380,18 @@ def read_solution(project, run_name, member):
                 not np.isclose(selected['moment_l2'], fields['Lm'], rtol=1e-8, atol=1e-12) or
                 not np.isclose(np.linalg.norm(model['scalar_moment_nm']/REFERENCE_MOMENT_NM), fields['Lm'], rtol=1e-8, atol=1e-12)):
             raise ValueError('DC selected solution disagrees with logged/model norms')
+        moment_cost = (fields['lambda_spatial']*selected['moment_l1'] if penalty == 'l1'
+                       else (fields['lambda_spatial']*selected['moment_l2'])**2)
+        if penalty == 'l1' and not np.isclose(selected['moment_l1'],
+                model['scalar_moment_nm'].sum()/REFERENCE_MOMENT_NM, rtol=1e-8, atol=1e-12):
+            raise ValueError('DC selected L1 moment norm disagrees with the saved model')
+        smoothing = dc_settings.get('horizontal_smoothing', 0.)
+        if solver.get('horizontal_smoothing', 0.) != smoothing:
+            raise ValueError('DC horizontal smoothing disagrees with archived settings')
+        smoothing_cost = (smoothing*selected['horizontal_mechanism_l2'])**2 if smoothing else 0.
+        if not np.isclose(2*selected['cost'], fields['L2']**2+moment_cost+smoothing_cost,
+                          rtol=1e-8, atol=1e-12):
+            raise ValueError('DC selected objective disagrees with its residual and penalties')
         tensor = model['tensors_nm'][:, [[0, 1, 2], [1, 3, 4], [2, 4, 5]]]
         # Check tensor shape at unit scale. The stored moment can underflow
         # to zero for a nonzero tensor when its components are squared.
@@ -391,10 +407,13 @@ def read_solution(project, run_name, member):
                              where=scale.ravel() > 0)
         if not np.all(abs(eigenvalues-expected) <= (1e-8*moment+rounding)[:, None]):
             raise ValueError('Saved DC solution contains ISO or CLVD')
-    return {'member': member, 'run_name': run_name, 'model': model, 'predictions': prediction,
+    result = {'member': member, 'run_name': run_name, 'model': model, 'predictions': prediction,
             'damping': fields['lambda_spatial'], 'residual_l2': fields['L2'], 'model_l2': fields['Lm'],
             'weighting': weighting, 'solver_diagnostics': solver,
             'residual_rms_mm': float(np.sqrt(np.mean(prediction['residual_m']**2))*1000)}
+    if solver is not None and solver['penalty'] == 'scalar_moment_l1':
+        result['model_l1'] = selected['moment_l1']
+    return result
 
 
 def read_run(project, run_name):
@@ -417,6 +436,8 @@ def read_run(project, run_name):
                   for key in ('ids', 'coordinates', 'los_m', 'projection_neu', 'sigma_m'))):
             raise ValueError('Sweep member source or observation geometry/data changed')
         rows.append({key: solution[key] for key in ('member', 'damping', 'residual_l2', 'model_l2', 'residual_rms_mm')})
+        if 'model_l1' in solution:
+            rows[-1]['model_l1'] = solution['model_l1']
         rows[-1].update(sum_scalar_moment_nm=model['sum_scalar_moment_nm'],
                         net_scalar_moment_nm=model['net_scalar_moment_nm'])
     return {'project': project, 'run_name': run_name, 'weighting': solution['weighting'],
