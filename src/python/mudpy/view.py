@@ -3089,6 +3089,150 @@ def geotomo_tradeoff(project, run_name, *, reference_mw=None, highlight=None, ax
         return figure, axes
 
 
+def geotomo_gnss_fit(prediction_file, *, units='mm', extent=None, labels=(),
+                     vector_scale=None, vertical_limits=None, residual_limits=None, axes=None):
+    """Station NEU predictions: horizontal vectors and vertical displacement maps.
+
+    No fitting or file writes. Vector scale is displayed displacement units per
+    inch; supplied limits/scales can be shared between models. Heights are not
+    used to project the map. Labels are station IDs, or a mapping from IDs to
+    text offsets (dx, dy) in points for crowded networks.
+    """
+    import numpy as np
+    import matplotlib.pyplot as plt
+    from mudpy.geotomo_io import read_gnss_predictions
+    if units not in ('m', 'mm'):
+        raise ValueError('Units must be m or mm')
+    data = read_gnss_predictions(prediction_file)
+    scale = 1000 if units == 'mm' else 1
+    values = [data[key]*scale for key in ('displacement_m', 'prediction_m', 'residual_m')]
+    lon, lat = data['coordinates'].T
+    if extent is None:
+        extent = (lon.min()-.05, lon.max()+.05, lat.min()-.05, lat.max()+.05)
+    if (len(extent) != 4 or not np.isfinite(extent).all() or
+            extent[0] >= extent[1] or extent[2] >= extent[3]):
+        raise ValueError('Extent must be finite increasing longitude and latitude pairs')
+    visible = (lon >= extent[0]) & (lon <= extent[1]) & (lat >= extent[2]) & (lat <= extent[3])
+    if not visible.any():
+        raise ValueError('No GNSS stations fall inside the map extent')
+    if any(name not in data['ids'] for name in labels):
+        raise ValueError('Unknown GNSS station label')
+    label_offsets = labels if isinstance(labels, dict) else {name: (3, 3) for name in labels}
+    if any(np.asarray(offset).shape != (2,) or not np.isfinite(offset).all() for offset in label_offsets.values()):
+        raise ValueError('Station label offsets must be finite (dx, dy) pairs in points')
+    if vector_scale is None:
+        vector_scale = max(np.linalg.norm(value[visible, :2], axis=1).max() for value in values)*1.4 or 1.
+    if not np.isfinite(vector_scale) or vector_scale <= 0:
+        raise ValueError('Vector scale must be positive and finite')
+    if vertical_limits is None:
+        bound = max(abs(value[visible, 2]).max() for value in values[:2]) or 1.
+        vertical_limits = (-bound, bound)
+    if residual_limits is None:
+        bound = abs(values[2][visible, 2]).max() or 1.
+        residual_limits = (-bound, bound)
+    for limits in (vertical_limits, residual_limits):
+        if len(limits) != 2 or not np.isfinite(limits).all() or limits[0] >= limits[1]:
+            raise ValueError('Colour limits must be finite increasing pairs')
+    with plt.rc_context({'font.family': 'DejaVu Sans', 'font.size': 10}):
+        figure, flat_axes = _geotomo_axes(axes, 6, 3, (14, 8))
+        grid = flat_axes.reshape(2, 3)
+        for column, (value, title) in enumerate(zip(values, ('Observed', 'Predicted', 'Observed − predicted'))):
+            axis = grid[0, column]
+            axis.scatter(lon[visible], lat[visible], s=8, color='.55')
+            arrows = axis.quiver(lon[visible], lat[visible], value[visible, 1], value[visible, 0],
+                                  angles='uv', scale_units='inches', scale=vector_scale, color='black', width=.004)
+            reference = vector_scale*.3
+            axis.quiverkey(arrows, .75, 1.04, reference, '%.3g %s' % (reference, units), coordinates='axes')
+            axis.set_title(title+' horizontal', pad=28)
+            axis = grid[1, column]
+            limits = residual_limits if column == 2 else vertical_limits
+            vertical = value[visible, 2]
+            image = axis.scatter(lon[visible], lat[visible], c=vertical, s=30, cmap='RdBu_r',
+                                  vmin=limits[0], vmax=limits[1], edgecolors='.3', linewidths=.3)
+            below, above = (vertical < limits[0]).any(), (vertical > limits[1]).any()
+            extend = 'both' if below and above else 'min' if below else 'max' if above else 'neither'
+            figure.colorbar(image, ax=axis, shrink=.8, label=units, extend=extend)
+            axis.set_title(title+' up')
+            for index in np.flatnonzero(visible & np.isin(data['ids'], list(label_offsets))):
+                for row in range(2):
+                    grid[row, column].annotate(data['ids'][index], (lon[index], lat[index]),
+                                               xytext=label_offsets[data['ids'][index]], textcoords='offset points',
+                                               fontsize=7, arrowprops={'arrowstyle': '-', 'color': '.4', 'lw': .5})
+        for axis in flat_axes:
+            axis.set(xlim=extent[:2], ylim=extent[2:], xlabel='Longitude (degrees)', ylabel='Latitude (degrees)')
+            axis.set_aspect(1/np.cos(np.deg2rad(lat[visible].mean())))
+            axis.grid(alpha=.2)
+        return figure, grid
+
+
+def geotomo_joint_background(project, run_name, member, *, units='mm', limits=None,
+                             background_limits=None, axes=None):
+    """Separate elastic LOS, fitted background and their total; return without writes."""
+    import numpy as np
+    import matplotlib.pyplot as plt
+    from mudpy.geotomo_io import read_solution
+    if units not in ('m', 'mm'):
+        raise ValueError('Units must be m or mm')
+    solution = read_solution(project, run_name, member)
+    if 'joint_predictions' not in solution:
+        raise ValueError('A joint prediction archive is required')
+    data = solution['predictions']
+    scale = 1000 if units == 'mm' else 1
+    values = [data[key]*scale for key in ('source_prediction_m', 'background_m', 'prediction_m')]
+    if limits is None:
+        bound = max(abs(values[0]).max(), abs(values[2]).max()) or 1.
+        limits = (-bound, bound)
+    if background_limits is None:
+        bound = abs(values[1]).max() or 1.
+        background_limits = (-bound, bound)
+    for bounds in (limits, background_limits):
+        if len(bounds) != 2 or not np.isfinite(bounds).all() or bounds[0] >= bounds[1]:
+            raise ValueError('Colour limits must be finite increasing pairs')
+    lon, lat = data['coordinates'].T
+    with plt.rc_context({'font.family': 'DejaVu Sans', 'font.size': 10}):
+        figure, axes = _geotomo_axes(axes, 3, 3, (13, 4.6))
+        for axis, value, bounds, title in zip(axes, values, (limits, background_limits, limits),
+                ('Elastic-source LOS', 'Fitted imagery background', 'Source + background')):
+            image = axis.scatter(lon, lat, c=value, s=16, cmap='RdBu_r', vmin=bounds[0], vmax=bounds[1])
+            below, above = (value < bounds[0]).any(), (value > bounds[1]).any()
+            extend = 'both' if below and above else 'min' if below else 'max' if above else 'neither'
+            figure.colorbar(image, ax=axis, label=units, shrink=.8, extend=extend)
+            axis.set(xlabel='Longitude (degrees)', ylabel='Latitude (degrees)', title=title)
+            axis.set_aspect(1/np.cos(np.deg2rad(lat.mean())))
+            axis.grid(alpha=.2)
+        return figure, axes
+
+
+def geotomo_gnss_components(prediction_file, *, units='mm', limits=None, axes=None):
+    """Observed versus predicted station components; error bars are reported uncertainties."""
+    import numpy as np
+    import matplotlib.pyplot as plt
+    from mudpy.geotomo_io import read_gnss_predictions
+    if units not in ('m', 'mm'):
+        raise ValueError('Units must be m or mm')
+    data = read_gnss_predictions(prediction_file)
+    scale = 1000 if units == 'mm' else 1
+    observed, predicted, sigma = (data[key]*scale for key in ('displacement_m', 'prediction_m', 'sigma_m'))
+    if limits is None:
+        bound = max(abs(observed).max(), abs(predicted).max())*1.1 or 1.
+        limits = (-bound, bound)
+    if len(limits) != 2 or not np.isfinite(limits).all() or limits[0] >= limits[1]:
+        raise ValueError('Limits must be a finite increasing pair')
+    with plt.rc_context({'font.family': 'DejaVu Sans', 'font.size': 10}):
+        figure, axes = _geotomo_axes(axes, 3, 3, (13, 4))
+        for component, axis in enumerate(axes):
+            axis.errorbar(observed[:, component], predicted[:, component], xerr=sigma[:, component],
+                           fmt='o', ms=3, elinewidth=.6, alpha=.7)
+            axis.plot(limits, limits, '--', color='.4')
+            rms = np.sqrt(np.mean((observed[:, component]-predicted[:, component])**2))
+            axis.set(xlim=limits, ylim=limits, xlabel='Observed (%s)' % units,
+                     ylabel='Predicted (%s)' % units,
+                     title='%s · RMS %.2f %s' % (('North', 'East', 'Up')[component], rms, units))
+            axis.set_aspect('equal')
+            axis.grid(alpha=.2)
+        return figure, axes
+
+
 def geotomo_fit(project, run_name, member, *, units='mm', limits=None, residual_limits=None,
                 cmap='RdBu_r', label='LOS', axes=None):
     """Observed/predicted/residual samples without interpolation or file writes.

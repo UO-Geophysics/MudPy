@@ -817,11 +817,134 @@ answer. DC3D0 inputs use `alpha=2/3`, source depth 3000 m, and strike/dip potenc
 The five recorded mechanisms check off-diagonal signs and diagonal differences.
 See the [NIED DC3D/DC3D0 manual](https://www.bosai.go.jp/information/pdf/DC3Dmanual.pdf).
 
+## Static GNSS prediction
+
+`mudpy.geotomo_io.import_gnss_table` imports a ten-column numeric table:
+`station lon lat height_m E_mm sigmaE_mm N_mm sigmaN_mm U_mm sigmaU_mm`.
+It converts offsets and reported uncertainties to metres and explicit NEU order,
+preserves station heights and input fingerprints, and accepts an `exclude`
+mapping from station IDs to reasons. It does not select stations by displacement
+amplitude, rescale uncertainties or infer their confidence convention.
+`write_gnss`/`read_gnss` use a separate `mudpy.geotomo.gnss` HDF5 schema (version 1)
+with station arrays `(station, NEU)`, independent of scalar imagery packages.
+
+For a TOML forward run, select `inputs.observation_format = "gnss_hdf5"` and
+place the package in `data/statics/`. Use `run.steps = ["greens", "synthetics"]`
+and the full-tensor response basis. Station NEU responses are computed once per
+source/station, using the existing parallel workers, HDF5 library, project lock,
+interface policy and optional native-file cleanup. Receivers remain at the flat
+elastic model top; supplied heights are preserved but not applied as FK depths.
+The resolved record states that approximation. Standalone `gnss_hdf5` inversion
+requests fail explicitly; combined inversion uses the separate joint package below.
+
+For a saved model, predict without refitting:
+
+```python
+from mudpy import geotomo_io as io, view
+
+stations = io.read_gnss(project / "data/statics/stations.h5")
+solution = io.read_solution(project, model_run_name, 0)
+prediction = io.predict_gnss(response_library, stations, solution["model"])
+io.write_gnss_predictions(prediction_file, stations, prediction,
+                          provenance={"model_run": model_run_name})
+figure, axes = view.geotomo_gnss_fit(prediction_file)
+```
+
+`predict_gnss` checks source/station geometry and ordering, complete finite response
+blocks, NED tensor conventions and the reference moment. No station datum shift
+or data fitting is performed. Archive model/library/input hashes in `provenance`
+for reproducible project studies. `read_gnss_predictions` checks NEU arrays and
+observed-minus-predicted residuals. `view.geotomo_gnss_fit` returns a 2-by-3 axes
+array for horizontal vectors and vertical maps; `view.geotomo_gnss_components`
+returns three axes for observed/predicted components with supplied uncertainty
+bars. Both return figures without saving or showing. Map extents, scales and
+label offsets can be shared across comparisons.
+
+## Joint imagery/GNSS DC inversion with a fitted background
+
+`geotomo_io.import_joint_preprocessing(directory, imagery_file, gnss_file, output)`
+restores original LOS cell means using the archived preprocessing arrays and
+exact cell membership. Receiver locations and mean look coefficients remain
+unchanged. The six normalized polynomial columns `(1, x, y, x², xy, y²)` are
+averaged over those same cells, rather than evaluated at a representative pixel.
+No native-pixel GFs are generated. The prior imagery package is preserved.
+
+The version-1 `mudpy.geotomo.joint` HDF5 package stores separate imagery and GNSS
+groups and a full-rank, dimensionless background basis. `write_joint`/`read_joint`
+validate geometry, units and NEU component order. Configure an invert-only DC run:
+
+```toml
+[inputs]
+sources = "volume.sources"
+earth_model = "earth.mod"
+observations = "joint.h5"
+observation_format = "joint_hdf5"
+
+[responses]
+name = "existing_imagery_library"
+gnss_name = "existing_station_library"
+
+[inversion]
+source_model = "double_couple"
+solver = "lbfgsb"
+weighting = "none"
+damping = [0.0001]
+
+[inversion.double_couple]
+initial_catalog = "event.ndk"
+moment_penalty = "l1"
+starts = 2
+seed = 71
+max_nfev = 20000
+
+[inversion.joint]
+gnss_weight = 1.0
+gnss_scale_m = 0.015
+```
+
+Retain the usual project/run/forward/matrix settings; `run.steps = ["invert"]`.
+The unweighted physical matrix contains imagery rows followed by station-major
+N/E/U rows. Its `.npy` cache depends on both verified response libraries, geometry
+and joint assembly code, not on data values, background basis or fit weights.
+Different joint weights can reuse that matrix without loading response libraries.
+Legacy imagery numerical cache identities are preserved.
+
+The objective is half of
+`||r_image||² + eta * ||(s/sigma_gnss) * r_gnss||² + lambda1 * sum(M0/Mref)`
+in the existing metre scaling. `eta = gnss_weight`, `s = gnss_scale_m`;
+`eta` multiplies the squared GNSS contribution. `eta = 0` is an imagery-only
+control that still saves independent GNSS predictions. The 15 mm pilot scale is
+a provisional dataset balance, not a calibrated imagery uncertainty. No division
+by observation count or automatic uncertainty confidence conversion occurs.
+
+`geotomo_dc.joint_system` uses a thin QR projection to eliminate the linear,
+unpenalized imagery background exactly. `solve_joint` calls the existing DC
+optimizer on that projected system and reconstructs the background afterward.
+Background terms are zero on GNSS rows; no station datum shift is fitted.
+Preparation and solver timings, selected coefficients and separate residual
+norms are recorded. A rank-deficient basis fails explicitly.
+
+Joint prediction archives keep elastic LOS, fitted background, total LOS,
+GNSS NEU and residuals distinct. Canonical readers check the combined weighted
+objective, background reconstruction, moment normalization and solver identity.
+`view.geotomo_fit`, source/mechanism viewers and GNSS viewers accept joint
+results. `view.geotomo_joint_background` separately displays the source LOS,
+background and their sum without automatic file writes.
+
+`examples/geotomo/validate_joint.py --config /path/to/joint.toml --output /new/directory`
+checks clean/noisy known DC tensors and six background coefficients in a verified
+cached observation geometry. It uses three candidate sources and synthetic
+displacements only, and saves two PNGs plus inputs, recovered models and metrics.
+The numerical tests independently check profiled gradients, dense background
+least squares, component ordering, zero-GNSS control invariance, canonical
+matrix reuse and reader integrity. Neither test implies real-data uniqueness.
+
 ## Scope and ownership
 
 Forward source calculations accept a positive `ncpus` count (or TOML
-`execution.processes`), with serial execution as the default. Unsupported
-GNSS/waveform requests fail explicitly. The standard slip-GF path has
+`execution.processes`), with serial execution as the default. Legacy GNSS flags,
+standalone GNSS inversion and waveform requests fail explicitly; canonical GNSS
+forward prediction and joint imagery/GNSS DC inversion are supported. The standard slip-GF path has
 not been changed to use the new tensor branch. No FK source code was modified.
 
 `inversionGFs` and `run_inversion` acquire the exclusive `.geotomo.lock` project lock. A second
@@ -841,6 +964,6 @@ This example checks two LOS views. Simple horizontal offset-direction projection
 are also checked, but production radar/optical pixel-offset ingestion remains to
 be designed. The layered mode adds numerical convergence, off-grid point sources,
 and iid noise. Independent layered-Earth benchmarks, finite-source mismatch,
-correlated noise, nuisance terms, real imagery, MPI, and numerical topography
+correlated noise, broader nuisance models, MPI, and numerical topography
 remain later validation work. Pure isotropic/zero tensors have undefined DC nodal planes,
 which are written as NaNs; other reported planes describe a best fitting DC only.

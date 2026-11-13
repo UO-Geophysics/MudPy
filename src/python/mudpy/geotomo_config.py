@@ -1,5 +1,5 @@
 """Project setup and version-1 TOML runs for Geodetic Source Tomography."""
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -131,15 +131,21 @@ class RunConfig:
     interface_offset_km: float
     keep_fk_intermediates: bool
     double_couple: dict = field(default_factory=dict)
+    gnss_response_name: str = ''
+    joint: dict = field(default_factory=dict)
 
     @property
     def observation_path(self):
-        folder = 'data/statics' if self.observation_format == 'hdf5' else 'data/station_info'
+        folder = 'data/station_info' if self.observation_format == 'gflist' else 'data/statics'
         return self.project/folder/self.observations
 
     @property
     def response_path(self):
         return self.project/'GFs/static'/(self.response_name+'.h5')
+
+    @property
+    def gnss_response_path(self):
+        return self.project/'GFs/static'/(self.gnss_response_name+'.h5')
 
     @property
     def effective_source_path(self):
@@ -171,11 +177,11 @@ class RunConfig:
         _keys(forward, ('backend', 'earth_flattening', 'dk', 'pmin', 'pmax', 'kmax',
                         'interface_policy', 'interface_offset_km'),
               ('earth_flattening',), 'forward')
-        _keys(inversion, ('source_model', 'fixed_tensor', 'solver', 'weighting', 'damping', 'double_couple'),
+        _keys(inversion, ('source_model', 'fixed_tensor', 'solver', 'weighting', 'damping', 'double_couple', 'joint'),
               ('source_model', 'damping'), 'inversion')
         _keys(matrix, ('name', 'mode'), (), 'matrix')
         _keys(execution, ('processes', 'keep_fk_intermediates'), (), 'execution')
-        _keys(responses, ('name',), (), 'responses')
+        _keys(responses, ('name', 'gnss_name'), (), 'responses')
         directory = project['directory']
         if not isinstance(directory, str) or not directory.strip():
             raise ValueError('project.directory must be a nonempty path')
@@ -192,12 +198,14 @@ class RunConfig:
             raise ValueError('run.steps must be a nonempty, unique ordered subset of greens, synthetics, invert')
         filenames = {key: _name(inputs[key], 'inputs.'+key) for key in ('sources', 'earth_model', 'observations')}
         observation_format = _choice(inputs.get('observation_format', 'gflist'),
-                                     ('gflist', 'hdf5'), 'inputs.observation_format')
+                                     ('gflist', 'hdf5', 'gnss_hdf5', 'joint_hdf5'), 'inputs.observation_format')
+        if observation_format == 'gnss_hdf5' and 'invert' in steps:
+            raise ValueError('GNSS HDF5 currently supports forward responses only; joint inversion is not implemented')
         response_name = _name(responses.get('name', 'elastic'), 'responses.name')
         if response_name.endswith('.h5'):
             raise ValueError('responses.name is a basename without the .h5 extension')
-        if responses and observation_format != 'hdf5':
-            raise ValueError('responses settings require inputs.observation_format = "hdf5"')
+        if responses and observation_format == 'gflist':
+            raise ValueError('responses settings require HDF5 observations')
         _choice(forward.get('backend', 'fk'), ('fk',), 'forward.backend')
         flattening = forward['earth_flattening']
         if type(flattening) is not bool:
@@ -225,12 +233,26 @@ class RunConfig:
         dc = _double_couple(inversion.get('double_couple', {})) if source_model == 'double_couple' else {}
         if source_model != 'double_couple' and 'double_couple' in inversion:
             raise ValueError('inversion.double_couple requires source_model = double_couple')
-        if source_model == 'double_couple' and observation_format != 'hdf5':
+        if source_model == 'double_couple' and observation_format not in ('hdf5', 'joint_hdf5'):
             raise ValueError('Pure-DC project runs require canonical HDF5 observations')
         dc_solver = 'lbfgsb' if dc.get('moment_penalty') == 'l1' else 'least_squares'
         solver = _choice(inversion.get('solver', dc_solver if dc else 'lstsq'),
                          (dc_solver,) if dc else ('lstsq', 'nnls'), 'inversion.solver')
         weighting = _choice(inversion.get('weighting', 'diagonal'), ('diagonal', 'none'), 'inversion.weighting')
+        joint, gnss_response_name = {}, ''
+        if observation_format == 'joint_hdf5':
+            if steps != ['invert'] or source_model != 'double_couple' or weighting != 'none':
+                raise ValueError('Joint HDF5 requires invert-only pure DC and weighting = none (joint weights are explicit)')
+            joint = inversion.get('joint', {})
+            _keys(joint, ('gnss_weight', 'gnss_scale_m'), ('gnss_weight', 'gnss_scale_m'), 'inversion.joint')
+            joint = {key: _real(value, 'inversion.joint.'+key) for key, value in joint.items()}
+            if joint['gnss_weight'] < 0 or joint['gnss_scale_m'] <= 0:
+                raise ValueError('Joint GNSS weight must be nonnegative and GNSS scale positive')
+            gnss_response_name = _name(responses.get('gnss_name', ''), 'responses.gnss_name')
+            if gnss_response_name.endswith('.h5'):
+                raise ValueError('responses.gnss_name is a basename without .h5')
+        elif 'joint' in inversion or 'gnss_name' in responses:
+            raise ValueError('Joint settings require inputs.observation_format = joint_hdf5')
         matrix_name = _name(matrix.get('name', name), 'matrix.name')
         if matrix_name.endswith('.npy'):
             raise ValueError('matrix.name is a basename without the .npy extension')
@@ -241,7 +263,7 @@ class RunConfig:
         keep_fk = execution.get('keep_fk_intermediates', True)
         if type(keep_fk) is not bool:
             raise ValueError('execution.keep_fk_intermediates must be a boolean')
-        if not keep_fk and observation_format != 'hdf5':
+        if not keep_fk and observation_format == 'gflist':
             raise ValueError('FK intermediate cleanup requires HDF5 responses')
         if 'greens' in steps and 'invert' in steps and 'synthetics' not in steps:
             raise ValueError('New greens must be followed by synthetics before inversion')
@@ -251,7 +273,8 @@ class RunConfig:
                    filenames['earth_model'], filenames['observations'], flattening,
                    dk, pmin, pmax, kmax, source_model, mechanism, solver, weighting,
                    _damping(inversion['damping']), matrix_name, matrix_mode,
-                   observation_format, response_name, processes, interface_policy, interface_offset, keep_fk, dc)
+                   observation_format, response_name, processes, interface_policy, interface_offset, keep_fk, dc,
+                   gnss_response_name, joint)
 
     def settings(self):
         settings = {
@@ -270,12 +293,16 @@ class RunConfig:
             'matrix': {'name': self.matrix_name, 'mode': self.matrix_mode,
                        'path': str(self.project/'GFs/matrices'/(self.matrix_name+'.npy'))},
             'execution': {'processes': self.processes, 'keep_fk_intermediates': self.keep_fk_intermediates}}
-        if self.observation_format == 'hdf5':
+        if self.observation_format != 'gflist':
             settings['responses'] = {'name': self.response_name, 'path': str(self.response_path),
                                      'format': 'hdf5', 'basis': 'six reference moment tensors'}
         if self.double_couple:
             settings['inversion']['double_couple'] = self.double_couple.copy()
             settings['inversion']['penalty'] = 'scalar_moment_'+self.double_couple['moment_penalty']
+        if self.joint:
+            settings['inversion']['joint'] = self.joint.copy()
+            settings['responses']['gnss_name'] = self.gnss_response_name
+            settings['responses']['gnss_path'] = str(self.gnss_response_path)
         return settings
 
 
@@ -394,6 +421,21 @@ def _inputs(config):
             (model[:, 1] <= 0).any() or (model[:, 2] <= model[:, 1]).any()):
         raise ValueError('Invalid FK model: require thickness/Vs/Vp [rho/Qs/Qp], positive speeds, Vp > Vs and a final zero-thickness half-space')
     sources = _effective_sources(config, sources, model)
+    if config.observation_format == 'joint_hdf5':
+        from mudpy.geotomo_io import read_joint
+        observations = read_joint(paths[2])
+        image, gps = observations['imagery'], observations['gnss']
+        geometry = {'imagery': [{'id': name, 'lon': xy[0], 'lat': xy[1], 'direction_neu': direction.tolist()}
+                    for name, xy, direction in zip(image['ids'], image['coordinates'], image['projection_neu'])],
+                    'gnss': [{'id': name, 'lon': xy[0], 'lat': xy[1]}
+                    for name, xy in zip(gps['ids'], gps['coordinates'])]}
+        return sources, observations, geometry, {str(path.resolve()): _hash(path) for path in paths}
+    if config.observation_format == 'gnss_hdf5':
+        from mudpy.geotomo_io import read_gnss
+        observations = read_gnss(paths[2])
+        geometry = [{'id': name, 'lon': xy[0], 'lat': xy[1]}
+                    for name, xy in zip(observations['ids'], observations['coordinates'])]
+        return sources, observations, geometry, {str(path.resolve()): _hash(path) for path in paths}
     if config.observation_format == 'hdf5':
         from mudpy.geotomo_io import read_observations
         observations = read_observations(paths[2])
@@ -451,13 +493,19 @@ def _code_identity():
     modules = ('geotomo', 'geotomo_config', 'geotomo_io', 'geotomo_dc', 'parallel', 'green', 'inverse', 'analysis', 'runslip')
     identity = {'source_sha256': {name: _hash(folder/(name+'.py')) for name in modules},
                 'git_revision': None, 'git_status': None}
-    # Preserve numerical cache identity when only read-only result viewers change.
-    # Response generation/storage/assembly code must remain above this boundary.
+    # Preserve legacy imagery cache identity when adapters/readers change. Its
+    # response/storage/assembly code is above this boundary; joint row assembly
+    # is fingerprinted separately below.
     core, boundary, _ = (folder/'geotomo_io.py').read_bytes().partition(
         b'\n\n# Read-only result readers (excluded from response/matrix cache identity).')
     if not boundary:
         raise ValueError('Missing geotomo_io numerical cache boundary')
     identity['io_cache_sha256'] = hashlib.sha256(core).hexdigest()
+    import ast
+    io_source = (folder/'geotomo_io.py').read_text()
+    joint_function = next(node for node in ast.parse(io_source).body
+                          if isinstance(node, ast.FunctionDef) and node.name == 'assemble_joint_matrix')
+    identity['joint_assembly_sha256'] = hashlib.sha256(ast.get_source_segment(io_source, joint_function).encode()).hexdigest()
     repo = folder.parents[2]
     if (repo/'.git').exists():
         identity['git_revision'] = subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=repo,
@@ -467,8 +515,23 @@ def _code_identity():
     return identity
 
 
+def _joint_response_specs(config, sources, geometry, code, executables):
+    image = replace(config, observation_format='hdf5', joint={}, gnss_response_name='')
+    gps = replace(image, observation_format='gnss_hdf5', response_name=config.gnss_response_name)
+    return (_signatures(image, sources, geometry['imagery'], code, executables),
+            _signatures(gps, sources, geometry['gnss'], code, executables))
+
+
 def _signatures(config, sources, geometry, code, executables):
     project = config.project
+    if config.observation_format == 'joint_hdf5':
+        image, gps = _joint_response_specs(config, sources, geometry, code, executables)
+        matrix = {'responses': {'imagery': _digest(image[1][1]), 'gnss': _digest(gps[1][1])},
+                  'geometry': geometry, 'source_model': 'full_tensor',
+                  'assembly_code': code['joint_assembly_sha256'], 'io_code': code['io_cache_sha256'],
+                  'row_order': 'imagery,station-major NEU'}
+        return (image[0], image[1], (project/'GFs/matrices'/(config.matrix_name+'.npy.json'), matrix,
+                                   [project/'GFs/matrices'/(config.matrix_name+'.npy')]))
     forward = config.settings()['forward'].copy()
     del forward['interface_policy'], forward['interface_offset_km']
     base = {'sources': _hash(project/'data/model_info'/config.sources),
@@ -487,7 +550,7 @@ def _signatures(config, sources, geometry, code, executables):
                     (config.earth_model, source[3], source[0])) for source in sources]
     components = ('Mxx',) if config.source_model == 'fixed_tensor' else ('Mxx', 'Mxy', 'Mxz', 'Myy', 'Myz', 'Mzz')
     response_files = [project/'GFs/static'/('_'+component+'.los') for component in components]
-    if config.observation_format == 'hdf5':
+    if config.observation_format != 'gflist':
         # Physical NEU responses depend on positions, not look coefficients,
         # data, uncertainty, fixed mechanisms, or inversion choices.
         responses = {'greens': _digest(base), 'synthesis': 'numpy_mt_radiat_float64',
@@ -604,7 +667,7 @@ def _collisions(config, normalized, matrix_specification):
                  config.effective_source_path]
     if normalized is not None:
         artifacts.append(normalized)
-    if config.observation_format == 'hdf5' and 'synthetics' in config.steps:
+    if config.observation_format != 'gflist' and 'synthetics' in config.steps:
         artifacts += [config.response_path, config.response_path.with_suffix('.h5.json')]
     numbered = re.compile(re.escape(config.name)+r'\.\d{4,}\.')
     for directory in ('models', 'statics', 'waveforms'):
@@ -624,7 +687,7 @@ def run(config_file):
     import obspy
     import pyproj
     config = RunConfig.load(config_file)
-    hdf5 = config.observation_format == 'hdf5'
+    hdf5 = config.observation_format != 'gflist'
     project = config.project
     required = ('data/model_info', 'data/station_info', 'data/statics', 'structure',
                 'GFs/static', 'GFs/matrices', 'output/inverse_models/models',
@@ -672,6 +735,8 @@ def run(config_file):
                 matrix_record = _require_cache(project, matrix)
             elif 'synthetics' not in config.steps:
                 _require_cache(project, responses)
+                if config.joint:
+                    _require_cache(project, _joint_response_specs(config, sources, geometry, code, executables)[1][1])
         original = project/'output/inverse_models/models'/(config.name+'.config.toml')
         resolved = original.with_name(config.name+'.resolved.json')
         normalized_bytes = None if hdf5 else (
@@ -713,6 +778,15 @@ def run(config_file):
             import h5py
             record['versions'].update(h5py=h5py.__version__, hdf5=h5py.version.hdf5_version)
             record['observation_metadata'] = rows['metadata']
+        if config.observation_format == 'gnss_hdf5':
+            record['gnss_sampling'] = {'station_count': len(rows['ids']), 'components': 'NEU',
+                                       'scalar_component_count': 3*len(rows['ids']),
+                                       'receiver_surface': 'flat model top z=0; supplied heights preserved but not applied'}
+        if config.joint:
+            record['joint_sampling'] = {'imagery_count': len(rows['imagery']['ids']),
+                                        'gnss_station_count': len(rows['gnss']['ids']),
+                                        'background_parameter_count': rows['background_basis'].shape[1],
+                                        'receiver_surface': 'flat elastic model top z=0; heights preserved but not applied'}
         # Immutable records are installed before the first numerical operation.
         with original.open('xb') as stream:
             stream.write(config.original)
@@ -739,9 +813,12 @@ def run(config_file):
             G = None
             if config.matrix_mode == 'assemble':
                 if hdf5:
-                    from mudpy.geotomo_io import assemble_matrix
-                    G = assemble_matrix(config.response_path, rows, sources,
-                                        config.fixed_tensor if fixed else None)
+                    from mudpy.geotomo_io import assemble_matrix, assemble_joint_matrix
+                    if config.joint:
+                        G = assemble_joint_matrix(config.response_path, config.gnss_response_path, rows, sources)
+                    else:
+                        G = assemble_matrix(config.response_path, rows, sources,
+                                            config.fixed_tensor if fixed else None)
                     with matrix[2][0].open('xb') as stream:
                         np.save(stream, G, allow_pickle=False)
                 else:

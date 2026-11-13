@@ -1,10 +1,10 @@
 # Geodetic Source Tomography (`geotomo`)
 
-Current implementation status, November 10, 2026.
+Current implementation status, November 13, 2026.
 
 Geodetic imaging of distributed subsurface deformation sources, implemented
-within MudPy. Imagery-derived displacement is primary; GNSS is complementary
-and its response assembly remains unimplemented in this workflow.
+within MudPy. Imagery-derived displacement is primary; static GNSS provides
+complementary directional constraints through typed joint DC runs.
 
 ## Entry points and files
 
@@ -109,6 +109,32 @@ geotomo.run('/absolute/path/new_project/configs/experiment.toml')
 
 ## Validation and limits
 
+Joint imagery/GNSS DC inversion now supports an unweighted cached physical
+matrix, explicit component weighting and exact QR elimination of an imagery
+background basis. Original LOS cell means and polynomial columns are recovered
+using preserved cell membership; no native-pixel responses are calculated.
+Separate source/background/total imagery and station predictions are archived.
+The zero-GNSS-weight control still saves GNSS predictions. Existing imagery
+cache identities are preserved; joint matrix assembly is fingerprinted separately.
+All 83 Geotomo tests pass, including independent gradient and dense nuisance-fit
+checks and canonical joint result integrity. Physical-geometry clean/noisy
+synthetics recover known tensors and background coefficients. Only the approved
+Norcia pilot and matched control at L1 0.0001 and GNSS weights 1/0 were run;
+both starts converged in each. A full joint hyperparameter sweep remains unrun.
+
+Static GNSS forward validation is available through `gnss_hdf5` TOML inputs.
+The importer preserves explicit station NEU offsets, reported uncertainties,
+heights, exclusions and source fingerprints. Station GFs reuse the parallel
+six-tensor response pipeline; receivers remain at the flat model top and supplied
+heights are not applied. Fixed-model predictions and reusable GNSS vector,
+vertical and component viewers are implemented. Standalone `gnss_hdf5` inversion
+is rejected; joint inversion uses its own typed package. Existing imagery cache
+identities are preserved. Norcia's 112-station,
+1,445-source library completed in 193.6 s; the two saved imagery models each
+predicted station NEU in about 0.17 s before the joint pilot.
+The GNSS regression checks cover units/order, archives,
+forward-only execution, cleanup and read-only plotting.
+
 The synthetic forward profiling mode (`validate.py --profile-forward`) separates
 FK, vectorized make-synthetics and HDF5 costs for three sources/1,507 receivers.
 Make-synthetics took 0.64 s with either one or three workers, replacing the
@@ -128,6 +154,6 @@ python -B -m unittest discover -s src/python/tests -p 'test_geotomo*.py'
 ```
 
 Independent layered benchmarks, finite sources, realistic correlated noise and
-nuisance terms, production imagery ingestion, MPI, and numerical topography
+broader nuisance models, production imagery ingestion, MPI, and numerical topography
 remain open. Equivalent elastic moments alone do not determine volcanic pressure,
 magma volume, groundwater extraction, or irreversible compaction.

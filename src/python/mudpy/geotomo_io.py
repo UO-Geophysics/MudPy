@@ -330,7 +330,11 @@ def read_solution(project, run_name, member):
     """Read one canonical model/log/prediction set without modifying results."""
     project, member, model_path, prediction_path = _result_paths(project, run_name, member)
     model = read_model(str(model_path)+'.inv')
-    prediction = read_predictions(str(prediction_path)+'.predictions.h5')
+    archived = json.loads((project/'output/inverse_models/models'/(run_name+'.resolved.json')).read_text())
+    settings = archived['settings']
+    joint = (read_joint_predictions(str(prediction_path)+'.predictions.h5')
+             if settings.get('inputs', {}).get('observation_format') == 'joint_hdf5' else None)
+    prediction = joint['imagery'] if joint is not None else read_predictions(str(prediction_path)+'.predictions.h5')
     fields = {}
     for line in Path(str(model_path)+'.log').read_text().splitlines():
         if ' = ' in line:
@@ -342,8 +346,6 @@ def read_solution(project, run_name, member):
     if (set(fields) != {'lambda_spatial', 'L2', 'Lm'} or
             any(not np.isfinite(v) or v < 0 for v in fields.values())):
         raise ValueError('Missing or invalid damping, residual norm or coefficient norm in log')
-    archived = json.loads((project/'output/inverse_models/models'/(run_name+'.resolved.json')).read_text())
-    settings = archived['settings']
     damping = settings['inversion']['damping']
     if settings['run']['name'] != run_name or member >= len(damping) or fields['lambda_spatial'] != damping[member]:
         raise ValueError('Log member/damping disagrees with archived run settings')
@@ -351,7 +353,10 @@ def read_solution(project, run_name, member):
     if metadata['run_name'] != run_name or metadata['damping'] != fields['lambda_spatial']:
         raise ValueError('Prediction identity/damping disagrees with the log')
     weighting = settings['inversion']['weighting']
-    if weighting == 'diagonal':
+    if joint is not None:
+        residual = np.r_[prediction['residual_m'], joint['gnss']['residual_m'].ravel()]
+        residual *= joint_weights(joint, **settings['inversion']['joint'])
+    elif weighting == 'diagonal':
         if prediction['sigma_m'] is None:
             raise ValueError('Weighted run predictions lack sigma_m')
         residual = prediction['residual_m']/prediction['sigma_m']
@@ -376,6 +381,11 @@ def read_solution(project, run_name, member):
                 solver['moment_reference_nm'] != REFERENCE_MOMENT_NM):
             raise ValueError('Invalid DC solver identity, convergence or moment normalization')
         selected = solver['starts'][solver['selected_start']]
+        if joint is not None:
+            if (any(solver['joint'][key] != value for key, value in settings['inversion']['joint'].items()) or
+                    not np.allclose(solver['joint']['background_coefficients_m'], joint['background_coefficients_m'],
+                                    rtol=1e-12, atol=1e-14)):
+                raise ValueError('Joint weights/background disagree with saved solver diagnostics')
         if (not selected['success'] or not np.isclose(selected['residual_l2'], fields['L2'], rtol=1e-8, atol=1e-12) or
                 not np.isclose(selected['moment_l2'], fields['Lm'], rtol=1e-8, atol=1e-12) or
                 not np.isclose(np.linalg.norm(model['scalar_moment_nm']/REFERENCE_MOMENT_NM), fields['Lm'], rtol=1e-8, atol=1e-12)):
@@ -413,6 +423,8 @@ def read_solution(project, run_name, member):
             'residual_rms_mm': float(np.sqrt(np.mean(prediction['residual_m']**2))*1000)}
     if solver is not None and solver['penalty'] == 'scalar_moment_l1':
         result['model_l1'] = selected['moment_l1']
+    if joint is not None:
+        result.update(joint_predictions=joint, gnss_predictions=joint['gnss'], joint_settings=settings['inversion']['joint'])
     return result
 
 
@@ -442,3 +454,292 @@ def read_run(project, run_name):
                         net_scalar_moment_nm=model['net_scalar_moment_nm'])
     return {'project': project, 'run_name': run_name, 'weighting': solution['weighting'],
             'solutions': rows, 'settings': archived['settings']}
+
+
+def _gnss(ids, coordinates, displacement_m, sigma_m, height_m, metadata):
+    """Validate station vectors; reported uncertainty confidence is metadata."""
+    ids = _ids(ids)
+    coordinates = _coordinates(coordinates, len(ids))
+    displacement, sigma = np.asarray(displacement_m, dtype=float), np.asarray(sigma_m, dtype=float)
+    height = np.asarray(height_m, dtype=float)
+    if (displacement.shape != (len(ids), 3) or sigma.shape != displacement.shape or
+            height.shape != (len(ids),) or not all(np.isfinite(a).all() for a in (displacement, sigma, height)) or
+            (sigma <= 0).any()):
+        raise ValueError('Expected finite station NEU displacements, positive NEU uncertainties and heights in metres')
+    if not isinstance(metadata, dict):
+        raise ValueError('GNSS metadata must be a JSON object')
+    _json(metadata)
+    return {'ids': ids, 'coordinates': coordinates, 'displacement_m': displacement,
+            'sigma_m': sigma, 'height_m': height, 'metadata': metadata}
+
+
+def write_gnss(filename, ids, coordinates, displacement_m, sigma_m, height_m, *, metadata):
+    """Create a station-vector package, preserving heights without using them as FK depths."""
+    data = _gnss(ids, coordinates, displacement_m, sigma_m, height_m, metadata)
+    with h5py.File(str(filename), 'w-') as file:
+        file.attrs.update(format='mudpy.geotomo.gnss', schema_version=1,
+                          coordinate_order='longitude,latitude', coordinate_units='degrees',
+                          displacement_units='m', components='NEU', height_units='m',
+                          positive='north,east,up', metadata_json=_json(metadata))
+        file.create_dataset('ids', data=data['ids'].astype('S'))
+        for key in ('coordinates', 'displacement_m', 'sigma_m', 'height_m'):
+            file.create_dataset(key, data=data[key])
+    return Path(filename)
+
+
+def read_gnss(filename):
+    """Read explicit station vectors, not scalar LOS observations."""
+    with h5py.File(str(filename), 'r') as file:
+        _header(file, 'gnss')
+        expected = {'coordinate_order': 'longitude,latitude', 'coordinate_units': 'degrees',
+                    'displacement_units': 'm', 'components': 'NEU', 'height_units': 'm',
+                    'positive': 'north,east,up'}
+        if any(file.attrs.get(key) != value for key, value in expected.items()):
+            raise ValueError('Unsupported GNSS units, components or sign conventions')
+        return _gnss(file['ids'][()].astype(str), file['coordinates'][()],
+                     file['displacement_m'][()], file['sigma_m'][()], file['height_m'][()],
+                     json.loads(file.attrs['metadata_json']))
+
+
+def import_gnss_table(table_file, filename, *, metadata, exclude=None):
+    """Import station/lon/lat/height/E/sigmaE/N/sigmaN/U/sigmaU, offsets in mm.
+
+    The numeric table has no header (comment lines may start with #). Heights
+    are metres. Exclusions map exact station IDs to explicit reasons; no
+    amplitude threshold, uncertainty rescaling or coordinate deduplication.
+    """
+    table_file = Path(table_file).resolve()
+    digest = _hash(table_file)
+    table = np.loadtxt(table_file, dtype=str, ndmin=2)
+    if table.shape[1] != 10:
+        raise ValueError('Expected ten GNSS columns: station lon lat height E sigmaE N sigmaN U sigmaU')
+    numeric = table[:, 1:].astype(float)
+    data = _gnss(table[:, 0], numeric[:, :2], numeric[:, [5, 3, 7]]*.001,
+                 numeric[:, [6, 4, 8]]*.001, numeric[:, 2], metadata)
+    exclude = {} if exclude is None else exclude
+    if (not isinstance(exclude, dict) or any(name not in data['ids'] for name in exclude) or
+            any(not isinstance(reason, str) or not reason.strip() for reason in exclude.values())):
+        raise ValueError('GNSS exclusions require existing station IDs and nonempty reasons')
+    keep = ~np.isin(data['ids'], list(exclude))
+    if not keep.any():
+        raise ValueError('No GNSS stations remain after exclusion')
+    if _hash(table_file) != digest:
+        raise RuntimeError('GNSS source table changed during import')
+    return write_gnss(filename, *(data[key][keep] for key in
+                      ('ids', 'coordinates', 'displacement_m', 'sigma_m', 'height_m')),
+                      metadata={'input_sha256': {str(table_file): digest},
+                                'source_format': 'station lon lat height_m E_mm sigmaE_mm N_mm sigmaN_mm U_mm sigmaU_mm',
+                                'source_station_count': len(table), 'excluded_stations': exclude,
+                                'observation_metadata': metadata})
+
+
+def predict_gnss(response_file, observations, model):
+    """Sum source responses for a fixed model; no fitting, reference shift or weighting."""
+    sources = np.column_stack((model['ids'], model['coordinates'], model['depth_km']))
+    coefficients = np.asarray(model['tensors_nm'], dtype=float)/REFERENCE_MOMENT_NM
+    if coefficients.shape != (len(sources), 6) or not np.isfinite(coefficients).all():
+        raise ValueError('Expected six finite NED tensor components in Nm per model source')
+    prediction = np.zeros((len(observations['ids']), 3))
+    with closing(_response_blocks(response_file, observations, sources)) as blocks:
+        for coefficient, block in zip(coefficients, blocks):
+            prediction += np.einsum('rct,t->rc', block, coefficient)
+    if not np.isfinite(prediction).all():
+        raise ValueError('Nonfinite GNSS prediction')
+    return prediction
+
+
+def write_gnss_predictions(filename, observations, prediction_m, *, provenance):
+    """Archive observed/predicted NEU and observed-minus-predicted residuals."""
+    prediction = np.asarray(prediction_m, dtype=float)
+    if prediction.shape != observations['displacement_m'].shape or not np.isfinite(prediction).all():
+        raise ValueError('Expected finite predicted NEU displacements matching the GNSS stations')
+    write_gnss(filename, *(observations[key] for key in
+               ('ids', 'coordinates', 'displacement_m', 'sigma_m', 'height_m')),
+               metadata={'observation_metadata': observations['metadata'], 'prediction': provenance})
+    with h5py.File(str(filename), 'r+') as file:
+        file.create_dataset('prediction_m', data=prediction)
+        file.create_dataset('residual_m', data=observations['displacement_m']-prediction)
+    return Path(filename)
+
+
+def read_gnss_predictions(filename):
+    with h5py.File(str(filename), 'r') as file:
+        joint = file.attrs.get('format') == 'mudpy.geotomo.joint'
+    if joint:
+        return read_joint_predictions(filename)['gnss']
+    data = read_gnss(filename)
+    with h5py.File(str(filename), 'r') as file:
+        prediction, residual = file['prediction_m'][()], file['residual_m'][()]
+    if (prediction.shape != data['displacement_m'].shape or residual.shape != prediction.shape or
+            not np.isfinite(prediction).all() or not np.isfinite(residual).all() or
+            not np.allclose(residual, data['displacement_m']-prediction, rtol=1e-12, atol=1e-15)):
+        raise ValueError('Invalid GNSS predictions or observed-minus-predicted residuals')
+    data.update(prediction_m=prediction, residual_m=residual)
+    return data
+
+
+def write_joint(filename, imagery, gnss, background_basis, *, metadata):
+    """Create typed imagery/station data with a dimensionless imagery background basis."""
+    image = _observations(*(imagery[key] for key in
+                          ('ids', 'coordinates', 'los_m', 'projection_neu', 'sigma_m', 'metadata')))
+    gps = _gnss(*(gnss[key] for key in ('ids', 'coordinates', 'displacement_m', 'sigma_m', 'height_m', 'metadata')))
+    basis = np.asarray(background_basis, dtype=float)
+    if (basis.ndim != 2 or basis.shape[0] != len(image['ids']) or not basis.shape[1] or
+            not np.isfinite(basis).all() or np.linalg.matrix_rank(basis) != basis.shape[1]):
+        raise ValueError('Background basis must be finite, full column rank and match imagery rows')
+    if not isinstance(metadata, dict):
+        raise ValueError('Joint metadata must be a JSON object')
+    with h5py.File(str(filename), 'w-') as file:
+        file.attrs.update(format='mudpy.geotomo.joint', schema_version=1, displacement_units='m',
+                          row_order='imagery,station-major NEU', metadata_json=_json(metadata))
+        for name, data in (('imagery', image), ('gnss', gps)):
+            group = file.create_group(name)
+            group.attrs['metadata_json'] = _json(data['metadata'])
+            for key, value in data.items():
+                if key != 'metadata' and value is not None:
+                    group.create_dataset(key, data=value.astype('S') if key == 'ids' else value)
+        file.create_dataset('background_basis', data=basis)
+    return Path(filename)
+
+
+def read_joint(filename):
+    with h5py.File(str(filename), 'r') as file:
+        _header(file, 'joint')
+        if file.attrs.get('displacement_units') != 'm' or file.attrs.get('row_order') != 'imagery,station-major NEU':
+            raise ValueError('Unsupported joint units or row ordering')
+        group = file['imagery']
+        image = _observations(group['ids'][()].astype(str), group['coordinates'][()], group['los_m'][()],
+                               group['projection_neu'][()], group['sigma_m'][()] if 'sigma_m' in group else None,
+                               json.loads(group.attrs['metadata_json']))
+        group = file['gnss']
+        gps = _gnss(group['ids'][()].astype(str), group['coordinates'][()], group['displacement_m'][()],
+                     group['sigma_m'][()], group['height_m'][()], json.loads(group.attrs['metadata_json']))
+        basis = file['background_basis'][()]
+        if (basis.ndim != 2 or basis.shape[0] != len(image['ids']) or not basis.shape[1] or
+                not np.isfinite(basis).all() or np.linalg.matrix_rank(basis) != basis.shape[1]):
+            raise ValueError('Invalid or rank-deficient joint background basis')
+        ids = np.r_[['imagery.'+name for name in image['ids']],
+                    ['gnss.'+name+'.'+component for name in gps['ids'] for component in 'NEU']]
+        return {'imagery': image, 'gnss': gps, 'background_basis': basis, 'ids': ids,
+                'metadata': json.loads(file.attrs['metadata_json'])}
+
+
+def import_joint_preprocessing(directory, imagery_file, gnss_file, filename):
+    """Restore original cell means and average the archived polynomial basis over the same cells.
+
+    This touches native data/coordinates only, never native-pixel elastic responses.
+    Existing representative receiver positions and mean look coefficients are retained.
+    """
+    directory = Path(directory).resolve()
+    paths = [directory/'processed.npz', directory/'processing.json', Path(imagery_file).resolve(), Path(gnss_file).resolve()]
+    hashes = {str(path): _hash(path) for path in paths}
+    image, gps = read_observations(imagery_file), read_gnss(gnss_file)
+    processing = json.loads(paths[1].read_text())
+    trend = processing['trend']
+    if trend['model'] != 'quadratic' or trend['powers'] != [[0, 0], [1, 0], [0, 1], [2, 0], [1, 1], [0, 2]]:
+        raise ValueError('Joint import requires the documented full quadratic preprocessing basis')
+    for path in paths[:2]:
+        if image['metadata']['input_sha256'][str(path)] != hashes[str(path)]:
+            raise ValueError('Imagery package does not match the preprocessing archive')
+    with np.load(paths[0], allow_pickle=False) as archive:
+        if (not np.array_equal(archive['sample_xy'], image['coordinates']) or
+                not np.array_equal(archive['sample_los'], image['los_m']) or
+                not np.array_equal(archive['sample_look_enu'][:, [1, 0, 2]], image['projection_neu'])):
+            raise ValueError('Joint import must preserve the existing imagery samples/geometry')
+        indices, offsets, counts = (archive[key] for key in ('sample_source_indices', 'sample_offsets', 'sample_counts'))
+        if (offsets.shape != (len(image['ids'])+1,) or counts.shape != (len(image['ids']),) or
+                offsets[0] != 0 or offsets[-1] != len(indices) or (counts <= 0).any() or
+                not np.array_equal(np.diff(offsets), counts) or
+                any(not np.issubdtype(a.dtype, np.integer) for a in (indices, offsets, counts)) or
+                (indices < 0).any() or (indices >= archive['original_m'].size).any() or
+                len(np.unique(indices)) != len(indices)):
+            raise ValueError('Invalid joint-import cell membership')
+        def average(array):
+            values = array.ravel()[indices]
+            if not np.isfinite(values).all():
+                raise ValueError('Nonfinite data in restored imagery cells')
+            return np.add.reduceat(values, offsets[:-1])/counts
+        original = average(archive['original_m'])
+        removed = average(archive['trend_m'])
+        x = (archive['x']-trend['origin'][0])/trend['scale'][0]
+        y = (archive['y']-trend['origin'][1])/trend['scale'][1]
+        basis = np.column_stack([average(x**p*y**q) for p, q in trend['powers']])
+    if (not np.allclose(original, image['los_m']+removed, rtol=0, atol=1e-12) or
+            not np.allclose(basis @ trend['coefficients'], removed, rtol=0, atol=1e-12)):
+        raise ValueError('Restored cell means or averaged background basis disagree with preprocessing')
+    if any(_hash(path) != digest for path, digest in hashes.items()):
+        raise RuntimeError('Joint import inputs changed during execution')
+    image = dict(image, los_m=original, metadata=dict(image['metadata'],
+                 background_treatment='original LOS cell means restored; polynomial fitted with source model'))
+    return write_joint(filename, image, gps, basis, metadata={'input_sha256': hashes,
+                       'background': trend, 'sampling': 'unchanged cells and representative elastic-response positions',
+                       'restoration': 'native cell mean of original_m; polynomial columns averaged over exact cell membership'})
+
+
+def assemble_joint_matrix(imagery_response, gnss_response, observations, sources):
+    """Unweighted physical rows: imagery, then N/E/U per station; no background columns."""
+    image = assemble_matrix(imagery_response, observations['imagery'], sources)
+    gps = observations['gnss']
+    matrix = np.empty((len(image)+3*len(gps['ids']), 6*len(sources)))
+    matrix[:len(image)] = image
+    with closing(_response_blocks(gnss_response, gps, sources)) as blocks:
+        for k, block in enumerate(blocks):
+            matrix[len(image):, 6*k:6*k+6] = block.reshape(-1, 6)
+    return matrix
+
+
+def joint_weights(observations, *, gnss_weight, gnss_scale_m):
+    """Keep imagery in metre scaling; eta multiplies the squared GNSS contribution."""
+    if (not np.isfinite(gnss_weight) or gnss_weight < 0 or
+            not np.isfinite(gnss_scale_m) or gnss_scale_m <= 0):
+        raise ValueError('Require finite nonnegative GNSS weight and positive GNSS scale')
+    sigma = np.asarray(observations['gnss']['sigma_m'], dtype=float)
+    if sigma.shape != (len(observations['gnss']['ids']), 3) or not np.isfinite(sigma).all() or (sigma <= 0).any():
+        raise ValueError('Joint weights require positive finite station NEU uncertainties')
+    return np.r_[np.ones(len(observations['imagery']['ids'])),
+                 np.sqrt(gnss_weight)*gnss_scale_m/sigma.ravel()]
+
+
+def write_joint_predictions(filename, observations, source_prediction, background_coefficients, *, provenance):
+    source_prediction = np.asarray(source_prediction, dtype=float).ravel()
+    beta = np.asarray(background_coefficients, dtype=float)
+    if (source_prediction.shape != (len(observations['ids']),) or
+            beta.shape != (observations['background_basis'].shape[1],) or
+            not np.isfinite(source_prediction).all() or not np.isfinite(beta).all()):
+        raise ValueError('Invalid joint source prediction or background coefficients')
+    write_joint(filename, observations['imagery'], observations['gnss'], observations['background_basis'],
+                 metadata={'observations': observations['metadata'], 'run': provenance})
+    count = len(observations['imagery']['ids'])
+    background = observations['background_basis'] @ beta
+    with h5py.File(str(filename), 'r+') as file:
+        file.create_dataset('background_coefficients_m', data=beta)
+        for name, source, observed, nuisance in (
+                ('imagery', source_prediction[:count], observations['imagery']['los_m'], background),
+                ('gnss', source_prediction[count:].reshape(-1, 3), observations['gnss']['displacement_m'], 0.)):
+            group = file[name]
+            group.create_dataset('source_prediction_m', data=source)
+            group.create_dataset('prediction_m', data=source+nuisance)
+            group.create_dataset('residual_m', data=observed-source-nuisance)
+    return Path(filename)
+
+
+def read_joint_predictions(filename):
+    data = read_joint(filename)
+    with h5py.File(str(filename), 'r') as file:
+        beta = file['background_coefficients_m'][()]
+        if beta.shape != (data['background_basis'].shape[1],) or not np.isfinite(beta).all():
+            raise ValueError('Invalid saved background coefficients')
+        background = data['background_basis'] @ beta
+        for name, observed, nuisance in (('imagery', data['imagery']['los_m'], background),
+                                        ('gnss', data['gnss']['displacement_m'], 0.)):
+            group = file[name]
+            source, predicted, residual = (group[key][()] for key in ('source_prediction_m', 'prediction_m', 'residual_m'))
+            if (any(a.shape != observed.shape or not np.isfinite(a).all() for a in (source, predicted, residual)) or
+                    not np.allclose(predicted, source+nuisance, rtol=1e-12, atol=1e-14) or
+                    not np.allclose(residual, observed-predicted, rtol=1e-12, atol=1e-14)):
+                raise ValueError('Invalid joint predictions, residuals or background reconstruction')
+            data[name].update(source_prediction_m=source, prediction_m=predicted, residual_m=residual,
+                              metadata={'observation_metadata': data[name]['metadata'], 'run': data['metadata']['run']})
+    data['imagery']['background_m'] = background
+    data['background_coefficients_m'] = beta
+    return data

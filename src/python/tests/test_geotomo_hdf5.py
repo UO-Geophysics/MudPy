@@ -250,6 +250,27 @@ class HDF5RunTests(unittest.TestCase):
         record = json.loads((self.project/'GFs/static/_geotomo_greens.json').read_text())
         self.assertNotIn('native_cleanup', record)
 
+    def test_gnss_forward_uses_station_vectors_without_projection_or_inversion(self):
+        io.write_gnss(self.project/'data/statics/gnss.h5', ['GPS1'], [[13., 43.]],
+                      [[.01, -.02, .03]], [[.001, .002, .005]], [1000.], metadata={})
+        path = self.config('gnss_forward', ['greens', 'synthetics'], keep_fk=False)
+        text = path.read_text().replace('observations = "template.h5"', 'observations = "gnss.h5"')
+        text = text.replace('observation_format = "hdf5"', 'observation_format = "gnss_hdf5"')
+        path.write_text(text)
+        config = RunConfig.load(path)
+        sources, obs, geometry, _ = _inputs(config)
+        self.assertNotIn('projection_neu', obs)
+        self.assertEqual(geometry, [{'id': 'GPS1', 'lon': 13., 'lat': 43.}])
+        with patch.object(geotomo, '_inversion_gfs', side_effect=self.worker), \
+                patch.object(io, 'assemble_matrix', side_effect=AssertionError('Unexpected inversion')):
+            record = geotomo.run(path)
+        self.assertTrue(record.is_file())
+        io.validate_responses(config.response_path, obs, sources)
+        self.assertFalse((self.project/'GFs/static/template.mod.static.3.0000.sub0001.insar').exists())
+        path.write_text(text.replace('steps = ["greens", "synthetics"]', 'steps = ["invert"]'))
+        with self.assertRaisesRegex(ValueError, 'forward responses only'):
+            RunConfig.load(path)
+
     def test_result_reader_changes_do_not_invalidate_numerical_caches(self):
         import hashlib
         from mudpy import geotomo_config

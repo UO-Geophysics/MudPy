@@ -315,17 +315,75 @@ def solve(matrix, data, damping, initial_tensor, *, starts=3, seed=0, perturbati
     return coefficients.ravel()[:, None], report
 
 
+def joint_system(matrix, observations, *, gnss_weight, gnss_scale_m):
+    """Whiten data and eliminate linear imagery background with a thin QR projection.
+
+    Returns projected G/d, row weights and Q/R. Inputs are never mutated; the
+    unweighted physical matrix remains reusable across weights and backgrounds.
+    """
+    from mudpy.geotomo_io import joint_weights
+    data = np.r_[observations['imagery']['los_m'], observations['gnss']['displacement_m'].ravel()]
+    matrix = np.asarray(matrix, dtype=float)
+    if (matrix.ndim != 2 or matrix.shape[0] != len(data) or not matrix.shape[1] or matrix.shape[1] % 6 or
+            not np.isfinite(matrix).all() or not np.isfinite(data).all()):
+        raise ValueError('Invalid physical joint matrix or component data')
+    basis = np.asarray(observations['background_basis'], dtype=float)
+    count = len(observations['imagery']['ids'])
+    if basis.ndim != 2 or basis.shape[0] != count or not basis.shape[1] or not np.isfinite(basis).all():
+        raise ValueError('Invalid joint background basis')
+    weights = joint_weights(observations, gnss_weight=gnss_weight, gnss_scale_m=gnss_scale_m)
+    background = np.zeros((len(data), basis.shape[1]))
+    background[:count] = basis
+    background *= weights[:, None]
+    if np.linalg.matrix_rank(background) != background.shape[1]:
+        raise ValueError('Rank-deficient weighted background basis')
+    Q, R = np.linalg.qr(background, mode='reduced')
+    G, d = matrix*weights[:, None], data*weights
+    G -= Q @ (Q.T @ G)
+    d -= Q @ (Q.T @ d)
+    return G, d, weights, Q, R
+
+
+def solve_joint(matrix, observations, damping, initial_tensor, *, gnss_weight, gnss_scale_m, **options):
+    """Profile nuisance coefficients exactly, then use the existing DC optimizer."""
+    from time import perf_counter, process_time
+    wall, cpu = perf_counter(), process_time()
+    G, d, weights, Q, R = joint_system(matrix, observations, gnss_weight=gnss_weight, gnss_scale_m=gnss_scale_m)
+    preparation_wall, preparation_cpu = perf_counter()-wall, process_time()-cpu
+    coefficients, diagnostic = solve(G, d, damping, initial_tensor, **options)
+    data = np.r_[observations['imagery']['los_m'], observations['gnss']['displacement_m'].ravel()]
+    source = matrix @ coefficients[:, 0]
+    beta = np.linalg.solve(R, Q.T @ (weights*(data-source)))
+    residual = data-source
+    count = len(observations['imagery']['ids'])
+    residual[:count] -= observations['background_basis'] @ beta
+    selected = diagnostic['starts'][diagnostic['selected_start']]
+    if not np.isclose(np.linalg.norm(weights*residual), selected['residual_l2'], rtol=1e-9, atol=1e-12):
+        raise ValueError('Profiled objective disagrees with reconstructed joint residuals')
+    diagnostic['joint'] = {'gnss_weight': float(gnss_weight), 'gnss_scale_m': float(gnss_scale_m),
+                           'background_coefficients_m': beta.tolist(), 'background_rank': len(beta),
+                           'background_method': 'thin QR variable projection; unpenalized imagery-only basis',
+                           'imagery_residual_l2_m': float(np.linalg.norm(residual[:count])),
+                           'gnss_scaled_residual_l2_m': float(np.linalg.norm((weights*residual)[count:])),
+                           'preparation_wall_seconds': preparation_wall, 'preparation_cpu_seconds': preparation_cpu}
+    diagnostic.update(wall_seconds=perf_counter()-wall, cpu_seconds=process_time()-cpu)
+    return coefficients, diagnostic
+
+
 def _run_inversion(config, sources, observations, matrix, initial_tensor, provenance, source_name,
                    horizontal_pairs):
     """TOML adapter; caller owns the project lock and immutable run snapshots."""
     from mudpy import geotomo
     from mudpy.geotomo_config import _hash, _json_bytes
-    from mudpy.geotomo_io import write_predictions
-    data = observations['los_m']
+    from mudpy.geotomo_io import write_predictions, write_joint_predictions
+    joint = bool(config.joint)
+    data = (np.r_[observations['imagery']['los_m'], observations['gnss']['displacement_m'].ravel()]
+            if joint else observations['los_m'])
     if matrix.shape != (len(data), len(sources)*6):
         raise ValueError('Pure DC requires the full six-component matrix basis')
-    weights = 1/observations['sigma_m'] if config.weighting == 'diagonal' else np.ones(len(data))
-    WG, wd = matrix*weights[:, None], data*weights
+    if not joint:
+        weights = 1/observations['sigma_m'] if config.weighting == 'diagonal' else np.ones(len(data))
+        WG, wd = matrix*weights[:, None], data*weights
     options = {key: value for key, value in config.double_couple.items()
                if key not in ('initial_tensor', 'initial_catalog', 'horizontal_neighbor_radius_km')}
     smoothing = {}
@@ -339,8 +397,12 @@ def _run_inversion(config, sources, observations, matrix, initial_tensor, proven
         stem = '%s.%04d' % (config.name, member)
         diagnostic_file = project/'output/inverse_models/models'/(stem+'.solver.json')
         try:
-            coefficients, diagnostic = solve(WG, wd, damping, initial_tensor, verbose=True,
-                                             horizontal_pairs=horizontal_pairs, **options)
+            if joint:
+                coefficients, diagnostic = solve_joint(matrix, observations, damping, initial_tensor, verbose=True,
+                                                        horizontal_pairs=horizontal_pairs, **config.joint, **options)
+            else:
+                coefficients, diagnostic = solve(WG, wd, damping, initial_tensor, verbose=True,
+                                                 horizontal_pairs=horizontal_pairs, **options)
         except DCConvergenceError as error:
             with diagnostic_file.open('xb') as stream:
                 stream.write(_json_bytes({'success': False, 'run_name': config.name,
@@ -351,9 +413,14 @@ def _run_inversion(config, sources, observations, matrix, initial_tensor, proven
         with diagnostic_file.open('xb') as stream:
             stream.write(_json_bytes(diagnostic))
         prediction = matrix @ coefficients[:, 0]
+        fitted_prediction = prediction.copy()
+        if joint:
+            count = len(observations['imagery']['ids'])
+            fitted_prediction[:count] += observations['background_basis'] @ diagnostic['joint']['background_coefficients_m']
         total, _, magnitude = geotomo.get_moment(home, name, source_name, coefficients, False)
         vr = np.full(5, np.nan)
-        vr[4] = 100*(1-abs(data-prediction).sum()/abs(data).sum()) if abs(data).sum() else np.nan
+        vr_data, vr_prediction = (data[:count], fitted_prediction[:count]) if joint else (data, prediction)
+        vr[4] = 100*(1-abs(vr_data-vr_prediction).sum()/abs(vr_data).sum()) if abs(vr_data).sum() else np.nan
         geotomo.write_log(home, name, config.name, member, damping, selected['residual_l2'],
             selected['moment_l2'], vr, total, magnitude, config.earth_model, source_name,
             config.matrix_name, config.observations, provenance=dict(provenance,
@@ -361,9 +428,14 @@ def _run_inversion(config, sources, observations, matrix, initial_tensor, proven
                 Solver_diagnostics=diagnostic_file.name, **smoothing))
         geotomo.write_model(home, name, config.name, source_name, config.earth_model,
                             coefficients, member, False, ())
-        write_predictions(project/'output/inverse_models/statics'/(stem+'.predictions.h5'), observations,
-            prediction, {'run_name': config.name, 'damping': damping, 'provenance': provenance,
-                         'source_model': 'double_couple', 'solver_sha256': _hash(diagnostic_file)})
+        prediction_provenance = {'run_name': config.name, 'damping': damping, 'provenance': provenance,
+                                 'source_model': 'double_couple', 'solver_sha256': _hash(diagnostic_file)}
+        if joint:
+            write_joint_predictions(project/'output/inverse_models/statics'/(stem+'.predictions.h5'), observations,
+                prediction, diagnostic['joint']['background_coefficients_m'], provenance=prediction_provenance)
+        else:
+            write_predictions(project/'output/inverse_models/statics'/(stem+'.predictions.h5'), observations,
+                              prediction, prediction_provenance)
         print('DC member %04d: %d/%d starts converged; selected %d; residual L2 %.6g' %
               (member, sum(item['success'] for item in diagnostic['starts']), len(diagnostic['starts']),
                diagnostic['selected_start'], selected['residual_l2']), flush=True)
