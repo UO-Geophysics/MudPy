@@ -13,7 +13,7 @@ import numpy as np
 from mudpy import geotomo, runslip
 from mudpy.geotomo_config import (
     RunConfig, _inputs, _signatures, _record_cache, _require_cache,
-    _code_identity,
+    _code_identity, _effective_sources,
 )
 
 
@@ -24,7 +24,13 @@ class ConfigTests(unittest.TestCase):
         self.parent = Path(self.temporary.name).resolve()
         self.project = self.parent/'site'
         self.config_file = geotomo.init_project(self.project)
-        self.original = self.config_file.read_text()
+        # Continue exercising the supported text-list interface independently
+        # of the canonical HDF5 starter, which has its own integration tests.
+        self.original = self.config_file.read_text().replace('observations = "template.h5"',
+            'observations = "template.gflist"').replace('observation_format = "hdf5"',
+            'observation_format = "gflist"')
+        self.original = self.original.replace('[responses]\n# Basename without .h5, in GFs/static. A new library requires a new name.\nname = "elastic"\n', '')
+        self.config_file.write_text(self.original)
 
     def configure(self, *changes):
         text = self.original
@@ -96,6 +102,8 @@ damping = [0.0]
         config = RunConfig.load(self.config_file)
         self.assertEqual(config.project, self.project.resolve())
         self.assertEqual(config.steps, ('greens', 'synthetics', 'invert'))
+        self.assertEqual(config.processes, 1)
+        self.assertTrue(config.keep_fk_intermediates)
         self.assertEqual(_inputs(config)[0].shape, (1, 4))
         with self.assertRaises(FrozenInstanceError):
             config.name = 'different'
@@ -104,6 +112,13 @@ damping = [0.0]
             geotomo.init_project(self.project)
         self.assertEqual(self.config_file.read_text(), self.original)
         self.assertTrue((self.project/'GFs/dynamic').is_dir())
+
+    def test_worker_count_changes_provenance_without_invalidating_physical_caches(self):
+        serial = self.configure()
+        serial_signatures = self.products(serial)
+        parallel = self.configure(('processes = 1', 'processes = 8'))
+        self.assertEqual(parallel.settings()['execution']['processes'], 8)
+        self.assertEqual(self.products(parallel), serial_signatures)
         self.assertTrue((self.project/'analysis/frequency').is_dir())
 
     def test_strict_schema_values_and_cross_field_validation(self):
@@ -114,8 +129,18 @@ damping = [0.0]
             ('source_model = "full_tensor"', 'source_model = "fixed_tensor"'),
             ('source_model = "full_tensor"', 'source_model = "full_tensor"\nfixed_tensor = [1,0,0,1,0,1]'),
             ('processes = 1', 'processes = true'),
-            ('processes = 1', 'processes = 2'),
+            ('processes = 1', 'processes = 0'),
+            ('processes = 1', 'processes = -2'),
+            ('processes = 1', 'processes = 1.5'),
+            ('keep_fk_intermediates = true', 'keep_fk_intermediates = "false"'),
+            ('keep_fk_intermediates = true', 'keep_fk_intermediates = 0'),
+            ('keep_fk_intermediates = true', 'keep_fk_intermediates = false'),
             ('earth_flattening = false', 'earth_flattening = "false"'),
+            ('interface_policy = "error"', 'interface_policy = "guess"'),
+            ('interface_offset_km = 0.01', 'interface_offset_km = 0.0'),
+            ('interface_offset_km = 0.01', 'interface_offset_km = 0.00001'),
+            ('interface_offset_km = 0.01', 'interface_offset_km = true'),
+            ('interface_offset_km = 0.01', 'interface_offset_km = nan'),
             ('dk = 0.05', 'dk = -1'),
             ('pmax = 1.0', 'pmax = 0.0'),
             ('damping = [0.0]', 'damping = [true]'),
@@ -156,6 +181,66 @@ damping = [0.0]
         config = self.configure(('name = "example"', 'name = "new_experiment"'))
         self.assertEqual(config.matrix_name, 'new_experiment')
 
+    def test_interface_default_fails_before_workers_or_run_records(self):
+        (self.project/'structure/template.mod').write_text('1 3 5 2.5\n0 3.5 6 2.7\n')
+        (self.project/'data/model_info/template.sources').write_text('9 13 43 1\n')
+        with patch.object(geotomo, '_inversion_gfs') as worker:
+            with self.assertRaisesRegex(ValueError, 'Source 9.*interface 1 km'):
+                geotomo.run(self.config_file)
+            worker.assert_not_called()
+        self.assertEqual(list((self.project/'output/inverse_models/models').iterdir()), [])
+        self.assertFalse((self.project/'.geotomo.lock').exists())
+
+    def test_interface_sides_quantization_and_adjacent_layer_limits(self):
+        model = np.array([[.5, 2, 4], [.5, 2.1, 4.1], [.5, 2.2, 4.2], [0, 3, 5]])
+        requested = np.array([[9., 13., 43., 1.], [2., 13., 43., 1.24996]])
+        for side, expected in [('above', .99), ('below', 1.01)]:
+            config = self.configure(('interface_policy = "error"', 'interface_policy = "'+side+'"'))
+            effective = _effective_sources(config, requested, model)
+            np.testing.assert_array_equal(effective[:, 0], [9, 2])
+            np.testing.assert_array_equal(effective[:, 3], [expected, 1.25])
+            np.testing.assert_array_equal(requested[:, 3], [1, 1.24996])
+            rounded_hit = requested[:1].copy()
+            rounded_hit[0, 3] = .99996
+            self.assertEqual(_effective_sources(config, rounded_hit, model)[0, 3], expected)
+            for offset in (.5, .75):
+                bad = self.configure(('interface_policy = "error"', 'interface_policy = "'+side+'"'),
+                                     ('interface_offset_km = 0.01', 'interface_offset_km = '+str(offset)))
+                with self.assertRaisesRegex(ValueError, 'adjacent layer'):
+                    _effective_sources(bad, requested, model)
+        config = self.configure(('interface_policy = "error"', 'interface_policy = "below"'))
+        # Bottom interface may shift into the unbounded half-space.
+        requested[0, 3] = 1.5
+        self.assertEqual(_effective_sources(config, requested, model)[0, 3], 1.51)
+        # Identical layers are not real FK interfaces.
+        identical = np.array([[1., 3., 5.], [0., 3., 5.]])
+        requested[0, 3] = 1.
+        np.testing.assert_array_equal(_effective_sources(self.configure(), requested, identical),
+                                      np.array([[9, 13, 43, 1.], [2, 13, 43, 1.25]]))
+        requested[0, 3] = .00001
+        with self.assertRaisesRegex(ValueError, 'nonpositive'):
+            _effective_sources(config, requested, model)
+
+    def test_interface_earth_flattening_and_physical_cache_identity(self):
+        config = self.configure(('earth_flattening = false', 'earth_flattening = true'),
+                                ('interface_policy = "error"', 'interface_policy = "below"'))
+        model = np.array([[10., 3., 5.], [0., 3.5, 6.]])
+        boundary = -6371*np.expm1(-(10*6371/(6371-5))/6371)
+        sources = np.array([[1., 13., 43., float('%.4f' % boundary)]])
+        result = _effective_sources(config, sources, model)
+        self.assertEqual(result[0, 3], float('%.4f' % (boundary+.01)))
+        strict = self.configure(('earth_flattening = false', 'earth_flattening = true'))
+        with self.assertRaisesRegex(ValueError, 'FK interface'):
+            _effective_sources(strict, sources, model)
+        # Policy alone does not invalidate responses when effective geometry is unchanged.
+        serial = self.configure()
+        unshifted = self.products(serial)
+        below = self.configure(('interface_policy = "error"', 'interface_policy = "below"'))
+        self.assertEqual(self.products(below), unshifted)
+        (self.project/'structure/template.mod').write_text('3 3 5\n0 3.5 6\n')
+        above = self.configure(('interface_policy = "error"', 'interface_policy = "above"'))
+        self.assertNotEqual(self.products(above)[0][1], self.products(below)[0][1])
+
     def test_invalid_input_and_stale_cache_fail_before_run_artifacts(self):
         config = self.configure(('steps = ["greens", "synthetics", "invert"]', 'steps = ["invert"]'))
         with self.assertRaisesRegex(ValueError, 'Missing cache record'):
@@ -192,7 +277,8 @@ damping = [0.0]
             _require_cache(self.project, matrix)
 
     def test_snapshot_normalization_and_exclusion_survive_working_file_edits(self):
-        config = self.configure(('steps = ["greens", "synthetics", "invert"]', 'steps = ["greens"]'))
+        config = self.configure(('steps = ["greens", "synthetics", "invert"]', 'steps = ["greens"]'),
+                                ('processes = 1', 'processes = 3'))
         exact = self.config_file.read_bytes()
 
         def worker(*args):
@@ -207,10 +293,11 @@ damping = [0.0]
         with patch.object(geotomo, '_inversion_gfs', side_effect=worker) as execute:
             resolved = geotomo.run(self.config_file)
             self.assertEqual(execute.call_count, 1)
+            self.assertEqual(execute.call_args[0][12], 3)
         record = json.loads(resolved.read_text())
         self.assertEqual(record['configuration_sha256'], hashlib.sha256(exact).hexdigest())
         self.assertEqual(record['source_count'], 1)
-        self.assertEqual(record['settings']['execution']['processes'], 1)
+        self.assertEqual(record['settings']['execution']['processes'], 3)
         self.assertEqual(len(record['input_sha256']), 4)
         normalized = Path(record['normalized_observations'])
         self.assertIn(str(self.project/'data/statics/template.los'), normalized.read_text())

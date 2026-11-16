@@ -301,6 +301,105 @@ def make_planar_geometry(strike,dip,nstrike,dx_dip,dx_strike,epicenter,num_updip
     fault=c_[fault_num,loout,laout,zout,strike,dip,tw,rise,L,W]
     return fault
     
+def double_couple_tensors(parameters, reference):
+    """Return DC coefficients and analytic derivatives in xx,xy,xz,yy,yz,zz.
+
+    parameters is (source,4): nonnegative scalar moment in caller units and a
+    rotation vector in radians. reference is a unit-moment symmetric DC matrix,
+    either (3,3) or (source,3,3). Coefficients retain caller moment units;
+    derivatives have shape (source,6,4). Rotations act in NED coordinates.
+    """
+    import numpy as np
+    from scipy.spatial.transform import Rotation
+    p = np.asarray(parameters, dtype=float)
+    base = np.asarray(reference, dtype=float)
+    if (p.ndim != 2 or p.shape[1] != 4 or not len(p) or not np.isfinite(p).all() or
+            (p[:, 0] < 0).any() or base.shape not in ((3, 3), (len(p), 3, 3)) or
+            not np.isfinite(base).all() or not np.allclose(base, np.swapaxes(base, -1, -2), atol=1e-12) or
+            not np.allclose(np.linalg.eigvalsh(base), [-1, 0, 1], rtol=0, atol=1e-10)):
+        raise ValueError('Expected finite (N,4) moment/rotation parameters and unit-moment DC reference tensors')
+    def skew(v):
+        result = np.zeros((len(v), 3, 3))
+        result[:, 0, 1], result[:, 0, 2], result[:, 1, 2] = -v[:, 2], v[:, 1], -v[:, 0]
+        return result-np.swapaxes(result, 1, 2)
+    rotation = Rotation.from_rotvec(p[:, 1:]).as_matrix()
+    transpose = np.swapaxes(rotation, 1, 2)
+    unit = rotation @ base @ transpose
+    theta = np.linalg.norm(p[:, 1:], axis=1)
+    a = .5*np.sinc(theta/(2*np.pi))**2
+    b = 1/6-theta**2/120+theta**4/5040
+    large = theta > 1e-4
+    b[large] = (theta[large]-np.sin(theta[large]))/theta[large]**3
+    cross = skew(p[:, 1:])
+    right = np.eye(3)-a[:, None, None]*cross+b[:, None, None]*(cross @ cross)
+    upper = np.triu_indices(3)
+    coefficients = unit[:, upper[0], upper[1]]*p[:, :1]
+    derivative = np.empty((len(p), 6, 4))
+    derivative[:, :, 0] = unit[:, upper[0], upper[1]]
+    for k in range(3):
+        generator = skew(right[:, :, k])
+        change = rotation @ (generator @ base-base @ generator) @ transpose
+        derivative[:, :, k+1] = change[:, upper[0], upper[1]]*p[:, :1]
+    return coefficients, derivative
+
+
+def decompose_geotomo_tensors(tensors_nm):
+    """Decompose NED tensors (xx,xy,xz,yy,yz,zz) without changing inputs.
+
+    Returns batches, including for one six-vector. ISO is trace(M)/3 I;
+    DEV = DC + CLVD uses the Jost--Herrmann eigenvalue decomposition.
+    Component strengths use sqrt(M:M/2), as in geotomo.get_moment, not the
+    spectral normalization used for conventional decomposition percentages.
+    Component scalar moments are not additive. ISO sign is trace sign; CLVD
+    sign is that of its unique principal axis (positive for [-1,-1,2]).
+    iso_balance is |ISO|/(|ISO|+|DEV|), undefined for zero tensors.
+    DC planes/axes are undefined below 64*machine-epsilon of full moment.
+    Plane A/B are algebraic alternatives, not selected geological fault planes.
+    """
+    import numpy as np
+    values = np.asarray(tensors_nm, dtype=float)
+    if values.ndim == 1:
+        values = values[None, :]
+    if values.ndim != 2 or values.shape[1] != 6 or not len(values) or not np.isfinite(values).all():
+        raise ValueError('Expected a nonempty finite array of six NED tensor components')
+    scale = np.abs(values).max(axis=1)
+    normalized = np.divide(values, scale[:, None], out=np.zeros_like(values), where=scale[:, None] > 0)
+    full = normalized[:, [[0, 1, 2], [1, 3, 4], [2, 4, 5]]]
+    amplitude = np.trace(full, axis1=1, axis2=2)/3
+    iso = amplitude[:, None, None]*np.eye(3)
+    dev = full-iso
+    eigenvalues, eigenvectors = np.linalg.eigh(dev)
+    middle = eigenvalues[:, 1]
+    clvd_eigenvalues = middle[:, None]*np.where((middle >= 0)[:, None], [-2, 1, 1], [1, 1, -2])
+    clvd = np.einsum('nik,nk,njk->nij', eigenvectors, clvd_eigenvalues, eigenvectors)
+    dc = dev-clvd
+    components = {'full': full, 'iso': iso, 'dev': dev, 'dc': dc, 'clvd': clvd}
+    moment = {name: np.linalg.norm(tensor, axis=(1, 2))/np.sqrt(2)*scale
+              for name, tensor in components.items()}
+    tolerance = 64*np.finfo(float).eps*moment['full']
+    # Degenerate orientations are numerical undefined values, not inferred mechanisms.
+    planes = np.full((len(values), 2, 3), np.nan)
+    axes = np.full((len(values), 3, 3), np.nan)
+    for k in np.flatnonzero(moment['dc'] > tolerance):
+        tensor = dc[k]
+        mechanism = MT(tensor[0, 0], tensor[0, 1], tensor[0, 2], tensor[1, 1],
+                       tensor[1, 2], tensor[2, 2], 0, 0, 0, mt_style='xyz')
+        mechanism.get_nodal_planes()
+        planes[k] = [mechanism.nodal_plane1, mechanism.nodal_plane2]
+        axes[k] = eigenvectors[k]
+    rakes = planes[:, :, 2]
+    defined = np.isfinite(rakes)
+    rakes[defined] = (rakes[defined]+180) % 360-180
+    balance = np.divide(moment['iso'], moment['iso']+moment['dev'],
+                        out=np.full(len(values), np.nan), where=moment['full'] > 0)
+    # Axis columns are P, B, T; RGB blends reverse, strike-slip, normal character.
+    style_rgb = np.clip(axes[:, 2, [2, 1, 0]]**2, 0, 1)
+    return {'tensors_nm': {name: tensor*scale[:, None, None] for name, tensor in components.items()},
+            'moment_nm': moment, 'iso_signed_moment_nm': np.sign(amplitude)*moment['iso'],
+            'clvd_signed_moment_nm': -np.sign(middle)*moment['clvd'], 'iso_balance': balance,
+            'dc_nodal_planes_deg': planes, 'dc_axes_ned': axes, 'dc_style_rgb': style_rgb}
+
+
 class MT:
     """
     A moment tensor class

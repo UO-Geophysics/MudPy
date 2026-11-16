@@ -30,7 +30,7 @@ def inversionGFs(home,project_name,GF_list,source_name,model_name,
     """Generate tensor responses with exclusive project ownership.
 
     flat=True retains historical Earth flattening; use False for a homogeneous
-    flat half-space benchmark. The current tensor path requires ncpus=1.
+    flat half-space benchmark. ncpus caps concurrent source workers.
     """
     with _project_lock(home,project_name):
         return _inversion_gfs(home,project_name,GF_list,source_name,model_name,
@@ -38,8 +38,9 @@ def inversionGFs(home,project_name,GF_list,source_name,model_name,
 
 
 def _inversion_gfs(home,project_name,GF_list,source_name,model_name,
-        green_flag,synth_flag,dk,pmin,pmax,kmax,hot_start,ncpus,forceMT,mt,flat=True):
-    """Compute tensor responses serially; one run owns the project at a time.
+        green_flag,synth_flag,dk,pmin,pmax,kmax,hot_start,ncpus,forceMT,mt,flat=True,
+        *, observations=None, response_file=None, response_metadata=None):
+    """Compute source responses concurrently; one run owns the project at a time.
 
     ``flat`` retains the historical FK Earth-flattening option. Set False for
     a flat homogeneous half-space benchmark. Static GNSS is not implemented.
@@ -48,17 +49,23 @@ def _inversion_gfs(home,project_name,GF_list,source_name,model_name,
     from pathlib import Path
     from numpy import genfromtxt, where, isfinite
 
-    if ncpus != 1:
-        raise NotImplementedError('geotomo currently requires ncpus=1; MPI execution is not validated')
+    if type(ncpus) is not int or ncpus < 1:
+        raise ValueError('ncpus must be a positive integer')
     project = Path(home) / project_name
-    gf_file = project / 'data/station_info' / GF_list
-    stations = atleast_1d(genfromtxt(gf_file, usecols=0, dtype='U'))
-    flags = atleast_2d(genfromtxt(gf_file, usecols=range(1,8)))
-    if not isfinite(flags).all() or not ((flags[:,2:] == 0) | (flags[:,2:] == 1)).all():
-        raise ValueError('Observation flags must be finite and binary')
-    if flags[:,2:6].any():
-        raise NotImplementedError('geotomo currently supports scalar imagery projections only, not GNSS or waveforms')
-    selected = where(flags[:,6] == 1)[0]
+    if observations is None:
+        gf_file = project / 'data/station_info' / GF_list
+        stations = atleast_1d(genfromtxt(gf_file, usecols=0, dtype='U'))
+        flags = atleast_2d(genfromtxt(gf_file, usecols=range(1,8)))
+        if not isfinite(flags).all() or not ((flags[:,2:] == 0) | (flags[:,2:] == 1)).all():
+            raise ValueError('Observation flags must be finite and binary')
+        if flags[:,2:6].any():
+            raise NotImplementedError('geotomo currently supports scalar imagery projections only, not GNSS or waveforms')
+        selected = where(flags[:,6] == 1)[0]
+        coordinates = flags[:, :2]
+    else:
+        stations = observations['ids']
+        coordinates = observations['coordinates']
+        selected = range(len(stations))
     if not len(selected):
         raise ValueError('No imagery observations requested')
     if len(set(stations)) != len(stations):
@@ -67,7 +74,7 @@ def _inversion_gfs(home,project_name,GF_list,source_name,model_name,
     # Exclusive creation makes concurrent top-level runs fail before writing inputs.
     with station_file.open('x') as stream:
         for k in selected:
-            stream.write('%s %.9f %.9f\n' % (stations[k], flags[k,0], flags[k,1]))
+            stream.write('%s %.17g %.17g\n' % (stations[k], *coordinates[k]))
     try:
         if green_flag:
             make_parallel_green(home,project_name,station_file.name,source_name,
@@ -75,14 +82,15 @@ def _inversion_gfs(home,project_name,GF_list,source_name,model_name,
                 insar=True,flat=flat)
         if synth_flag:
             make_parallel_synthetics(home,project_name,station_file.name,source_name,
-                model_name,hot_start,ncpus,forceMT,mt,insar=True)
+                model_name,hot_start,ncpus,forceMT,mt,insar=True,
+                response_file=response_file, response_metadata=response_metadata)
     finally:
         station_file.unlink()
 
 
 def make_parallel_green(home,project_name,station_file,fault_name,model_name,dt,NFFT,
         hot_start,dk,pmin,pmax,kmax,ncpus,insar=False,flat=True):
-    """Generate complete DC+EX static GFs using the existing worker, serially.
+    """Generate complete DC+EX static GFs with independent source workers.
 
     Direct callers must own the project exclusively; inversionGFs enforces this.
     """
@@ -90,8 +98,8 @@ def make_parallel_green(home,project_name,station_file,fault_name,model_name,dt,
     from numpy import loadtxt, savetxt, isfinite, unique
     from mudpy.parallel import run_parallel_green
 
-    if ncpus != 1:
-        raise NotImplementedError('geotomo currently requires ncpus=1')
+    if type(ncpus) is not int or ncpus < 1:
+        raise ValueError('ncpus must be a positive integer')
     project = Path(home) / project_name
     source = loadtxt(project / 'data/model_info' / fault_name, ndmin=2)
     if source.shape[1] != 4 or not isfinite(source).all():
@@ -102,15 +110,15 @@ def make_parallel_green(home,project_name,station_file,fault_name,model_name,dt,
     if (source[:,3] <= 0).any() or not 0 <= hot_start < len(source):
         raise ValueError('Sources must be buried and hot_start must select a source')
     savetxt(project / 'data/model_info/mpi_source.0.fault', source[hot_start:],
-            fmt=['%d','%.9f','%.9f','%.9f'])
+            fmt=['%d','%.17g','%.17g','%.17g'])
     run_parallel_green(home,project_name,str(project / 'data/station_info' / station_file),
         model_name,dt,NFFT,1,dk,pmin,pmax,kmax,False,insar,0,1,
-        full_mt=True,flat=flat)
+        full_mt=True,flat=flat,processes=ncpus)
 
 
 def make_parallel_synthetics(home,project_name,station_file,source_name,model_name,
-        hot_start,ncpus,forceMT,mt,insar=False):
-    """Generate and assemble tensor responses serially, in existing text formats.
+        hot_start,ncpus,forceMT,mt,insar=False,*,response_file=None,response_metadata=None):
+    """Generate source responses concurrently and assemble with one writer.
 
     Direct callers must own the project exclusively; inversionGFs enforces this.
     """
@@ -118,16 +126,19 @@ def make_parallel_synthetics(home,project_name,station_file,source_name,model_na
     from numpy import loadtxt, savetxt
     from mudpy.parallel import run_parallel_synthetics_geotomo
 
-    if ncpus != 1:
-        raise NotImplementedError('geotomo currently requires ncpus=1')
+    if type(ncpus) is not int or ncpus < 1:
+        raise ValueError('ncpus must be a positive integer')
     project = Path(home) / project_name
     source = loadtxt(project / 'data/model_info' / source_name, ndmin=2)
     if not 0 <= hot_start < len(source):
         raise ValueError('hot_start must select a source')
     savetxt(project / 'data/model_info/mpi_source.0.fault', source[hot_start:],
-            fmt=['%d','%.9f','%.9f','%.9f'])
+            fmt=['%d','%.17g','%.17g','%.17g'])
     run_parallel_synthetics_geotomo(home,project_name,
-        str(project / 'data/station_info' / station_file),model_name,forceMT,mt,insar,0,1)
+        str(project / 'data/station_info' / station_file),model_name,forceMT,mt,insar,0,1,
+        response_file=response_file, response_metadata=response_metadata,processes=ncpus)
+    if response_file is not None:
+        return
     suffix = 'los' if insar else 'neu'
     components = ('Mxx',) if forceMT else ('Mxx','Mxy','Mxz','Myy','Myz','Mzz')
     for component in components:
@@ -136,6 +147,46 @@ def make_parallel_synthetics(home,project_name,station_file,source_name,model_na
             output.write('# station source_id lon_sta lat_sta lon_src lat_src depth_km '+
                          ('projection_m' if insar else 'north_m east_m up_m')+'\n')
             output.write((folder / ('tmp_'+component+'_process0')).read_text())
+
+
+def _tensor_static_neu(statics, azimuths, mechanisms):
+    """Vectorize radiats.c mt_radiat and syn.c static sums in float64.
+
+    Native columns are DC distance/Z0/R0/T0/Z1/R1/T1/Z2/R2/T2 followed by
+    EX distance/Zex/Rex/Tex. Mechanisms are xx,xy,xz,yy,yz,zz in NED;
+    off-diagonal coefficients are symmetric tensor entries, without a factor 2.
+    Return (receiver, NEU, mechanism), metres per 10**16.6 Nm coefficient.
+    """
+    import numpy as np
+    from mudpy.green import rt2ne
+
+    statics = np.asarray(statics, dtype=float)
+    azimuths = np.asarray(azimuths, dtype=float)
+    mechanisms = np.asarray(mechanisms, dtype=float)
+    if (statics.ndim != 2 or statics.shape[1] != 14 or not len(statics) or
+            azimuths.shape != (len(statics),) or mechanisms.ndim != 2 or
+            mechanisms.shape[1] != 6 or not len(mechanisms) or
+            not all(np.isfinite(a).all() for a in (statics, azimuths, mechanisms)) or
+            not np.array_equal(statics[:, 0], statics[:, 10])):
+        raise ValueError('Expected finite matching DC+EX rows, receiver azimuths, and six-component mechanisms')
+    xx, xy, xz, yy, yz, zz = mechanisms.T
+    angle = np.deg2rad(azimuths)[:, None]
+    s, c = np.sin(angle), np.cos(angle)
+    s2, c2 = 2*s*c, c*c-s*s
+    with np.errstate(over='raise', invalid='raise'):
+        dd = (2*zz-xx-yy)/6
+        ds = -xz*c-yz*s
+        ss = -.5*(xx-yy)*c2-xy*s2
+        explosion = (xx+yy+zz)/3
+        up = (statics[:, 1, None]*dd + statics[:, 4, None]*ds +
+              statics[:, 7, None]*ss + statics[:, 11, None]*explosion)
+        radial = (statics[:, 2, None]*dd + statics[:, 5, None]*ds +
+                  statics[:, 8, None]*ss + statics[:, 12, None]*explosion)
+        transverse = (statics[:, 6, None]*(-xz*s+yz*c) +
+                      statics[:, 9, None]*(-.5*(xx-yy)*s2+xy*c2))
+        north, east = rt2ne(radial, transverse, azimuths[:, None])
+        # syn: Nm -> dyne cm (1e7), native normalization (1e-20), cm -> m (1e-2).
+        return np.stack((north, east, up), axis=1) * (10**16.6 * 1e-15)
 
 
 def getG(home,project_name,source_name,model_name,GF_list,G_from_file,G_name,forceMT):
@@ -341,14 +392,15 @@ def run_inversion(home,project_name,run_name,source_name,model_name,GF_list,G_fr
 
 
 def _run_inversion(home,project_name,run_name,source_name,model_name,GF_list,G_from_file,G_name,
-        reg_spatial,nsources,solver,forceMT,mt,weight=False,Ltype=0,*,provenance=None):
+        reg_spatial,nsources,solver,forceMT,mt,weight=False,Ltype=0,*,provenance=None,
+        observations=None,matrix=None):
     """Minimize ||W(Gm-d)||^2 + lambda^2 ||m||^2 in data space.
 
     Identity damping is the only supported penalty. NNLS imposes componentwise
     nonnegativity only when explicitly requested; signed tensors use lstsq.
     """
     from mudpy import inverse as inv
-    from numpy import asarray, isfinite, eye, vstack, zeros, loadtxt
+    from numpy import asarray, isfinite, eye, vstack, zeros, loadtxt, full
     from numpy.linalg import lstsq, norm
     from scipy.optimize import nnls
 
@@ -359,15 +411,22 @@ def _run_inversion(home,project_name,run_name,source_name,model_name,GF_list,G_f
     regularization = asarray(reg_spatial,dtype=float).reshape(-1)
     if not len(regularization) or not isfinite(regularization).all() or (regularization < 0).any():
         raise ValueError('Damping values must be finite and nonnegative')
-    G = getG(home,project_name,source_name,model_name,GF_list,G_from_file,G_name,forceMT)
+    G = (getG(home,project_name,source_name,model_name,GF_list,G_from_file,G_name,forceMT)
+         if matrix is None else matrix)
+    if G.shape != (G.shape[0], nsources*(1 if forceMT else 6)) or not isfinite(G).all():
+        raise ValueError('Matrix columns must match the finite source basis')
     source = loadtxt(home+project_name+'/data/model_info/'+source_name,ndmin=2)
     if len(source) != nsources:
         raise ValueError('nsources does not match source file')
-    d = inv.getdata(home,project_name,GF_list,decimate=None,bandpass=[None,None,None],quiet=True)
+    d = (inv.getdata(home,project_name,GF_list,decimate=None,bandpass=[None,None,None],quiet=True)
+         if observations is None else observations['los_m'][:, None])
     if d.shape != (G.shape[0],1) or not isfinite(d).all():
         raise ValueError('Data and matrix rows differ or observations are nonfinite')
     if weight:
-        w = inv.get_data_weights(home,project_name,GF_list,d,None)
+        if observations is not None and observations['sigma_m'] is None:
+            raise ValueError('Diagonal weighting requires calibrated observation sigma_m')
+        w = (inv.get_data_weights(home,project_name,GF_list,d,None)
+             if observations is None else 1/observations['sigma_m'])
         if w.shape != (len(d),) or not isfinite(w).all() or (w <= 0).any():
             raise ValueError('Observation standard deviations must be positive and finite')
         WG,wd = G*w[:,None],d*w[:,None]
@@ -381,11 +440,24 @@ def _run_inversion(home,project_name,run_name,source_name,model_name,GF_list,G_f
         sol = (lstsq(A,b,rcond=None)[0] if solver == 'lstsq' else nnls(A,b[:,0])[0][:,None])
         ds = G.dot(sol)
         L2,Lmodel = norm(WG.dot(sol)-wd),norm(sol)
-        VR,_ = inv.get_VR(home,project_name,GF_list,sol,d,ds,None,WG,wd)
+        if observations is None:
+            VR,_ = inv.get_VR(home,project_name,GF_list,sol,d,ds,None,WG,wd)
+        else:
+            VR = full(5, float('nan'))
+            # Retain MudPy's imagery statistic: fractional reduction in L1 residual.
+            VR[4] = 100*(1-abs(d-ds).sum()/abs(d).sum()) if abs(d).sum() else float('nan')
         total,_,magnitude = get_moment(home,project_name,source_name,sol,forceMT,mt)
         write_log(home,project_name,run_name,k,damping,L2,Lmodel,VR,total,magnitude,
                   model_name,source_name,G_name,GF_list,provenance=provenance)
-        inv.write_synthetics(home,project_name,run_name,GF_list,G,sol,ds,k,None)
+        if observations is None:
+            inv.write_synthetics(home,project_name,run_name,GF_list,G,sol,ds,k,None)
+        else:
+            from pathlib import Path
+            from mudpy.geotomo_io import write_predictions
+            filename = Path(home)/project_name/'output/inverse_models/statics'/(
+                run_name+'.'+str(k).zfill(4)+'.predictions.h5')
+            write_predictions(filename, observations, ds, {'run_name': run_name,
+                              'damping': float(damping), 'provenance': provenance})
         write_model(home,project_name,run_name,source_name,model_name,sol,k,forceMT,mt)
 
 
@@ -399,3 +471,9 @@ def run(config_file):
     """Validate and execute a named tensor experiment from TOML."""
     from mudpy.geotomo_config import run as execute
     return execute(config_file)
+
+
+def import_observations(preprocessing_directory, filename, *, id_prefix='pixel'):
+    """Import a geographic preprocessing package into a new HDF5 observation file."""
+    from mudpy.geotomo_io import import_preprocessing
+    return import_preprocessing(preprocessing_directory, filename, id_prefix=id_prefix)

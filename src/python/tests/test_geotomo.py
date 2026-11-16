@@ -7,10 +7,113 @@ from unittest.mock import patch
 import numpy as np
 
 from mudpy import geotomo, inverse
-from mudpy.analysis import MT
+from mudpy.analysis import MT, decompose_geotomo_tensors
+
+
+class DecompositionTests(unittest.TestCase):
+    def test_pure_sources_signs_balance_and_undefined_planes(self):
+        values = np.array([[1, 0, 0, 1, 0, 1], [-1, 0, 0, -1, 0, -1],
+                           [-1, 0, 0, -1, 0, 2], [1, 0, 0, 1, 0, -2],
+                           [0, 1, 0, 0, 0, 0], [0]*6], dtype=float)
+        before = values.copy()
+        d = decompose_geotomo_tensors(values)
+        np.testing.assert_array_equal(values, before)
+        np.testing.assert_allclose(d['iso_signed_moment_nm'][:2], [np.sqrt(1.5), -np.sqrt(1.5)])
+        np.testing.assert_allclose(d['clvd_signed_moment_nm'][2:4], [np.sqrt(3), -np.sqrt(3)])
+        np.testing.assert_array_equal(d['moment_nm']['dc'][:4], 0)
+        np.testing.assert_allclose(d['iso_balance'][:5], [1, 1, 0, 0, 0])
+        self.assertTrue(np.isnan(d['iso_balance'][5]))
+        self.assertTrue(np.isnan(d['dc_nodal_planes_deg'][:4]).all())
+        np.testing.assert_allclose(d['dc_style_rgb'][4], [0, 1, 0])
+        for scale in (1e-200, 1e200):
+            scaled = decompose_geotomo_tensors(values[4]*scale)
+            self.assertAlmostEqual(scaled['moment_nm']['dc'][0]/scale, 1)
+        for bad in ([], [[1]*5], [[np.nan]*6], np.ones((2, 3, 3))):
+            with self.assertRaises(ValueError):
+                decompose_geotomo_tensors(bad)
+
+    def test_rotated_mixtures_reconstruction_and_independent_mopad_reference(self):
+        from obspy.imaging.scripts.mopad import MomentTensor
+        rng = np.random.default_rng(261110)
+        for _ in range(20):
+            rotation, _ = np.linalg.qr(rng.normal(size=(3, 3)))
+            matrix = rotation @ np.diag(rng.normal(size=3)) @ rotation.T
+            d = decompose_geotomo_tensors(matrix[np.triu_indices(3)])
+            parts, moments = d['tensors_nm'], d['moment_nm']
+            np.testing.assert_allclose(parts['iso']+parts['dc']+parts['clvd'], matrix[None], atol=1e-14)
+            self.assertAlmostEqual(moments['full'][0]**2, moments['iso'][0]**2+moments['dev'][0]**2)
+            dc_eigenvalues = np.linalg.eigvalsh(parts['dc'][0])
+            np.testing.assert_allclose(dc_eigenvalues, [-moments['dc'][0], 0, moments['dc'][0]], atol=2e-14)
+            ned = matrix[[0, 1, 2, 0, 0, 1], [0, 1, 2, 1, 2, 2]]
+            reference = MomentTensor(ned, system='NED')
+            for name, reader in [('iso', reference.get_iso), ('dev', reference.get_devi)]:
+                np.testing.assert_allclose(parts[name][0], reader(system='NED'), atol=2e-13)
+            # The installed legacy MoPaD sorts full and deviatoric eigenvalues
+            # inconsistently for some mixed ISO tensors. Compare its DC/CLVD
+            # decomposition on the trace-free tensor, where that bug is absent.
+            dev = parts['dev'][0]
+            reference = MomentTensor(dev[[0, 1, 2, 0, 0, 1], [0, 1, 2, 1, 2, 2]], system='NED')
+            np.testing.assert_allclose(parts['dc'][0], reference.get_DC(system='NED'), atol=2e-13)
+            np.testing.assert_allclose(parts['clvd'][0], reference.get_CLVD(system='NED'), atol=2e-13)
+            for plane in d['dc_nodal_planes_deg'][0]:
+                reconstructed = MomentTensor(plane).get_M(system='NED')
+                np.testing.assert_allclose(reconstructed, parts['dc'][0]/moments['dc'][0], atol=1e-7)
+
+    def test_normal_reverse_axes_and_constant_strike_listric_sum(self):
+        from obspy.imaging.scripts.mopad import MomentTensor
+        normal = np.diag([0., 1., -1.])
+        reverse = -normal
+        d = decompose_geotomo_tensors(np.array([normal[np.triu_indices(3)], reverse[np.triu_indices(3)]]))
+        np.testing.assert_allclose(d['dc_style_rgb'], [[0, 0, 1], [1, 0, 0]])
+        summed = sum(MomentTensor([155, dip, -90]).get_M(system='NED') for dip in (25, 45, 65))
+        d = decompose_geotomo_tensors(summed[np.triu_indices(3)])
+        self.assertLess(d['moment_nm']['iso'][0], 1e-14)
+        self.assertLess(d['moment_nm']['clvd'][0], 1e-14)
 
 
 class TensorTests(unittest.TestCase):
+    def test_vectorized_tensor_isotropic_shear_signs_units_and_linearity(self):
+        azimuths = np.array([0., 90., 180., 270.])
+        statics = np.arange(56., dtype=float).reshape(4, 14)/10
+        statics[:, 10] = statics[:, 0]
+        scale = 10**16.6*1e-15
+        isotropic = geotomo._tensor_static_neu(statics, azimuths, [[1, 0, 0, 1, 0, 1]])[:, :, 0]
+        np.testing.assert_allclose(isotropic[:, 2], statics[:, 11]*scale, rtol=1e-15)
+        angles = np.deg2rad(azimuths)
+        np.testing.assert_allclose(isotropic[:, 0], statics[:, 12]*np.cos(angles)*scale)
+        np.testing.assert_allclose(isotropic[:, 1], statics[:, 12]*np.sin(angles)*scale)
+        np.testing.assert_array_equal(geotomo._tensor_static_neu(statics, azimuths, [[0]*6]), np.zeros((4, 3, 1)))
+
+        # Independent cardinal-direction checks for the off-diagonal entries.
+        terms = np.zeros((2, 14))
+        terms[:, [4, 5, 6, 9]] = [2, 3, 5, 7]
+        basis = geotomo._tensor_static_neu(terms, [0, 90], np.eye(6))/scale
+        np.testing.assert_allclose(basis[0, :, 1], [0, 7, 0], atol=1e-14)  # Mxy
+        np.testing.assert_allclose(basis[1, :, 1], [7, 0, 0], atol=1e-14)
+        np.testing.assert_allclose(basis[0, :, 2], [-3, 0, -2], atol=1e-14)  # Mxz
+        np.testing.assert_allclose(basis[1, :, 2], [5, 0, 0], atol=1e-14)
+        np.testing.assert_allclose(basis[0, :, 4], [0, 5, 0], atol=1e-14)  # Myz
+        np.testing.assert_allclose(basis[1, :, 4], [0, -3, -2], atol=1e-14)
+
+        rng = np.random.default_rng(571)
+        mechanisms = rng.normal(size=(8, 6))
+        all_basis = geotomo._tensor_static_neu(statics, azimuths, np.eye(6))
+        combined = geotomo._tensor_static_neu(statics, azimuths, mechanisms)
+        np.testing.assert_allclose(combined, np.einsum('nck,pk->ncp', all_basis, mechanisms), atol=2e-13, rtol=1e-14)
+        self.assertEqual(combined.dtype, np.dtype('float64'))
+
+    def test_vectorized_tensor_rejects_invalid_native_rows_and_shapes(self):
+        statics = np.zeros((1, 14))
+        for table, azimuth, mechanism in (
+                (statics[:, :10], [0], np.eye(6)), (statics, [np.nan], np.eye(6)),
+                (statics, [0, 1], np.eye(6)), (statics, [0], [[1]*5]),
+                (np.full((1, 14), np.nan), [0], np.eye(6))):
+            with self.assertRaises(ValueError):
+                geotomo._tensor_static_neu(table, azimuth, mechanism)
+        statics[0, 10] = 1
+        with self.assertRaises(ValueError):
+            geotomo._tensor_static_neu(statics, [0], np.eye(6))
+
     def test_moment_norm_and_signed_fixed_tensor(self):
         unit = 10**16.6
         _, moment, _ = geotomo.get_moment('', '', '', [0, 1, 0, 0, 0, 0], False)
