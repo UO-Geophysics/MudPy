@@ -1,8 +1,13 @@
 '''
 Parameter file for 3D fakequakes run
+
+For a new project, call fakequakes.init(home, project_name) once. Copy the
+bundled .fault, .mshout and .xyz files to data/model_info/, cascadia.mod to
+structure/, and cascadia_small.gflist to data/station_info/ before running.
 '''
 
 
+from os.path import expanduser
 from mudpy import fakequakes,runslip,forward
 import numpy as np
 from obspy.core import UTCDateTime
@@ -10,29 +15,29 @@ from obspy.core import UTCDateTime
 
 
 ########                            GLOBALS                             ########
-home='/Users/dmelgarm/FakeQuakes/'
-project_name='Cascadia3D_test'
+home=expanduser('~/fakequakes/')
+project_name='cascadia3d_test'
 run_name='cascadia3D'
 ################################################################################
 
 
 ##############             What do you want to do??           ##################
 init=0
-make_ruptures=0
+make_ruptures=1
 make_GFs=0
 make_synthetics=0
-make_waveforms=1
+make_waveforms=0
 make_hf_waveforms=0
 match_filter=0
 make_statics=0
 # Things that only need to be done once
-load_distances=1
-G_from_file=1
+load_distances=0
+G_from_file=0
 ###############################################################################
 
 
 #############                 Run-time parameters            ##################
-ncpus=4
+ncpus=1  # Increase after the first run and set load_distances=1 to reuse distances.
 hot_start=0
 model_name='cascadia.mod'   # Velocity model
 moho_depth_in_km=25.0
@@ -41,11 +46,11 @@ slab_name='cascadia_slab.xyz'    # Slab 1.0 Ascii file
 mesh_name='cascadia30.mshout'  
 distances_name=fault_name # Name of distances matrices
 rupture_list='ruptures.list'
-UTM_zone='10T'
+UTM_zone='10'
 scaling_law='T' # T for thrust, S for strike-slip, N for normal
 
 #Station information
-GF_list='cascadia_test.gflist'
+GF_list='cascadia_small.gflist'
 G_name=run_name  #Name of G matrix for waveforms
 G_name_static=run_name+'_statics' #Name of G matrix for statics
 
@@ -87,8 +92,10 @@ stress_parameter=50 #measured in bars
 high_stress_depth=30 # SMGA must be below this depth (measured in km)
 rake=90 # average rake
 rise_time_depths=[10,15] #Transition depths for rise time scaling (if slip shallower than first index, rise times are twice as long as calculated)
+rise_time='MH2017'
 mean_slip_name=None
-shear_wave_fraction=0.8
+shear_wave_fraction_shallow=0.49
+shear_wave_fraction_deep=0.8
 
 #Enforcement of rules on area scaling and hypo location
 force_area=False
@@ -107,11 +114,14 @@ if init==1:
 if make_ruptures==1: 
     fakequakes.generate_ruptures(home,project_name,run_name,fault_name,slab_name,
             mesh_name,load_distances,distances_name,UTM_zone,target_Mw,model_name,
-            hurst,Ldip,Lstrike,num_modes,Nrealizations,rake,
-            rise_time_depths,time_epi,max_slip,source_time_function,lognormal,
-            slip_standard_deviation,scaling_law,ncpus,mean_slip_name=mean_slip_name,
+            hurst,Ldip,Lstrike,num_modes,Nrealizations,rake,rise_time=rise_time,
+            rise_time_depths=rise_time_depths,time_epi=time_epi,max_slip=max_slip,
+            source_time_function=source_time_function,lognormal=lognormal,
+            slip_standard_deviation=slip_standard_deviation,scaling_law=scaling_law,ncpus=ncpus,
+            mean_slip_name=mean_slip_name,
             force_magnitude=force_magnitude,force_area=force_area,hypocenter=hypocenter,
-            force_hypocenter=force_hypocenter,shear_wave_fraction=shear_wave_fraction,
+            force_hypocenter=force_hypocenter,shear_wave_fraction_shallow=shear_wave_fraction_shallow,
+            shear_wave_fraction_deep=shear_wave_fraction_deep,
             max_slip_rule=max_slip_rule,use_hypo_fraction=use_hypo_fraction)
 
                 
@@ -125,7 +135,7 @@ if make_GFs==1 or make_synthetics==1:
 if make_waveforms==1:
     forward.waveforms_fakequakes(home,project_name,fault_name,rupture_list,GF_list,
                 model_name,run_name,dt,NFFT,G_from_file,G_name,source_time_function,
-                stf_falloff_rate,hot_start=hot_start)
+                stf_falloff_rate=stf_falloff_rate,hot_start=hot_start)
 
 #Generate static offsets
 if make_statics==1:
@@ -144,6 +154,6 @@ if make_hf_waveforms==1:
 # Combine LF and HF waveforms with match filter                              
 if match_filter==1:
     forward.match_filter(home,project_name,fault_name,rupture_list,GF_list,
-            zero_phase,order,fcorner)
+            zero_phase,order,fcorner_low=fcorner,fcorner_high=fcorner)
                 
             

@@ -1,17 +1,22 @@
 '''
 Parameter file for fakequakes run, with Christine's Hayward discretization
+
+For a new project, call fakequakes.init(home, project_name) once. Copy the
+bundled hayward.fault to data/model_info/, bbp_norcal.mod to structure/,
+and four_stations.gflist to data/station_info/ before running this driver.
 '''
 
 
-from mudpy import fakequakes,runslip,forward,viewFQ
+from os.path import expanduser
+from mudpy import fakequakes,runslip,forward
 import numpy as np
 from obspy.core import UTCDateTime
 
 
 
 ########                            GLOBALS                             ########
-home='/Users/dmelgar/fakequakes/'
-project_name='Hayward'
+home=expanduser('~/fakequakes/')
+project_name='hayward'
 run_name='hayward'
 ################################################################################
 
@@ -29,15 +34,15 @@ G_from_file=0
 
 
 #############                 Run-time parameters            ##################
-ncpus=8
+ncpus=1  # Increase after the first run and set load_distances=1 to reuse distances.
 
-model_name='gil7.mod'   # Velocity model
+model_name='bbp_norcal.mod'   # Velocity model
 fault_name='hayward.fault'    # Fault geometry
 slab_name=None    # Slab 1.0 Ascii file, set to None for simple geometry
 mesh_name=None    # GMSH output file, set to None for simple geometry
 distances_name='heyward_dist' # Name of dist matrix
-rupture_list='onerup.list'
-UTM_zone='10S'
+rupture_list='ruptures.list'
+UTM_zone='10'
 scaling_law='S' # T for thrust, S for strike-slip, N for normal
 
 #Station information
@@ -56,8 +61,8 @@ custom_stf=None
 
 # Correlation function parameters
 hurst=0.75
-Ldip='auto'
-Lstrike='auto'
+Ldip='MB2002'  # Mai & Beroza correlation scaling used by the original Hayward example
+Lstrike='MB2002'
 lognormal=True
 slip_standard_deviation=0.9
 
@@ -68,7 +73,9 @@ stf_falloff_rate=6 #Only affects Dreger STF, choose 4-8 are reasonable values
 num_modes=500
 rake=180
 rise_time_depths=[5,8] #Transition depths for rise time scaling
-buffer_factor=0.5
+rise_time='S1999'  # Somerville (1999) rise-time scaling
+shear_wave_fraction_shallow=0.56
+shear_wave_fraction_deep=0.8
 ###############################################################################
 
 
@@ -81,9 +88,12 @@ if init==1:
 if make_ruptures==1:
     fakequakes.generate_ruptures(home,project_name,run_name,fault_name,slab_name,
             mesh_name,load_distances,distances_name,UTM_zone,target_Mw,model_name,
-            hurst,Ldip,Lstrike,num_modes,Nrealizations,rake,buffer_factor,
-            rise_time_depths,time_epi,max_slip,source_time_function,lognormal,
-            slip_standard_deviation,scaling_law)
+            hurst,Ldip,Lstrike,num_modes,Nrealizations,rake,rise_time=rise_time,
+            rise_time_depths=rise_time_depths,time_epi=time_epi,max_slip=max_slip,
+            source_time_function=source_time_function,lognormal=lognormal,
+            slip_standard_deviation=slip_standard_deviation,scaling_law=scaling_law,ncpus=ncpus,
+            shear_wave_fraction_shallow=shear_wave_fraction_shallow,
+            shear_wave_fraction_deep=shear_wave_fraction_deep)
                 
 # Prepare waveforms and synthetics       
 if make_GFs==1 or make_synthetics==1:
@@ -94,4 +104,4 @@ if make_GFs==1 or make_synthetics==1:
 if make_waveforms==1:
     forward.waveforms_fakequakes(home,project_name,fault_name,rupture_list,GF_list,
                 model_name,run_name,dt,NFFT,G_from_file,G_name,source_time_function,
-                stf_falloff_rate)
+                stf_falloff_rate=stf_falloff_rate)
